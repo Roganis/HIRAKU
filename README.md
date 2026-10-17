@@ -48,7 +48,7 @@ Get the latest package from the [Releases](../../releases) page and unpack it an
 
 Then drop a game's files on the launcher's window, all at once: the MAME ROM set (`.zip`, `.7z` or a folder) and its CHDs (several games' files at once work too). HIRAKU recognises the game, copies what it needs into its own folder, and the game is ready to play. Nothing else needs installing: the packages carry their own Python, 7-Zip, CHD reader and libraries.
 
-The packages run the DJ Main, System 573, Twinkle and Firebeat games, and the Linux package the Konami Python games too (pop'n music 9–14, DrumMania V/V2): add a Python game's folder together with the folders `bios` (the arcade BIOS) and `keys` (the MagicGate key files), which HIRAKU can't ship. The packages are portable: your saves and settings stay in their `user` folder.
+The packages run the DJ Main, System 573, Twinkle and Firebeat games, and the Konami Python games too (pop'n music 9–14, DrumMania V/V2; they need Vulkan or OpenGL drivers): add a Python game's folder together with the folders `bios` (the arcade BIOS) and `keys` (the MagicGate key files), which HIRAKU can't ship. The packages are portable: your saves and settings stay in their `user` folder.
 
 ## Building from source
 

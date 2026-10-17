@@ -1,0 +1,89 @@
+# The Konami Python core for Windows (PLAN.md section 26, phase 4): hiraku-python.exe built inside
+# PCSX2 Reliquary's source with clang-cl, as PCSX2 builds for Windows. Trial runs on the
+# python-windows branch; once it builds and runs, its steps join release.yml.
+name: python-windows
+on:
+  push:
+    branches: [python-windows]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-2025
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          path: hiraku
+
+      # Reliquary 1.9.4's source from HIRAKU's own release (as tools/release-python-linux.sh), HIRAKU's
+      # patch applied; its dependency script less what HIRAKU doesn't use: Qt and KDDockWidgets
+      # (PCSX2's interface is off) and SDL (PCSX2's has no video: SDL's own package below)
+      - name: Reliquary's source
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fL --retry 3 -o rel.zip https://github.com/Roganis/HIRAKU/releases/download/reliquary-1.9.4/pcsx2-reliquary-1.9.4-reliquary.zip
+          echo "da9b9a601e8b3eeede9eb8bae6d46e81e1001beb98b438859aa847c75b547884  rel.zip" | sha256sum -c -
+          7z x -y rel.zip > /dev/null
+          mv pcsx2-reliquary-* reliquary
+          cd reliquary
+          patch -p1 < ../hiraku/oracle/pcsx2/reliquary-oracle.patch
+          rmdir pcsx2/GS/parallel-gs 2>/dev/null || true
+          s=.github/workflows/scripts/windows/build-dependencies.bat
+          # each block runs from its `echo` line to the next; CRLF, as cmd wants for its labels
+          awk '/^echo / { skip = /Qt|KDDockWidgets|SDL/ } !skip' "$s" | sed 's/\r*$/\r/' > "${s%.bat}-hiraku.bat"
+          curl -fL --retry 3 -o ../sdl.zip https://github.com/libsdl-org/SDL/releases/download/release-3.4.18/SDL3-devel-3.4.18-VC.zip
+          (cd .. && 7z x -y sdl.zip > /dev/null)
+
+      - name: Dependencies (cached)
+        id: deps
+        uses: actions/cache@v6
+        with:
+          path: reliquary/deps
+          key: reliquary-1.9.4 windows deps ${{ hashFiles('reliquary/.github/workflows/scripts/windows/build-dependencies-hiraku.bat', 'reliquary/.github/workflows/scripts/common/*.patch') }}
+
+      - name: Build the dependencies
+        if: steps.deps.outputs.cache-hit != 'true'
+        shell: cmd
+        env:
+          DEBUG: 0
+        run: reliquary\.github\workflows\scripts\windows\build-dependencies-hiraku.bat
+
+      - name: Configure
+        shell: cmd
+        run: |
+          for /f "usebackq tokens=*" %%i in (`call vswhere -latest -property installationPath`) do set "VSINSTPATH=%%i"
+          call "%VSINSTPATH%\VC\Auxiliary\Build\vcvars64.bat" || exit /b
+          cmake -S reliquary -B reliquary\build -G Ninja -DCMAKE_BUILD_TYPE=Release ^
+            -DCMAKE_C_COMPILER=clang-cl -DCMAKE_CXX_COMPILER=clang-cl ^
+            "-DCMAKE_PREFIX_PATH=%cd%\reliquary\deps;%cd%\SDL3-3.4.18" ^
+            -DENABLE_QT_UI=OFF -DENABLE_TESTS=OFF -DUSE_LINKED_FFMPEG=OFF -DDISABLE_ADVANCE_SIMD=ON ^
+            "-DHIRAKU_DIR=%cd%\hiraku"
+
+      # -k 0: every file that can be built is, so one run shows all that fails
+      - name: Build hiraku-python
+        shell: cmd
+        run: |
+          for /f "usebackq tokens=*" %%i in (`call vswhere -latest -property installationPath`) do set "VSINSTPATH=%%i"
+          call "%VSINSTPATH%\VC\Auxiliary\Build\vcvars64.bat" || exit /b
+          cmake --build reliquary\build --target hiraku-python -- -k 0 > build.log 2>&1
+          set rc=%errorlevel%
+          findstr /C:"error" /C:"FAILED" build.log
+          exit /b %rc%
+
+      - name: The build's log
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: build-log
+          path: build.log
+          if-no-files-found: ignore
+
+      - name: The core
+        uses: actions/upload-artifact@v7
+        with:
+          name: hiraku-python-windows
+          path: |
+            reliquary/build/bin
+            SDL3-3.4.18/lib/x64/SDL3.dll

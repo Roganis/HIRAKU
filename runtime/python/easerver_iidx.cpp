@@ -18,10 +18,12 @@
 //   music getranking 20: the most played songs, a child each (mid).
 //   weekly getmid: the week's song (mid) and the week (wid); weekly entry CARD wid chart pgreat
 //     great NAME SHOP PREFECTURE opt, after playing it: answer bstscr.
-//   ranking getinfo: the ranking (rid) and the six courses shown in attract (c0-c5: 0-11, the
-//     courses the game keeps rankers for, 0x1909d90 + course * 0x5f0); ranking getranker RID 0
-//     20 COURSE: its top 20 (a child each: pid the prefecture, gnum great, pgnum pgreat, opt, name,
-//     opname the shop, name2, udate); ranking entry, after a course (14 fields, kept as they come).
+//   ranking: EXPERT mode's courses (12 a class, the course's number its id in the program's
+//     table; STYLISH is class 0 course 0). getinfo: the ranking (rid) and the six courses attract
+//     shows (c0-c5); getranker RID CLID 20 COID: a course's top 20 (a child each: pid the
+//     prefecture, gnum great, pgnum pgreat, opt, name, opname the shop, name2, udate); entry after a
+//     course, when the player agrees to send it (the PASSWORD FOR INTERNET RANKING screen); getme
+//     CARD 120 when EXPERT is chosen: the card's last try on each course.
 // The week's song and the courses were Konami's server's to choose: here a file in the server's
 // folder (iidx9-weekly-song: a song number; iidx9-courses: rid c0 ... c5) or, without one, a
 // song played on this server (a different one each week) and courses 0-5.
@@ -213,26 +215,25 @@ std::string EamuseServer::answer_c02(const Request &r) {
             for (int i = 0; i < 6; i++) at += a(C[i], std::clamp(std::strtol(info[1 + i].c_str(), nullptr, 10), 0L, 11L));
             return ok(method, cmd, at);
         }
+        // an entry's place: the ranking, the class (clid) and the course (coid)
+        auto same = [&](const Record &x, const std::string &clid, const std::string &coid) {
+            return get(x, "rid") == rid && get(x, "clid") == clid && get(x, "coid") == coid;
+        };
         if (cmd == "entry") {
-            // entry CARD course a pgreat great NAME b opt SHOP c PREFECTURE d CARD2 NAME2 (0x10004d50;
-            // a two-player course: both cards and names, the two players' counts added up)
-            Record e = {{"rid", rid}, {"date", date}};
-            for (size_t i = 1; i < w.size(); i++) e["f" + std::to_string(i)] = w[i];
-            e["card"] = arg(1);
-            e["course"] = arg(2);
-            e["pg"] = arg(4);
-            e["gr"] = arg(5);
-            e["name"] = arg(6);
-            e["shop"] = arg(9);
-            e["opt"] = arg(8);
-            e["pref"] = arg(11);
+            // entry CARD clid coid pgreat great NAME PIN opt SHOP n PREFECTURE stages [CARD2 NAME2]
+            // (0x436960, 0x10004d50; two players: both cards and names, their counts added up).
+            // The PIN (the game's password seed) isn't kept.
+            Record e = {{"rid", rid}, {"date", date}, {"card", arg(1)}, {"clid", arg(2)}, {"coid", arg(3)},
+                        {"pg", arg(4)}, {"gr", arg(5)}, {"name", arg(6)}, {"opt", arg(8)}, {"shop", arg(9)},
+                        {"n", arg(10)}, {"pref", arg(11)}, {"stages", arg(12)}, {"card2", arg(13)}, {"name2", arg(14)}};
+            if (!safe_name(e["card"])) return ok(method, cmd, a("rentry", 0L) + a("bstscr", 0L) + a("bstranking", 0L) + a("topranker", 0L));
             entries.push_back(e);
             std::string text;
             for (const Record &x : entries) text += to_line(x);
             write_file("iidx9-ranking", text);
             long count = 0, best = 0, top = 0;
             for (const Record &x : entries)
-                if (get(x, "rid") == rid && get(x, "course") == e["course"]) {
+                if (same(x, e["clid"], e["coid"])) {
                     count++;
                     top = std::max(top, ex(x));
                     if (get(x, "card") == e["card"]) best = std::max(best, ex(x));
@@ -240,14 +241,13 @@ std::string EamuseServer::answer_c02(const Request &r) {
             long place = 1;
             std::set<std::string> ahead;
             for (const Record &x : entries)
-                if (get(x, "rid") == rid && get(x, "course") == e["course"] && ex(x) > best && ahead.insert(get(x, "card")).second) place++;
+                if (same(x, e["clid"], e["coid"]) && ex(x) > best && ahead.insert(get(x, "card")).second) place++;
             return ok(method, cmd, a("rentry", count) + a("bstscr", best) + a("bstranking", place) + a("topranker", top));
         }
-        if (cmd == "getranker") {
-            const std::string course = arg(4);   // getranker RID 0 20 COURSE
-            std::map<std::string, Record> best;   // a card's best on the course
+        if (cmd == "getranker") {   // getranker RID CLID 20 COID: the course's top 20, a card's best each
+            std::map<std::string, Record> best;
             for (const Record &x : entries)
-                if (get(x, "rid") == rid && get(x, "course") == course) {
+                if (same(x, arg(2), arg(4))) {
                     auto it = best.find(get(x, "card"));
                     if (it == best.end() || ex(x) > ex(it->second)) best[get(x, "card")] = x;
                 }
@@ -255,15 +255,34 @@ std::string EamuseServer::answer_c02(const Request &r) {
             for (const auto &[c, x] : best) list.push_back(x);
             std::stable_sort(list.begin(), list.end(), [](const Record &x, const Record &y) { return ex(x) > ex(y); });
             std::string children;
-            for (size_t i = 0; i < list.size() && i < 20; i++) {
+            for (size_t i = 0; i < list.size() && i < (size_t)std::clamp(iarg(3), 0L, 20L); i++) {
                 const Record &x = list[i];
                 children += "<ranker" + a("pid", field(x, "pref")) + a("gnum", field(x, "gr")) + a("pgnum", field(x, "pg")) +
-                            a("opt", field(x, "opt")) + a("name", get(x, "name")) + a("opname", get(x, "shop")) + a("name2", "") +
-                            a("udate", field(x, "date")) + "/>";
+                            a("opt", field(x, "opt")) + a("name", get(x, "name")) + a("opname", get(x, "shop")) +
+                            a("name2", get(x, "name2")) + a("udate", field(x, "date")) + "/>";
             }
             return ok(method, cmd, "", children);
         }
-        return ok(method, cmd);   // getme: nothing kept by class yet
+        if (cmd == "getme") {
+            // getme CARD 120: the card's last try on each course (course select's 前回のスコア), its
+            // tries and whether one went through all five stages; the game's array is 12 courses a
+            // class (0x10005510: clid * 12 + coid), 120 in all
+            std::map<std::pair<long, long>, std::pair<Record, long>> last;
+            for (const Record &x : entries) {
+                if (get(x, "rid") != rid || get(x, "card") != arg(1)) continue;
+                const long clid = field(x, "clid"), coid = field(x, "coid");
+                if (clid < 0 || coid < 0 || coid >= 12 || clid * 12 + coid >= std::clamp(iarg(2), 0L, 120L)) continue;
+                auto &[r, tries] = last[{clid, coid}];
+                r = x;
+                tries++;
+            }
+            std::string children;
+            for (const auto &[k, v] : last)
+                children += "<course" + a("clid", k.first) + a("coid", k.second) + a("gnum", field(v.first, "gr")) +
+                            a("pgnum", field(v.first, "pg")) + a("tcnt", v.second) + a("cflg", field(v.first, "stages") >= 5 ? 1L : 0L) + "/>";
+            return ok(method, cmd, "", children);
+        }
+        return ok(method, cmd);
     }
     return ok(method, cmd);   // grade raised
 }

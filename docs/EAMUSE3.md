@@ -1239,14 +1239,28 @@ The calls, what the game does with the answers (bm2dx JAH), and HIRAKU's answers
   getme and getranker exist but the game doesn't ask. The week's song was Konami's choice: HIRAKU
   takes `iidx9-weekly-song` (a song number) or else one of the songs played on the server, another
   each week (none before any play).
-- **ranking getinfo**: the ranking `rid` and six courses `c0`-`c5` (0-11: the game keeps the top
-  20 of each of 12 courses, `0x1909d90` + course × 0x5f0), shown in attract. HIRAKU: `iidx9-courses`
-  (`rid c0 c1 c2 c3 c4 c5`) or ranking 1 with courses 0-5. **ranking getranker** `RID 0 20 COURSE`:
-  a child per ranker, `pid` (the prefecture), `gnum`, `pgnum`, `opt`, `name`, `opname` (the shop),
-  `name2`, `udate`. **ranking entry** after a course, 14 fields (`0x10004d50`: `CARD course a
-  pgreat great NAME b opt SHOP c PREFECTURE d CARD2 NAME2`, two cards for a course played by two):
-  answer `rentry`, `bstscr`, `bstranking`, `topranker`. **ranking getme** `CARD n`: children
-  `clid`, `coid`, `gnum`, `pgnum`, `tcnt`, `cflg` (HIRAKU: none yet).
+- **ranking**: EXPERT mode's courses. The program's course table (`0x482dd0`, 0x7c bytes a
+  course: its number, then five songs) holds 12 courses a class; STYLISH is class 0, course 0. The
+  ALL JAPAN RANKING courses (PLATINUM, GOLD, SILVER, BRONZE: songs 1-5, 6-10, 11-15, 16-20 of
+  `music getranking`, played from the 5th up) aren't these: a song missing there is the shop's own
+  (LOCAL RANKING) song in its place (`0x40a84c`).
+  - **getinfo**: the ranking `rid` and the six courses attract's internet ranking shows, `c0`-`c5`
+    (0-11). HIRAKU: `iidx9-courses` (`rid c0 c1 c2 c3 c4 c5`) or ranking 1 with courses 0-5.
+  - **getme** `CARD 120` when EXPERT is chosen: a child per course played, `clid`, `coid`, `gnum`,
+    `pgnum`, `tcnt` (tries), `cflg`, read into the game's 120 places (`0x10005510`: clid × 12 +
+    coid). Course select shows it as the player's 前回のスコア (FAILED / NO PLAY / the score).
+    HIRAKU: the card's last try on each course, its tries, `cflg` 1 when it went through five
+    stages.
+  - **entry** after a course, when the player says はい to "今回のスコアを登録しますか？" on the
+    PASSWORD FOR INTERNET RANKING screen (`0x436960`, `0x10004d50`): `CARD clid coid pgreat great
+    NAME PIN opt SHOP n PREFECTURE stages [CARD2 NAME2]` (a course for two: both cards and names, the
+    counts added up; empty names drop out of the line). The game then shows "今回のスコアが登録
+    されました" and the password. Answer `rentry` (entries on the course), `bstscr` (the card's
+    best EX), `bstranking` (its place), `topranker` (the top EX). HIRAKU keeps every entry but the
+    PIN (`iidx9-ranking`).
+  - **getranker** `RID CLID 20 COID`: the course's top 20, a card's best each: `pid` (the
+    prefecture), `gnum`, `pgnum`, `opt`, `name`, `opname` (the shop), `name2`, `udate`
+    (HIRAKU: the date, YYYYMMDD).
 - **grade raised**: SOK.
 
 ## Not known yet

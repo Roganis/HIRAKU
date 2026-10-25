@@ -284,6 +284,16 @@ if(HK_PC_DLL_CC)
     DEPENDS tests/pc/test_vsock.c runtime/pc/vsock.c runtime/pc/cabinet.h
     COMMENT "pc/test_vsock.exe (32-bit)")
   add_custom_target(hiraku-pc-test-vsock ALL DEPENDS ${CMAKE_BINARY_DIR}/pc/test_vsock.exe)
+  # The 32-bit AVS2 PC games (runtime/pc32/, PLAN.md section 35): hiraku-pc32.exe, the loader that
+  # starts Konami's AVS2 and the game's DLL, with the DLLs above as its cabinet. Into pc/.
+  add_custom_command(OUTPUT ${CMAKE_BINARY_DIR}/pc/hiraku-pc32.exe
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/pc
+    COMMAND ${HK_PC_DLL_CC} --target=i686-w64-mingw32 ${HK_PC_DLL_SYS} -O2 -Wall -Wextra -fuse-ld=lld -static
+            -o ${CMAKE_BINARY_DIR}/pc/hiraku-pc32.exe ${CMAKE_SOURCE_DIR}/runtime/pc32/main.c
+            ${CMAKE_SOURCE_DIR}/runtime/pc64/imports.c
+    DEPENDS runtime/pc32/main.c runtime/pc64/imports.c runtime/pc64/pc64.h
+    COMMENT "pc/hiraku-pc32.exe (32-bit)")
+  add_custom_target(hiraku-pc32 ALL DEPENDS ${CMAKE_BINARY_DIR}/pc/hiraku-pc32.exe)
 else()
   message(STATUS "No 32-bit Windows compiler (clang, lld and mingw-w64's i686 libraries): no PC games' DLLs")
 endif()

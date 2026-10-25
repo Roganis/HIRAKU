@@ -2655,3 +2655,63 @@ Nothing of a game comes with HIRAKU: the songs are the player's.
   number), songs past the table (ids ≥ 2374: custom songs; popnMods' high-ID work is a staged
   experiment), characters the game hasn't, the `_ifs` folders' PNGs (only whole members), By Medal
   and the extra Random entries (By Medal's source is needed).
+
+## 35. The last 32-bit PC pop'n, `popn22.dll` (written 2026-10-26)
+
+pop'n music from 22 to the last game before the 64-bit one (§32) is `popn22.dll`, a DLL on AVS2
+started by Konami's `bootstrap.exe`, like the 64-bit game's. Its cabinet is the older one, though:
+one screen, the `ezusb.dll` board and `libacio.dll` reader of pop'n 15-18 (§30), Direct3D 9 and
+DirectSound. HIRAKU runs it with the parts it already has: §32's way of starting an AVS2 game,
+built 32-bit, with §30's DLLs around it. The first game is the last build of the last `popn22.dll`
+game (M39, 2025092400).
+
+**The owner's dump** (outside the repo): `modules/` and `prop/` as the cabinet has them (`bootstrap.exe`,
+its DRM and licence DLLs `k*.dll`), and `data/` (5209 files, 32 GB): exactly the list in
+`prop/filepath.info`. `prop/trustfiles_*.p7s` are Konami's signed lists of the files, their
+content encrypted (`bootstrap.exe` decodes it); not read yet.
+
+**The program, measured (2025092400):**
+- **Exports:** `dll_entry_init` and `dll_entry_main` only.
+- **What it calls:**
+  - `ezusb.dll`: the board. All 59 exports have the same names as pop'n 15-18's (`runtime/pc/ezusb.def`).
+  - `libacio.dll`: the reader (ICCA). 30 calls; 14 of them aren't in `runtime/pc/libacio.c` yet: felica
+    (`ac_io_icca_is_felica`, `get_uid_felica`), `ac_io_icca_crypt_init`, the card dispenser
+    (`ac_io_hbhi_req_carddispenser_*`) and an LED strip (`ac_io_hdxs_*`).
+  - `libavs-win32.dll` 2.15.8 and `libavs-win32-ea3.dll`: AVS2's exports under other names than the
+    64-bit game's 2.17 (`XCd229cc…`, `ea3_boot` = `XE592acd00008c`; spice2x lists them), and
+    `avs_boot` takes two heaps (`bootstrap.xml`: 48 MB AVS, 32 MB standard).
+  - Windows: Direct3D 9 with `d3dx9_41`, DirectSound, ACM, WINMM, IPHLPAPI. The opening movie is
+    Windows Media (`data/mov/op_*.wmv`).
+- **e-AMUSEMENT:** the modules `info24`, `player24`, `lobby24` (kbin XML, as pop'n 17-18's).
+  `bootstrap.xml`: the security code `GQM39JAA`, the data on the DRM file system (`kdm.dll`,
+  `D:/m39/contents`), which the dump already has as plain files.
+
+**Steps:**
+1. **The loader** (started 2026-10-26): `runtime/pc32/` (`hiraku-pc32.exe`, clang i686 for MinGW,
+   in `pc/` beside the DLLs): AVS2 2.15.8 booted with `prop/avs-config.xml`, the defaults copied
+   into `/dev/nvram`, the game's DLL loaded, `dll_entry_init` with the soft ID, `ea3_boot`, then
+   `dll_entry_main` (as `runtime/pc64/main.c`, spice2x's order). HIRAKU's `ezusb.dll` and
+   `libacio.dll` in the game's search path in place of Konami's; the missing `libacio` calls added.
+   Run under Wine alone (no `hiraku-pc` yet) to see how far it boots.
+   - **Done (2026-10-26):** the loader reads Konami's `bootstrap.xml` for the DLL, its
+     `<component><param>` (`pcb_type` 0), the security code (`GQM39JAA`: model, dest, spec, rev) and
+     the release code (the soft ID's ext: the cabinet's `ea3-config.xml` has no `<soft>` or `<id>`).
+     `avs-config.xml` as the cabinet's but NVRAM and RAW plain folders in `dev/` (theirs are on
+     `D:\m39\contents`), `net/enable_raw` a bool (a u8 in the file: 2.15.8's boot stops at
+     `property_psmap_import() failed`). The licence key (`kbt.dll`, `kld.dll`, Konami's talk to the
+     dongle) answered as for the 64-bit game: two keys, every file check passed (`bt_get_ikey_status`,
+     `bt_fcheck_*`, through the game's `GetModuleHandleA`/`GetProcAddress`); without it 5-1501
+     (SECURITY). The reader's device 5 is the card dispenser: none (else DISPENSER CHECKING for a
+     minute; pop'n 15-18 only ask for device 1).
+   - **Checked under Wine** (the program's folder copied with HIRAKU's DLLs and `hiraku-pc32.exe` in
+     it, the data linked, `LC_ALL=ja_JP.UTF-8` for its Shift-JIS text): the boot screen's USB I/O,
+     SECURITY, BACKUP DATA, GAME DATA and IC CARD OK in 10 s, then 5-2002 (no center server: step 2).
+2. **To the attract loop:** `games/` entry and ingest; the board's start-up and security, the
+   reader, the network and `info24`'s boot calls on HIRAKU's server; a new cabinet's first-boot
+   errors.
+3. **Through `hiraku-pc`:** pictures, sound, coins, buttons (pop'n 16-18's timed presses, the judging
+   routine by shape), the game's own frame wait taken out; a credit played.
+4. **Players:** `player24`'s calls and the record's layout from the game's code; scores; one card
+   with the other pop'n games.
+5. **Mods:** a player's data mods (Omnimix packs, ifs_layeredfs folders) laid over the data, as §34.
+6. **NET TAISEN** through `lobby24`.

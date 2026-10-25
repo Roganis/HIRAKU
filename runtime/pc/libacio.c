@@ -154,7 +154,12 @@ API int ac_io_is_active2(int a, int *b, int c) {
     *b = 6;
     return 1;
 }
-API char ac_io_is_active_device(int index, int a) { (void)index, (void)a; return 1; }
+// Device 5 is the card dispenser (popn22.dll asks for it, then waits for it to start): none, as
+// spice2x answers
+API char ac_io_is_active_device(int index, int a) {
+    trace("is_active_device", index, a);
+    return index != 5;
+}
 API int ac_io_get_node_no(void) { return 1; }
 API int ac_io_get_firmware_update_device_index(void) { return 0xff; }
 API int ac_io_go_firmware_update(void) { return 1; }
@@ -286,6 +291,38 @@ YES(ac_io_pjei_set_framing_err_packet_send_interval)
 YES(ac_io_pjei_set_watchdog_time)
 YES(ac_io_pjei_unlock_coincounter)
 YES(ac_io_pjei_update_control_status_buffer)
+
+// popn22.dll's (PLAN.md section 35): a FeliCa card is any but an ISO 15693 one (E0 04 ...); its number
+// as the plain one's, then a byte saying it's FeliCa (spice2x)
+static int felica(void) { return !(g.st.uid[0] == 0xe0 && g.st.uid[1] == 0x04); }
+API char ac_io_icca_is_felica(void) { return (char)felica(); }
+API char ac_io_icca_get_uid_felica(int unit, char *card) {
+    trace("get_uid_felica", unit, g.state);
+    (void)unit;
+    memcpy(card, g.st.uid, 8);
+    card[8] = (char)felica();
+    return g.state != ERR_GETUID;
+}
+API char ac_io_icca_crypt_init(int unit) { (void)unit; return 1; }
+// ... and the card dispenser (none: every request done at once) and the LED strip (lit by nothing)
+API char ac_io_hbhi_req_carddispenser_init(void) { trace("dispenser_init", 0, 0); return 1; }
+API char ac_io_hbhi_req_carddispenser_init_isfinished(int *n) { trace("dispenser_init_isfinished", *n, 0); ++*n; return 1; }
+API char ac_io_hbhi_req_carddispenser_get_status(void) { trace("dispenser_get_status", 0, 0); return 1; }
+API int ac_io_hbhi_req_carddispenser_get_status_isfinished(int *n) { trace("dispenser_status_isfinished", *n, 0); ++*n; return 2; }
+API char ac_io_hbhi_req_carddispenser_disburse(void) { trace("dispenser_disburse", 0, 0); return 1; }
+API char ac_io_hbhi_req_carddispenser_disburse_isfinished(int *n) { trace("dispenser_disburse_isfinished", *n, 0); ++*n; return 1; }
+API int ac_io_hdxs_get_control_status_buffer(int a, void *buf) { (void)a; memset(buf, 0, 32); return 1; }
+API char ac_io_hdxs_update_control_status_buffer(int a) { (void)a; return 1; }
+API int ac_io_hdxs_led_scroll(int a, char b, char c, char d, char e, char f, char g_, char h, char i, char j, char k, char l,
+                              char m) {
+    (void)a, (void)b, (void)c, (void)d, (void)e, (void)f, (void)g_, (void)h, (void)i, (void)j, (void)k, (void)l, (void)m;
+    return 1;
+}
+API int ac_io_hdxs_led_set_pattern(int index, char r, char g_, char b, uint64_t bits) {
+    (void)index, (void)r, (void)g_, (void)b, (void)bits;
+    return 1;
+}
+API int ac_io_hdxs_led_set_rgb_mask(int a, char b, char c, long d) { (void)a, (void)b, (void)c, (void)d; return 1; }
 
 // Whichever of HIRAKU's DLLs loads first sets the game up (runtime/pc/cabinet.c: once)
 BOOL WINAPI DllMain(HINSTANCE h, DWORD why, LPVOID r) {

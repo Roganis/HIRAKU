@@ -404,7 +404,7 @@ so their memory and files are the game's own process's, not an emulated machine'
   picture the game reads from inside one of its packs (a song's banner `kc_NNNN.ifs`, its
   background) can be a whole file in the mod's folder named after the pack, as ifs_layeredfs's
   (`tex/system/kc_diff_ifs/kc_0001.ifs`). The save folder's `pc.log` lists the songs brought back
-  and those left out (PLAN.md section 34). Not yet: songs past the game's own (custom songs), PNGs
+  and those left out (PLAN.md section 34; how to install a pack: [SONGS-BACK.md](SONGS-BACK.md)). Not yet: songs past the game's own (custom songs), PNGs
   in the `_ifs` folders, and their scores on HIRAKU's e-AMUSEMENT server.
 
 ## Per core

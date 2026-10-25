@@ -188,8 +188,11 @@ static void read_xml(const WCHAR *path) {
     CloseHandle(f);
     if (!buf) return;
     buf[got] = 0;
+    // UTF-8 unless it says Shift-JIS, and then too when its bytes are UTF-8 (a pack's file says
+    // shift-jis and isn't: Shift-JIS text is almost never valid UTF-8)
     const int utf8 = !(strstr(buf, "shift-jis") || strstr(buf, "SHIFT-JIS") || strstr(buf, "Shift_JIS") || strstr(buf, "SHIFT_JIS") ||
-                       strstr(buf, "cp932") || strstr(buf, "windows-31j"));
+                       strstr(buf, "cp932") || strstr(buf, "windows-31j")) ||
+                     MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, buf, (int)got, NULL, 0) > 0;
     for (char *c = buf; (c = strstr(c, "<!--"));) {   // comments: no songs in them
         char *e = strstr(c + 4, "-->");
         if (!e) break;
@@ -321,9 +324,54 @@ static int data_file(const char *rel) {   // rel: under the game's data folder, 
 }
 static int plain_name(const char *s) { return s && *s && !strpbrk(s, "/\\:") && !strstr(s, ".."); }
 
+// --- the banners: a song brought back needs one (the music select asks for it until it comes): the
+// game's own packs (tex/system/kc*.ifs: their pictures named kc_NNNN inside) or a mod's folders
+static unsigned char *g_banner;   // by id
+static void game_banners(void) {
+    WCHAR game[MAX_PATH] = L"", folder[32], pattern[MAX_PATH * 2];
+    MultiByteToWideChar(CP_UTF8, 0, pc64_game_folder(), -1, game, MAX_PATH);
+    MultiByteToWideChar(CP_UTF8, 0, pc64_data_folder(), -1, folder, 32);
+    _snwprintf(pattern, MAX_PATH * 2, L"%ls%ls%ls\\tex\\system\\kc*.ifs", game, game[0] ? L"\\" : L"", folder);
+    WIN32_FIND_DATAW d;
+    HANDLE h = FindFirstFileW(pattern, &d);
+    if (h == INVALID_HANDLE_VALUE) return;
+    do {
+        WCHAR path[MAX_PATH * 2];
+        _snwprintf(path, MAX_PATH * 2, L"%ls%ls%ls\\tex\\system\\%ls", game, game[0] ? L"\\" : L"", folder, d.cFileName);
+        HANDLE f = CreateFileW(path, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_FLAG_SEQUENTIAL_SCAN, NULL);
+        if (f == INVALID_HANDLE_VALUE) continue;
+        static char buf[1 << 20];
+        char tail[8] = {0};
+        DWORD got;
+        while (ReadFile(f, buf + 8, sizeof buf - 8, &got, NULL) && got) {   // the 8 bytes before kept for a name across reads
+            memcpy(buf, tail, 8);
+            for (DWORD i = 0; i + 8 <= got + 8; i++)
+                if (buf[i] == 'k' && buf[i + 1] == 'c' && buf[i + 2] == '_' && i + 7 < got + 8) {
+                    unsigned id = 0, k = 3;
+                    for (; k < 8 && buf[i + k] >= '0' && buf[i + k] <= '9'; k++) id = id * 10 + (unsigned)(buf[i + k] - '0');
+                    if (k == 7 && id < g_songs) g_banner[id] = 1;
+                }
+            memcpy(tail, buf + got, 8);
+        }
+        CloseHandle(f);
+    } while (FindNextFileW(h, &d));
+    FindClose(h);
+}
+static int has_banner(unsigned id) {
+    if (g_banner[id]) return 1;
+    static const char *const KC[] = {"tex/system/kc_diff_ifs", "tex/system/kc_jka_diff_ifs", "tex/system/kc_jka_ifs"};
+    char rel[64];
+    for (int i = 0; i < 3; i++) {
+        snprintf(rel, sizeof rel, "%s/kc_%04u.ifs", KC[i], id);
+        if (data_file(rel)) return 1;
+    }
+    return 0;
+}
+
 // --- the characters: by name, the one the game's own songs use most (a name can be several), the
 // pair of the two side by side when the song names both
 static unsigned short *g_uses;
+static unsigned g_unknown_charas;   // songs none of whose characters the game has
 static const BYTE *g_image, *g_image_end;
 static int chara_is(unsigned i, const char *name) {
     const char *p;
@@ -348,6 +396,11 @@ static void characters(const struct song *s, BYTE *rec) {
                 pair = (int)i, best = g_uses[i] + g_uses[i + 1];
         if (pair >= 0 && (best || (c[0] < 0 && c[1] < 0))) c[0] = pair, c[1] = pair + 1;
     }
+    // a character the game hasn't (an old song's own): the song's other one, else the slot's (the
+    // game's first character)
+    if (c[0] < 0) c[0] = c[1];
+    if (c[1] < 0) c[1] = c[0];
+    if (c[0] < 0 && (s->chara[0] || s->chara[1])) g_unknown_charas++;
     for (int k = 0; k < 2; k++)
         if (c[k] >= 0) {
             const uint16_t v = (uint16_t)c[k];
@@ -426,7 +479,9 @@ void pc64_songs_install(HMODULE game) {
     if (!locate(base)) return;
     IMAGE_NT_HEADERS *nt = (IMAGE_NT_HEADERS *)(base + ((IMAGE_DOS_HEADER *)base)->e_lfanew);
     g_image = base, g_image_end = base + nt->OptionalHeader.SizeOfImage;
-    if (!(g_data = calloc(g_songs, sizeof *g_data)) || !(g_back = calloc(g_songs, 1)) || !(g_uses = calloc(g_nchara, sizeof *g_uses))) return;
+    if (!(g_data = calloc(g_songs, sizeof *g_data)) || !(g_back = calloc(g_songs, 1)) || !(g_uses = calloc(g_nchara, sizeof *g_uses)) ||
+        !(g_banner = calloc(g_songs, 1)))
+        return;
     // the music data: the last mod first, so the first one's fields win
     size_t files = 0;
     for (int m = g_nmods - 1; m >= 0; m--) {
@@ -439,6 +494,7 @@ void pc64_songs_install(HMODULE game) {
         files += n;
     }
     if (!files) return;
+    game_banners();
     // the charts in use, the characters' uses
     unsigned char *used = calloc(g_nchart, 1);
     if (!used) return;
@@ -480,6 +536,10 @@ void pc64_songs_install(HMODULE game) {
         }
         if (present[1] != 1 || !ok) {   // Normal, always
             if (skipped++ < 20) pc64_log("songs: %u (%s) left out: its charts' files aren't there", id, s->text[4]);
+            continue;
+        }
+        if (!has_banner(id)) {
+            if (skipped++ < 20) pc64_log("songs: %u (%s) left out: no banner (tex/system/kc_diff_ifs/kc_%04u.ifs)", id, s->text[4], id);
             continue;
         }
         BYTE *rec = recs + (size_t)n * RECORD;
@@ -567,6 +627,6 @@ void pc64_songs_install(HMODULE game) {
     }
     VirtualProtect(g_charts, (size_t)g_nchart * 40, old_c, &ignored);
     VirtualProtect(g_music, (size_t)g_songs * RECORD, old_m, &ignored);
-    pc64_log("songs: %u brought back (%u charts added; %u described without their files); the game's %u songs, %u charts", n, nnew, skipped,
-             g_songs, g_nchart);
+    pc64_log("songs: %u brought back (%u charts added; %u described without their files or banner; %u without a character the game has); "
+             "the game's %u songs, %u charts", n, nnew, skipped, g_unknown_charas, g_songs, g_nchart);
 }

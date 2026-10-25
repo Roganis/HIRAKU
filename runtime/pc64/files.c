@@ -190,6 +190,23 @@ static int avs_stat_(const char *path, void *st) {
     return r_avs_stat(m ? m : path, st);
 }
 
+// An older game's banner (a 246x60 picture; this game's are 488x118) is set on its frame's clip at its
+// own size: a quarter of the frame, the frame's "Loading" around it. A texture of that size is
+// stretched to its clip instead (afp-core's texture call, ordinal 137, its fit flag). The texture:
+// its atlas's width and height (+4, +8), its corners there as fractions (+12: u0, u1, v0, v1)
+typedef int (*set_texture_fn)(int clip, const void *texture, char fit);
+static set_texture_fn r_set_texture;
+static int set_texture_(int clip, const void *texture, char fit) {
+    if (texture && !fit) {
+        uint32_t aw, ah;
+        float uv[4];
+        memcpy(&aw, (const char *)texture + 4, 4), memcpy(&ah, (const char *)texture + 8, 4), memcpy(uv, (const char *)texture + 12, 16);
+        const float w = (uv[1] - uv[0]) * (float)aw, h = (uv[3] - uv[2]) * (float)ah;
+        if (w > 230 && w < 260 && h > 54 && h < 66) fit = 1;
+    }
+    return r_set_texture(clip, texture, fit);
+}
+
 void pc64_files_install(HMODULE game, const char *game_dir) {
     if (game_dir) snprintf(g_game, sizeof g_game, "%s", game_dir);
     r_avs_fs_mount = pc64_import_ordinal(game, "avs2-core.dll", 76, (void *)avs_fs_mount_);
@@ -215,6 +232,7 @@ void pc64_files_install(HMODULE game, const char *game_dir) {
         r_avs_open = pc64_import_ordinal(game, "avs2-core.dll", 79, (void *)avs_open_);
         r_avs_stat = pc64_import_ordinal(game, "avs2-core.dll", 100, (void *)avs_stat_);
         if (!r_avs_open || !r_avs_stat) pc64_log("overlay: the game's AVS2 open and stat not found: no pictures from the mods' packs");
+        r_set_texture = pc64_import_ordinal(game, "afp-core.dll", 137, (void *)set_texture_);
     }
     if (!r_avs_fs_mount) pc64_log("the game doesn't mount its data through AVS2 (ordinal 76)");
 }

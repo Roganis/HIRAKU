@@ -2638,8 +2638,19 @@ Nothing of a game comes with HIRAKU: the songs are the player's.
 - Checked (2026-10-26) with a player's Omnimix pack: 225 songs back (261 charts; 13 described
   without their files, left out), song 1 found in the title index, its banner from the pack, its
   Light chart played through to the result at its 110 BPM.
-- **Not yet:** the "Loading" mark on restored songs' banners at the music select (a picture still
-  asked for), scores for them on HIRAKU's e-AMUSEMENT server, songs past the table (ids ≥ 2374:
-  custom songs; popnMods' high-ID work is a staged experiment), the `_ifs` folders' PNGs (only
-  whole members), By Medal and the extra Random entries (the source of By Medal's code is needed),
-  the launcher's Mods… for these games.
+- **Old banners** (the earlier games' are 246x60, this game's 488x118): shown at their size they fill
+  a quarter of the frame, the frame's "Loading" around it. The texture call (afp-core ordinal 137:
+  the texture's atlas size at +4/+8, its corners as fractions from +12) stretches a texture of that
+  size to its clip (its fit flag). (Doubling the picture's size in its texture list instead makes
+  the game's decoder assert: the size is the pixels it decodes.)
+- **Songs left out by the loader:** no banner anywhere (the game's packs keep some for songs they
+  left out: their `kc_NNNN` names are read from `tex/system/kc*.ifs`; else a mod's) — the music
+  select would wait for it forever; a character the game hasn't takes the song's other one.
+  Music data that says Shift-JIS but is valid UTF-8 is read as UTF-8 (a pack's file is).
+- **For players:** `docs/SONGS-BACK.md` (installing a pack in the mods folder, the launcher's Mods…,
+  `mod.toml`), and `tools/songsback.py`, which reads the game's program and the packs and says what
+  will come back and why not (the loader's rules; checked: the same 226 songs).
+- **Not yet:** scores for restored songs checked on HIRAKU's e-AMUSEMENT server (it keeps any song
+  number), songs past the table (ids ≥ 2374: custom songs; popnMods' high-ID work is a staged
+  experiment), characters the game hasn't, the `_ifs` folders' PNGs (only whole members), By Medal
+  and the extra Random entries (By Medal's source is needed).

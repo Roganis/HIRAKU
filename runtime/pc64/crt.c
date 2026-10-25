@@ -359,8 +359,8 @@ void pc64_crt_install(HMODULE game) {
     for (int i = 0; i < WINDOW_CLIPS; i++) g_window_clips[i] = -1;
     g_find_clip = (find_clip_fn)(void *)GetProcAddress(afp, MAKEINTRESOURCEA(103));
     g_next_clip = (next_clip_fn)(void *)GetProcAddress(afp, MAKEINTRESOURCEA(106));
-    g_set_texture = (set_texture_fn)(void *)GetProcAddress(afp, MAKEINTRESOURCEA(137));
-    if (!g_find_clip || !g_next_clip || !g_set_texture || !pc64_import_ordinal(game, "afp-core.dll", 137, (void *)set_texture) ||
+    // (the texture call's hook before this one's, files.c's, kept in the chain)
+    if (!g_find_clip || !g_next_clip || !(g_set_texture = (set_texture_fn)pc64_import_ordinal(game, "afp-core.dll", 137, (void *)set_texture)) ||
         !pc64_import_ordinal(game, "afp-core.dll", 103, (void *)find_clip))
         pc64_log("crt: the game's clip lookups not found: the songs' pictures left at their size");
     pc64_log("crt: the play screen's characters (table at +0x%llx) scaled by %.2f",

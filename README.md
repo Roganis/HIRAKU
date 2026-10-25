@@ -89,7 +89,7 @@ HK_REGRESS_BIN=build/arm64 tools/regress.py check   # the ARM build against the 
 - Plan, status and per-board notes: [PLAN.md](PLAN.md)
 - Playing, per game: [docs/PLAY.md](docs/PLAY.md)
 - How Firebeat translation works: [docs/RECOMP.md](docs/RECOMP.md); the kernel: [docs/KERNEL.md](docs/KERNEL.md)
-- Konami Python: [docs/PYTHON.md](docs/PYTHON.md); e-AMUSEMENT and NET TAISEN: [docs/EAMUSE3.md](docs/EAMUSE3.md); mods: [docs/MODS.md](docs/MODS.md)
+- Konami Python: [docs/PYTHON.md](docs/PYTHON.md); e-AMUSEMENT and NET TAISEN: [docs/EAMUSE3.md](docs/EAMUSE3.md); mods: [docs/MODS.md](docs/MODS.md), songs back from Omnimix packs: [docs/SONGS-BACK.md](docs/SONGS-BACK.md)
 - The MAME oracle: [oracle/README.md](oracle/README.md)
 
 ## Licence

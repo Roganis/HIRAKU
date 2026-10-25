@@ -27,6 +27,7 @@ void hk_log(const char *fmt, ...) {
     va_end(a);
     fputc('\n', stderr);
 }
+void *hk_program(void) { return GetModuleHandleA(NULL); }   // (cabinet.c's: the game's program)
 
 typedef void(__cdecl *init_t)(void);
 typedef int(__cdecl *open_t)(int);

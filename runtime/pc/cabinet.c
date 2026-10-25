@@ -903,6 +903,16 @@ static void *avs_logged(const char *dll, const char *fn) {
 
 static HMODULE g_self;
 
+void *hk_program(void) {
+    static HMODULE program;
+    if (!program) {
+        const char *name = getenv("HK_PC_PROGRAM");
+        if (name && *name) program = GetModuleHandleA(name);
+        if (!program) program = GetModuleHandleA(NULL);
+    }
+    return program;
+}
+
 static void *hook_for(const char *dll, const char *fn) {
     if (!_stricmp(dll, "ws2_32.dll") || !_stricmp(dll, "wsock32.dll")) return hk_net_hook(fn);   // net.c
     if (!_stricmp(dll, "iphlpapi.dll")) return hk_net_card_hook(fn);
@@ -1037,7 +1047,7 @@ static int mentions(const uint8_t *p, size_t n, const void *slot) {
 }
 
 static void unlimit_frames(void) {
-    HMODULE exe = GetModuleHandleA(NULL);
+    HMODULE exe = (HMODULE)hk_program();
     void *tgt = import_slot(exe, "winmm.dll", "timeGetTime"), *sleep = import_slot(exe, "kernel32.dll", "Sleep");
     if (!tgt || !sleep) return;
     char *base = (char *)exe;
@@ -1083,7 +1093,7 @@ static LONG CALLBACK crash_log(EXCEPTION_POINTERS *e) {
            code, (unsigned long)c->Eip,
            e->ExceptionRecord->NumberParameters > 1 ? (unsigned long)e->ExceptionRecord->ExceptionInformation[1] : 0ul,
            c->Eax, c->Ebx, c->Ecx, c->Edx, c->Esi, c->Edi, c->Ebp, c->Esp);
-    char *base = (char *)GetModuleHandleA(NULL);
+    char *base = (char *)hk_program();
     IMAGE_NT_HEADERS *nt = (IMAGE_NT_HEADERS *)(base + ((IMAGE_DOS_HEADER *)base)->e_lfanew);
     const uintptr_t lo = (uintptr_t)base + nt->OptionalHeader.BaseOfCode, hi = lo + nt->OptionalHeader.SizeOfCode;   // its code
     char line[1024];

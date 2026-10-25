@@ -33,6 +33,9 @@
 #include "link.h"
 
 void hk_log(const char *fmt, ...);
+// The game's program: the module HK_PC_PROGRAM names (a DLL a loader starts: popn22.dll, PLAN.md
+// section 35), else the process's EXE. Its code is where the game's own routines are looked for
+void *hk_program(void);   // (an HMODULE)
 struct hk_pc_link *hk_link(void);   // never null: an empty one when hiraku-pc gave none
 void hk_cabinet_start(void);        // once: the path and window hooks (DllMain, process attach)
 // The pad as the game reads it: hiraku-pc's, the keys bound to it, the test script's

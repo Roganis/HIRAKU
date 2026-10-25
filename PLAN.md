@@ -2737,6 +2737,24 @@ content encrypted (`bootstrap.exe` decodes it); not read yet.
      answer is the model, the game's own reader the reference), real Windows.
 3. **Through `hiraku-pc`:** pictures, sound, coins, buttons (pop'n 16-18's timed presses, the judging
    routine by shape), the game's own frame wait taken out; a credit played.
+   - **Done (2026-10-26):** the DLLs look for the game's own routines in its program, which here is
+     `popn22.dll`, not the loader: `hk_program()` (`HK_PC_PROGRAM`, set by `hiraku-pc` from
+     machine.txt's `exe`; else the EXE as before) for the frame wait, the judging routine, NET
+     TAISEN's socket calls and the crash log. The 14 ms frame wait is pop'n 15's shape and is found.
+   - **The board as the game reads it:** `usbPadRead` once a frame; `usbPadReadLast` into a 36-byte
+     buffer (`0x10de4288`, the next field at `+0x24`: spice2x's 40 bytes would overrun it) read as
+     pop'n 16-18's (a counter, then ten 16-bit samples, newest first, through its button table at
+     `0x101ed048`), which HIRAKU's `ezusb.dll` already gives (22 bytes, at the board's 360 a second);
+     the coins as the coin switch's pulses (`usbCoinMode` 1 and 2).
+   - **Checked under Wine** (`out/` script: two coins, then the red button): guest entry, 3 STAGES for
+     2 coins, mode select (the tutorial question; a guest's first credit plays the tutorial as stage 1
+     either way), the tutorial stage, the character and music select, a song played with judgements
+     and its result ("New Record!", the result's server call), the third stage. Sound the whole way;
+     60 pictures a second on display sync, the controls read 0.1 ms into the frame, the picture
+     handed 13 ms after its start (DXVK's read-back), 3 % of frames late, all in loads.
+   - **Not yet:** `--press-time` and `--judge-offset` (no judging routine of pop'n 16-18's shape: the
+     samples go to an input object at `0x101bbe50` (+0x10c the last counter, +0x110 the new samples;
+     a counter wrap counts one too few) whose judging is still to find); the lamps on real lights.
 4. **Players:** `player24`'s calls and the record's layout from the game's code; scores; one card
    with the other pop'n games.
 5. **Mods:** a player's data mods (Omnimix packs, ifs_layeredfs folders) laid over the data, as §34.

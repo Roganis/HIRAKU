@@ -592,7 +592,7 @@ static void *ws2_slot(char *base, int ordinal) {
 
 void hk_vsock_patch_program(void) {
     if (!getenv("HK_PC_RELAY")) return;
-    char *base = (char *)GetModuleHandleA(NULL);
+    char *base = (char *)hk_program();
     IMAGE_NT_HEADERS *nt = (IMAGE_NT_HEADERS *)(base + ((IMAGE_DOS_HEADER *)base)->e_lfanew);
     static const struct { int ordinal; int option; void *to; const char *name; } calls[] = {
         {115, 0, (void *)v_init, "SockInit"},        {23, 0, (void *)v_open, "SockOpen"},

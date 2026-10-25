@@ -135,8 +135,7 @@ void hk_press_patch_program(void) {
     g_press_time = pt && *pt && *pt != '0';
     g_offset_us = off && *off ? (int32_t)(atof(off) * 1000) : 0;
     if (!g_press_time && !g_offset_us) return;
-    HMODULE exe = GetModuleHandleA(NULL);
-    char *base = (char *)exe;
+    char *base = (char *)hk_program();
     IMAGE_NT_HEADERS *nt = (IMAGE_NT_HEADERS *)(base + ((IMAGE_DOS_HEADER *)base)->e_lfanew);
     IMAGE_SECTION_HEADER *sec = IMAGE_FIRST_SECTION(nt);
     for (WORD s = 0; s < nt->FileHeader.NumberOfSections; s++, sec++) {

@@ -525,6 +525,7 @@ public:
         set_env("HK_PC_JUDGE_OFFSET", judge_offset_ ? std::to_string(judge_offset_) : "");
         set_env("HK_PC_LOG", win_path(save_ + "/pc.log"));
         set_env("HK_PC32_LOG", win_path(save_ + "/pc.log"));
+        set_env("HK_PC_PROGRAM", m.count("exe") ? m["exe"] : "popn22.dll");   // the game's own code: the DLL, not the loader
         { std::ofstream(save_ + "/pc.log", std::ios::trunc); }
         printf("hiraku-pc: %s from %s; saves in %s\n", game_.c_str(), contents_.c_str(), save_.c_str());
         fflush(stdout);

@@ -23,6 +23,8 @@ void pc64_patch(void *slot, void *fn);   // a pointer (an import or a vtable's) 
 
 // The pieces, each hooked into the game's DLL (game) or AVS2's core (avs) before the game starts
 void pc64_files_install(HMODULE game, const char *game_dir);   // files.c: the data mounted from the game's folder
+const char *pc64_data_folder(void);        // files.c: the game's data folder's name (plain_data, or data)
+const char *pc64_game_folder(void);        // ... the game's folder ("": the current one)
 void pc64_display_install(HMODULE game);   // display.c: two screens on one adapter
 void pc64_board_install(HMODULE game);     // board.c: the BI3A board, the AMI2000 reader, the license key
 void pc64_net_install(HMODULE avs);        // net.c: the network card, e-AMUSEMENT's port, the keepalive
@@ -80,6 +82,7 @@ int pc64_crt(void);
 unsigned pc64_crt_inputs(unsigned in);
 int pc64_crt_view(int *x, int *y);
 void pc64_crt_cursor(int x, int y);   // (HK_SCRIPT's cursor:X:Y)
-void pc64_crt_install(HMODULE game);   // crt.c: its play screen's characters, scaled to the 4:3 picture
+void pc64_crt_install(HMODULE game);
+void pc64_songs_install(HMODULE game);   // songs.c: songs the game left out, back from the mods' music data   // crt.c: its play screen's characters, scaled to the 4:3 picture
 // link.c: a fifth of a millisecond's nap
 void pc64_nap(void);

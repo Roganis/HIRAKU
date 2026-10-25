@@ -2601,3 +2601,44 @@ From 9th style (2003) to HAPPY SKY, IIDX is a Windows PC game (Konami's model C0
    - **Kernel:** the assembly glue is identical in all five programs. The BM3 C kernel matches pop'n 5/6/7 at 115/118 unique functions (`analyze/sigmatch.py`). pop'n 4 has the same glue but a differently compiled C kernel. Details are in docs/KERNEL.md.
    - **Game code** shares about 10% with BM3, and pop'n 6↔7 share 35%.
    - The "SDK sharing" risk in §6 is mostly retired for the kernel. The ATA/GCU/SPU driver libraries are still to be checked the same way once they are labelled in BM3.
+
+## 34. Songs back from the player's music data (written 2026-10-26)
+
+The 64-bit PC pop'n keeps a slot in its music table for every song it ever had, those it left out
+marked so (mask 0x80000000: 311 of 2374). Players' Omnimix packs (popnhax's music data: XML with
+`<music id>` texts, characters, BPMs and `<chart idx>` files, the songs' packs in `sd/`, their
+banners and backgrounds in ifs_layeredfs's `_ifs` folders) fill them in again. After the work of a
+friend of HIRAKU's author on the same game (popnMods' native Omnimix: its tables' layouts, the
+difficulty bits, characters by name, the old songs' background guard; credited when it ships).
+Nothing of a game comes with HIRAKU: the songs are the player's.
+
+- **The mods reach the loader** (`hiraku-pc` passes the launcher's mods as `HK_PC64_DATA`); each
+  mod folder is laid over the game's data folder, files it adds too (`runtime/pc64/files.c`: the
+  game's CreateFileW/A and FindFirstFile in avs2-core, several layers, the first wins).
+- **The songs** (`runtime/pc64/songs.c`): every `.xml` under the mods' folders read before the game
+  starts (the first mod's fields win, later files of a mod over earlier ones; Shift-JIS or UTF-8,
+  comments out). A song left out that the data describes, with its Normal chart's file there (a mod's
+  or the game's), is written into the game's table: texts, characters by name (the pair side by
+  side, the one the game's own songs use most), folder, version, categories, levels, holds, charts
+  (new entries in the chart table, shared when two are the same), its difficulties' mask bits, the
+  unlock bits (0x08020080) cleared. Found by the code that reads the tables, not by addresses.
+- **What the game needs besides** (found here): the regions a song is listed for (+120: the game's
+  songs' 0x17; 0 in the slots left out, so the music select never listed them: popnMods' Unlock All
+  hid this), each chart's tempos (+222, 12 bytes a chart: tempo, share of the song in thousandths,
+  twice more), from `display_bpm`'s two groups.
+- **Pictures inside the game's packs**: a song's banner (`/ifs_image_kc/kc_NNNN.ifs`), background,
+  characters' names and pictures are read one by one through AVS2's open and stat (ordinals 79,
+  100); a mod's `tex/system/kc_diff_ifs/kc_NNNN.ifs` (and the other names the packs had) is given
+  instead, through a mount of each mod folder (`/hiraku_modN`). Without a banner the game asks for
+  it forever (the music select stops).
+- **The background guard**: the game waits for an old song's own background forever when it isn't
+  there; a song brought back without one in a mod takes the game's way for a song without one
+  (a jump at the comparison after the background checks, to a stub with the songs' bitmap).
+- Checked (2026-10-26) with a player's Omnimix pack: 225 songs back (261 charts; 13 described
+  without their files, left out), song 1 found in the title index, its banner from the pack, its
+  Light chart played through to the result at its 110 BPM.
+- **Not yet:** the "Loading" mark on restored songs' banners at the music select (a picture still
+  asked for), scores for them on HIRAKU's e-AMUSEMENT server, songs past the table (ids ≥ 2374:
+  custom songs; popnMods' high-ID work is a staged experiment), the `_ifs` folders' PNGs (only
+  whole members), By Medal and the extra Random entries (the source of By Medal's code is needed),
+  the launcher's Mods… for these games.

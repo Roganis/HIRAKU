@@ -767,6 +767,12 @@ std::vector<std::pair<std::string, std::string>> folder_files() {
     return {g_folder_files.begin(), g_folder_files.end()};
 }
 
+std::vector<std::string> folders() {
+    std::vector<std::string> f;
+    for (const Mod &m : g_mods) f.push_back(m.dir);
+    return f;
+}
+
 std::vector<std::string> describe() {
     std::vector<std::string> d;
     for (const Mod &m : g_mods) d.push_back(m.name + (m.version.empty() ? "" : " " + m.version) + " (" + m.dir + ")");

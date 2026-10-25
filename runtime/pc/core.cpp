@@ -454,6 +454,16 @@ public:
             set_env("HK_PC64_OVERLAY", win_path(save_ + "/single-screen"));
             printf("hiraku-pc: the single-screen layout from %s/single-screen\n", save_.c_str());
         }
+        // the mods (docs/MODS.md): each folder the game's data folder's files laid over it, new ones
+        // too (a file at <mod>/a/b is the game's data/a/b), and the songs its music data describes
+        // (the loader's HK_PC64_DATA: runtime/pc64/files.c, songs.c)
+        std::string data_mods;
+        const std::vector<std::string> mods = hk::mods::folders();
+        for (const std::string &d : mods) data_mods += (data_mods.empty() ? "" : ";") + win_path(d);
+        if (!data_mods.empty()) {
+            set_env("HK_PC64_DATA", data_mods);
+            printf("hiraku-pc: %zu mod%s over the game's data\n", mods.size(), mods.size() == 1 ? "" : "s");
+        }
         { std::ofstream(save_ + "/pc.log", std::ios::trunc); }
         printf("hiraku-pc: %s from %s; saves in %s\n", game_.c_str(), contents_.c_str(), save_.c_str());
         fflush(stdout);

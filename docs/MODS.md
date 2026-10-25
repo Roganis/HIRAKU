@@ -397,6 +397,16 @@ so their memory and files are the game's own process's, not an emulated machine'
   the files by their logical paths, while the disk holds numbered folders libavs maps them from;
   a mod's files need both worked out (PLAN.md section 30, PC-6).
 
+- **The 64-bit PC pop'n** (`[pc] loader = "pc64"`): a mod's folder is laid over the game's data
+  folder, new files too, the first mod winning. Its music data (popnhax's XML, any `.xml` in the
+  folder: `<music id>` with its texts, characters, `display_bpm` and `<chart idx>` files) brings back
+  the songs the game left out, each whose Normal chart's `sd/<folder>/<file>.ifs` is there; a
+  picture the game reads from inside one of its packs (a song's banner `kc_NNNN.ifs`, its
+  background) can be a whole file in the mod's folder named after the pack, as ifs_layeredfs's
+  (`tex/system/kc_diff_ifs/kc_0001.ifs`). The save folder's `pc.log` lists the songs brought back
+  and those left out (PLAN.md section 34). Not yet: songs past the game's own (custom songs), PNGs
+  in the `_ifs` folders, and their scores on HIRAKU's e-AMUSEMENT server.
+
 ## Per core
 
 | core | patches | media |

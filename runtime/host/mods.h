@@ -39,6 +39,7 @@ struct MemoryPatch {
 };
 std::vector<MemoryPatch> memory_patches();
 std::vector<std::pair<std::string, std::string>> folder_files();
+std::vector<std::string> folders();   // the mods' folders, in the list's order (the first wins)
 
 // [[text]]: a string of the game's (Shift-JIS here, converted from the mod's UTF-8) replaced
 // wherever it is, as a whole string (a zero before and after it), by one that fits its room (the

@@ -16,7 +16,7 @@
 #include <stdint.h>
 
 #define HK_PC_LINK_MAGIC 0x4b50484bu   // "HKPK"
-#define HK_PC_LINK_VERSION 7u
+#define HK_PC_LINK_VERSION 8u
 
 // The pad's bits, as Konami's ezusb.dll gives them to pop'n music (usbPadRead)
 #define HK_PC_PAD_SERVICE (1u << 6)
@@ -112,6 +112,8 @@ struct hk_pc_link {
     volatile uint8_t turntable[2], slider[5];
     volatile char ticker[9];
     volatile uint8_t top_lamp, top_neon, led;
+    // (v8) the C02 cabinet's player 2: the 10-key (as keypad) and the card (as card_seq)
+    volatile uint32_t keypad2, card_seq2;
 };
 
 #define HK_PC_PIXELS 4096u                         // where the pixels start in the file

@@ -237,6 +237,9 @@ uint32_t hk_card_seq(void) {
     return l->card_seq + extra;
 }
 
+uint32_t hk_keypad2_now(void) { return hk_link()->keypad2; }
+uint32_t hk_card_seq2(void) { return hk_link()->card_seq2; }
+
 // --- the game's paths (HK_PC_MAP)
 
 static struct { char from[MAX_PATH], to[MAX_PATH]; size_t n; } g_map[8];

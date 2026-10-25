@@ -51,6 +51,8 @@ uint32_t hk_coins_now(void);
 void hk_set_coin_mode(int mode);   // usbCoinMode: 1, coins as the coin switch's pulses on the pad
 uint32_t hk_keypad_now(void);   // HK_PC_KEY_* and digits: hiraku-pc's and the keys bound to them
 uint32_t hk_card_seq(void);     // moves on with each card: hiraku-pc's and the card key's
+uint32_t hk_keypad2_now(void);  // the same for a second reader (the C02 cabinet's player 2): hiraku-pc's only
+uint32_t hk_card_seq2(void);
 // The network's calls that lead to e-AMUSEMENT (net.c): the hook for a ws2_32 call, or NULL
 void *hk_net_hook(const char *fn);
 void *hk_net_card_hook(const char *fn);   // iphlpapi's

@@ -217,21 +217,23 @@ STUB(usbH8KeyboardGetStatus, 0)
 
 // The 10-keys: their keys as PS/2 set 2 scan codes (the code down, f0 and the code up), as the game
 // decodes them (bm2dx.exe 0x469630: the keypad's digits, Enter, Backspace for Clear, the decimal
-// point; Enter without its e0, which the game skips). Player 1's from hiraku-pc's keypad bits (the
-// link) and the keys bound to them; the game asks how many bytes wait (GetSize, then GetSizeDone)
-// and reads them (ReadData)
+// point; Enter without its e0, which the game skips). Unit 1 is player 1's, from hiraku-pc's keypad
+// bits (the link) and the keys bound to them; unit 2 player 2's (the link's keypad2). The game asks
+// how many bytes wait (GetSize, then GetSizeDone) and reads them (ReadData)
 static uint8_t g_keys[2][64];
 static int g_nkeys[2], g_key_unit;
-static uint32_t g_keypad_was;
+static uint32_t g_keypad_was[2];
 
 static void keypad_poll(void) {
     static const uint8_t scan[13] = {0x70, 0x69, 0x72, 0x7a, 0x6b, 0x73, 0x74, 0x6c, 0x75, 0x7d, 0x5a, 0x71, 0x66};
-    const uint32_t now = hk_keypad_now(), changed = now ^ g_keypad_was;
-    g_keypad_was = now;
-    for (int k = 0; k < 13; k++) {
-        if (!(changed >> k & 1) || g_nkeys[0] + 2 > (int)sizeof g_keys[0]) continue;
-        if (!(now >> k & 1)) g_keys[0][g_nkeys[0]++] = 0xf0;
-        g_keys[0][g_nkeys[0]++] = scan[k];
+    for (int u = 0; u < 2; u++) {
+        const uint32_t now = u == 0 ? hk_keypad_now() : hk_keypad2_now(), changed = now ^ g_keypad_was[u];
+        g_keypad_was[u] = now;
+        for (int k = 0; k < 13; k++) {
+            if (!(changed >> k & 1) || g_nkeys[u] + 2 > (int)sizeof g_keys[u]) continue;
+            if (!(now >> k & 1)) g_keys[u][g_nkeys[u]++] = 0xf0;
+            g_keys[u][g_nkeys[u]++] = scan[k];
+        }
     }
 }
 CALL4(usbH8KeyboardGetSize) {
@@ -259,8 +261,9 @@ CALL4(usbH8KeyboardReadData) {
 
 // --- the magnetic card readers (units 1 and 2: players 1 and 2). A card is 128 bytes, kept in a file
 // (HK_PC_CARD1 / HK_PC_CARD2, from hiraku-pc: the save folder's card.bin and card2.bin): what the
-// game writes is kept, and a card never written is a new e-AMUSEMENT card (new_card). Player 1's card is offered with the
-// card control (the link's card_seq) and taken in when the game opens the slot; the game reads it,
+// game writes is kept, and a card never written is a new e-AMUSEMENT card (new_card). A card is
+// offered with its player's card control (the link's card_seq, card_seq2) and taken in when the
+// game opens the slot; the game reads it,
 // writes or formats it, and gives it back (eject). Each call is done at once (Konami's answer 0x60
 // while the H8 works). usbCardGetStatus: 0 no card, 3 a card in (bm2dx.exe 0x4342b8)
 struct card {
@@ -306,12 +309,10 @@ static void card_save(int u) {
 static int card_unit(int unit) {
     if (unit < 1 || unit > 2) return -1;
     struct card *c = &g_cards[unit - 1];
-    if (unit == 1) {
-        const uint32_t seq = hk_card_seq();
-        if (seq != c->seq_seen) {
-            c->seq_seen = seq;
-            if (!c->inside) c->offered = 1, hk_log("hiraku-pc: C02: player 1's card held to the slot");
-        }
+    const uint32_t seq = unit == 1 ? hk_card_seq() : hk_card_seq2();
+    if (seq != c->seq_seen) {
+        c->seq_seen = seq;
+        if (!c->inside) c->offered = 1, hk_log("hiraku-pc: C02: player %d's card held to the slot", unit);
     }
     if (c->open && c->offered && !c->inside) {
         card_load(unit - 1);

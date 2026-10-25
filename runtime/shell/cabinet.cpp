@@ -353,13 +353,10 @@ std::vector<Control> make_iidx() {
     c.push_back({"Coin 1", "Coin", "Cabinet", false, "key:5"});
     c.push_back({"Test", "Test", "Cabinet", false, "key:F2"});
     c.push_back({"Service", "Service", "Cabinet", false, "key:9"});
-    // 9th style's (the C02 cabinet, runtime/pc/ezusb_c02.c): the e-AMUSEMENT card slot and 10-key
-    c.push_back({"Card", "e-AMUSEMENT card (9th style on)", "e-AMUSEMENT", false, "key:Insert"});
-    for (int k = 0; k <= 9; k++)
-        c.push_back({"Keypad " + std::to_string(k), "10-key " + std::to_string(k), "e-AMUSEMENT", false, "key:Keypad " + std::to_string(k)});
-    c.push_back({"Keypad Enter", "10-key Enter", "e-AMUSEMENT", false, "key:Keypad Enter"});
-    c.push_back({"Keypad Clear", "10-key Clear", "e-AMUSEMENT", false, "key:Backspace"});
-    c.push_back({"Keypad .", "10-key .", "e-AMUSEMENT", false, "key:Keypad ."});
+    // 9th style's (the C02 cabinet, runtime/pc/ezusb_c02.c): a card slot and 10-key each side;
+    // player 2's 10-key has no keys by default
+    add_card_unit(c, "", "Insert");
+    add_card_unit(c, "P2 ", "Delete");
     return c;
 }
 

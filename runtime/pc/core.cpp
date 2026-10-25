@@ -732,12 +732,16 @@ private:
             if (value) link_->coins = link_->coins + 1;
         } else if (name == "Card") {   // player 1's card held to the slot
             if (value) link_->card_seq = link_->card_seq + 1;
-        } else if (name.rfind("Keypad ", 0) == 0) {   // player 1's 10-key
-            const std::string k = name.substr(7);
-            if (k.size() == 1 && k[0] >= '0' && k[0] <= '9') bit(link_->keypad, 1u << (k[0] - '0'));
-            else if (k == "Enter" || k == "00") bit(link_->keypad, HK_PC_KEY_00);
-            else if (k == ".") bit(link_->keypad, HK_PC_KEY_DECIMAL);
-            else if (k == "Clear") bit(link_->keypad, HK_PC_KEY_CLEAR);
+        } else if (name == "P2 Card") {
+            if (value) link_->card_seq2 = link_->card_seq2 + 1;
+        } else if (name.rfind("Keypad ", 0) == 0 || name.rfind("P2 Keypad ", 0) == 0) {   // the 10-keys
+            const bool two = name[0] == 'P';
+            volatile uint32_t &pad = two ? link_->keypad2 : link_->keypad;
+            const std::string k = name.substr(two ? 10 : 7);
+            if (k.size() == 1 && k[0] >= '0' && k[0] <= '9') bit(pad, 1u << (k[0] - '0'));
+            else if (k == "Enter" || k == "00") bit(pad, HK_PC_KEY_00);
+            else if (k == ".") bit(pad, HK_PC_KEY_DECIMAL);
+            else if (k == "Clear") bit(pad, HK_PC_KEY_CLEAR);
             else return false;
         } else if (name == "P1 Turntable" || name == "P2 Turntable") {   // a position (scripts' `set`)
             link_->turntable[name[1] - '1'] = (uint8_t)value;

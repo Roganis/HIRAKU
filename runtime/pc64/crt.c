@@ -13,6 +13,8 @@
 //     the PIN, a name, events) can be done there.
 //   - A new card's terms (after its PIN): button 5 touches YES, then OK, and the touch screen is
 //     shown for the name. Leaving a scene hides it.
+//   - HI-SPEED on buttons 4 (down) and 6 (up) at the options (held: again every 0.2 s), the option
+//     editor opened first when it isn't (the main screen then shows the game's preview).
 //   - The PIN, typed on the 10-key: the game's pad (on the touch screen) always in its digits'
 //     order (it picks one of fourteen orders; the loader has it pick the plain one), each digit a
 //     touch on its button, 00 the pad's clear.
@@ -46,6 +48,8 @@ static const struct { int scene; int count; struct place at[3]; } SCENES[] = {
 static const short PIN_X[3] = {496, 636, 776}, PIN_Y[4] = {126, 264, 406, 544};   // 7-9, 4-6, 1-3, 0 (rows)
 #define PIN_CLEAR_X 704
 #define PIN_CLEAR_Y 544
+#define OPTIONS 22                       // the options before a song (the touch screen's editor):
+static const struct place EDIT_OPTIONS = {653, 623}, SPEED_UP = {362, 87}, SPEED_DOWN = {362, 555};
 static const struct place TERMS[2] = {{393, 450}, {650, 747}};   // a new card's terms: YES, then OK
 
 // The characters (1080-line coordinates): scaled by CHARA_SCALE about a point at the bottom of the
@@ -142,6 +146,8 @@ static void move_cursor(unsigned in, unsigned keys) {
 static void watch(unsigned in, unsigned keys) {
     static int scene_seen = -1, step, nine_done;
     static unsigned cards_seen;
+    static int editing;            // the option editor opened (by the shortcut, or touched in the view)
+    static DWORD speed_at;         // HI-SPEED's last step
     static unsigned in_was = ~0u, keys_was = ~0u;   // nothing pressed at the start
     static DWORD scene_at;
     const unsigned in_down = in & ~in_was, keys_down = keys & ~keys_was;
@@ -155,7 +161,7 @@ static void watch(unsigned in, unsigned keys) {
     }
     const int scene = pc64_scene;
     if (scene != scene_seen) {   // a new scene: its first place first, the touch screen hidden
-        scene_seen = scene, step = 0, scene_at = GetTickCount(), cards_seen = pc64_cards_given;
+        scene_seen = scene, step = 0, scene_at = GetTickCount(), cards_seen = pc64_cards_given, editing = 0;
         if (scene == TITLE) nine_done = 0;   // a new credit
         if (g_view) g_view = 0, pc64_log("crt: the touch screen hidden (scene %d)", scene);
     }
@@ -163,6 +169,7 @@ static void watch(unsigned in, unsigned keys) {
         move_cursor(in, keys);
         if ((keys_down & KEY(5)) || (in_down & PC64_IN_BUTTON(5))) {
             pc64_log("crt: the touch screen touched at %d,%d", g_cx, g_cy);
+            if (scene == OPTIONS) editing = 1;
             touch_soon(1, (struct place){g_cx, g_cy}, (struct place){g_cx, g_cy});
         }
         return;
@@ -171,6 +178,25 @@ static void watch(unsigned in, unsigned keys) {
         nine_done = 1;
         pc64_log("crt: the music select in nine-button mode (its songs by title)");
         touch_soon(2, (struct place){CATEGORIES_X, CATEGORIES_Y}, (struct place){BY_TITLE_X, BY_TITLE_Y});
+    }
+    if (scene == OPTIONS) {   // HI-SPEED: a step at the press, then every 0.2 s from 0.4 s held
+        static DWORD held_since;
+        const unsigned speed = in & (PC64_IN_BUTTON(4) | PC64_IN_BUTTON(6));
+        const DWORD now = GetTickCount();
+        int go = 0;
+        if (!speed) held_since = 0;
+        else if (in_down & speed) held_since = now, speed_at = now, go = 1;
+        else if (held_since && now - held_since >= 400 && now - speed_at >= 200) speed_at = now, go = 1;
+        if (go) {
+            const struct place arrow = (speed & PC64_IN_BUTTON(6)) ? SPEED_UP : SPEED_DOWN;
+            if (!editing) {
+                editing = 1;
+                pc64_log("crt: the option editor opened for HI-SPEED");
+                touch_soon(2, EDIT_OPTIONS, arrow);
+            } else {
+                touch_soon(1, arrow, arrow);
+            }
+        }
     }
     if (scene == ENTRY && (keys_down & 0x7ffu)) {   // the PIN pad's buttons
         struct place p = {PIN_CLEAR_X, PIN_CLEAR_Y};

@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // A local e-AMUSE3 server for Python 1 pop'n (easerver.h): the calls taken apart and answered, the
 // files kept. Its games' answers are in easerver_*.cpp: rankings (rank), GuitarFreaks and
-// DrumMania V (gfdm), pop'n 9-14 (popn), one card for all (share), pop'n 15-18 (pc).
+// DrumMania V (gfdm), pop'n 9-14 (popn), one card for all (share), pop'n 15-18 (pc), beatmania
+// IIDX 9th style (iidx).
 #include "python/easerver_parts.h"
 #include "python/kbin.h"
 #include "python/lobby.h"
@@ -136,16 +137,8 @@ std::string EamuseServer::answer(const Call &c, const Request &r, const std::str
     // beatmania IIDX 9th style (model C02, the PC's e-AMUSE3, PLAN.md section 33): pop'n 9's calls
     // (numbering, userid, ntp, posevent, package: below) and two of its own
     if (game == "C02") {
-        // its module: method ranking / music / weekly with a command line ("getinfo", "getranking
-        // 20", "getmid", "getrank CARD 120"...). The answer names what it answers: its method
-        // attribute the method and the command's first word run together ("musicgetrank": sonet.dll
-        // 0x10004600 reads nothing of an answer without it), its status a word, SOK for done
-        // (0x10003840; ENOTFOUND, ENOCARDID, EPARAM..., anything else an error the game shows as a
-        // network error). Nothing kept yet: every answer is an empty SOK
-        if (m == "C02") {
-            const std::string command = attr(r.attrs, "command");
-            return "<C02 status=\"SOK\" method=\"" + esc(f + command.substr(0, command.find(' '))) + "\"/>";
-        }
+        // its module: method music / weekly / ranking / grade with a command line (easerver_iidx.cpp)
+        if (m == "C02") return answer_c02(r);
         // the player: the card's record as the game wrote it (its DJ name, PIN, ...), its own file
         const std::string card = attr(r.attrs, "card");
         if (m == "userdata" && f == "read") {

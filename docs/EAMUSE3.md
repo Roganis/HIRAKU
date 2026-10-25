@@ -1203,6 +1203,52 @@ library, from the RAM of a running game (no symbols; the addresses are where it 
   player's totals and each song and seqmode's best score, combo and percentage, and its plays
   (`gfdmv-GDID`); the players in `gfdmv-cards`.
 
+## beatmania IIDX 9th style (a PC game)
+
+IIDX 9th style (`C02:J:A:H`, PLAN.md §33) talks e-AMUSE3 through its own network DLLs (sonet,
+sosys, eam3lib): pop'n 9's envelope and common calls (services, pcbtracker, posevent, ntp,
+numbering, userid ctou, userdata read/write, package), its magnetic cards pop'n 9's format.
+Its own calls are one module, `C02`, with a method and a command line:
+`<C02 method="music" command="reg 2003010000000077 1 908 12 5 7 0"/>` (sonet.dll prints each
+request kind's fields in turn, numbers in decimal, names in EUC-JP). The answer:
+
+- `<C02 status="SOK" method="musicreg" .../>`: **method** the method and the command's first word
+  run together (sonet.dll `0x10004600` reads nothing of an answer without it: the game then shows
+  a network error), **status** a word (SOK; ENOTFOUND, ENOCARDID, EPARAM, EDENIED... errors).
+- Values as attributes of `<C02>`; lists as child elements (any name), each read into the game's
+  array in turn without a bound: never more than the game asked for. Their parsers: sonet.dll's
+  method tables (`0x100136a0` music, `0x100137c0` ranking, `0x10013920` weekly, `0x100135f8` grade;
+  per command its name, its field count and a handler per element depth).
+
+The calls, what the game does with the answers (bm2dx JAH), and HIRAKU's answers
+(`runtime/python/easerver_iidx.cpp`, files in the server's folder):
+
+- **music reg** `CARD chart song pgreat great djlevel cleared` after each stage (`0x4364d0`): chart
+  0-2 SP normal, hyper, another, 3-5 DP; the song's number (style × 100 + n, 908); the DJ level 0
+  AAA to 7 F (`0x425800`: 8 − 9·EX/(2·notes), EX = 2·pgreat + great). Answer `mid`, `clid`,
+  `bestScore` (1: a new best, the only part the game uses). HIRAKU keeps each card's best by song
+  and chart (EX, the best DJ level, cleared ever, plays: `iidx9-scores`).
+- **music getrank** `CARD 120` when a card is read: the player's marks for music select
+  (`0x415e70`: per song, each chart's DJ level and a cleared bit). Answer the week's song (`mid`,
+  `wid`) and a child per chart, `cl="chart"`, its text 4 hex digits a song: `song << 5 | DJ
+  level << 2 | cleared << 1`. At most 1050 songs (the game's buffer, 0x189c bytes a player).
+- **music getranking** `20`: the most played songs, a child each with `mid` (HIRAKU: by plays on
+  this server).
+- **weekly getmid**: the week's song `mid` and the week `wid`. **weekly entry** `CARD wid chart
+  pgreat great NAME SHOP PREFECTURE opt` after playing the week's song: answer `bstscr`. getinfo,
+  getme and getranker exist but the game doesn't ask. The week's song was Konami's choice: HIRAKU
+  takes `iidx9-weekly-song` (a song number) or else one of the songs played on the server, another
+  each week (none before any play).
+- **ranking getinfo**: the ranking `rid` and six courses `c0`-`c5` (0-11: the game keeps the top
+  20 of each of 12 courses, `0x1909d90` + course × 0x5f0), shown in attract. HIRAKU: `iidx9-courses`
+  (`rid c0 c1 c2 c3 c4 c5`) or ranking 1 with courses 0-5. **ranking getranker** `RID 0 20 COURSE`:
+  a child per ranker, `pid` (the prefecture), `gnum`, `pgnum`, `opt`, `name`, `opname` (the shop),
+  `name2`, `udate`. **ranking entry** after a course, 14 fields (`0x10004d50`: `CARD course a
+  pgreat great NAME b opt SHOP c PREFECTURE d CARD2 NAME2`, two cards for a course played by two):
+  answer `rentry`, `bstscr`, `bstranking`, `topranker`. **ranking getme** `CARD n`: children
+  `clid`, `coid`, `gnum`, `pgnum`, `tcnt`, `cflg` (HIRAKU: none yet).
+- **grade raised**: SOK.
+
 ## Not known yet
 
 - What `alter` and `aflag` are for; what the pop'n friends statuses 600 and 601

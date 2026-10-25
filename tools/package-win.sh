@@ -39,6 +39,7 @@ if [ -d "$build/pc" ]; then
   # the C02 cabinet's board (beatmania IIDX 9th style), in a folder of its own
   if [ -f "$build/pc/c02/ezusb.dll" ]; then mkdir -p "$d/bin/pc/c02" && cp "$build/pc/c02/ezusb.dll" "$d/bin/pc/c02/"; fi
   cp "$build"/pc/hiraku-pc64.exe "$d/bin/pc/" 2>/dev/null || true
+  cp "$build"/pc/hiraku-pc32.exe "$d/bin/pc/" 2>/dev/null || true
 fi
 # HK_PACKAGE_BIN: more programs for bin\ (a release's 7-Zip, 7zr.exe: tools/mameset.py looks there first)
 for f in ${HK_PACKAGE_BIN:-}; do cp -L "$f" "$d/bin/"; done

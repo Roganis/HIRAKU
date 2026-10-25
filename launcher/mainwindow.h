@@ -35,7 +35,7 @@ protected:
     void dropEvent(QDropEvent *e) override;
     bool eventFilter(QObject *o, QEvent *e) override;   // the keys typed in the window (secretKeys)
 private:
-    void secretKeys(int key);   // ↑↑↓↓←→←→ B A: the 64-bit PC games listed, or hidden again
+    void secretKeys(int key);   // ↑↑↓↓←→←→ B A: the AVS2 PC games listed, or hidden again
     void refresh();
     void applyFilter();
     void updateActions();

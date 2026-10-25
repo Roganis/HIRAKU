@@ -58,9 +58,10 @@ std::string EamuseServer::answer_later(const std::string &game, const Request &r
         // package.list, and stops at a network error (boot status 1,2008) when the module isn't listed
         // and its own modules (registered with the library at start-up): listed, or the library fails
         // their calls before sending (the boot check's NETWORK ERROR)
+        // (the last 32-bit PC pop'n, also M39, PLAN.md §35: info24 and player24 of its own)
         if (game == "M39")
-            for (const char *mod : {"pcbevent", "pcb", "info", "player", "lobby24", "loctest24", "sidmgr", "sppass", "eacoin",
-                                    "dlstatus", "ins", "apsmanager", "local2", "local3"})
+            for (const char *mod : {"pcbevent", "pcb", "info", "player", "info24", "player24", "lobby24", "loctest24", "sidmgr",
+                                    "sppass", "eacoin", "dlstatus", "ins", "apsmanager", "local2", "local3"})
                 items += std::string("<item name=\"") + mod + "\" url=\"http://" + esc(host) + "/\"/>";
         if (game == "M39")   // the keepalive as pop'n 15-18's (its pings answered by HIRAKU's loader)
             items += "<item name=\"keepalive\" url=\"http://127.0.0.1/keepalive?pa=127.0.0.1&amp;ia=127.0.0.1&amp;"

@@ -2709,6 +2709,32 @@ content encrypted (`bootstrap.exe` decodes it); not read yet.
 2. **To the attract loop:** `games/` entry and ingest; the board's start-up and security, the
    reader, the network and `info24`'s boot calls on HIRAKU's server; a new cabinet's first-boot
    errors.
+   - **Done (2026-10-26):** `games/popn28` (`[pc] loader = "pc32"`, family `pcpopn`); ingest finds
+     the contents folder by `modules/popn22.dll` and the model, the soft ID from `bootstrap.xml`
+     (machine.txt: `loader=pc32`, `contents=`). `hiraku-pc` (`init_pc32`) makes the save folder's
+     `run/` the game's AVS2 root: `modules/` copied with HIRAKU's `ezusb.dll`, `libacio.dll` and
+     `hiraku-pc32.exe` (the program's copy for pop'n 15-18 and this one: `copy_program`), `prop/`
+     copied, `data/` a link (a junction on Windows), Japanese (`LC_ALL`), the same link, server and
+     pacing as pop'n 15-18. Listed by the launcher only once unlocked, as the 64-bit games.
+   - **The cabinet's drives:** the game mounts `e:/` as `/e_drive` (its downloads in `up/`, `tmp/`)
+     through AVS2; with no such drive the package loader tried to make its folder once a second for a
+     minute, then faulted (popn22.dll+0x137184). The loader mounts D:, E: and F: from the save
+     folder's `dev/vfs/drive_<letter>` instead (as spice2x), found at the game's import of
+     `avs_fs_mount` by its address (AVS2's calls are imported by ordinal).
+   - **The server:** `services` lists `info24` and `player24` for M39 too (the library fails a call to
+     a module not listed). The start-up asks `services`, `pcbtracker.alive`, `message.get`,
+     `facility.get` (the 64-bit game's answer serves), `pcbevent.put`, `package.list`, then
+     `pcb24.error` (a fault it saved from the last run), `pcb24.boot` and `info24.common`; each answered
+     `status="0"` with nothing more is enough for NETWORK OK.
+   - **Its pictures:** Wine's own Direct3D 9 drew everything after the start-up checks magnified into
+     a corner (as the 64-bit game's did); DXVK's 32-bit `d3d9.dll` in `bin/pc/dxvk32/` is copied beside
+     the game's modules and loaded instead (`d3d9=n,b`; the Linux package takes it from
+     `HK_PACKAGE_DXVK/x32/`).
+   - **Checked under Wine** (`hiraku-pc --game popn28 --window`): the start-up checks, then the title
+     and attract loop (NEW SONG pages, "e-amusement pass をタッチしてください", NETWORK OK) at 640x480;
+     pop'n 15 through the shared code still boots to its title; the Windows `hiraku-pc.exe` links.
+   - **Not yet:** `info24.common`'s content (events' phases, rankings, goods: bemaniutils' pop'n 27
+     answer is the model, the game's own reader the reference), real Windows.
 3. **Through `hiraku-pc`:** pictures, sound, coins, buttons (pop'n 16-18's timed presses, the judging
    routine by shape), the game's own frame wait taken out; a credit played.
 4. **Players:** `player24`'s calls and the record's layout from the game's code; scores; one card

@@ -506,7 +506,7 @@ bool MainWindow::eventFilter(QObject *o, QEvent *e) {
     return QMainWindow::eventFilter(o, e);
 }
 
-// The newest games (the 64-bit PC ones) aren't listed until the window
+// The newest games (the AVS2 PC ones) aren't listed until the window
 // has been typed the Konami code; typed again, they are hidden again (ui/pc64)
 void MainWindow::secretKeys(int key) {
     static const int code[] = {Qt::Key_Up,   Qt::Key_Up,    Qt::Key_Down, Qt::Key_Down, Qt::Key_Left,
@@ -541,7 +541,7 @@ void MainWindow::closeEvent(QCloseEvent *e) {
 void MainWindow::refresh() {
     QString keep = selected() ? selected()->id : cfg::settings().value("ui/lastGame").toString();
     m_games = scanGames();
-    if (!cfg::settings().value("ui/pc64").toBool())   // the 64-bit PC games: only once unlocked (secretKeys)
+    if (!cfg::settings().value("ui/pc64").toBool())   // the AVS2 PC games: only once unlocked (secretKeys)
         m_games.erase(std::remove_if(m_games.begin(), m_games.end(), [](const Game &g) { return g.hidden; }), m_games.end());
     // series by series, each system's games by year and title
     QList<Shelf> shelves;
@@ -687,7 +687,7 @@ static QString statusOf(const Game &g, bool *notable) {
     if (const int n = cfg::modsOn(g.id).size()) notes << (n == 1 ? QString("1 mod") : QString("%1 mods").arg(n));
     if (!cfg::settings().value("gameArgs/" + g.id).toString().isEmpty()) notes << "own arguments";
     if (cfg::settings().contains("dips/" + g.id)) notes << "DIP switches set";
-    if (g.hidden && cfg::settings().value("singleScreen/" + g.id).toBool()) notes << "one 4:3 screen";
+    if (g.loader == "pc64" && cfg::settings().value("singleScreen/" + g.id).toBool()) notes << "one 4:3 screen";
     return notes.isEmpty() ? QString("Ready") : notes.join(", ");
 }
 
@@ -923,7 +923,7 @@ QStringList MainWindow::arguments(const Game &g) const {
         if (QString ac = s.value("eamuse/autocard", "off").toString(); ac != "off") a << "-autocard" << ac;
         if (s.value("eamuse/autopin", false).toBool()) a << "-autopin";
     }
-    if (g.hidden && s.value("singleScreen/" + g.id).toBool()) a << "--single-screen";   // (Game menu)
+    if (g.loader == "pc64" && s.value("singleScreen/" + g.id).toBool()) a << "--single-screen";   // (Game menu)
     if (g.core == "pc") {   // pop'n music 15-18's presses (runtime/pc/press.c)
         if (s.value("game/pressTime", false).toBool()) a << "--press-time";
         if (int ms = s.value("game/judgeOffset", 0).toInt(); ms) a << "--judge-offset" << QString::number(ms);
@@ -1086,7 +1086,7 @@ void MainWindow::fillGameMenu(QMenu *menu, const Game &g) {
         cd->setChecked(cfg::settings().value("cd/" + id).toString() == "install");
         cd->setToolTip("To install again, or finish an install that stopped before it was done");
     }
-    if (g.hidden) {   // the 64-bit PC games ([pc] loader = "pc64"): on one 4:3 screen (runtime/pc64/crt.c)
+    if (g.loader == "pc64") {   // the 64-bit PC games: on one 4:3 screen (runtime/pc64/crt.c)
         auto *one = menu->addAction("One 4:3 screen, nine buttons", this, [this, id](bool on) {
             if (on) cfg::settings().setValue("singleScreen/" + id, true);
             else cfg::settings().remove("singleScreen/" + id);

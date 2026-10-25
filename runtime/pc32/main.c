@@ -53,13 +53,13 @@ struct avs_names {
     const char *core, *ea3, *version;
     const char *boot, *property_create, *property_insert_read, *property_read_query_memsize,
         *property_search, *property_node_create, *property_node_remove, *property_node_refer, *std_setenv,
-        *avs_fs_copy, *avs_fs_lstat, *ea3_boot;
+        *avs_fs_copy, *avs_fs_lstat, *avs_fs_mount, *ea3_boot;
 };
 static const struct avs_names AVS[] = {
     {"libavs-win32.dll", "libavs-win32-ea3.dll", "2.15.8",
      "XCd229cc0000aa", "XCd229cc000126", "XCd229cc00009a", "XCd229cc0000ff",
      "XCd229cc00012e", "XCd229cc00002c", "XCd229cc000028", "XCd229cc000009", "XCd229cc000094",
-     "XCd229cc0000eb", "XCd229cc0000c0", "XE592acd00008c"},
+     "XCd229cc0000eb", "XCd229cc0000c0", "XCd229cc0000ce", "XE592acd00008c"},
 };
 
 typedef void *prop_t;
@@ -78,6 +78,7 @@ static int (*std_setenv)(const char *, const char *);
 static int (*avs_fs_copy)(const char *, const char *);
 static int (*avs_fs_lstat)(const char *, void *);
 static int (*ea3_boot)(node_t);
+static int (*avs_fs_mount)(const char *mountpoint, const char *fsroot, const char *fstype, void *data);
 #define NODE_S32 6
 #define NODE_STR 11
 #define NODE_BOOL 52
@@ -244,6 +245,54 @@ static FARPROC WINAPI GetProcAddress_(HMODULE m, LPCSTR name) {
     return NULL;
 }
 
+// The game's import slot (from any DLL) that holds TARGET, pointed at FN: AVS2's calls are imported by
+// ordinal, so they're found by where they lead. The old target, or NULL when no slot has it
+static void *hook_target(HMODULE m, void *target, void *fn) {
+    BYTE *base = (BYTE *)m;
+    IMAGE_NT_HEADERS *nt = (IMAGE_NT_HEADERS *)(base + ((IMAGE_DOS_HEADER *)base)->e_lfanew);
+    IMAGE_DATA_DIRECTORY dir = nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT];
+    if (!dir.VirtualAddress || !target) return NULL;
+    for (IMAGE_IMPORT_DESCRIPTOR *d = (IMAGE_IMPORT_DESCRIPTOR *)(base + dir.VirtualAddress); d->Name; d++)
+        for (IMAGE_THUNK_DATA *t = (IMAGE_THUNK_DATA *)(base + d->FirstThunk); t->u1.Function; t++)
+            if ((void *)t->u1.Function == target) {
+                pc64_patch(&t->u1.Function, fn);
+                return target;
+            }
+    return NULL;
+}
+
+// The cabinet's drives the game mounts in AVS2 (/e_drive from e:/: its downloads, up/, and tmp/):
+// folders of the save folder's dev/vfs/drive_<letter> instead, as spice2x makes them
+static void make_dirs(char *path) {
+    for (char *p = path; *p; p++)
+        if (*p == '/' || *p == '\\') {
+            const char c = *p;
+            *p = 0;
+            CreateDirectoryA(path, NULL);
+            *p = c;
+        }
+    CreateDirectoryA(path, NULL);
+}
+static int avs_fs_mount_(const char *mountpoint, const char *fsroot, const char *fstype, void *data) {
+    if (mountpoint && fsroot && fstype && !_stricmp(fstype, "fs") && fsroot[0] && fsroot[1] == ':' &&
+        strchr("dDeEfF", fsroot[0])) {
+        char to[MAX_PATH];
+        const char *sub = fsroot + 2;
+        snprintf(to, sizeof to, "dev/vfs/drive_%c%s%s", fsroot[0] | 0x20, *sub == '/' || *sub == '\\' ? "" : "/", sub);
+        make_dirs(to);
+        if ((fsroot[0] | 0x20) == 'e' && (!sub[0] || ((sub[0] == '/' || sub[0] == '\\') && !sub[1]))) {
+            char d[MAX_PATH + 8];
+            snprintf(d, sizeof d, "dev/vfs/drive_e/tmp");
+            CreateDirectoryA(d, NULL);
+            snprintf(d, sizeof d, "dev/vfs/drive_e/up");
+            CreateDirectoryA(d, NULL);
+        }
+        say("%s: the cabinet's %s, here %s", mountpoint, fsroot, to);
+        return avs_fs_mount(mountpoint, to, fstype, data);
+    }
+    return avs_fs_mount(mountpoint, fsroot, fstype, data);
+}
+
 int main(int argc, char **argv) {
     if (argc < 2) {
         fprintf(stderr, "usage: hiraku-pc32 CONTENTS [GAME.dll]\n");
@@ -308,6 +357,7 @@ int main(int argc, char **argv) {
     std_setenv = need(core, v->core, v->std_setenv);
     avs_fs_copy = need(core, v->core, v->avs_fs_copy);
     avs_fs_lstat = need(core, v->core, v->avs_fs_lstat);
+    avs_fs_mount = need(core, v->core, v->avs_fs_mount);
     ea3_boot = need(ea3, v->ea3, v->ea3_boot);
     say("AVS2 %s, %s, %s", v->version, game_dll, security);
 
@@ -350,6 +400,7 @@ int main(int argc, char **argv) {
     r_GetModuleHandleA = pc64_import(game, "kernel32.dll", "GetModuleHandleA", (void *)GetModuleHandleA_);
     r_GetProcAddress = pc64_import(game, "kernel32.dll", "GetProcAddress", (void *)GetProcAddress_);
     if (!r_GetModuleHandleA || !r_GetProcAddress) say("%s doesn't find the licence key as expected", game_dll);
+    if (!hook_target(game, (void *)avs_fs_mount, (void *)avs_fs_mount_)) say("%s doesn't mount drives as expected", game_dll);
     int (*entry_init)(char *, node_t) = need(game, game_dll, "dll_entry_init");
     int (*entry_main)(void) = need(game, game_dll, "dll_entry_main");
 

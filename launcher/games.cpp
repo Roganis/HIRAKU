@@ -41,7 +41,7 @@ void readManifest(const QString &path, Game &g) {
         if (!m.hasMatch()) continue;
         QString k = m.captured(1), v = m.captured(2);
         if (!section.isEmpty()) {
-            if (section == "pc" && k == "loader" && v == "pc64") g.hidden = true;
+            if (section == "pc" && k == "loader") g.loader = v, g.hidden = v == "pc64" || v == "pc32";
             continue;
         }
         if (k == "id") g.id = v;

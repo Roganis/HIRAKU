@@ -1,0 +1,10 @@
+# pop'n music (M39), Konami 2022/2025: the last 32-bit Windows PC pop'n, one screen
+id = "popn28"
+title = "pop'n music Jam&Fizz"
+family = "pcpopn"       # pop'n on a PC: 9 buttons, the e-AMUSEMENT reader and 10-key, the board's lamps
+core = "pc"             # Konami's own DLL, started by HIRAKU's loader (runtime/pc32/, PLAN.md section 35)
+
+[pc]
+loader = "pc32"         # hiraku-pc32.exe: AVS2 2.15, then modules/popn22.dll
+dll = "popn22.dll"      # in contents/modules/, with prop/ and data/ beside them
+model = "M39"           # prop/bootstrap.xml's security code's model

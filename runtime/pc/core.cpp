@@ -250,6 +250,7 @@ public:
         exe_ = m["exe"];
         program_ = path_of("program");
         if (m["loader"] == "pc64") return init_pc64(o, m, path_of("contents"));
+        if (m["loader"] == "pc32") return init_pc32(o, m, path_of("contents"));
         const std::string data = path_of("data");
         const std::string drive = m.count("drive") ? m["drive"] : "D:\\" + game_;
         const std::string save_drive = m.count("save_drive") ? m["save_drive"] : "E:\\";
@@ -269,24 +270,7 @@ public:
         mkdirs(run_prog_);
         mkdirs(run_e_);
         if (m.count("save_drive2")) mkdirs(save_ + "/f");
-        const std::string bin_dir = hk::sys::exe_path().substr(0, hk::sys::exe_path().rfind('/'));
-        for (const std::string &f : list_files(program_)) {
-            std::string lower = f;
-            for (char &c : lower) c = (char)std::tolower((unsigned char)c);
-            std::string from = program_ + "/" + f;
-            if (lower == "ezusb.dll" || lower == "libacio.dll") from = bin_dir + "/pc/" + (c02_ && lower == "ezusb.dll" ? "c02/" : "") + lower;
-            const std::string to = run_prog_ + "/" + f;
-            if (file_size(from) == UINT64_MAX) {
-                fprintf(stderr, "hiraku-pc: no %s (HIRAKU's PC DLLs belong in a pc folder beside hiraku-pc)\n", from.c_str());
-                return false;
-            }
-            // copied once; HIRAKU's DLLs each time (a new HIRAKU brings new ones)
-            if (file_size(to) != file_size(from) || from.rfind(bin_dir, 0) == 0)
-                if (!copy_file(from, to)) {
-                    fprintf(stderr, "hiraku-pc: can't copy %s to %s\n", from.c_str(), to.c_str());
-                    return false;
-                }
-        }
+        if (!copy_program(program_, run_prog_)) return false;
         if (!link_data(data)) return false;
         if (!hand_mods(drive, data, prog_name)) return false;
         std::string error;
@@ -320,22 +304,52 @@ public:
         return true;
     }
 
+    // The program's folder copied into the save folder (FROM to TO), HIRAKU's DLLs in place of
+    // Konami's board and reader: the game's files once, HIRAKU's each time (a new HIRAKU brings new
+    // ones)
+    static std::string bin_dir() { return hk::sys::exe_path().substr(0, hk::sys::exe_path().rfind('/')); }
+    bool copy_program(const std::string &from_dir, const std::string &to_dir) {
+        for (const std::string &f : list_files(from_dir)) {
+            std::string lower = f;
+            for (char &c : lower) c = (char)std::tolower((unsigned char)c);
+            std::string from = from_dir + "/" + f;
+            if (lower == "ezusb.dll" || lower == "libacio.dll") from = bin_dir() + "/pc/" + (c02_ && lower == "ezusb.dll" ? "c02/" : "") + lower;
+            if (!copy_in(from, to_dir + "/" + f)) return false;
+        }
+        return true;
+    }
+    bool copy_in(const std::string &from, const std::string &to) {
+        if (file_size(from) == UINT64_MAX) {
+            fprintf(stderr, "hiraku-pc: no %s (HIRAKU's PC DLLs belong in a pc folder beside hiraku-pc)\n", from.c_str());
+            return false;
+        }
+        if (file_size(to) != file_size(from) || from.rfind(bin_dir(), 0) == 0)
+            if (!copy_file(from, to)) {
+                fprintf(stderr, "hiraku-pc: can't copy %s to %s\n", from.c_str(), to.c_str());
+                return false;
+            }
+        return true;
+    }
+
     // The game's data where the game names it from its program folder (data_as=..\data, IIDX 9th
     // style), beside the program's copy: HIRAKU's path map (HK_PC_MAP) sees only the game's own
-    // modules, and Windows' DirectShow opens the movies itself. Linux: a symbolic link; Windows: a
-    // junction (no rights needed)
+    // modules, and Windows' DirectShow opens the movies itself
     bool link_data(const std::string &data) {
         if (data_as_.rfind("..\\", 0) != 0) return true;
-        const std::string at = save_ + "/prog/" + data_as_.substr(3);
+        return link_folder(save_ + "/prog/" + data_as_.substr(3), data, data_as_);
+    }
+    // A folder AT that is the folder TO (made again each time: TO may have moved). Linux: a symbolic
+    // link; Windows: a junction (no rights needed)
+    static bool link_folder(const std::string &at, const std::string &to, const std::string &what) {
 #ifdef _WIN32
-        make_junction(at, data);
+        make_junction(at, to);
 #else
         std::error_code ec;
-        if (std::filesystem::is_symlink(at, ec)) std::filesystem::remove(at, ec);   // the data may have moved
-        std::filesystem::create_directory_symlink(data, at, ec);
+        if (std::filesystem::is_symlink(at, ec)) std::filesystem::remove(at, ec);
+        std::filesystem::create_directory_symlink(to, at, ec);
 #endif
         if (!hk::sys::is_dir(at)) {
-            fprintf(stderr, "hiraku-pc: can't make %s, the game's data (%s) where it looks for it\n", at.c_str(), data_as_.c_str());
+            fprintf(stderr, "hiraku-pc: can't make %s, the game's data (%s) where it looks for it\n", at.c_str(), what.c_str());
             return false;
         }
         return true;
@@ -470,6 +484,53 @@ public:
         return true;
     }
 
+    // The last 32-bit PC pop'n (PLAN.md section 35): hiraku-pc32.exe (runtime/pc32/) starts Konami's
+    // AVS2 and popn22.dll. The save folder's run/ is AVS2's root, as the cabinet's contents folder:
+    // modules/ copied with HIRAKU's DLLs in place of Konami's board and reader and the loader beside
+    // them (the DLLs take the modules in the program's folder as the game's: runtime/pc/cabinet.c),
+    // prop/ copied (the game's settings start from its defaults there), data/ the game's (a link),
+    // dev/ the cabinet's NVRAM. machine.txt: core=pc, loader=pc32, contents=PATH, family=pcpopn
+    bool init_pc32(const Options &o, std::map<std::string, std::string> &m, const std::string &contents) {
+        pc32_ = true;
+        contents_ = contents;
+        if (contents_.empty() || !hk::sys::is_dir(contents_ + "/modules") || !hk::sys::is_dir(contents_ + "/data")) {
+            fprintf(stderr, "hiraku-pc: %s isn't the game's folder (modules/, prop/, data/)\n", contents_.c_str());
+            return false;
+        }
+        if (m.count("family")) family_ = m["family"];
+        exe_ = "hiraku-pc32.exe";
+        program_ = contents_ + "/modules";
+        save_ = o.nvram_dir.empty() ? hk::user_data_dir(o.root) + "/" + game_ : o.nvram_dir;
+        const std::string run = save_ + "/run";
+        run_prog_ = run + "/modules";
+        mkdirs(run_prog_);
+        mkdirs(run + "/prop/defaults");
+        if (!copy_program(program_, run_prog_) || !copy_in(bin_dir() + "/pc/" + exe_, run_prog_ + "/" + exe_)) return false;
+        for (const char *dir : {"prop", "prop/defaults"})
+            for (const std::string &f : list_files(contents_ + "/" + dir))
+                if (!copy_in(contents_ + "/" + dir + "/" + f, run + "/" + dir + "/" + f)) return false;
+        if (!link_folder(run + "/data", contents_ + "/data", "data")) return false;
+        // DXVK's 32-bit Direct3D 9 when it is in bin/pc/dxvk32/ (Wine's own draws the game's pictures
+        // after its start-up checks magnified into a corner, as the 64-bit game's: PLAN.md section 32)
+        const std::string dxvk = bin_dir() + "/pc/dxvk32/d3d9.dll";
+        dxvk32_ = file_size(dxvk) != UINT64_MAX && copy_in(dxvk, run_prog_ + "/d3d9.dll");
+        std::string error;
+        ea_.read_card_files(save_, &error);
+        if (!error.empty()) fprintf(stderr, "%s\n", error.c_str());
+        if (!start_eamuse(o.root)) return false;
+        hk::host::popnio_default_dll(program_ + "/ezusb.dll");
+        if (!make_link()) return false;
+        set_env("HK_PC_HZ", "0");   // the shell paces
+        set_env("HK_PC_PRESS_TIME", press_time_ ? "1" : "");
+        set_env("HK_PC_JUDGE_OFFSET", judge_offset_ ? std::to_string(judge_offset_) : "");
+        set_env("HK_PC_LOG", win_path(save_ + "/pc.log"));
+        set_env("HK_PC32_LOG", win_path(save_ + "/pc.log"));
+        { std::ofstream(save_ + "/pc.log", std::ios::trunc); }
+        printf("hiraku-pc: %s from %s; saves in %s\n", game_.c_str(), contents_.c_str(), save_.c_str());
+        fflush(stdout);
+        return true;
+    }
+
     const std::string &family() const override { return family_; }
     void set_frame_hook(FrameHook h) override { frame_hook_ = std::move(h); }
     void set_audio_sink(AudioSink s) override { audio_sink_ = std::move(s); }
@@ -529,7 +590,7 @@ public:
         if (!start_game()) fatal();
         // A new save folder: the game makes its backup files and asks to be switched off and on
         // (BACKUP ERROR 5-1502); that is done for it, once, when they've been there a few seconds
-        bool first_boot = !c02_ && list_files(run_e_ + "/settings").empty();
+        bool first_boot = !c02_ && !pc32_ && list_files(run_e_ + "/settings").empty();
         auto backup_made = std::chrono::steady_clock::time_point{};
         auto last = std::chrono::steady_clock::now(), rate_from = last;
         uint32_t seen = link_->frame_seq, rate_pictures = seen;
@@ -1096,6 +1157,7 @@ private:
         std::string cmd = "\"" + win_path(run_prog_ + "/" + exe_) + "\"";
         std::string dir = win_path(run_prog_);
         if (pc64_) cmd = "\"" + win_path(loader_) + "\" \"" + win_path(contents_) + "\"", dir = win_path(save_ + "/run");
+        if (pc32_) cmd += " .", dir = win_path(save_ + "/run");   // the loader's game folder: run/, AVS2's root
         if (CreateProcessA(nullptr, cmd.data(), nullptr, nullptr, FALSE, 0, nullptr, dir.c_str(), &si, &pi_))
             return started_ = true;
         fprintf(stderr, "hiraku-pc: can't start %s (error %lu)\n", cmd.c_str(), GetLastError());
@@ -1125,16 +1187,21 @@ private:
             unsetenv("WINEDLLOVERRIDES");
             if (r != 0) fprintf(stderr, "hiraku-pc: wineboot said %d\n", r);
         }
-        const std::string exe_path = pc64_ ? loader_ : run_prog_ + "/" + exe_, game_dir = win_path(contents_);
-        const std::string dir = pc64_ ? save_ + "/run" : run_prog_;
-        char *args[] = {(char *)wine_.c_str(), (char *)exe_path.c_str(), pc64_ ? (char *)game_dir.c_str() : nullptr, nullptr};
-        // The 64-bit pop'n's environment: Japanese (its text is Shift-JIS: Wine's code page 932), and
-        // DXVK's Direct3D 9 when it is beside the loader (bin/pc/d3d9.dll: Wine's own misplaces its
-        // pictures, PLAN.md section 32)
+        const std::string exe_path = pc64_ ? loader_ : run_prog_ + "/" + exe_, game_dir = pc32_ ? "." : win_path(contents_);
+        const std::string dir = pc64_ || pc32_ ? save_ + "/run" : run_prog_;
+        char *args[] = {(char *)wine_.c_str(), (char *)exe_path.c_str(), pc64_ || pc32_ ? (char *)game_dir.c_str() : nullptr, nullptr};
+        // The AVS2 pop'n's environment: Japanese (its text is Shift-JIS: Wine's code page 932), and for
+        // the 64-bit one DXVK's Direct3D 9 when it is beside the loader (bin/pc/d3d9.dll: Wine's own
+        // misplaces its pictures, PLAN.md section 32)
         std::vector<std::string> env_own;
         std::vector<char *> env;
         for (char **e = environ; *e; e++)
-            if (!pc64_ || (strncmp(*e, "LC_ALL=", 7) && strncmp(*e, "WINEDLLOVERRIDES=", 17))) env.push_back(*e);
+            if (!(pc64_ || pc32_) || (strncmp(*e, "LC_ALL=", 7) && strncmp(*e, "WINEDLLOVERRIDES=", 17))) env.push_back(*e);
+        if (pc32_) {
+            env_own.push_back("LC_ALL=ja_JP.UTF-8");
+            env_own.push_back(std::string("WINEDLLOVERRIDES=mscoree=;mshtml=") + (dxvk32_ ? ";d3d9=n,b" : ""));
+            for (std::string &e : env_own) env.push_back(e.data());
+        }
         if (pc64_) {
             env_own.push_back("LC_ALL=ja_JP.UTF-8");
             const std::string dxvk = loader_.substr(0, loader_.rfind('/')) + "/d3d9.dll";
@@ -1171,11 +1238,13 @@ private:
 
     std::string game_, family_ = "pcpopn", exe_, program_, save_, run_prog_, run_e_, link_path_, wine_ = "wine";
     bool pc64_ = false;               // the 64-bit loader runs the game (init_pc64)
+    bool pc32_ = false;               // the 32-bit AVS2 loader runs the game (init_pc32)
+    bool dxvk32_ = false;             // ... with DXVK's Direct3D 9 beside it
     bool c02_ = false;                // the C02 cabinet's board (beatmania IIDX 9th style, PLAN.md section 33)
     std::string data_as_;             // the name the game gives its data folder (HK_PC_MAP)
     int tt_frac_[2] = {};             // turntable_add's counts not yet a whole step
     bool crt_ = false;                // --single-screen: the 64-bit loader's single-screen mode
-    std::string contents_, loader_;   // its game folder, hiraku-pc64.exe
+    std::string contents_, loader_;   // its game folder, hiraku-pc64.exe (contents_: the 32-bit one's too)
     hk::EaOptions ea_;
     std::unique_ptr<hk::py::EamuseServer> server_;
     hk::py::RelayServer relay_;

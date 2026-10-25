@@ -12,7 +12,8 @@ struct Game {
     QString year, maker;                 // from the manifest's first comment line
     QString firstBoot;                   // what a new cabinet needs in test mode
     bool installCassette = false;        // System 573: first boots with an install cassette (ddr3mj)
-    bool hidden = false;                 // the 64-bit PC games ([pc] loader = "pc64"): listed once unlocked
+    bool hidden = false;                 // the AVS2 PC games ([pc] loader = "pc64", "pc32"): listed once unlocked
+    QString loader;                      // [pc] loader: "pc64", "pc32", or none
     // Unavailable: a package (no source beside it) without a binary for the game: Firebeat and
     // Konami Python games in a release (PLAN.md section 28)
     enum Status { Ready, NotBuilt, NotInstalled, Unavailable } status = NotInstalled;

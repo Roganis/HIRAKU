@@ -142,11 +142,14 @@ if [ -d "$build/pc" ]; then
   # the C02 cabinet's board (beatmania IIDX 9th style), in a folder of its own
   if [ -f "$build/pc/c02/ezusb.dll" ]; then mkdir -p "$d/bin/pc/c02" && cp "$build/pc/c02/ezusb.dll" "$d/bin/pc/c02/"; fi
   cp "$build"/pc/hiraku-pc64.exe "$d/bin/pc/" 2>/dev/null || true
+  cp "$build"/pc/hiraku-pc32.exe "$d/bin/pc/" 2>/dev/null || true
 fi
 # HK_PACKAGE_DXVK: a folder with DXVK's 64-bit d3d9.dll and its LICENSE, beside the loader (hiraku-pc
 # has Wine load it for the 64-bit PC games: Wine's own Direct3D 9 misplaces its pictures)
+# (and its 32-bit one, DXVK's x32/d3d9.dll there, in bin/pc/dxvk32/ for the 32-bit AVS2 PC games)
 if [ -n "${HK_PACKAGE_DXVK:-}" ] && [ -d "$d/bin/pc" ]; then
   cp "$HK_PACKAGE_DXVK/d3d9.dll" "$d/bin/pc/"
+  if [ -f "$HK_PACKAGE_DXVK/x32/d3d9.dll" ]; then mkdir -p "$d/bin/pc/dxvk32" && cp "$HK_PACKAGE_DXVK/x32/d3d9.dll" "$d/bin/pc/dxvk32/"; fi
   mkdir -p "$d/third_party/dxvk" && cp "$HK_PACKAGE_DXVK/LICENSE" "$d/third_party/dxvk/LICENSE"
 fi
 # HK_PACKAGE_LIBS: libraries for bin/lib that the binaries load themselves (dlopen: ldd doesn't

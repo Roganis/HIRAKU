@@ -1,0 +1,20 @@
+# pop'n music 15 ADVENTURE: what the operator can unlock (tools/unlock.py; launcher: right-click > Unlocks).
+#
+# The phase is typed in the game's own test mode; HIRAKU can't set it from here yet. The game keeps
+# it in its settings (e/settings: the phase byte at +0x0a, 0 = "--", 1, 2 = MAX, under a sum in the
+# .mhd) and writes a file named after the code beside them, which a tool would have to make too. The
+# test mode's PHASE OPTIONS (the same code in 15 to 18): its PHASE line is the item above EXIT; red
+# on it opens PASSWORD, a wheel of 0-9 and A-Z (blue buttons turn it, red enters a character); after
+# ten, PHASE UPDATED or ILLEGAL PASSWORD. At MAX the PHASE line can't be chosen any more. Checked in
+# HIRAKU: pop'n 15 took its Phase 01 code ("PHASE:1. SECRET DATA RELEASE"); pop'n 16, 17 and 18 have
+# the same screens, and name their phase files after these two codes.
+
+[[note]]
+title = "Event phase (typed in test mode)"
+text = """Phase 01: 47MRY1Y8QS
+Releases the secret songs and the EX charts (PHASE: 1. SECRET DATA RELEASE).
+
+Phase MAX: VT7NPI4J2M
+Releases everything (PHASE: MAX. ALL DATA RELEASE).
+
+How: start the game, press Test (F2), then in the MAIN MENU the blue button (button 4 or 6: D or F) down to PHASE OPTIONS and the red button (button 5: C). There the cursor is on EXIT: a blue button moves it up to PHASE, red opens PASSWORD. Turn the wheel of 0-9 and A-Z with the blue buttons and enter each character with red; after the tenth the game says PHASE UPDATED (or ILLEGAL PASSWORD). EXIT, then leave test mode. The game keeps the phase in its save; at MAX the PHASE line can't be chosen any more."""

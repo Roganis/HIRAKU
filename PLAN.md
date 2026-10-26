@@ -2839,8 +2839,12 @@ content encrypted (`bootstrap.exe` decodes it); not read yet.
        done; / 100 the long-note tutorial, 3 = done: 308 skips them); `event_p28` given back with its
        first play done made the game fault after the next stage (it then wants its shops' list,
        0x10387cc8): kept, not given back, until that list is known.
-     - **Not yet:** charts added to songs the game kept (song 5's EASY), songs past the table, the
-       old songs' own backgrounds (none in the bundle's packs: not needed so far).
+     - **Charts added to songs the game lists** (2026-10-26): a slot the game asks a mask bit for (Easy,
+       Hyper, EX, Battle Hyper) that a listed song hasn't, given by the music data with its file
+       there, gets its chart entry, level and hold flag, and the bit. Checked: 837 (Omnimix's Easy
+       charts), song 5 (Hi-Tekno) played on its Easy, `write_music` sheet 0.
+     - **Not yet:** songs past the table, the old songs' own backgrounds (none in the bundle's packs:
+       not needed so far).
    - **5c, pictures as PNGs:** a texture pack keeps its pictures converted, under their names' MD5
      (`tex/<md5>`), listed in `tex/texturelist.xml`: a mod's `<pack>_ifs/tex/name.png` (translations,
      category icons) needs converting and listing.

@@ -527,7 +527,42 @@ void pc32_songs_install(HMODULE game) {
         memcpy(rec + 28, &m, 4);
         ids[n++] = id;
     }
-    if (!n) {
+    // the charts the music data adds to songs the game lists (Omnimix's Easy charts): a slot the game
+    // asks a mask bit for (Easy, Hyper, EX, Battle Hyper) that the song hasn't, its chart's file there
+    unsigned *kept = malloc(sizeof *kept * g_songs), nkept = 0, added = 0;
+    BYTE *kept_recs = malloc((size_t)g_songs * RECORD);
+    if (!kept || !kept_recs) return;
+    for (unsigned id = 0; id < g_songs; id++) {
+        const struct song *s = &g_data[id];
+        const BYTE *native = g_music + (size_t)id * RECORD;
+        uint32_t mask;
+        memcpy(&mask, native + 28, 4);
+        if (mask & REMOVED) continue;
+        BYTE *rec = kept_recs + (size_t)nkept * RECORD;
+        memcpy(rec, native, RECORD);
+        int more = 0;
+        for (int k = 0; k < SLOTS; k++) {
+            const struct chart *c = &s->chart[k];
+            if (!SLOT_BITS[k] || (mask & SLOT_BITS[k]) || !plain_name(c->folder) || !plain_name(c->file) || c->level > 50 || c->type > 64)
+                continue;
+            char rel[600];
+            snprintf(rel, sizeof rel, "sd/%s/%s.ifs", c->folder, c->file);
+            if (!data_file(rel)) continue;
+            const unsigned at = chart_for(c);
+            if (!at) continue;
+            const uint16_t at16 = (uint16_t)at;
+            memcpy(rec + 50 + 2 * k, &at16, 2);
+            rec[44 + k] = (BYTE)c->level;
+            rec[164 + k] = (BYTE)c->hold;
+            mask |= SLOT_BITS[k];
+            more++;
+        }
+        if (!more) continue;
+        memcpy(rec + 28, &mask, 4);
+        kept[nkept++] = id;
+        added += (unsigned)more;
+    }
+    if (!n && !nkept) {
         pc32_log("songs: none brought back (%zu files of music data, %u songs without their files or banner)", files, skipped);
         return;
     }
@@ -542,11 +577,13 @@ void pc32_songs_install(HMODULE game) {
         charts++;
     }
     for (unsigned i = 0; i < n; i++) memcpy(g_music + (size_t)ids[i] * RECORD, recs + (size_t)i * RECORD, RECORD);
+    for (unsigned i = 0; i < nkept; i++) memcpy(g_music + (size_t)kept[i] * RECORD, kept_recs + (size_t)i * RECORD, RECORD);
+    free(kept), free(kept_recs);
     char some[256] = "";
     for (unsigned i = 0, at = 0; i < n && i < 12 && at < sizeof some - 8; i++) at += (unsigned)snprintf(some + at, sizeof some - at, " %u", ids[i]);
     pc32_log("songs: the first brought back:%s", some);
     free(recs), free(ids);
-    pc32_log("songs: %u brought back (%u chart entries given to them; %u described without their files or banner; %u without a chart "
-             "entry; %u without a character the game has); the game's %u songs, %u charts", n, charts, skipped, full, g_unknown_charas,
-             g_songs, g_nchart);
+    pc32_log("songs: %u brought back, %u charts added to %u of the game's (%u chart entries given to them; %u described without their "
+             "files or banner; %u without a chart entry; %u without a character the game has); the game's %u songs, %u charts",
+             n, added, nkept, charts, skipped, full, g_unknown_charas, g_songs, g_nchart);
 }

@@ -81,14 +81,21 @@ class Game:
     def record(self, i):
         return self.d[self.at(self.music + i * RECORD):][:RECORD]
 
-    def character_names(self):
+    def chara(self, i):
+        """a character's name, folder and flags (bit 0: removed, its slot kept)"""
+        o = self.at(self.charas + i * 128)
+        q = lambda k: struct.unpack_from("<Q", self.d, o + k)[0]
+        return {"chara_id": self.text(q(0)) or "", "folder": self.text(q(0x10)) or "", "gg": self.text(q(0x18)) or "",
+                "ha": self.text(q(0x60)) or "", "flags": struct.unpack_from("<I", self.d, o + 8)[0]}
+
+    def character_names(self, back=()):
+        """the names of the game's characters and of those the mods describe again (back: their ids)"""
         names = set()
         for i in range(self.ncharas):
-            o = self.at(self.charas + i * 128)
-            n = self.text(struct.unpack_from("<Q", self.d, o)[0]) if o is not None else None
-            if n:
-                names.add(n)
-        return names
+            c = self.chara(i)
+            if c["chara_id"] and not c["flags"] & 1:
+                names.add(c["chara_id"])
+        return names | set(back.values()) if back else names
 
 
 def tag(body, name):
@@ -140,6 +147,60 @@ def read_music(mods):
     return songs
 
 
+def read_charas(mods):
+    """id -> a character's name and folder as the mods' music data describes it (popnhax's <chara id>)"""
+    charas = {}
+    for mod in reversed(mods):
+        files = []
+        for root, dirs, names in os.walk(mod):
+            dirs[:] = [x for x in dirs if not x.startswith(".")]
+            files += [os.path.join(root, n) for n in names if n.lower().endswith(".xml")]
+        for f in sorted(files, key=str.lower):
+            raw = open(f, "rb").read()
+            sj = re.search(rb"encoding=.(shift.jis|cp932|windows-31j)", raw[:200], re.I)
+            try:
+                text = raw.decode("utf-8")
+            except UnicodeDecodeError:
+                text = raw.decode("cp932" if sj else "utf-8", "replace")
+            for cid, body in re.findall(r'<chara\s+id=["\'](\d+)["\']\s*>(.*?)</chara>', text, re.S):
+                c = charas.setdefault(int(cid), {})
+                for k in ("chara_id", "folder", "gg", "ha"):
+                    v = tag(body, k)
+                    if v is not None:
+                        c[k] = v
+    return charas
+
+
+def charas_back(g, mods, data):
+    """id -> name: the characters the game removed that the mods describe again, their pictures there
+    (tex/FOLDER/NAME.ifs, the hariai and the name's picture: a mod's, or the game's own characters')"""
+    own = [g.chara(i) for i in range(g.ncharas)]
+    own = {k: {c[k] for c in own if c[k] and not c["flags"] & 1} for k in ("ha", "gg")}
+
+    def picture(k, folders, name):
+        return name in own[k] or any(exists(mods, data, "tex/system/%s/%s.ifs" % (f, name)) for f in folders)
+    back = {}
+    for i, c in read_charas(mods).items():
+        if 0 < i < g.ncharas and c.get("chara_id") and c.get("folder") and g.chara(i)["flags"] & 1 and \
+                exists(mods, data, "tex/%s/%s.ifs" % (c["folder"], c["chara_id"])) and \
+                picture("ha", ("ha_merge_ifs", "ha_merge_jka_ifs"), c.get("ha", "")) and \
+                picture("gg", ("chara_name_diff_ifs", "chara_name_new_diff_ifs", "chara_name_jka_ifs"), c.get("gg", "")):
+            back[i] = c["chara_id"]
+    return back
+
+
+def game_folder(arg):
+    """the 64-bit game's folder: arg, or dumps/popn29/machine.txt's"""
+    if arg:
+        return arg
+    here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    mt = os.path.join(here, "dumps", "popn29", "machine.txt")
+    for line in open(mt, encoding="utf-8") if os.path.exists(mt) else []:
+        if line.startswith("contents="):
+            return line.split("=", 1)[1].strip()
+    raise SystemExit("the game's folder: --game DIR (no dumps/popn29/machine.txt)")
+
+
 def game_banners(data):
     """the song numbers whose banner the game's own packs hold (tex/system/kc*.ifs: kc_NNNN inside)"""
     ids = set()
@@ -160,15 +221,7 @@ def main():
     ap.add_argument("mods", nargs="+")
     ap.add_argument("-v", "--verbose", action="store_true", help="every song, not only the totals and the first of each kind")
     a = ap.parse_args()
-    game = a.game
-    if not game:
-        here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        mt = os.path.join(here, "dumps", "popn29", "machine.txt")
-        for line in open(mt, encoding="utf-8") if os.path.exists(mt) else []:
-            if line.startswith("contents="):
-                game = line.split("=", 1)[1].strip()
-        if not game:
-            raise SystemExit("the game's folder: --game DIR (no dumps/popn29/machine.txt)")
+    game = game_folder(a.game)
     dll = os.path.join(game, "modules", "popn.dll")
     data = os.path.join(game, "plain_data") if os.path.isdir(os.path.join(game, "plain_data")) else os.path.join(game, "data")
     for m in a.mods:
@@ -180,7 +233,10 @@ def main():
     songs = read_music(a.mods)
     # the songs past the game's table: as songs left out, in the slots the loader adds for them
     past = sorted(i for i in songs if i >= g.songs)
-    names = g.character_names()
+    back_charas = charas_back(g, a.mods, data)
+    names = g.character_names(back_charas)
+    if back_charas:
+        print("characters the game removed, described again by the mods: %d" % len(back_charas))
     back, why = [], {}
     no_chara = []
     banners = game_banners(data)

@@ -45,6 +45,18 @@ With thanks to Milo, whose work on the same game (popnMods) showed the way.
    ```
    (`--game DIR` if HIRAKU can't find the game's folder; several mod folders in order.)
 
+5. Characters the game removed (the cover songs' own: anime, TV themes, games): the game keeps a
+   place for each, and an older PC pop'n of yours still describes them. `tools/oldcharas.py` reads
+   that game's `popn22.dll` (pop'n 22 to the last 32-bit game) and writes a mod with them: their
+   names and texts, and their hariai and name pictures from that game's packs (this game's packs
+   haven't them; their own pictures it still has):
+   ```bash
+   python3 tools/oldcharas.py <older game>/modules/popn22.dll ~/.local/share/hiraku/mods/popn29/Characters
+   ```
+   Tick it with the pack in **Mods…** (in any order). Only that game's data goes into the folder,
+   for these characters; `tools/songsback.py` with both folders says how many come back. A pack's
+   own `charadb` (popnhax's `<chara id>` entries) works the same way.
+
 ## Run
 
 1. In the launcher, right-click the game, **Mods…**, tick the pack (and the others, in order: the
@@ -74,8 +86,10 @@ all the same (the songs' files, banners and music data are new to it).
 A song comes back when the game left it out, the pack describes it (genre, title, artist), its
 Normal chart's file is there and it has a banner (the pack's, or one the game kept); its Easy,
 Hyper and EX charts come with it when their files are there (a missing one leaves the song out),
-the battle charts are optional. Characters are found by name among the game's own; a song whose
-characters the game hasn't (the cover songs' own) shows its other one, or the game's first. The
+the battle charts are optional. Characters are found by name among the game's own and those the
+mods describe again (`songs: N characters back` in `pc.log`: only in the places the game kept for
+them, and only with their pictures, hariai and name picture there, the game faults without them);
+a song whose characters the game hasn't shows its other one, or the game's first. The
 earlier games' banners are half this game's size: they're stretched to their frames. A music data
 file that says Shift-JIS but is UTF-8 is read as UTF-8.
 
@@ -90,7 +104,10 @@ HIRAKU knows (2026041500); another build keeps them out and says so in `pc.log`.
 
 ## Not yet
 
-- Characters the game hasn't (the pack's `charadb` only changes the game's own).
+- Characters no older PC game describes (one in a player's pack: umaru_23a), and the small icons of
+  those that come back (pictures inside the game's `icon.ifs`: their place is blank).
+- The characters the pack put in for songs whose own it hadn't (the console games', pop'n music
+  Mickey Tunes', old anime): the originals from the older games' data.
 - Pictures as PNGs in the `_ifs` folders (ifs_layeredfs converts them): only whole files are used.
 - Categories added by other mods (By Medal) and the extra Random entries.
 - The launcher doesn't check a pack; `tools/songsback.py` does.
@@ -99,4 +116,6 @@ Checked (2026-10-26) with a player's Omnimix pack: the tool and the game agree (
 them past the game's table; 12 left out for missing chart files, 2 for missing texts, 1 without a
 Normal chart), a restored song played through to its result from the launcher's mods folder, and
 song 3000 (from the console games) listed under its genre, played to its result and its score sent
-as song 3000.
+as song 3000. Characters (2026-10-27): 28 described by `tools/oldcharas.py` from an older game (32
+with the pack's own `charadb`), song 650 shown and played with its own character, its hariai and
+name, two stages, its score sent.

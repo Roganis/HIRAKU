@@ -116,6 +116,18 @@ struct song {
 };
 static struct song *g_data;   // by id, g_songs of them
 
+// a character the music data describes (popnhax's <chara id>: a pack's own, or tools/oldcharas.py's
+// from an older game of the player's)
+#define CHARA_TEXTS 10
+static const char *const CHARA_TAGS[CHARA_TEXTS] = {"chara_id", "folder", "gg", "cs", "icon1", "icon2", "sort_name", "disp_name", "ha", "catchtext"};
+static const unsigned CHARA_TEXT_AT[CHARA_TEXTS] = {0x00, 0x10, 0x18, 0x20, 0x28, 0x30, 0x48, 0x50, 0x60, 0x68};
+struct chara {
+    char *text[CHARA_TEXTS];
+    char *shape;
+    unsigned flags, disp, file_type, version, xw, yh, flavor, has;   // has: bit 0 flags, 1 display_flags, 2 file_type, 3 game_version, 4 size, 5 flavor_idx
+};
+static struct chara *g_cdata;   // by id, g_nchara of them
+
 static char *keep(const char *s, size_t n) {
     char *k = malloc(n + 1);
     if (k) memcpy(k, s, n), k[n] = 0;
@@ -200,7 +212,34 @@ static void read_xml(const WCHAR *path) {
         memset(c, ' ', (size_t)(e + 3 - c));
         c = e + 3;
     }
-    unsigned count = 0;
+    unsigned count = 0, ccount = 0;
+    for (char *m = buf; g_cdata && (m = strstr(m, "<chara "));) {   // (a song's own are <chara1>, <chara2>)
+        char *gt = strchr(m, '>'), *close = gt ? strstr(gt, "</chara>") : NULL;
+        if (!close) break;
+        char *id_at = strstr(m, "id=");
+        unsigned id = id_at && id_at < gt && (id_at[3] == '"' || id_at[3] == '\'') ? (unsigned)strtoul(id_at + 4, NULL, 10) : ~0u;
+        m = close + 8;
+        if (id >= g_nchara) continue;
+        struct chara *c = &g_cdata[id];
+        char *fl = strstr(gt, "<flavor>"), *fl_end = fl ? strstr(fl, "</flavor>") : NULL;   // its phrases: not read (the slot's kept)
+        if (fl && fl_end && fl_end < close) memset(fl, ' ', (size_t)(fl_end + 9 - fl));
+        char *const own_end = close;
+        for (int i = 0; i < CHARA_TEXTS; i++) {
+            char *t = text_of(gt, own_end, CHARA_TAGS[i], utf8);
+            if (t) c->text[i] = t;
+        }
+        char *t = text_of(gt, own_end, "lapis_shape", 0);
+        if (t) c->shape = t;
+        static const char *const NUMS[6] = {"flags", "display_flags", "file_type", "game_version", "chara_xw", "flavor_idx"};
+        unsigned *const at[6] = {&c->flags, &c->disp, &c->file_type, &c->version, &c->xw, &c->flavor};
+        for (int i = 0; i < 6; i++) {
+            unsigned v;
+            if (number_of(gt, own_end, NUMS[i], &v)) *at[i] = v, c->has |= 1u << i;
+        }
+        unsigned v;
+        if (number_of(gt, own_end, "chara_yh", &v)) c->yh = v;
+        ccount++;
+    }
     for (char *m = buf; (m = strstr(m, "<music"));) {
         if (m[6] != ' ') {   // <musicdb>
             m += 6;
@@ -268,10 +307,11 @@ static void read_xml(const WCHAR *path) {
         count++;
     }
     free(buf);
-    if (count) {
+    if (count || ccount) {
         char name[MAX_PATH * 2];
         WideCharToMultiByte(CP_UTF8, 0, path, -1, name, sizeof name, NULL, NULL);
-        pc64_log("songs: %u in %s", count, name);
+        if (count) pc64_log("songs: %u in %s", count, name);
+        if (ccount) pc64_log("songs: %u characters in %s", ccount, name);
     }
 }
 
@@ -375,11 +415,12 @@ static int has_banner(unsigned id) {
 static unsigned short *g_uses;
 static unsigned g_unknown_charas;   // songs none of whose characters the game has
 static const BYTE *g_image, *g_image_end;
+static unsigned char *g_chara_back;   // by character: described again by the music data
 static int chara_is(unsigned i, const char *name) {
     const char *p;
     memcpy(&p, g_charas + (size_t)i * 128, sizeof p);
     const size_t n = strlen(name);
-    if ((const BYTE *)p < g_image || (const BYTE *)p + n + 1 > g_image_end) return 0;   // the game's own texts only
+    if (!g_chara_back[i] && ((const BYTE *)p < g_image || (const BYTE *)p + n + 1 > g_image_end)) return 0;   // the game's own texts
     return !memcmp(p, name, n + 1);
 }
 static int chara_named(const char *name) {
@@ -408,6 +449,95 @@ static void characters(const struct song *s, BYTE *rec) {
             const uint16_t v = (uint16_t)c[k];
             memcpy(rec + 56 + 2 * k, &v, 2);
         }
+}
+
+// --- the characters the game removed: their slots kept (the flags' bit 0, a stand-in's names and
+// pictures; the ids are the same in every game), filled in again from the music data when the
+// character's pictures are there (tex/FOLDER/NAME.ifs: the game's packs keep many, a mod's), its
+// hariai and its name's picture (a mod's tex/system/ha_merge_ifs/HA.ifs, chara_name_diff_ifs/GG.ifs,
+// or the game's own when another character uses them). Kept
+// from the slot: the picture's size (this game's own; the older games' are smaller), its
+// variation number (+0x42), the phrases (+0x40) unless the data gives their number, +0x78.
+#define CHARA_REMOVED 1u
+// a picture pack (at +off in a character: gg +0x18, ha +0x60) one of the game's own characters uses
+static int game_uses(unsigned off, const char *name) {
+    for (unsigned i = 1; i < g_nchara; i++) {
+        const BYTE *r = g_charas + (size_t)i * 128;
+        const char *p;
+        uint32_t flags;
+        memcpy(&flags, r + 8, 4);
+        memcpy(&p, r + off, sizeof p);
+        if (!(flags & CHARA_REMOVED) && (const BYTE *)p >= g_image && (const BYTE *)p < g_image_end && !strcmp(p, name)) return 1;
+    }
+    return 0;
+}
+// a picture in a mod's folders for the game's pack (files.c gives it), or one the game uses
+static int picture(const char *const *folders, unsigned off, const char *name) {
+    char rel[300];
+    for (int i = 0; folders[i]; i++)
+        if (snprintf(rel, sizeof rel, "tex/system/%s/%s.ifs", folders[i], name), data_file(rel)) return 1;
+    return game_uses(off, name);
+}
+static unsigned charas_back(void) {
+    unsigned n = 0, left = 0;
+    DWORD old, ignored;
+    if (!VirtualProtect(g_charas, (size_t)g_nchara * 128, PAGE_READWRITE, &old)) return 0;
+    for (unsigned i = 1; i < g_nchara; i++) {
+        const struct chara *c = &g_cdata[i];
+        BYTE *slot = g_charas + (size_t)i * 128;
+        uint32_t flags;
+        memcpy(&flags, slot + 8, 4);
+        if (!c->text[0] || !(flags & CHARA_REMOVED)) continue;   // not described, or the game's own
+        int ok = 1;
+        for (int k = 0; k < 6; k++) ok &= plain_name(c->text[k]);
+        // its pictures (tex/FOLDER/NAME.ifs), its hariai and its name's picture, which the game's
+        // packs don't keep for the characters it removed (without them the game faults): a mod's,
+        // or the game's when one of its own characters uses them
+        static const char *const HA[] = {"ha_merge_ifs", "ha_merge_jka_ifs", NULL};
+        static const char *const GG[] = {"chara_name_diff_ifs", "chara_name_new_diff_ifs", "chara_name_jka_ifs", NULL};
+        char rel[300];
+        const char *why = "names missing";
+        if (ok && plain_name(c->text[8])) {
+            snprintf(rel, sizeof rel, "tex/%s/%s.ifs", c->text[1], c->text[0]);
+            why = !data_file(rel) ? "its pictures aren't there" : !picture(HA, 0x60, c->text[8]) ? "its hariai picture isn't there"
+                : !picture(GG, 0x18, c->text[2]) ? "its name's picture isn't there" : NULL;
+        }
+        if (why) {
+            if (left++ < 10) pc64_log("songs: character %u (%s) left out: %s", i, c->text[0], why);
+            continue;
+        }
+        BYTE r[128];
+        memcpy(r, slot, 128);
+        for (int k = 0; k < CHARA_TEXTS; k++) {
+            static char none[] = "";
+            char *t = c->text[k] ? c->text[k] : none;
+            memcpy(r + CHARA_TEXT_AT[k], &t, 8);
+        }
+        const uint32_t f = (c->has & 1) ? c->flags & ~CHARA_REMOVED : flags & ~CHARA_REMOVED;
+        memcpy(r + 8, &f, 4);
+        if (c->has & 2) memcpy(r + 0x3c, &c->disp, 4);
+        if (c->has & 4) memcpy(r + 0x58, &c->file_type, 4);
+        if (c->has & 8) memcpy(r + 0x70, &c->version, 4);
+        if (c->has & 32) {
+            const int16_t fl = (int16_t)c->flavor;
+            memcpy(r + 0x40, &fl, 2);
+        }
+        uint16_t size[2];
+        memcpy(size, r + 0x38, 4);
+        if (!size[0] && !size[1] && (c->has & 16)) size[0] = (uint16_t)c->xw, size[1] = (uint16_t)c->yh, memcpy(r + 0x38, size, 4);
+        if (c->shape) {   // the gem's shape: "dia" 1 (the only one checked), none 0
+            const uint32_t shape = !strcmp(c->shape, "dia") ? 1 : 0;
+            if (shape || !*c->shape) memcpy(r + 0x74, &shape, 4);
+        }
+        memcpy(slot + 0x10, r + 0x10, 128 - 0x10);
+        MemoryBarrier();
+        memcpy(slot, r, 0x10);   // its name and flags last
+        g_chara_back[i] = 1;
+        n++;
+    }
+    VirtualProtect(g_charas, (size_t)g_nchara * 128, old, &ignored);
+    if (n || left) pc64_log("songs: %u characters back (%u described without their pictures)", n, left);
+    return n;
 }
 
 // --- the background: a song brought back has none of its own (the game's packs don't hold it):
@@ -499,7 +629,7 @@ void pc64_songs_install(HMODULE game) {
     IMAGE_NT_HEADERS *nt = (IMAGE_NT_HEADERS *)(base + ((IMAGE_DOS_HEADER *)base)->e_lfanew);
     g_image = base, g_image_end = base + nt->OptionalHeader.SizeOfImage;
     if (!(g_data = calloc(MAX_IDS, sizeof *g_data)) || !(g_back = calloc(MAX_IDS, 1)) || !(g_uses = calloc(g_nchara, sizeof *g_uses)) ||
-        !(g_banner = calloc(MAX_IDS, 1)))
+        !(g_banner = calloc(MAX_IDS, 1)) || !(g_cdata = calloc(g_nchara, sizeof *g_cdata)) || !(g_chara_back = calloc(g_nchara, 1)))
         return;
     // the music data: the last mod first, so the first one's fields win
     size_t files = 0;
@@ -513,6 +643,7 @@ void pc64_songs_install(HMODULE game) {
         files += n;
     }
     if (!files) return;
+    charas_back();
     game_banners();
     // songs past the game's table (the console games' songs, players' own): the tables grown to the
     // last one the music data describes, with room for seven charts each (tables.c); the new slots

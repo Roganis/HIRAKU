@@ -253,7 +253,7 @@ Durations are rough, assume one person, and are assisted. Each milestone has a c
 | **M17** | A song added to pop'n music 14 (modding pilot, §20) | A new song, packed by a tool from the modder's own files, appears in the song list, plays with its sounds and its charts, and keeps its scores, through a mod folder alone (nothing on the user's disk changed). The pieces: a new entry past the last in the song list (lisbin), the list's integrity checksum made again (FUN_017c18b8, constants 0x3f306b90 / 0x70f93885), the sounds encoded in the game's ADPCM and placed in a free 20 MB slot of the song area (from 0x20000000, LCG-scrambled: tools/popnsong.py reads them), the charts in the game's format, and the song select, unlocks and score records accepting the new number. | **not started** (split from the pilot 2026-10-20). Most of it is reverse engineering still to do: the checksum's coverage, the chart format, and what else counts the songs. |
 | **M18** | Two more shaders: Lola Retro and the CRT beam simulator (§29) | Lola Retro as a picture mode with presets chosen per board; the Blur Busters beam simulator as a motion mode on 120 Hz+ displays, paced from the game's real rate; both from the launcher. | **done 2026-10-20** (§29): the engine (feedback, frame history, FrameCount in game frames), Lola as a picture mode with looks per monitor, the CRT beam (`--crt-beam`); the owner, at 240 Hz: Lola "perfect", the beam "perfect" (after its curve and whole-refresh fixes). |
 | **M19** | The PC pop'n music games, 15–18 (§30) | Konami's program as it is (under Wine on Linux), HIRAKU's DLLs as the cabinet, `hiraku-pc` as its window, sound and controls. | **done for 15–18 under Wine** (2026-10-21/23): play, e-AMUSEMENT (players, rankings, one card for all), NET TAISEN, timed presses, mods.<br>• **Left:** pop'n 19–21 (`popn19/20/21.dll`); 18's `boss`, the expert courses' stage scores in 16's and 17's records, file mods for 16–18; real Windows, board and reader. |
-| **M20** | The 64-bit PC platform (§32, §34) | A 64-bit AVS2 game through `hiraku-pc64` and `hiraku-pc`: its two screens, 120 Hz, sound, controls, e-AMUSEMENT. | **in progress**: plays under Wine, on one 4:3 screen too (steps 1–3); players and scores kept; songs it left out and songs past its music table back from the player's music data (§34); the events' phases and the songs' unlocks (§32).<br>• **Left:** what events 2, 5, 6 and 7 do; the shop and other items; courses, friends, one card for all; By Medal; characters the game hasn't. NET battles are off in the game itself (no phase for its event). |
+| **M20** | The 64-bit PC platform (§32, §34) | A 64-bit AVS2 game through `hiraku-pc64` and `hiraku-pc`: its two screens, 120 Hz, sound, controls, e-AMUSEMENT. | **in progress**: plays under Wine, on one 4:3 screen too (steps 1–3); players and scores kept; songs it left out and songs past its music table back from the player's music data, the characters it removed with them (§34); the events' phases and the songs' unlocks (§32).<br>• **Left:** what events 2, 5, 6 and 7 do; the shop and other items; courses, friends, one card for all; By Medal; the icons of characters brought back. NET battles are off in the game itself (no phase for its event). |
 | **M21** | beatmania IIDX 9th style (§33) | The C02 cabinet's program as it is, through `hiraku-pc`. | **in progress** (IIDX-1 to IIDX-4): plays with its movies; e-AMUSEMENT cards for both players, scores, rankings, EXPERT courses.<br>• **Left:** the record's layout (DJ points), KONAMI ID, attract's ranking with rankers, a course for two; real Windows (the junction, MPEG-1); then 10th, RED and HAPPY SKY. |
 | **M22** | The last 32-bit PC pop'n (§35) | `popn22.dll` on AVS2 2.15 through `hiraku-pc32` and `hiraku-pc`. | **steps 1–6 done** (2026-10-26): plays, players kept, mods and songs past the music table, NET TAISEN.<br>• **Left:** see §35's "Not yet" lists. |
 
@@ -2667,9 +2667,32 @@ Nothing of a game comes with HIRAKU: the songs are the player's.
 - **For players:** `docs/SONGS-BACK.md` (installing a pack in the mods folder, the launcher's Mods…,
   `mod.toml`), and `tools/songsback.py`, which reads the game's program and the packs and says what
   will come back and why not (the loader's rules; checked: the same 226 songs).
+- **Characters back (2026-10-27).** The character table (2507 x 128 bytes, read only by the getters
+  at 0x18005cd94-0x18005e1dd) keeps a slot for each character the game removed: a stand-in
+  (`bamb_1a`, its flags' bit 0 set) with the original's picture size, its +0x42 number and +0x78;
+  the ids are the same in every game (the last 32-bit game's mimi_28a 2409, shoten 442, as here), so
+  no table grows. The record: name +0, flags +8, folder +0x10, gg/cs/icon1/icon2 +0x18..+0x30, size
+  +0x38, display flags +0x3c, phrases' number +0x40, sort/display names +0x48/+0x50, file type +0x58,
+  ha +0x60, catch text +0x68, version +0x70, gem shape +0x74 (the 32-bit game's 0x4c bytes, the same
+  fields). `runtime/pc64/songs.c` reads popnhax's `<chara id>` entries from the mods and fills a
+  removed slot with them, before the songs' characters are found by name. The game needs a
+  character's hariai (`/ifs_image_hariai/ha_X.ifs`) and name picture (`/ifs_image_chara_name/gg_X.ifs`)
+  and faults without them (a null write after `HariaiFile CHR = N is not exist`); its packs haven't
+  them for the removed ones, so a character comes back only with both in a mod (or used by one of
+  the game's own). `tools/oldcharas.py` takes the records from an older game's `popn22.dll` (lined up
+  by name) and the two pictures from its `ha_chara*.ifs`/`chara_name*.ifs` (`tools/ifs.py`: the
+  packs' file lists, kbin; folders are nodes with a time, files three s32): 28 characters, 53
+  pictures; song 650 played with its own (mario). Its small icon (`cs_X` in `icon.ifs`) is blank.
 - **Not yet:** scores for restored songs checked on HIRAKU's e-AMUSEMENT server (it keeps any song
-  number), characters the game hasn't, the `_ifs` folders' PNGs (only
-  whole members), By Medal and the extra Random entries (By Medal's source is needed).
+  number), the `_ifs` folders' PNGs (only whole members: the removed characters' icons need them),
+  By Medal and the extra Random entries (By Medal's source is needed); umaru_23a (no older PC game
+  describes it; its pictures are in the last 32-bit game's packs).
+- **Later (modding roadmap): the characters the pack substituted.** For songs whose own character
+  the pack's game didn't have, Omnimix names a similar one it had (the owner: pop'n music Mickey
+  Tunes' characters, old anime, the console games' own). Their originals are in older data: Mickey
+  Tunes is a Firebeat game (`popnmt2` in `dumps/`, its own picture formats), the console games' on
+  their discs. A step per source: read its character pictures and records, convert them to this
+  game's packs, and a mod naming them for those songs.
 - **Songs past the table (2026-10-26).** A player's packs describe 162 songs with ids from 2374
   up (3000-3155 the console songs, 5600s custom ones), and the game has 85 free slots: the tables
   have to grow, as §35's 5b did for the 32-bit game. The game's own `musicsub` (songs sent by the

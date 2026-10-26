@@ -77,6 +77,7 @@ void *__stdcall hk_Direct3DCreate8(unsigned sdk);   // d3d8.c: the game's Direct
 // HIRAKU's DirectSound (dsound.c): the game's, when HIRAKU's window shows it
 long __stdcall hk_DirectSoundCreate8(const void *device, void **out, void *outer);
 long __stdcall hk_DirectSoundCreate(const void *device, void **out, void *outer);
+void *hk_mixer_hook(const char *fn);   // winmm's mixer: a pretend one, with HIRAKU's sound (dsound.c)
 // A picture's sound mixed into the link's ring at once, as the picture is counted (link.h:
 // audio_frame_end); nothing before the game makes its DirectSound
 void hk_dsound_picture(void);

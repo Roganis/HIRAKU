@@ -17,6 +17,7 @@
 typedef const WAVEFORMATEX *LPCWAVEFORMATEX;
 #endif
 #include <dsound.h>
+#include <mmsystem.h>
 #include <math.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -532,3 +533,152 @@ long __stdcall hk_DirectSoundCreate8(const void *device, void **out, void *outer
 }
 
 long __stdcall hk_DirectSoundCreate(const void *device, void **out, void *outer) { return hk_DirectSoundCreate8(device, out, outer); }
+
+// ---------------------------------------------------------------- the mixer
+// With HIRAKU's sound the game's winmm mixer calls get a pretend mixer: one destination, the
+// speakers, with a volume and a mute control. pop'n music 15-18 look for the speakers' mute and
+// unmute it before starting DirectSound, and without it start none (and fault at the first sound
+// played): Windows' mixer has no speakers line on a PC whose output is HDMI, digital or headphones
+// (pop'n 17 on Windows 10, GitHub issue 4). The game also sets the speakers' volume to its own
+// setting; here the values are kept, not applied (HIRAKU's sound output has its own), and the PC's
+// own volume and mute are left alone.
+
+#define MIX_HANDLE ((HMIXER)(uintptr_t)0x4b4d4958)   // "XIMK"
+#define MIX_LINE 0xffff0000u
+enum { MIX_VOLUME = 1, MIX_MUTE = 2 };
+static DWORD g_mix_value[3] = {0, 65535, 0};
+
+static int mix_ours(HMIXEROBJ h, DWORD flags) {   // mixer 0 or the pretend handle, as the flags say
+    switch (flags & 0xf0000000u) {
+    case MIXER_OBJECTF_MIXER: return (uintptr_t)h == 0 || h == (HMIXEROBJ)MIX_HANDLE;   // (games pass the handle as an id)
+    case MIXER_OBJECTF_HMIXER: return h == (HMIXEROBJ)MIX_HANDLE;
+    default: return 0;
+    }
+}
+static void mix_line(MIXERLINEA *l) {
+    const DWORD cb = l->cbStruct;
+    memset(l, 0, cb < sizeof *l ? cb : sizeof *l);
+    l->cbStruct = cb;
+    l->dwDestination = 0;
+    l->dwLineID = MIX_LINE;
+    l->fdwLine = MIXERLINE_LINEF_ACTIVE;
+    l->dwComponentType = MIXERLINE_COMPONENTTYPE_DST_SPEAKERS;
+    l->cChannels = 1;
+    l->cControls = 2;
+    strcpy(l->szShortName, "Speakers");
+    strcpy(l->szName, "Speakers");
+    l->Target.dwType = MIXERLINE_TARGETTYPE_WAVEOUT;
+    strcpy(l->Target.szPname, "HIRAKU");
+}
+static void mix_control(MIXERCONTROLA *c, DWORD id) {
+    memset(c, 0, sizeof *c);
+    c->cbStruct = sizeof *c;
+    c->dwControlID = id;
+    c->dwControlType = id == MIX_VOLUME ? MIXERCONTROL_CONTROLTYPE_VOLUME : MIXERCONTROL_CONTROLTYPE_MUTE;
+    c->fdwControl = MIXERCONTROL_CONTROLF_UNIFORM;
+    strcpy(c->szShortName, id == MIX_VOLUME ? "Volume" : "Mute");
+    strcpy(c->szName, id == MIX_VOLUME ? "Volume" : "Mute");
+    c->Bounds.dwMinimum = 0;
+    c->Bounds.dwMaximum = id == MIX_VOLUME ? 65535 : 1;
+    c->Metrics.cSteps = id == MIX_VOLUME ? 65536 : 2;
+}
+
+static UINT WINAPI mix_GetNumDevs(void) { return 1; }
+static MMRESULT WINAPI mix_Open(LPHMIXER out, UINT id, DWORD_PTR cb, DWORD_PTR inst, DWORD flags) {
+    (void)cb, (void)inst, (void)flags;
+    if (!out) return MMSYSERR_INVALPARAM;
+    if (id != 0 && id != (UINT)(uintptr_t)MIX_HANDLE) return MMSYSERR_BADDEVICEID;
+    *out = MIX_HANDLE;
+    static int said;
+    if (!said++) hk_log("hiraku-pc: the game's mixer is HIRAKU's (its speakers' volume and mute kept here, the PC's left alone)");
+    return MMSYSERR_NOERROR;
+}
+static MMRESULT WINAPI mix_Close(HMIXER h) { return h == MIX_HANDLE ? MMSYSERR_NOERROR : MMSYSERR_INVALHANDLE; }
+static MMRESULT WINAPI mix_GetDevCapsA(UINT_PTR id, LPMIXERCAPSA caps, UINT size) {
+    if (id != 0 && id != (UINT_PTR)MIX_HANDLE) return MMSYSERR_BADDEVICEID;
+    if (!caps || size < sizeof(MIXERCAPSA)) return MMSYSERR_INVALPARAM;
+    memset(caps, 0, sizeof *caps);
+    caps->wMid = 1;
+    caps->wPid = 1;
+    strcpy(caps->szPname, "HIRAKU");
+    caps->cDestinations = 1;
+    return MMSYSERR_NOERROR;
+}
+static MMRESULT WINAPI mix_GetLineInfoA(HMIXEROBJ h, LPMIXERLINEA l, DWORD flags) {
+    if (!mix_ours(h, flags)) return MMSYSERR_INVALHANDLE;
+    if (!l || l->cbStruct < sizeof *l) return MMSYSERR_INVALPARAM;
+    switch (flags & MIXER_GETLINEINFOF_QUERYMASK) {
+    case MIXER_GETLINEINFOF_DESTINATION:
+        if (l->dwDestination != 0) return MIXERR_INVALLINE;
+        break;
+    case MIXER_GETLINEINFOF_LINEID:
+        if (l->dwLineID != MIX_LINE) return MIXERR_INVALLINE;
+        break;
+    case MIXER_GETLINEINFOF_COMPONENTTYPE:
+        if (l->dwComponentType != MIXERLINE_COMPONENTTYPE_DST_SPEAKERS) return MIXERR_INVALLINE;
+        break;
+    default:   // its sources (none), by target
+        return MIXERR_INVALLINE;
+    }
+    mix_line(l);
+    return MMSYSERR_NOERROR;
+}
+static MMRESULT WINAPI mix_GetLineControlsA(HMIXEROBJ h, LPMIXERLINECONTROLSA lc, DWORD flags) {
+    if (!mix_ours(h, flags)) return MMSYSERR_INVALHANDLE;
+    if (!lc || lc->cbStruct < sizeof *lc || !lc->pamxctrl || lc->cbmxctrl < sizeof(MIXERCONTROLA)) return MMSYSERR_INVALPARAM;
+    switch (flags & MIXER_GETLINECONTROLSF_QUERYMASK) {
+    case MIXER_GETLINECONTROLSF_ALL:
+        if (lc->dwLineID != MIX_LINE) return MIXERR_INVALLINE;
+        if (lc->cControls < 2) return MMSYSERR_INVALPARAM;
+        mix_control(lc->pamxctrl, MIX_VOLUME);
+        mix_control((MIXERCONTROLA *)((char *)lc->pamxctrl + lc->cbmxctrl), MIX_MUTE);
+        return MMSYSERR_NOERROR;
+    case MIXER_GETLINECONTROLSF_ONEBYID:
+        if (lc->dwControlID != MIX_VOLUME && lc->dwControlID != MIX_MUTE) return MIXERR_INVALCONTROL;
+        mix_control(lc->pamxctrl, lc->dwControlID);
+        lc->dwLineID = MIX_LINE;
+        return MMSYSERR_NOERROR;
+    case MIXER_GETLINECONTROLSF_ONEBYTYPE:
+        if (lc->dwLineID != MIX_LINE) return MIXERR_INVALLINE;
+        if (lc->dwControlType == MIXERCONTROL_CONTROLTYPE_VOLUME) mix_control(lc->pamxctrl, MIX_VOLUME);
+        else if (lc->dwControlType == MIXERCONTROL_CONTROLTYPE_MUTE) mix_control(lc->pamxctrl, MIX_MUTE);
+        else return MIXERR_INVALCONTROL;
+        return MMSYSERR_NOERROR;
+    default:
+        return MMSYSERR_INVALFLAG;
+    }
+}
+static MMRESULT mix_details(HMIXEROBJ h, LPMIXERCONTROLDETAILS d, DWORD flags, int set) {
+    if (!mix_ours(h, flags)) return MMSYSERR_INVALHANDLE;
+    if (!d || !d->paDetails || d->cbDetails < sizeof(DWORD)) return MMSYSERR_INVALPARAM;
+    if (d->dwControlID != MIX_VOLUME && d->dwControlID != MIX_MUTE) return MIXERR_INVALCONTROL;
+    if ((flags & MIXER_GETCONTROLDETAILSF_QUERYMASK) != MIXER_GETCONTROLDETAILSF_VALUE) return MMSYSERR_NOTSUPPORTED;
+    const DWORD n = d->cChannels ? d->cChannels : 1;
+    for (DWORD i = 0; i < n; i++) {
+        DWORD *v = (DWORD *)((char *)d->paDetails + i * d->cbDetails);
+        if (set) {
+            if (!i) g_mix_value[d->dwControlID] = *v;
+        } else {
+            *v = g_mix_value[d->dwControlID];
+        }
+    }
+    return MMSYSERR_NOERROR;
+}
+static MMRESULT WINAPI mix_GetControlDetailsA(HMIXEROBJ h, LPMIXERCONTROLDETAILS d, DWORD flags) { return mix_details(h, d, flags, 0); }
+static MMRESULT WINAPI mix_SetControlDetails(HMIXEROBJ h, LPMIXERCONTROLDETAILS d, DWORD flags) { return mix_details(h, d, flags, 1); }
+
+void *hk_mixer_hook(const char *fn) {
+    static const struct { const char *fn; void *to; } hooks[] = {
+        {"mixerGetNumDevs", (void *)mix_GetNumDevs},
+        {"mixerOpen", (void *)mix_Open},
+        {"mixerClose", (void *)mix_Close},
+        {"mixerGetDevCapsA", (void *)mix_GetDevCapsA},
+        {"mixerGetLineInfoA", (void *)mix_GetLineInfoA},
+        {"mixerGetLineControlsA", (void *)mix_GetLineControlsA},
+        {"mixerGetControlDetailsA", (void *)mix_GetControlDetailsA},
+        {"mixerSetControlDetails", (void *)mix_SetControlDetails},
+    };
+    for (size_t i = 0; i < sizeof hooks / sizeof *hooks; i++)
+        if (!strcmp(fn, hooks[i].fn)) return hooks[i].to;
+    return NULL;
+}

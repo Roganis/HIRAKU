@@ -939,6 +939,7 @@ static void *hook_for(const char *dll, const char *fn) {
         return v ? v : avs_logged(dll, fn);
     }
     if (!_stricmp(dll, "libcomm.dll")) return hk_comm_hook(fn);
+    if (!_stricmp(dll, "winmm.dll") && !strncmp(fn, "mixer", 5)) return host_shows() ? hk_mixer_hook(fn) : NULL;   // dsound.c
     if (!_stricmp(dll, "sonet.dll")) return avs_logged(dll, fn);
     if (g_waitlog < 0) g_waitlog = getenv("HK_PC_WAITLOG") != NULL;
     if (g_waitlog && !_stricmp(dll, "kernel32.dll") && !strcmp(fn, "Sleep")) return (void *)my_Sleep;

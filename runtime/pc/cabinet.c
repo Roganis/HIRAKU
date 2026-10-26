@@ -425,6 +425,7 @@ static void apply_patches(void) {
 static int g_win_w, g_win_h, g_win_full;   // HK_PC_WINDOW
 static double g_hz = 60;
 static HWND g_hwnd;
+static int g_shown_off;   // the game's window shown off the screen: Direct3D wanted it shown (my_CreateDevice)
 static int g_game_w = 640, g_game_h = 480;
 
 typedef HRESULT(WINAPI *CreateDevice_t)(IDirect3D9 *, UINT, D3DDEVTYPE, HWND, DWORD, D3DPRESENT_PARAMETERS *,
@@ -730,8 +731,24 @@ static HRESULT WINAPI my_CreateDevice(IDirect3D9 *self, UINT adapter, D3DDEVTYPE
     hk_log("hiraku-pc: the game's Direct3D: %ux%u, %s, %u Hz, interval %#x", pp->BackBufferWidth, pp->BackBufferHeight,
            pp->Windowed ? "windowed" : "full screen", pp->FullScreen_RefreshRateInHz, pp->PresentationInterval);
     windowed(pp);
-    place_window(pp->hDeviceWindow ? pp->hDeviceWindow : focus);
-    const HRESULT r = g_CreateDevice(self, adapter, type, focus, flags, pp, dev);
+    const HWND w = pp->hDeviceWindow ? pp->hDeviceWindow : focus;
+    place_window(w);
+    HRESULT r = g_CreateDevice(self, adapter, type, focus, flags, pp, dev);
+    // Windows' Direct3D 9 (not Wine's) said the device was lost (pop'n 17 on Windows 10, GitHub
+    // issue 4): the screen held by another program for a moment, or a window never shown refused.
+    // Again a few times, then with the hidden window shown off the screen; each try in the log.
+    for (int i = 0; r == D3DERR_DEVICELOST && i < 10; i++) {
+        Sleep(100);
+        r = g_CreateDevice(self, adapter, type, focus, flags, pp, dev);
+        hk_log("hiraku-pc: CreateDevice lost, again after %d ms: %#lx", 100 * (i + 1), (unsigned long)r);
+    }
+    if (r == D3DERR_DEVICELOST && w && host_shows()) {
+        SetWindowPos(w, HWND_BOTTOM, -32000, -32000, g_game_w, g_game_h, SWP_NOACTIVATE | SWP_SHOWWINDOW);
+        r = g_CreateDevice(self, adapter, type, focus, flags, pp, dev);
+        hk_log("hiraku-pc: CreateDevice lost, again with the game's window shown off the screen: %#lx", (unsigned long)r);
+        if (r != D3D_OK) ShowWindow(w, SW_HIDE);
+        else g_shown_off = 1;
+    }
     if (r == D3D_OK && dev && *dev) {
         void **vt = *(void ***)*dev;
         void *was = patch_slot(&vt[16], (void *)my_Reset);
@@ -761,6 +778,7 @@ static IDirect3D9 *WINAPI my_Direct3DCreate9(UINT sdk) {
 
 // The game showing its window again, once HIRAKU's shows the pictures: it stays hidden
 static BOOL WINAPI my_ShowWindow(HWND w, int how) {
+    if (g_shown_off && w == g_hwnd) return TRUE;   // kept as it is, off the screen
     if (host_shows() && (w == g_hwnd || !g_hwnd)) how = SW_HIDE;
     return ShowWindow(w, how);
 }

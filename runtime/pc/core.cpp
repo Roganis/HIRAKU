@@ -526,6 +526,13 @@ public:
         set_env("HK_PC_LOG", win_path(save_ + "/pc.log"));
         set_env("HK_PC32_LOG", win_path(save_ + "/pc.log"));
         set_env("HK_PC_PROGRAM", m.count("exe") ? m["exe"] : "popn22.dll");   // the game's own code: the DLL, not the loader
+        // the mods (docs/MODS.md): each folder laid over the game's data folder, new files too, and
+        // inside its packs (<pack>_ifs/<member>), as ifs_layeredfs (the loader's HK_PC32_DATA: files.c)
+        std::string data_mods;
+        const std::vector<std::string> mods = hk::mods::folders();
+        for (const std::string &d : mods) data_mods += (data_mods.empty() ? "" : ";") + win_path(d);
+        set_env("HK_PC32_DATA", data_mods);
+        if (!mods.empty()) printf("hiraku-pc: %zu mod%s over the game's data\n", mods.size(), mods.size() == 1 ? "" : "s");
         { std::ofstream(save_ + "/pc.log", std::ios::trunc); }
         printf("hiraku-pc: %s from %s; saves in %s\n", game_.c_str(), contents_.c_str(), save_.c_str());
         fflush(stdout);

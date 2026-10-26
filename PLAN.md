@@ -2786,4 +2786,23 @@ content encrypted (`bootstrap.exe` decodes it); not read yet.
      (`buy`), the common info's events (`phase`), course rankings, friends/rivals, carry-over from
      the earlier games (`conversion`), one card with the other pop'n games (this game's song table).
 5. **Mods:** a player's data mods (Omnimix packs, ifs_layeredfs folders) laid over the data, as §34.
+   A mod as players have them: folders of files at their paths under `data/`, `<pack>_ifs/` folders
+   of a pack's members (banners `kc_NNNN.ifs`, sounds `.2dx`, pictures as PNGs), and music data
+   (popnhax's XML) for the songs a pack adds. In three parts:
+   - **5a, files and pack members (done 2026-10-26, `runtime/pc32/files.c`):** `hiraku-pc` passes the
+     mods' folders (`HK_PC32_DATA`). Whole files: AVS2 opens them with libavs-win32's `CreateFileA`
+     and `FindFirstFileA` (`.\data\sys\font24.ifs`), which take a mod's. Members: the game mounts
+     each pack (imagefs) and reads its members by path; the loader notes every mount (its source
+     `/data/x.ifs` → the mods' `x_ifs/`), and the game's open and stat of a member a mod has (from
+     popn22.dll, and from the texture library through its AVS2 shim `_ibavs-win32.dll`, which the
+     loader hooks too) read the mod's file through a mount of the mod's folder (`/hiraku_modN`). A
+     pack inside a pack (`/afp5/ifs_image_hariai/ha_mimi_28a.ifs` from a member of `/ifs_image_hariai`)
+     is mounted from the mod's file the same way. Checked under Wine: a voice mod's three system
+     sounds (`sd/system/system28_ifs/system28.2dx` ...) read from the mod, the game's sound playing;
+     a whole file (`sys/font24.ifs`) from a mod. `HK_PC32_TRACE` also logs each mount and open.
+   - **5b, the songs a pack adds:** the music data written into the game's music table (as §34 does
+     for the 64-bit game), so its packs' charts and sounds are listed.
+   - **5c, pictures as PNGs:** a texture pack keeps its pictures converted, under their names' MD5
+     (`tex/<md5>`), listed in `tex/texturelist.xml`: a mod's `<pack>_ifs/tex/name.png` (translations,
+     category icons) needs converting and listing.
 6. **NET TAISEN** through `lobby24`.

@@ -407,6 +407,13 @@ so their memory and files are the game's own process's, not an emulated machine'
   and those left out (PLAN.md section 34; how to install a pack: [SONGS-BACK.md](SONGS-BACK.md)). Not yet: songs past the game's own (custom songs), PNGs
   in the `_ifs` folders, and their scores on HIRAKU's e-AMUSEMENT server.
 
+- **The last 32-bit PC pop'n** (`[pc] loader = "pc32"`): a mod's folder is laid over the game's
+  data folder (new files too, the first mod winning), and inside the game's packs as ifs_layeredfs
+  lays them out: `<mod>/sd/system/system28_ifs/system28.2dx` is the member `system28.2dx` of
+  `data/sd/system/system28.ifs`, for any pack the game mounts (a pack inside a pack too). The save
+  folder's `pc.log` lists the files and members read from the mods (`mods: ...`). Not yet: the
+  songs a pack's music data adds, and PNGs in the `_ifs` folders (PLAN.md section 35).
+
 ## Per core
 
 | core | patches | media |

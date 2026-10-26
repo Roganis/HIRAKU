@@ -2836,9 +2836,13 @@ content encrypted (`bootstrap.exe` decodes it); not read yet.
      - Found on the way (step 4's record): `total_play_cnt` must count the credit being played (from
        1; with 0 on a first credit the next card read plays a broken tutorial stage, BPM 1, "a cursed
        tutorial stage", as bemaniutils notes); `tutorial` is two counters (% 100 the guidance, 8 =
-       done; / 100 the long-note tutorial, 3 = done: 308 skips them); `event_p28` given back with its
-       first play done made the game fault after the next stage (it then wants its shops' list,
-       0x10387cc8): kept, not given back, until that list is known.
+       done; / 100 the long-note tutorial, 3 = done: 308 skips them); `event_p28` given back as written
+       made the game fault after the next stage: its parser (0x1011b100) reads the flags, then
+       `<order>` (id, point, patties, is_cleared: 0x10387cc8), `<neon_lamp>` and `<neko_stamp>` lists, and
+       `current_order` names orders ("out of range: currentOrder"); write sends `0 0 0` and no orders.
+       Given back without `current_order` (it may be left out), the game picks its orders anew: checked,
+       a credit with the card past a stage and on to the next. The orders, lamps and stamps
+       themselves aren't kept yet (write hasn't sent any so far).
      - **Charts added to songs the game lists** (2026-10-26): a slot the game asks a mask bit for (Easy,
        Hyper, EX, Battle Hyper) that a listed song hasn't, given by the music data with its file
        there, gets its chart entry, level and hold flag, and the bit. Checked: 837 (Omnimix's Easy

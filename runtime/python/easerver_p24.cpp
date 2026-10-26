@@ -128,10 +128,16 @@ const Field NETVS[] = {
     {"set_recommend", "s8", 3, "0"},    {"netvs_play_cnt", "u32", 0, "0"},
 };
 
-// event_p28, its burger shop's state (the 0x10387c78 descriptor; its shops' list, 0x10387cc8, unknown yet)
+// event_p28, its burger shop's state (the 0x10387c78 descriptor), as write sends it; given back without
+// current_order (the orders it names come as <order> lists the game reads after it, 0x10387cc8, which
+// write doesn't send: an order it names that isn't there is "out of range", and the game faulted after
+// the next stage, popn22.dll+0xca719; left out, it picks its orders anew)
 const Field EVENT_P28[] = {
     {"burger_first_play", "bool", 0, "0"}, {"burger_daily_bonus", "bool", 0, "0"},
     {"current_order", "s16", 3, "0"},      {"neko_daily_bonus", "bool", 0, "0"},
+};
+const Field EVENT_P28_BACK[] = {
+    {"burger_first_play", "bool", 0, "0"}, {"burger_daily_bonus", "bool", 0, "0"}, {"neko_daily_bonus", "bool", 0, "0"},
 };
 
 // A list of numbers kept as "a b c": the first n, padded with -1, as an s16 array's values
@@ -220,8 +226,8 @@ std::string EamuseServer::answer_p24(const Request &r) {
                part("info", INFO, kept(p, "info", INFO)) + part("config", CONFIG, kept(p, "config", CONFIG)) +
                part("option", OPTION, kept(p, "option", OPTION)) + part("customize", CUSTOMIZE, kept(p, "customize", CUSTOMIZE)) +
                part("netvs", NETVS, {}) + part("custom_cate", CUSTOM_CATE, {}) + part("event2021", EVENT2021, kept(p, "event2021", EVENT2021)) +
-               charas + "</player24>";   // (event_p28 kept but not given back: with its first play done the game wants its shops'
-                                          // list too, 0x10387cc8, and without it faults after the next stage, popn22.dll+0xca719)
+               charas + (p.count("event_p28.burger_first_play") ? part("event_p28", EVENT_P28_BACK, kept(p, "event_p28", EVENT_P28_BACK)) : "") +
+               "</player24>";
     };
     if (f == "read") {   // 2: no player (the game asks for a name, then sends new)
         if (players.empty()) return "<player24 status=\"0\"><result __type=\"s8\">2</result></player24>";

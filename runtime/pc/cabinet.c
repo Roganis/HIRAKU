@@ -736,9 +736,10 @@ static HRESULT WINAPI my_Reset(IDirect3DDevice9 *d, D3DPRESENT_PARAMETERS *pp) {
     return g_Reset(d, pp);
 }
 
-// The game's Present kept HIRAKU's for its first minute: on Windows something put another in its
-// place (pop'n 17 on Windows 10, GitHub issue 4: the game ran, HIRAKU's window stayed black, its
-// Present never seen). Put back, with what was put there called by ours, as the game's own was.
+// The game's Present kept HIRAKU's: Windows' Direct3D 9 puts another table's in its place after the
+// device is made (pop'n 15-18 on Windows 10, GitHub issue 4: d3d9.dll+e6120; the game ran, HIRAKU's
+// window stayed black). Put back, with what was put there called by ours, as the game's own was;
+// looked at every 100 ms for the first minute, then every half second (a Reset may do it again).
 static IDirect3DDevice9 *g_dev;
 static const char *module_of(const void *p, uintptr_t *offset) {
     static char path[MAX_PATH];
@@ -751,8 +752,8 @@ static const char *module_of(const void *p, uintptr_t *offset) {
 }
 static DWORD WINAPI present_watch(LPVOID unused) {
     (void)unused;
-    for (int i = 0; i < 600; i++) {
-        Sleep(100);
+    for (int i = 0;; i++) {
+        Sleep(i < 600 ? 100 : 500);
         void **vt = *(void ***)g_dev;   // the device's table now (it may be another)
         if (vt[17] != (void *)my_Present) {
             uintptr_t at;
@@ -766,8 +767,6 @@ static DWORD WINAPI present_watch(LPVOID unused) {
             patch_slot(&vt[16], (void *)my_Reset);
         }
     }
-    IDirect3DDevice9_Release(g_dev);
-    return 0;
 }
 
 static HRESULT WINAPI my_CreateDevice(IDirect3D9 *self, UINT adapter, D3DDEVTYPE type, HWND focus, DWORD flags,
@@ -801,7 +800,7 @@ static HRESULT WINAPI my_CreateDevice(IDirect3D9 *self, UINT adapter, D3DDEVTYPE
         if (was) g_Present = (Present_t)was;
         if (!g_dev && host_shows()) {
             g_dev = *dev;
-            IDirect3DDevice9_AddRef(g_dev);   // (the watcher's, for its minute)
+            IDirect3DDevice9_AddRef(g_dev);   // (the watcher's)
             CloseHandle(CreateThread(NULL, 0, present_watch, NULL, 0, NULL));
         }
         was = patch_slot(&vt[23], (void *)my_CreateTexture);

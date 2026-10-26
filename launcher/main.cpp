@@ -27,6 +27,7 @@
 #include "config.h"
 #include "fit.h"
 #include "mainwindow.h"
+#include "nvidia.h"
 #include "dipsdialog.h"
 #include "modsdialog.h"
 
@@ -73,6 +74,11 @@ int main(int argc, char **argv) {
         else if (what == "mods") win = new ModsDialog("popn14", "pop'n music 14 FEVER!", &w);
         else if (what == "dips") win = new DipsDialog("popn1j", "pop'n music", &w);
         else if (what == "about") win = new AboutDialog(&w);
+        else if (what == "nvidia") {   // the PC games' NVIDIA notice, with a sample value
+            nv::PresentMethod sample;
+            sample.nvidia = true, sample.value = 2, sample.from = "the global profile";
+            win = nv::noticeBox(&w, "D:\\HIRAKU\\bin\\hiraku-pc.exe", sample);
+        }
         if (win != &w) win->show();
         if (args.size() >= 4 && args[2] == "--shot")
             QTimer::singleShot(2000, &w, [win, file = args[3]] {

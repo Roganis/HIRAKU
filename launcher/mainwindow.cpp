@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "mainwindow.h"
+#include "nvidia.h"
 
 #include <QAction>
 #include <QApplication>
@@ -963,6 +964,19 @@ void MainWindow::controls(const QString &family) {
     play(d.gameToTry());
 }
 
+// The PC games on Windows with an NVIDIA card: its "Vulkan/OpenGL present method" for the program
+// that shows them, in the run's log, and the steps to set it when it isn't "Prefer layered on DXGI
+// Swapchain" (launcher/nvidia.h: without it HIRAKU's full screen and the game's Direct3D can't
+// both be had). Only read: the player sets it, in NVIDIA's own panel.
+void MainWindow::nvidiaNotice(const Game &g) {
+    const QString exe = QFileInfo(g.exe).fileName();
+    const nv::PresentMethod m = nv::presentMethod(exe);
+    if (!m.nvidia) return;
+    log("NVIDIA: \"Vulkan/OpenGL present method\" for " + exe + ": " + nv::presentMethodName(m.value) + " (" + m.from + ")\n");
+    if (m.value == 1 || cfg::settings().value("notice/nvidiaPresent", true).toBool() == false) return;
+    if (nv::notice(this, QFileInfo(g.exe).absoluteFilePath(), m)) cfg::settings().setValue("notice/nvidiaPresent", false);
+}
+
 void MainWindow::play(const QString &id) {
     const Game *g = find(id);
     if (!g) {
@@ -999,6 +1013,7 @@ void MainWindow::play(const QString &id) {
     }
     QStringList args = arguments(*g);
     log("$ " + g->exe + " " + args.join(' ') + "\n");
+    if (g->core == "pc") nvidiaNotice(*g);
     m_running = g->id;
     m_stopping = false;
     m_proc.setWorkingDirectory(cfg::rootDir());

@@ -1097,8 +1097,8 @@ static void unlimit_frames(void) {
     if (!n) hk_log("hiraku-pc: no frame wait of the game's own found (its pictures may come late in the frame)");
 }
 
-// HK_PC_CRASHLOG: a fault's place and the way to it, for bringing a game up (its own handler ends it
-// quietly): the registers, and the return addresses on the stack that are in the program's code
+// A fault's place and the way to it, in the log (the game's own handler ends it quietly): the module
+// and registers, and the return addresses on the stack that are in the program's code
 static LONG CALLBACK crash_log(EXCEPTION_POINTERS *e) {
     const DWORD code = e->ExceptionRecord->ExceptionCode;
     if (code != EXCEPTION_ACCESS_VIOLATION && code != EXCEPTION_ILLEGAL_INSTRUCTION && code != EXCEPTION_INT_DIVIDE_BY_ZERO &&
@@ -1111,6 +1111,12 @@ static LONG CALLBACK crash_log(EXCEPTION_POINTERS *e) {
            code, (unsigned long)c->Eip,
            e->ExceptionRecord->NumberParameters > 1 ? (unsigned long)e->ExceptionRecord->ExceptionInformation[1] : 0ul,
            c->Eax, c->Ebx, c->Ecx, c->Edx, c->Esi, c->Edi, c->Ebp, c->Esp);
+    HMODULE in = NULL;   // where: the program, its DLLs, Direct3D's, the graphics driver's
+    char path[MAX_PATH] = "?";
+    GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT, (LPCSTR)c->Eip, &in);
+    if (in) GetModuleFileNameA(in, path, sizeof path);
+    const char *name = strrchr(path, '\\');
+    hk_log("crash: in %s+%lx", name ? name + 1 : path, in ? (unsigned long)(c->Eip - (uintptr_t)in) : 0ul);
     char *base = (char *)hk_program();
     IMAGE_NT_HEADERS *nt = (IMAGE_NT_HEADERS *)(base + ((IMAGE_DOS_HEADER *)base)->e_lfanew);
     const uintptr_t lo = (uintptr_t)base + nt->OptionalHeader.BaseOfCode, hi = lo + nt->OptionalHeader.SizeOfCode;   // its code
@@ -1128,7 +1134,9 @@ void hk_cabinet_start(void) {
     SetEnvironmentVariableA("HK_PC_STARTED", "1");
     GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
                        (LPCSTR)(void *)hk_cabinet_start, &g_self);
-    if (getenv("HK_PC_CRASHLOG")) AddVectoredExceptionHandler(1, crash_log);
+    // a fault: the first few in pc.log (on Windows a game that stops leaves nothing else; one the
+    // game handles itself is told too)
+    AddVectoredExceptionHandler(1, crash_log);
     read_map();
     read_files();
     read_patches();

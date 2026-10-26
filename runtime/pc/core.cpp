@@ -612,7 +612,7 @@ public:
         uint64_t rate_repeats = 0;
         for (;;) {
             if (!game_running()) {
-                printf("hiraku-pc: the game ended\n");
+                printf("hiraku-pc: the game ended%s\n", exit_note().c_str());
                 fatal();
             }
             if (first_boot && !list_files(run_e_ + "/settings").empty()) {
@@ -1179,6 +1179,13 @@ private:
         return false;
     }
     bool game_running() { return started_ && WaitForSingleObject(pi_.hProcess, 0) == WAIT_TIMEOUT; }
+    std::string exit_note() {   // its exit code: 0xc0000005 a fault, 0xc0000409 a fail-fast...
+        DWORD code = 0;
+        char s[48];
+        if (!started_ || !GetExitCodeProcess(pi_.hProcess, &code)) return "";
+        snprintf(s, sizeof s, " (exit code %#lx)", (unsigned long)code);
+        return s;
+    }
     void stop_game() {
         if (!started_) return;
         started_ = false;
@@ -1234,6 +1241,7 @@ private:
         fprintf(stderr, "hiraku-pc: can't start %s (is Wine installed? --wine PROGRAM)\n", wine_.c_str());
         return false;
     }
+    std::string exit_note() { return ""; }
     bool game_running() {
         int status;
         return pid_ > 0 && waitpid(pid_, &status, WNOHANG) == 0;

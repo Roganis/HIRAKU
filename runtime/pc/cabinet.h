@@ -17,8 +17,6 @@
 //                 the place of (whole)
 //   HK_PC_PATCHES mods: a file of "ADDRESS ONCE ORIGINAL REPLACE" lines (hex; ORIGINAL "-": none),
 //                 memory patches put in place as docs/MODS.md says, before each picture
-//   HK_PC_CRASHLOG for bringing a game up: a fault's place, registers and the program's return
-//                 addresses on the stack, to the log
 //   HK_PC_THREADLOG for bringing a game up: each thread the game's modules start (its routine,
 //                 and where it was started from), to the log
 //   HK_PC_PRESS_TIME 1: presses judged by when they happened, not by the frame the game read them

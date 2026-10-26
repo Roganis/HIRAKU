@@ -2844,4 +2844,20 @@ content encrypted (`bootstrap.exe` decodes it); not read yet.
    - **5c, pictures as PNGs:** a texture pack keeps its pictures converted, under their names' MD5
      (`tex/<md5>`), listed in `tex/texturelist.xml`: a mod's `<pack>_ifs/tex/name.png` (translations,
      category icons) needs converting and listing.
+     - **Done (2026-10-26, `files.c`):** each picture is a member of its own, `tex/<md5 of its name>`,
+       its pixels BGRA (`argb8888rev`), packed when the pack's list says `compress="avslz"` (the
+       sizes unpacked and packed, big endian, then Konami's LZ: written as literals, which the format
+       allows). The game's open (and stat) of such a member, when a mod has `<pack>_ifs/tex/<name>.png`
+       (or `<pack>_ifs/<name>.png`) of that MD5 (CryptoAPI), gets the PNG decoded by Windows' WIC and
+       written so, in the save folder's `dev\hiraku_tex` (emptied each run: a changed PNG is made
+       again), read through a mount (`/hiraku_tex`). Packed or not: as the mod's own
+       `tex/texturelist.xml` says when it brings one (pictures of other sizes, new ones: the list is a
+       member as any other, from 5a); else as the game's member is, which must then be the same size,
+       BGRA. After ifs_layeredfs's way of doing it (mon's: read, not copied). Checked under Wine with
+       the bundle's translation and English category icons: 310 pictures made, the title, the guest
+       entry, the start choice and the mode select in English. (The first try packed by the game's
+       member while the mod's list said avslz: the texture library asserted, `read_image_avslz_core`.)
+     - **Not yet:** `dxt5` pictures (logged), pictures added without a list of the mod's (ifs_layeredfs
+       packs them into new textures and rewrites the list), afp animations (`afp/`, `geo/` members by
+       MD5), and the game's own drawn texts (the tutorial's bubbles: `[[text]]` mods' business).
 6. **NET TAISEN** through `lobby24`.

@@ -414,8 +414,11 @@ so their memory and files are the game's own process's, not an emulated machine'
   folder's `pc.log` lists the files and members read from the mods (`mods: ...`). Its music data
   (popnhax's XML, any `.xml` in the folder) brings back the songs the game left out, each whose
   Normal chart's `sd/<folder>/<file>.ifs` and banner are there (`songs: ...` in `pc.log`). Not yet:
-  songs past the game's own, charts added to the game's songs, and PNGs in the `_ifs` folders
-  (PLAN.md section 35).
+  songs past the game's own and charts added to the game's songs. Pictures as PNGs work too
+  (`<pack>_ifs/tex/<name>.png`, as translations have them): each is converted for the game the
+  first time it's shown in a run (`mods: picture ...` in `pc.log`), its size the game's, or the
+  mod's own `tex/texturelist.xml`'s; not yet `dxt5` pictures, nor new pictures without a list of the
+  mod's (PLAN.md section 35).
 
 ## Per core
 

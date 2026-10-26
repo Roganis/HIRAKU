@@ -290,7 +290,7 @@ if(HK_PC_DLL_CC)
     COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/pc
     COMMAND ${HK_PC_DLL_CC} --target=i686-w64-mingw32 ${HK_PC_DLL_SYS} -O2 -Wall -Wextra -fuse-ld=lld -static
             -o ${CMAKE_BINARY_DIR}/pc/hiraku-pc32.exe ${CMAKE_SOURCE_DIR}/runtime/pc32/main.c ${CMAKE_SOURCE_DIR}/runtime/pc32/files.c
-            ${CMAKE_SOURCE_DIR}/runtime/pc32/songs.c
+            ${CMAKE_SOURCE_DIR}/runtime/pc32/songs.c -lole32 -lwindowscodecs -luuid
             ${CMAKE_SOURCE_DIR}/runtime/pc64/imports.c
     DEPENDS runtime/pc32/main.c runtime/pc32/files.c runtime/pc32/songs.c runtime/pc32/pc32.h runtime/pc64/imports.c runtime/pc64/pc64.h
     COMMENT "pc/hiraku-pc32.exe (32-bit)")

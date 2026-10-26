@@ -18,7 +18,16 @@ void *pc32_hook_target(HMODULE m, void *target, void *fn);
 typedef int (*pc32_mount_fn)(const char *mountpoint, const char *source, const char *fstype, void *data);
 typedef int (*pc32_open_fn)(const char *path, int mode, int perm);
 typedef int (*pc32_stat_fn)(const char *path, void *st);
-void pc32_files_install(HMODULE core, HMODULE game, pc32_mount_fn mount, pc32_open_fn open, pc32_stat_fn stat);
+typedef int (*pc32_read_fn)(int fd, void *to, unsigned size);
+typedef int (*pc32_close_fn)(int fd);
+struct pc32_avs_files {
+    pc32_mount_fn mount;
+    pc32_open_fn open;
+    pc32_stat_fn stat;
+    pc32_read_fn read;
+    pc32_close_fn close;
+};
+void pc32_files_install(HMODULE core, HMODULE game, const struct pc32_avs_files *avs);
 // songs.c: the songs the game left out, back from the mods' music data (before the game starts)
 void pc32_songs_install(HMODULE game);
 // A mount the game makes (main.c's hook sees each): its source as it is, or the mod's (written in

@@ -62,13 +62,13 @@ struct avs_names {
     const char *core, *ea3, *version;
     const char *boot, *property_create, *property_insert_read, *property_read_query_memsize,
         *property_search, *property_node_create, *property_node_remove, *property_node_refer, *std_setenv,
-        *avs_fs_copy, *avs_fs_lstat, *avs_fs_mount, *psmap_import, *avs_fs_open, *ea3_boot;
+        *avs_fs_copy, *avs_fs_lstat, *avs_fs_mount, *psmap_import, *avs_fs_open, *avs_fs_read, *avs_fs_close, *ea3_boot;
 };
 static const struct avs_names AVS[] = {
     {"libavs-win32.dll", "libavs-win32-ea3.dll", "2.15.8",
      "XCd229cc0000aa", "XCd229cc000126", "XCd229cc00009a", "XCd229cc0000ff",
      "XCd229cc00012e", "XCd229cc00002c", "XCd229cc000028", "XCd229cc000009", "XCd229cc000094",
-     "XCd229cc0000eb", "XCd229cc0000c0", "XCd229cc0000ce", "XCd229cc000005", "XCd229cc000090", "XE592acd00008c"},
+     "XCd229cc0000eb", "XCd229cc0000c0", "XCd229cc0000ce", "XCd229cc000005", "XCd229cc000090", "XCd229cc00010d", "XCd229cc00011f", "XE592acd00008c"},
 };
 
 typedef void *prop_t;
@@ -431,7 +431,9 @@ int main(int argc, char **argv) {
     if (!pc32_hook_target(game, (void *)avs_fs_mount, (void *)avs_fs_mount_)) say("%s doesn't mount drives as expected", game_dll);
     if (GetModuleHandleA("_ibavs-win32.dll"))   // the texture library's AVS2 (its packs' mounts)
         pc32_hook_target(GetModuleHandleA("_ibavs-win32.dll"), (void *)avs_fs_mount, (void *)avs_fs_mount_);
-    pc32_files_install(core, game, (pc32_mount_fn)avs_fs_mount, need(core, v->core, v->avs_fs_open), (pc32_stat_fn)avs_fs_lstat);
+    const struct pc32_avs_files files = {(pc32_mount_fn)avs_fs_mount, need(core, v->core, v->avs_fs_open), (pc32_stat_fn)avs_fs_lstat,
+                                         need(core, v->core, v->avs_fs_read), need(core, v->core, v->avs_fs_close)};
+    pc32_files_install(core, game, &files);
     pc32_songs_install(game);
     if (pc32_trace()) {
         r_psmap_import = need(core, v->core, v->psmap_import);

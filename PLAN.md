@@ -2896,4 +2896,11 @@ content encrypted (`bootstrap.exe` decodes it); not read yet.
      - **Not yet:** `dxt5` pictures (logged), pictures added without a list of the mod's (ifs_layeredfs
        packs them into new textures and rewrites the list), afp animations (`afp/`, `geo/` members by
        MD5), and the game's own drawn texts (the tutorial's bubbles: `[[text]]` mods' business).
+   - **The tutorials skipped** (2026-10-26, `--skip-tutorial`, the loader's `HK_PC32_SKIP_TUTORIAL`): as
+     popnhax's `skip_tutorials`, three of the game's checks made jumps: the guidance when its counter
+     is 0 (`test ax,ax; jne` at 0x10029097), a guest's (`test al,al; je` at 0x100290bb, after
+     `0x1012c9d0`) and the long-note tutorial when the counter is 1 (`cmp ax,1; jne` at 0x10086133),
+     each found by popnhax's bytes. A card player whose record has `tutorial` 308 skips them anyway;
+     this is for guests and new players. Checked: a guest's first credit goes from the start choice
+     to the character select, no tutorial question and no tutorial stage.
 6. **NET TAISEN** through `lobby24`.

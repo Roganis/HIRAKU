@@ -321,6 +321,41 @@ static int avs_fs_mount_(const char *mountpoint, const char *fsroot, const char 
     return r;
 }
 
+// HK_PC32_SKIP_TUTORIAL (--skip-tutorial): the guidance and long-note tutorials skipped, a guest's
+// and a new player's, as popnhax's skip_tutorials (GPL-3.0): three of the game's checks made jumps
+//   - test ax,ax; jne (the guidance counter at 0: the guidance) -> jmp;
+//   - the guest's: ...; ret 4; call; test al,al; je -> jmp;
+//   - pop edi; pop esi; cmp ax,1; jne (the long-note tutorial, after the guidance) -> jmp.
+static BYTE *find_once(HMODULE game, const BYTE *pat, size_t n, size_t within, const BYTE *from) {
+    BYTE *base = (BYTE *)game;
+    IMAGE_NT_HEADERS *nt = (IMAGE_NT_HEADERS *)(base + ((IMAGE_DOS_HEADER *)base)->e_lfanew);
+    BYTE *p = from ? (BYTE *)from : base + nt->OptionalHeader.BaseOfCode, *end = base + nt->OptionalHeader.BaseOfCode + nt->OptionalHeader.SizeOfCode;
+    if (within && p + within < end) end = p + within;
+    BYTE *hit = NULL;
+    int count = 0;
+    for (; p + n <= end; p++)
+        if (!memcmp(p, pat, n)) hit = p, count++;
+    return count == 1 ? hit : NULL;
+}
+static void skip_tutorials(HMODULE game) {
+    BYTE *guide = find_once(game, (const BYTE *)"\x66\x85\xC0\x75\x5E\x6A", 6, 0, NULL);
+    BYTE *guest = find_once(game, (const BYTE *)"\xFD\xFF\x5E\xC2\x04\x00\xE8", 7, 0, NULL);
+    if (guest) guest = find_once(game, (const BYTE *)"\x84\xC0\x74", 3, 0x10, guest);
+    BYTE *hold = find_once(game, (const BYTE *)"\x00\x5F\x5E\x66\x83\xF8\x01\x75", 8, 0, NULL);
+    if (!guide || !guest || !hold) {
+        say("the tutorials aren't where expected: not skipped");
+        return;
+    }
+    BYTE *at[3] = {guide + 3, guest + 2, hold + 7};
+    for (int i = 0; i < 3; i++) {
+        DWORD old;
+        VirtualProtect(at[i], 1, PAGE_EXECUTE_READWRITE, &old);
+        *at[i] = 0xeb;
+        VirtualProtect(at[i], 1, old, &old);
+    }
+    say("the tutorials skipped");
+}
+
 int main(int argc, char **argv) {
     if (argc < 2) {
         fprintf(stderr, "usage: hiraku-pc32 CONTENTS [GAME.dll]\n");
@@ -435,6 +470,7 @@ int main(int argc, char **argv) {
                                          need(core, v->core, v->avs_fs_read), need(core, v->core, v->avs_fs_close)};
     pc32_files_install(core, game, &files);
     pc32_songs_install(game);
+    if (getenv("HK_PC32_SKIP_TUTORIAL") && *getenv("HK_PC32_SKIP_TUTORIAL")) skip_tutorials(game);
     if (pc32_trace()) {
         r_psmap_import = need(core, v->core, v->psmap_import);
         r_search = (void *)property_search;

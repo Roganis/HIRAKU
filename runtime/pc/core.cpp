@@ -205,6 +205,10 @@ public:
             press_time_ = true;
             return true;
         }
+        if (name == "--skip-tutorial") {
+            skip_tutorial_ = true;
+            return true;
+        }
         if (name == "--judge-offset") {
             const std::string v = value();
             char *end = nullptr;
@@ -234,7 +238,9 @@ public:
                            "  --press-time         pop'n 15-18: each press judged by when it happened, not by the frame\n"
                            "                       the game read it in (as the game does: up to a frame later)\n"
                            "  --judge-offset MS    pop'n 15-18: each press judged MS milliseconds earlier (positive:\n"
-                           "                       for a display or sound that comes late), -200 to 200\n") +
+                           "                       for a display or sound that comes late), -200 to 200\n"
+                           "  --skip-tutorial      the 32-bit PC pop'n on AVS2 2.15: its guidance and long-note\n"
+                           "                       tutorials skipped, a guest's and a new player's\n") +
                hk::EaOptions::help();
     }
 
@@ -525,6 +531,7 @@ public:
         set_env("HK_PC_JUDGE_OFFSET", judge_offset_ ? std::to_string(judge_offset_) : "");
         set_env("HK_PC_LOG", win_path(save_ + "/pc.log"));
         set_env("HK_PC32_LOG", win_path(save_ + "/pc.log"));
+        set_env("HK_PC32_SKIP_TUTORIAL", skip_tutorial_ ? "1" : "");
         set_env("HK_PC_PROGRAM", m.count("exe") ? m["exe"] : "popn22.dll");   // the game's own code: the DLL, not the loader
         // the mods (docs/MODS.md): each folder laid over the game's data folder, new files too, and
         // inside its packs (<pack>_ifs/<member>), as ifs_layeredfs (the loader's HK_PC32_DATA: files.c)
@@ -1270,6 +1277,7 @@ private:
     std::vector<float> go_to_shell_, pad_read_, drawn_;   // ms, per picture (report)
     std::chrono::steady_clock::time_point pressed_at_{};   // a button went down (set_input)
     bool press_time_ = false;                              // --press-time
+    bool skip_tutorial_ = false;                           // --skip-tutorial
     double judge_offset_ = 0;                              // --judge-offset, milliseconds
     // A time on the link (link.h): microseconds of the steady clock, its low 32 bits
     static uint32_t host_us(std::chrono::steady_clock::time_point t) {

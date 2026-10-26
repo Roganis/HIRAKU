@@ -543,6 +543,90 @@ static int __cdecl my_avs_net_ctrl(int what, void *buf, int size) {
     return r;
 }
 
+// --- AVS2's own network calls (the last 32-bit PC pop'n, popn22.dll: PLAN.md section 35): the game
+// talks to the other cabinets through AVS2 (avs_net_socket, bind, setsockopt, sendto, recvfrom,
+// close: libavs-win32 2.15's exports, imported by ordinal, hooked by the loader through hk_avs_net);
+// the same relay serves them. AVS2's sockets are numbers above 0 (0 is taken as a failure), its
+// addresses a number (a.b.c.d as a << 24 | ...), its receive never waits.
+#define AVS_FD 0x40
+static int avs_s(int fd) { return fd >= AVS_FD && fd < AVS_FD + NSOCK ? fd - AVS_FD : -1; }
+static int __cdecl a_socket(int protocol) {
+    const int s = v_open(0);
+    if (s < 0) return -1;
+    EnterCriticalSection(&g_lock);
+    g_s[s].nonblock = 1;
+    LeaveCriticalSection(&g_lock);
+    if (logging()) hk_log("vsock: avs_net_socket(%d) = %d", protocol, AVS_FD + s);
+    return AVS_FD + s;
+}
+static int __cdecl a_bind(int fd, uint32_t addr, unsigned short port) {
+    (void)addr;
+    return v_bind(avs_s(fd), port) ? 0 : -1;
+}
+static int __cdecl a_setsockopt(int fd, int option, const void *value, int size) {
+    (void)option, (void)value, (void)size;
+    return avs_s(fd) >= 0 ? 0 : -1;
+}
+static int __cdecl a_sendto(int fd, void *buf, int len, uint32_t addr, unsigned short port) {
+    unsigned char a[4];
+    put_addr(a, addr);
+    return v_sendto(avs_s(fd), buf, len, a, port);
+}
+static int __cdecl a_recvfrom(int fd, void *buf, int size, uint32_t *addr, unsigned short *port) {
+    unsigned char a[4] = {0};
+    const int r = v_recvfrom(avs_s(fd), buf, size, a, port);
+    if (r > 0 && addr) *addr = addr_of(a);
+    return r;
+}
+static int __cdecl a_close(int fd) {
+    v_close(avs_s(fd));
+    return 0;
+}
+// avs_net_ctrl(0, buf, 4): the cabinet's own address (the relay's), 3 its network's mask; the rest
+// AVS2's own
+typedef int(__cdecl *ctrl_t)(int what, void *buf, int size);
+static ctrl_t g_ctrl;
+static int __cdecl a_ctrl(int what, void *buf, int size) {
+    if (what == 0 && buf && size >= 4 && relay()) {
+        memcpy(buf, &g_addr, 4);
+        return 4;
+    }
+    if (what == 3 && buf && size >= 4) {   // its network's mask
+        const uint32_t mask = 0xffff0000u;
+        memcpy(buf, &mask, 4);
+        return 4;
+    }
+    return g_ctrl ? g_ctrl(what, buf, size) : -1;
+}
+// the e-AMUSEMENT settings' query (libavs-win32-ea3's, (type, path, buf, size)): the router's address
+// as the world sees it is the relay's (portfw/globalip), the rest the settings' own
+typedef int(__cdecl *ea3_cfg_t)(int type, const char *path, void *buf, int size);
+static ea3_cfg_t g_ea3_cfg;
+static int __cdecl a_ea3_cfg(int type, const char *path, void *buf, int size) {
+    if (path && !strcmp(path, "portfw/globalip") && buf && size >= 4 && relay()) {
+        memcpy(buf, &g_addr, 4);
+        return 4;
+    }
+    return g_ea3_cfg ? g_ea3_cfg(type, path, buf, size) : -1;
+}
+
+// The hook for one of AVS2's calls by what it does ("socket", ... "ea3_cfg": its real one in *real),
+// or NULL without a relay
+void *hk_avs_net(const char *what, void *real) {
+    if (!getenv("HK_PC_RELAY")) return NULL;
+    init_once();
+    static const struct { const char *name; void *to; } calls[] = {
+        {"socket", (void *)a_socket}, {"bind", (void *)a_bind},         {"setsockopt", (void *)a_setsockopt},
+        {"sendto", (void *)a_sendto}, {"recvfrom", (void *)a_recvfrom}, {"close", (void *)a_close},
+        {"ctrl", (void *)a_ctrl},     {"ea3_cfg", (void *)a_ea3_cfg},
+    };
+    if (!strcmp(what, "ea3_cfg")) g_ea3_cfg = (ea3_cfg_t)real;
+    if (!strcmp(what, "ctrl")) g_ctrl = (ctrl_t)real;
+    for (size_t i = 0; i < sizeof calls / sizeof *calls; i++)
+        if (!strcmp(what, calls[i].name)) return calls[i].to;
+    return NULL;
+}
+
 // --- for HK_PC_NET_LOG: the game's messages as it hands them to libcomm
 
 typedef int(__cdecl *send_que_t)(unsigned char *addr, int type, char *data, int len, int flags);

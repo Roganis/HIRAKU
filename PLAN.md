@@ -2903,4 +2903,45 @@ content encrypted (`bootstrap.exe` decodes it); not read yet.
      each found by popnhax's bytes. A card player whose record has `tutorial` 308 skips them anyway;
      this is for guests and new players. Checked: a guest's first credit goes from the start choice
      to the character select, no tutorial question and no tutorial stage.
-6. **NET TAISEN** through `lobby24`.
+6. **NET TAISEN** through `lobby24` (2026-10-26). How the game does it (Ghidra, `CtrlNetvs`, its state
+   machine at `0x10004ee0`, the status at +0x2aa4):
+   - **Turned on** by the events' phases (info24.common and player24.start: `<phase>` event_id/phase,
+     20 events, `0x1010d820`): event 3 is NET TAISEN (0 off, 1 on, 2 with the shop's local battles, as
+     UniLab's in bemaniutils), forced to 0 when the facility has no portfw address. With it, the music
+     select offers "3 対戦待ち" and the player's `config.ms_raise_type` (challengers welcome, 1 or 2)
+     keeps the lobby open while choosing.
+   - **The lobby is e-AMUSEMENT's** (`lobby24`, found under the services name `lobby2`): while a
+     player with challengers welcome chooses, `getList` every 4 s (location_id, net_version 83: the
+     answer's `<list>`s: no, time, ip, port, local_ip, music, sheet, is_ojama, `0x10388640`). When the
+     player decides (`0x1006de90`), a listed room for the song (`0x100734f0`) is joined
+     (`ApplyNationalMatching`, `0x10004280`); none, the cabinet opens one (`GotoHostPlay`, `0x10004150`:
+     `entry` with its portfw address and port, its own, 40 s to wait, the song; the answer's `no`) and
+     waits for the others' packets; `update` says how many came (`matched_cnt`), `delete` closes it.
+   - **The cabinets talk directly**, UDP through AVS2's own network calls (no Winsock of its own:
+     `avs_net_socket`, `bind` 30000 / 5700 / 5702, `setsockopt` broadcast, `sendto`, `recvfrom`, `close`,
+     and `avs_net_ctrl(0)` for its address; XCd229cc000026/07e/092/15b/164/09c/02e), in "M39 " packets
+     (big-endian length, a CRC-16 of AVS2's, a sequence, the sender's addresses and port, a type):
+     join 228 bytes, the host's answer 32, then 248-byte updates answered with 28, 64 at the start;
+     about 300 during a song (the others' scores).
+   - **HIRAKU:** the server (`easerver_p24.cpp`) gives phase 3 = 1 (the data folder's `netvs-M39`
+     another) and keeps the rooms in a file of its data folder (`lobby24-M39`, so that cabinets each
+     with their own server on one folder meet as on one), a cabinet's own left out, each dropped after
+     its wait; the loader hooks the game's AVS2 network imports to `hk_avs_net` in HIRAKU's ezusb.dll
+     (`vsock.c`: the same relay as pop'n 15-18's, the address 10.57.x.y as a number a << 24 | ...),
+     and the ea3 settings' query for `portfw/globalip` (libavs-win32-ea3's XE592acd000009) answers
+     the relay's address. Also: two cabinets on one PC both start (the e-AMUSEMENT library's shop file
+     cache binds TCP 5703, fixed, and a UDP port of its circle: the loader's wrap of its `bind` takes
+     any free port when one is taken; without it the second retried for ever, "fscache-server: bind
+     failed").
+   - **The record:** the game reads `<netvs>` (record[6], dialogs, ojama settings, netvs_play_cnt) and
+     never sends it; each stage's `write_music` says netvs_type (1 national), netvs_rank (0-based) and
+     the three ojama used. netvs_play_cnt counts the credits with a NET stage (as pop'n 15's); record's
+     six numbers are kept at 0 (what they count isn't known yet).
+   - **Checked under Wine** (two hiraku-pc, each its own server on one data folder, one relay:
+     out/pcnet/pair.sh): A decides on a song and opens a room; B, choosing the same song, decides and
+     joins; both play it together (each screen listing HIRAKU and HIRAKUB, the results 1st and 2nd),
+     both cabinets' `write_music` with netvs_type 1 and their ranks; a whole credit on both (the NET
+     stage, then two where both decided at once and each opened a room of its own and played alone
+     after its wait), `write` and `logout`, each record's netvs_play_cnt 1.
+   - **Not yet:** local battles (phase 2, `local2`), CPUs filling a room, the "対戦待ち" category's
+     own list of rooms, record's meaning; a cabinet alone just plays after its 40 s.

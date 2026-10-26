@@ -131,6 +131,7 @@ void EamuseServer::write_file(const std::string &name, const std::string &data) 
 
 std::string EamuseServer::answer(const Call &c, const Request &r, const std::string &host) {
     const std::string &m = r.module, &f = r.method;
+    src_ = c.srcid;
     // pop'n 10 on (model C20, D11, E12, ...): their own calls and answer formats; pop'n 9 (C00)
     // and anything not handled there go on below
     const std::string game = c.model.substr(0, 3);

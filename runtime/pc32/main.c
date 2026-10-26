@@ -63,12 +63,16 @@ struct avs_names {
     const char *boot, *property_create, *property_insert_read, *property_read_query_memsize,
         *property_search, *property_node_create, *property_node_remove, *property_node_refer, *std_setenv,
         *avs_fs_copy, *avs_fs_lstat, *avs_fs_mount, *psmap_import, *avs_fs_open, *avs_fs_read, *avs_fs_close, *ea3_boot;
+    // NET TAISEN's: avs_net_socket, bind, setsockopt, sendto, recvfrom, close, ctrl; the ea3 settings' query
+    const char *net[7], *ea3_cfg;
 };
 static const struct avs_names AVS[] = {
     {"libavs-win32.dll", "libavs-win32-ea3.dll", "2.15.8",
      "XCd229cc0000aa", "XCd229cc000126", "XCd229cc00009a", "XCd229cc0000ff",
      "XCd229cc00012e", "XCd229cc00002c", "XCd229cc000028", "XCd229cc000009", "XCd229cc000094",
-     "XCd229cc0000eb", "XCd229cc0000c0", "XCd229cc0000ce", "XCd229cc000005", "XCd229cc000090", "XCd229cc00010d", "XCd229cc00011f", "XE592acd00008c"},
+     "XCd229cc0000eb", "XCd229cc0000c0", "XCd229cc0000ce", "XCd229cc000005", "XCd229cc000090", "XCd229cc00010d", "XCd229cc00011f", "XE592acd00008c",
+     {"XCd229cc000026", "XCd229cc00007e", "XCd229cc000092", "XCd229cc00015b", "XCd229cc000164", "XCd229cc00009c", "XCd229cc00002e"},
+     "XE592acd000009"},
 };
 
 typedef void *prop_t;
@@ -356,6 +360,37 @@ static void skip_tutorials(HMODULE game) {
     say("the tutorials skipped");
 }
 
+// The e-AMUSEMENT library's servers for a shop's cabinets (its file cache, share-proto-http: TCP 5703,
+// a fixed port, and the circle's UDP one) bind ports of the PC: when one is taken (another cabinet on
+// this PC) any free one instead, or the second cabinet's start-up retries for ever ("fscache-server:
+// bind failed")
+typedef int(__cdecl *avs_bind_t)(int fd, uint32_t addr, unsigned short port);
+static avs_bind_t r_share_bind;
+static int __cdecl share_bind(int fd, uint32_t addr, unsigned short port) {
+    int r = r_share_bind(fd, addr, port);
+    if (r < 0 && port) {
+        r = r_share_bind(fd, addr, 0);
+        say("the shop's file cache: port %u taken, another (%d)", port, r);
+    }
+    return r;
+}
+
+// NET TAISEN: the game's AVS2 network calls served by HIRAKU's relay (the cabinet's vsock.c, through
+// ezusb.dll's hk_avs_net), as pop'n 15-18's libsocket calls are: sockets, the cabinet's own address and
+// its router's (portfw) the relay gives it
+static void hook_avs_net(HMODULE game, HMODULE core, HMODULE ea3, const struct avs_names *v) {
+    void *(*avs_net)(const char *, void *) = (void *(*)(const char *, void *))(void *)GetProcAddress(GetModuleHandleA("ezusb.dll"), "hk_avs_net");
+    if (!avs_net) return;
+    static const char *const WHAT[8] = {"socket", "bind", "setsockopt", "sendto", "recvfrom", "close", "ctrl", "ea3_cfg"};
+    int hooked = 0;
+    for (int i = 0; i < 8; i++) {
+        void *real = i < 7 ? (void *)GetProcAddress(core, v->net[i]) : (void *)GetProcAddress(ea3, v->ea3_cfg);
+        void *to = real ? avs_net(WHAT[i], real) : NULL;
+        if (to && pc32_hook_target(game, real, to)) hooked++;
+    }
+    if (hooked) say("NET TAISEN: the game's network (%d of AVS2's calls) goes to HIRAKU's relay", hooked);
+}
+
 int main(int argc, char **argv) {
     if (argc < 2) {
         fprintf(stderr, "usage: hiraku-pc32 CONTENTS [GAME.dll]\n");
@@ -470,6 +505,9 @@ int main(int argc, char **argv) {
                                          need(core, v->core, v->avs_fs_read), need(core, v->core, v->avs_fs_close)};
     pc32_files_install(core, game, &files);
     pc32_songs_install(game);
+    hook_avs_net(game, core, ea3, v);
+    if ((r_share_bind = (avs_bind_t)(void *)GetProcAddress(core, v->net[1])))
+        pc32_hook_target(ea3, (void *)r_share_bind, (void *)share_bind);
     if (getenv("HK_PC32_SKIP_TUTORIAL") && *getenv("HK_PC32_SKIP_TUTORIAL")) skip_tutorials(game);
     if (pc32_trace()) {
         r_psmap_import = need(core, v->core, v->psmap_import);

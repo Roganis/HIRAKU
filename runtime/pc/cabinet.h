@@ -62,6 +62,8 @@ void *hk_net_card_hook(const char *fn);   // iphlpapi's
 // NET TAISEN through HIRAKU's relay (vsock.c): the hook for one of libsocket's calls, or for
 // libavs's ea3_query and avs_net_ctrl, or NULL
 void *hk_vsock_hook(const char *fn);
+// AVS2's network calls, for the loader of the 32-bit AVS2 games (vsock.c; exported from ezusb.dll)
+__declspec(dllexport) void *hk_avs_net(const char *what, void *real);
 void *hk_comm_hook(const char *fn);   // libcomm's, for HK_PC_NET_LOG
 // pop'n 16-18: libsocket built into the program, its calls made jumps to the relay's (vsock.c)
 void hk_vsock_patch_program(void);

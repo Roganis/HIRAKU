@@ -60,3 +60,4 @@ EXPORTS
     "?usbWdtStart@@YAHH@Z" = usb_wdt_start
     "?usbWdtStartDone@@YAHXZ" = usb_wdt_start_done
     "?usbWdtStop@@YAHXZ" = usb_wdt_stop
+    hk_avs_net

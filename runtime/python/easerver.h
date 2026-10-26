@@ -92,6 +92,7 @@ private:
     // the 64-bit PC pop'n (M39: runtime/pc64/): its module "player"
     std::string answer_hc(const Request &r);
     std::string answer_p24(const Request &r);   // the last 32-bit PC pop'n: info24, player24 (easerver_p24.cpp)
+    std::string answer_lobby24(const Request &r);   // and its NET TAISEN lobby
     // beatmania IIDX 9th style (C02: runtime/pc/): its module "C02" (music, weekly, ranking, grade)
     std::string answer_c02(const Request &r);
     // One card for all (docs/EAMUSE3.md): every chart's best clear mark over all the pop'n games
@@ -112,6 +113,8 @@ private:
 
     std::string dir_;
     uint32_t serial_ = 0;   // for the answers' X-Eamuse-Info: deterministic
+    std::string src_;       // the asking cabinet (the call's srcid)
+    std::string self_;      // this server, among those sharing its data folder (a random number)
 };
 
 }  // namespace hk::py

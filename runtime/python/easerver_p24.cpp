@@ -12,6 +12,8 @@
 
 #include <algorithm>
 #include <cstdlib>
+#include <ctime>
+#include <random>
 
 namespace hk::py {
 
@@ -122,7 +124,9 @@ const Field EVENT2021[] = {
     {"quest_point_nos", "u32", 13, "0"},   // may be left out
 };
 // netvs: every field may be left out, but set_recommend's default is broken (as the 64-bit game's:
-// its "pointer" is 1), so the arrays are given; the six dialog strings left to their default
+// its "pointer" is 1), so the arrays are given; the six dialog strings left to their default. The game
+// reads it and never sends it: netvs_play_cnt is the server's (credits with a NET TAISEN stage, from
+// write_music's netvs_type, as pop'n 15's), record's six numbers are kept as zeros (not known yet)
 const Field NETVS[] = {
     {"record", "s16", 6, "0"},          {"ojama_condition", "s8", 74, "0"}, {"set_ojama", "s8", 3, "0"},
     {"set_recommend", "s8", 3, "0"},    {"netvs_play_cnt", "u32", 0, "0"},
@@ -156,9 +160,12 @@ std::string first_n(const std::string &list, size_t n) {
 }
 
 // The common info, info24.common's and player24.start's: the areas (open, no end), the chocolate
-// event's five, the shop's goods (bemaniutils' prices)
-std::string common_info() {
-    std::string x;
+// event's five, the shop's goods (bemaniutils' prices), the events' phases (the game keeps 20,
+// 0x1010d820): event 3 is NET TAISEN (0 off, 1 on, 2 with the shop's local battles, as UniLab's in
+// bemaniutils; the game takes 0 when the facility has no portfw address), on unless the data folder's
+// netvs-M39 says otherwise
+std::string common_info(long netvs) {
+    std::string x = "<phase><event_id __type=\"s16\">3</event_id><phase __type=\"s16\">" + std::to_string(netvs) + "</phase></phase>";
     for (int i = 1; i <= 16; i++)
         x += "<area><area_id __type=\"s16\">" + std::to_string(i) + "</area_id><end_date __type=\"u64\">0</end_date>"
              "<medal_id __type=\"s16\">" + std::to_string(i) + "</medal_id><is_limit __type=\"bool\">0</is_limit></area>";
@@ -176,14 +183,17 @@ std::string common_info() {
 
 std::string EamuseServer::answer_p24(const Request &r) {
     const std::string &m = r.module, &f = r.method;
-    if (m == "info24") return f == "common" ? "<info24 status=\"0\">" + common_info() + "</info24>" : "<info24 status=\"0\"/>";
+    std::string setting = read_file("netvs-M39");
+    const long netvs = setting.empty() ? 1 : std::strtol(setting.c_str(), nullptr, 10);
+    if (m == "info24") return f == "common" ? "<info24 status=\"0\">" + common_info(netvs) + "</info24>" : "<info24 status=\"0\"/>";
+    if (m == "lobby24") return answer_lobby24(r);
     std::string ref = child(r.inner, "ref_id");
     if (ref.empty()) ref = attr(r.attrs, "ref_id");
     if (f == "start") {   // a credit's start (with or without a player): its play id, and the common info
         Record count = from_lines(read_file("p24-plays")).empty() ? Record{} : from_lines(read_file("p24-plays"))[0];
         count["n"] = std::to_string(num(count, "n") + 1);
         write_file("p24-plays", to_line(count));
-        return "<player24 status=\"0\"><play_id __type=\"s32\">" + attr(count, "n") + "</play_id>" + common_info() + "</player24>";
+        return "<player24 status=\"0\"><play_id __type=\"s32\">" + attr(count, "n") + "</play_id>" + common_info(netvs) + "</player24>";
     }
     if (!safe_name(ref)) return "<player24 status=\"0\"/>";
     const std::string file = "p24-" + ref;
@@ -225,7 +235,7 @@ std::string EamuseServer::answer_p24(const Request &r) {
         return "<player24 status=\"0\"><result __type=\"s8\">0</result>" + part("account", ACCOUNT, account) +
                part("info", INFO, kept(p, "info", INFO)) + part("config", CONFIG, kept(p, "config", CONFIG)) +
                part("option", OPTION, kept(p, "option", OPTION)) + part("customize", CUSTOMIZE, kept(p, "customize", CUSTOMIZE)) +
-               part("netvs", NETVS, {}) + part("custom_cate", CUSTOM_CATE, {}) + part("event2021", EVENT2021, kept(p, "event2021", EVENT2021)) +
+               part("netvs", NETVS, kept(p, "netvs", NETVS)) + part("custom_cate", CUSTOM_CATE, {}) + part("event2021", EVENT2021, kept(p, "event2021", EVENT2021)) +
                charas + (p.count("event_p28.burger_first_play") ? part("event_p28", EVENT_P28_BACK, kept(p, "event_p28", EVENT_P28_BACK)) : "") +
                "</player24>";
     };
@@ -271,6 +281,7 @@ std::string EamuseServer::answer_p24(const Request &r) {
         for (const Record &x : all) t += to_line(x);
         write_file(scores, t);
         if (child(r.inner, "is_option_save") == "1") keep(p, "option", OPTION, r.inner);
+        if (std::strtol(child(r.inner, "netvs_type").c_str(), nullptr, 10) > 0) p["netvs_credit"] = "1";   // a NET TAISEN stage
         write_file(file, to_line(p));
         return "<player24 status=\"0\"/>";
     }
@@ -283,6 +294,7 @@ std::string EamuseServer::answer_p24(const Request &r) {
         keep(p, "event2021", EVENT2021, child(r.inner, "event2021"));
         keep(p, "event_p28", EVENT_P28, child(r.inner, "event_p28"));
         p["account.total_play_cnt"] = std::to_string(num(p, "account.total_play_cnt") + 1);
+        if (p.erase("netvs_credit")) p["netvs.netvs_play_cnt"] = std::to_string(num(p, "netvs.netvs_play_cnt") + 1);
         // the stages' songs, newest first, ahead of the latest kept (each once); each chara_param's friendship
         std::string latest = attr(p, "latest"), charas = attr(p, "charas");
         for (size_t at = r.inner.find("<stage>"); at != std::string::npos; at = r.inner.find("<stage>", at + 1)) {
@@ -316,6 +328,66 @@ std::string EamuseServer::answer_p24(const Request &r) {
         return "<player24 status=\"0\"/>";
     }
     return "<player24 status=\"0\"/>";   // logout, buy, friend, update_ranking, ...
+}
+
+// NET TAISEN's lobby (lobby24): a cabinet that finds no room to join opens one when its player picks a
+// song (entry: its address and port as the world sees them, its own on its LAN, the song, how long it
+// waits, in milliseconds) and waits for the others, who find it (getList, every 4 seconds while their
+// players choose) and talk to it directly; it says how many came (update) and closes it (delete).
+// The rooms are a file of the data folder (lobby24-M39), so that cabinets each with its own server
+// on one folder meet as on one server; a cabinet's own rooms (its PCBID, this server) are left out of
+// its list, and each is dropped after its wait and half a minute more
+std::string EamuseServer::answer_lobby24(const Request &r) {
+    const std::string &f = r.method;
+    const int64_t t = now ? now() : (int64_t)time(nullptr);
+    if (self_.empty()) self_ = std::to_string(std::random_device{}());
+    std::vector<Record> rooms = from_lines(read_file("lobby24-M39"));
+    const size_t had = rooms.size();
+    rooms.erase(std::remove_if(rooms.begin(), rooms.end(), [&](const Record &room) { return t > std::atoll(attr(room, "until").c_str()); }),
+                rooms.end());
+    bool changed = rooms.size() != had;
+    auto mine = [&](const Record &room) { return attr(room, "src") == src_ && attr(room, "server") == self_; };
+    if (log) log("lobby24." + f + " from " + src_ + ": " + r.inner);
+    std::string out = "<lobby24 status=\"0\"/>";
+    if (f == "getList") {
+        std::string x;
+        for (const Record &room : rooms) {
+            if (mine(room)) continue;
+            x += "<list><no __type=\"u32\">" + attr(room, "no") + "</no><time __type=\"u32\">" + attr(room, "time") + "</time><ip __type=\"u32\">" +
+                 attr(room, "ip") + "</ip><port __type=\"u16\">" + attr(room, "port") + "</port><local_ip __type=\"u32\">" +
+                 attr(room, "local_ip") + "</local_ip><music __type=\"s16\">" + attr(room, "music") + "</music><sheet __type=\"u8\">" +
+                 attr(room, "sheet") + "</sheet><is_ojama __type=\"u8\">" + attr(room, "is_ojama") + "</is_ojama></list>";
+        }
+        out = "<lobby24 status=\"0\">" + x + "</lobby24>";
+    } else if (f == "entry") {
+        rooms.erase(std::remove_if(rooms.begin(), rooms.end(), mine), rooms.end());
+        long next = 1;
+        for (const Record &room : rooms) next = std::max(next, std::atol(attr(room, "no").c_str()) + 1);
+        Record room{{"src", src_}, {"server", self_}, {"no", std::to_string(std::max<long>(next, t % 100000))}};
+        for (const char *k : {"time", "ip", "port", "local_ip", "music", "sheet", "is_ojama", "gpm_id"}) {
+            const std::string v = child(r.inner, k);
+            room[k] = v.empty() ? "0" : v;
+        }
+        const long wait = std::strtol(room["time"].c_str(), nullptr, 10) / 1000;
+        room["until"] = std::to_string(t + (wait > 0 && wait < 600 ? wait + 30 : 600));
+        rooms.push_back(room);
+        changed = true;
+        out = "<lobby24 status=\"0\"><no __type=\"u32\">" + room["no"] + "</no></lobby24>";
+    } else if (f == "update") {
+        const std::string no = child(r.inner, "room_no");
+        for (Record &room : rooms)
+            if (attr(room, "no") == no) room["matched"] = child(r.inner, "matched_cnt"), changed = true;
+    } else if (f == "delete") {
+        const std::string no = child(r.inner, "no");
+        rooms.erase(std::remove_if(rooms.begin(), rooms.end(), [&](const Record &room) { return attr(room, "no") == no; }), rooms.end());
+        changed = true;
+    }
+    if (changed) {
+        std::string text;
+        for (const Record &room : rooms) text += to_line(room) + "\n";
+        write_file("lobby24-M39", text);
+    }
+    return out;
 }
 
 }  // namespace hk::py

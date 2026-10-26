@@ -2818,6 +2818,29 @@ content encrypted (`bootstrap.exe` decodes it); not read yet.
      - The music data (popnhax's XML) of the bundle's packs: ids 1-2026 mostly left-out songs (and
        charts added to kept ones: song 5's EASY), 3000-3155 the console songs and 5600+ custom ones
        past the table (not yet).
+     - **Done (2026-10-26, `runtime/pc32/songs.c`, after `runtime/pc64/songs.c`):** the tables found by
+       the code that reads them (the song count from the id check, the music table from its
+       characters' getters, the charts and characters with their counts from their readers); the
+       mods' music data read as on the 64-bit game; each left-out song the data describes, its
+       Normal chart's file there (a mod's or the game's) and a banner (`kc_NNNN` in the game's packs or
+       a mod's `tex/system/kc_diff_ifs/`), written into its slot before the game starts: texts,
+       characters by name, mask (unlock bits cleared, the charts' bits set), folder, version,
+       categories, levels, tempos, hold flags. Its charts take entries no song uses: the one with the
+       same file's name (the song's own, its folder an old game's), else one whose own file the
+       game's data hasn't. Entries no song uses can still be the game's own: the tutorial's chart
+       (`popn24/tuto24`, number 1656) is read by number, and taking it made the tutorial's play stage
+       empty. Checked under Wine with the bundle's Omnimix packs: 239 songs back (268 chart entries;
+       12 described without their files, 6 naming characters the game hasn't); song 1 (RAP, YOUNG
+       DREAM) listed and played (its banner and pack from the mod, its own character, its notes,
+       `write_music` for it), the music select listing the old songs.
+     - Found on the way (step 4's record): `total_play_cnt` must count the credit being played (from
+       1; with 0 on a first credit the next card read plays a broken tutorial stage, BPM 1, "a cursed
+       tutorial stage", as bemaniutils notes); `tutorial` is two counters (% 100 the guidance, 8 =
+       done; / 100 the long-note tutorial, 3 = done: 308 skips them); `event_p28` given back with its
+       first play done made the game fault after the next stage (it then wants its shops' list,
+       0x10387cc8): kept, not given back, until that list is known.
+     - **Not yet:** charts added to songs the game kept (song 5's EASY), songs past the table, the
+       old songs' own backgrounds (none in the bundle's packs: not needed so far).
    - **5c, pictures as PNGs:** a texture pack keeps its pictures converted, under their names' MD5
      (`tex/<md5>`), listed in `tex/texturelist.xml`: a mod's `<pack>_ifs/tex/name.png` (translations,
      category icons) needs converting and listing.

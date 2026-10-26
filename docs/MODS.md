@@ -411,8 +411,11 @@ so their memory and files are the game's own process's, not an emulated machine'
   data folder (new files too, the first mod winning), and inside the game's packs as ifs_layeredfs
   lays them out: `<mod>/sd/system/system28_ifs/system28.2dx` is the member `system28.2dx` of
   `data/sd/system/system28.ifs`, for any pack the game mounts (a pack inside a pack too). The save
-  folder's `pc.log` lists the files and members read from the mods (`mods: ...`). Not yet: the
-  songs a pack's music data adds, and PNGs in the `_ifs` folders (PLAN.md section 35).
+  folder's `pc.log` lists the files and members read from the mods (`mods: ...`). Its music data
+  (popnhax's XML, any `.xml` in the folder) brings back the songs the game left out, each whose
+  Normal chart's `sd/<folder>/<file>.ifs` and banner are there (`songs: ...` in `pc.log`). Not yet:
+  songs past the game's own, charts added to the game's songs, and PNGs in the `_ifs` folders
+  (PLAN.md section 35).
 
 ## Per core
 

@@ -128,7 +128,7 @@ const Field NETVS[] = {
     {"set_recommend", "s8", 3, "0"},    {"netvs_play_cnt", "u32", 0, "0"},
 };
 
-// event_p28, its burger shop's state (the 0x10387c78 descriptor; its shops' list, 0x10387cc8, not kept yet)
+// event_p28, its burger shop's state (the 0x10387c78 descriptor; its shops' list, 0x10387cc8, unknown yet)
 const Field EVENT_P28[] = {
     {"burger_first_play", "bool", 0, "0"}, {"burger_daily_bonus", "bool", 0, "0"},
     {"current_order", "s16", 3, "0"},      {"neko_daily_bonus", "bool", 0, "0"},
@@ -188,6 +188,9 @@ std::string EamuseServer::answer_p24(const Request &r) {
         std::map<std::string, std::string> account = kept(p, "account", ACCOUNT);
         account["g_pm_id"] = tail.substr(0, 4) + "-" + tail.substr(4);
         account["name"] = attr(p, "name");
+        // the plays with this one (the game expects it from 1: with 0 on a first credit it plays a
+        // broken tutorial stage on the next, as bemaniutils notes)
+        account["total_play_cnt"] = std::to_string(num(p, "account.total_play_cnt") + 1);
         // what the game leaves to the server: the latest songs played, the most played (by the scores' counts)
         account["latest_music"] = first_n(attr(p, "latest"), 10);
         std::vector<std::pair<long, std::string>> plays;
@@ -217,8 +220,8 @@ std::string EamuseServer::answer_p24(const Request &r) {
                part("info", INFO, kept(p, "info", INFO)) + part("config", CONFIG, kept(p, "config", CONFIG)) +
                part("option", OPTION, kept(p, "option", OPTION)) + part("customize", CUSTOMIZE, kept(p, "customize", CUSTOMIZE)) +
                part("netvs", NETVS, {}) + part("custom_cate", CUSTOM_CATE, {}) + part("event2021", EVENT2021, kept(p, "event2021", EVENT2021)) +
-               charas + (p.count("event_p28.burger_first_play") ? part("event_p28", EVENT_P28, kept(p, "event_p28", EVENT_P28)) : "") +
-               "</player24>";
+               charas + "</player24>";   // (event_p28 kept but not given back: with its first play done the game wants its shops'
+                                          // list too, 0x10387cc8, and without it faults after the next stage, popn22.dll+0xca719)
     };
     if (f == "read") {   // 2: no player (the game asks for a name, then sends new)
         if (players.empty()) return "<player24 status=\"0\"><result __type=\"s8\">2</result></player24>";

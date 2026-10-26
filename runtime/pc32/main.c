@@ -432,6 +432,7 @@ int main(int argc, char **argv) {
     if (GetModuleHandleA("_ibavs-win32.dll"))   // the texture library's AVS2 (its packs' mounts)
         pc32_hook_target(GetModuleHandleA("_ibavs-win32.dll"), (void *)avs_fs_mount, (void *)avs_fs_mount_);
     pc32_files_install(core, game, (pc32_mount_fn)avs_fs_mount, need(core, v->core, v->avs_fs_open), (pc32_stat_fn)avs_fs_lstat);
+    pc32_songs_install(game);
     if (pc32_trace()) {
         r_psmap_import = need(core, v->core, v->psmap_import);
         r_search = (void *)property_search;

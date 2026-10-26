@@ -19,6 +19,8 @@ typedef int (*pc32_mount_fn)(const char *mountpoint, const char *source, const c
 typedef int (*pc32_open_fn)(const char *path, int mode, int perm);
 typedef int (*pc32_stat_fn)(const char *path, void *st);
 void pc32_files_install(HMODULE core, HMODULE game, pc32_mount_fn mount, pc32_open_fn open, pc32_stat_fn stat);
+// songs.c: the songs the game left out, back from the mods' music data (before the game starts)
+void pc32_songs_install(HMODULE game);
 // A mount the game makes (main.c's hook sees each): its source as it is, or the mod's (written in
 // buf) when it's a pack inside a pack the mod has; the mount noted for its members
 const char *pc32_files_mount(const char *mountpoint, const char *source, const char *fstype, char *buf, size_t n);

@@ -91,6 +91,7 @@ struct chart {
     char *folder, *file;
     int audio[4];
     unsigned type, keys, level, hold;
+    int format;   // force_new_chart_format: 1 the new format, 0 the old, -1 not given
 };
 struct song {
     char *text[6];   // fw_genre, fw_title, fw_artist, genre, title, artist
@@ -99,7 +100,9 @@ struct song {
     unsigned short bpm[12];   // display_bpm: each chart's tempos, two groups of six
     struct chart chart[SLOTS];
 };
-static struct song *g_data;   // by id, g_songs of them
+static struct song *g_data;   // by id, g_ids of them (the game's songs and those past them)
+static unsigned g_ids;
+#define MAX_ID 32767u
 
 static char *keep(const char *s, size_t n) {
     char *k = malloc(n + 1);
@@ -195,7 +198,14 @@ static void read_xml(const WCHAR *path) {
         char *id_at = strstr(m, "id=");
         unsigned id = id_at && id_at < gt && (id_at[3] == '"' || id_at[3] == '\'') ? (unsigned)strtoul(id_at + 4, NULL, 10) : ~0u;
         m = close + 8;
-        if (id >= g_songs) continue;   // a song past the game's table (the console songs, custom ones): not yet
+        if (id > MAX_ID) continue;
+        if (id >= g_ids) {   // a song past the game's table (the console games', players' own): tables.c's
+            const unsigned ids = id + 1 > g_ids * 2 ? id + 1 : g_ids * 2 > MAX_ID + 1 ? MAX_ID + 1 : g_ids * 2;
+            struct song *more = realloc(g_data, sizeof *more * ids);
+            if (!more) continue;
+            memset(more + g_ids, 0, sizeof *more * (ids - g_ids));
+            g_data = more, g_ids = ids;
+        }
         struct song *s = &g_data[id];
         // the song's own fields come before its charts (a chart's <folder> isn't the song's)
         char *own_end = strstr(gt, "<chart");
@@ -237,6 +247,7 @@ static void read_xml(const WCHAR *path) {
             c = cend + 8;
             if (slot < 0) continue;
             struct chart *ch = &s->chart[slot];
+            ch->format = -1;
             char *folder = text_of(cgt, cend, "folder", utf8), *file = text_of(cgt, cend, "filename", utf8);
             if (folder && file) ch->folder = folder, ch->file = file;
             unsigned v;
@@ -247,6 +258,7 @@ static void read_xml(const WCHAR *path) {
             if (number_of(cgt, cend, "used_keys", &v)) ch->keys = v;
             if (number_of(cgt, cend, "diff", &v)) ch->level = v;
             if (number_of(cgt, cend, "hold_flag", &v)) ch->hold = v;
+            if (number_of(cgt, cend, "force_new_chart_format", &v)) ch->format = v != 0;
         }
         count++;
     }
@@ -326,7 +338,7 @@ static void game_banners(void) {
                 if (buf[i] == 'k' && buf[i + 1] == 'c' && buf[i + 2] == '_' && i + 7 < got + 8) {
                     unsigned id = 0, k = 3;
                     for (; k < 8 && buf[i + k] >= '0' && buf[i + k] <= '9'; k++) id = id * 10 + (unsigned)(buf[i + k] - '0');
-                    if (k == 7 && id < g_songs) g_banner[id] = 1;
+                    if (k == 7 && id < g_ids) g_banner[id] = 1;
                 }
             memcpy(tail, buf + got, 8);
         }
@@ -403,15 +415,16 @@ static int game_file(const char *folder, const char *file) {
     const DWORD a = GetFileAttributesA(rel);
     return a != INVALID_FILE_ATTRIBUTES && !(a & FILE_ATTRIBUTE_DIRECTORY);
 }
-static const struct chart *g_new[65536];   // by chart: what a free entry is to become (written at the end)
+static const struct chart *g_new[65536];   // by chart: what an entry is to become (written at the end)
+static unsigned g_grow, g_next;   // the chart table grows (tables.c): new entries from g_next on
 static unsigned chart_for(const struct chart *c) {
     for (unsigned j = 1; j < g_nchart; j++)
-        if ((g_used[j] && !g_new[j] && same_chart(g_charts + (size_t)j * CHART, c)) || (g_new[j] && g_new[j] == c)) return j;
-    for (unsigned j = 1; j < g_nchart; j++)   // another song's chart brought back, the same
-        if (g_new[j] && !strcmp(g_new[j]->folder, c->folder) && !strcmp(g_new[j]->file, c->file) &&
-            !memcmp(g_new[j]->audio, c->audio, 16) && g_new[j]->type == c->type && g_new[j]->keys == c->keys)
+        if (g_used[j] && !g_new[j] && same_chart(g_charts + (size_t)j * CHART, c)) return j;
+    for (unsigned j = 1; j < g_next; j++)   // another song's chart brought back, the same
+        if (g_new[j] && (g_new[j] == c || (!strcmp(g_new[j]->folder, c->folder) && !strcmp(g_new[j]->file, c->file) &&
+                                           !memcmp(g_new[j]->audio, c->audio, 16) && g_new[j]->type == c->type && g_new[j]->keys == c->keys)))
             return j;
-    for (int pass = 0; pass < 2; pass++)
+    for (int pass = 0; pass < 2 - (int)g_grow; pass++)
         for (unsigned j = 1; j < g_nchart; j++) {
             if (g_used[j]) continue;
             const BYTE *e = g_charts + (size_t)j * CHART;
@@ -419,7 +432,119 @@ static unsigned chart_for(const struct chart *c) {
             g_used[j] = 1, g_new[j] = c;
             return j;
         }
+    if (g_grow && g_next < sizeof g_new / sizeof *g_new - 16) {   // a new entry past the game's
+        g_new[g_next] = c;
+        return g_next++;
+    }
     return 0;
+}
+
+// --- what's to be written: each song brought back (left out by the game, or past its table) and
+// each of the game's songs given charts, their records as they are to be
+static BYTE *g_recs;
+static unsigned *g_rec_ids, g_nrecs, g_brought, g_past, g_added, g_skipped, g_full;
+static unsigned char *g_rec_slots;   // by record: the charts written (bit by slot)
+static unsigned g_first[2][12], g_nfirst[2];   // the first brought back, the first past the game's songs
+static unsigned char *g_used_game;   // g_used as the game has it (each plan starts from it)
+static void plan(unsigned grow) {
+    memcpy(g_used, g_used_game, g_nchart);
+    memset(g_new, 0, sizeof g_new);
+    g_grow = grow, g_next = g_nchart, g_nrecs = g_brought = g_past = g_added = g_skipped = g_full = g_unknown_charas = 0;
+    g_nfirst[0] = g_nfirst[1] = 0;
+    unsigned left_out = 1;   // the songs past the game's table: as a song it left out
+    for (uint32_t mask; left_out < g_songs && (memcpy(&mask, g_music + left_out * RECORD + 28, 4), !(mask & REMOVED));) left_out++;
+    for (unsigned id = 0; id < g_ids; id++) {
+        if (id >= g_songs && !grow) break;
+        const struct song *s = &g_data[id];
+        const BYTE *native = g_music + (size_t)(id < g_songs ? id : left_out) * RECORD;
+        uint32_t mask;
+        memcpy(&mask, native + 28, 4);
+        BYTE *rec = g_recs + (size_t)g_nrecs * RECORD;
+        memcpy(rec, native, RECORD);
+        g_rec_slots[g_nrecs] = 0;
+        if (!(mask & REMOVED)) {
+            // the charts the music data adds to a song the game lists (Omnimix's Easy charts): a slot
+            // the game asks a mask bit for (Easy, Hyper, EX, Battle Hyper) that the song hasn't, its
+            // chart's file there
+            int more = 0;
+            for (int k = 0; k < SLOTS; k++) {
+                const struct chart *c = &s->chart[k];
+                if (!SLOT_BITS[k] || (mask & SLOT_BITS[k]) || !plain_name(c->folder) || !plain_name(c->file) || c->level > 50 || c->type > 64)
+                    continue;
+                char rel[600];
+                snprintf(rel, sizeof rel, "sd/%s/%s.ifs", c->folder, c->file);
+                if (!data_file(rel)) continue;
+                const unsigned at = chart_for(c);
+                if (!at) continue;
+                const uint16_t at16 = (uint16_t)at;
+                memcpy(rec + 50 + 2 * k, &at16, 2);
+                rec[44 + k] = (BYTE)c->level;
+                rec[164 + k] = (BYTE)c->hold;
+                mask |= SLOT_BITS[k];
+                g_rec_slots[g_nrecs] |= (unsigned char)(1u << k);
+                more++;
+            }
+            if (!more) continue;
+            memcpy(rec + 28, &mask, 4);
+            g_rec_ids[g_nrecs++] = id;
+            g_added += (unsigned)more;
+            continue;
+        }
+        // a song the game left out, or past its table, that the music data has, its charts' files there
+        if (!s->text[3] || !s->text[4] || !s->text[5]) continue;   // not described
+        int present[SLOTS] = {0}, ok = 1;
+        for (int k = 0; k < SLOTS; k++) {
+            const struct chart *c = &s->chart[k];
+            if (!plain_name(c->folder) || !plain_name(c->file)) continue;
+            char rel[600];
+            snprintf(rel, sizeof rel, "sd/%s/%s.ifs", c->folder, c->file);
+            present[k] = data_file(rel) && c->level <= 50 && c->type <= 64 ? 1 : 2;
+            if (present[k] == 2 && k != 4 && k != 5) ok = 0;   // a missing chart the song needs (the battle ones may be)
+        }
+        if (present[1] != 1 || !ok) {   // Normal, always
+            if (g_skipped++ < 20 && grow) pc32_log("songs: %u (%s) left out: its charts' files aren't there", id, s->text[4]);
+            continue;
+        }
+        if (!has_banner(id)) {
+            if (g_skipped++ < 20 && grow) pc32_log("songs: %u (%s) left out: no banner (tex/system/kc_diff_ifs/kc_%04u.ifs)", id, s->text[4], id);
+            continue;
+        }
+        for (int i = 0; i < 6; i++)
+            if (s->text[i]) memcpy(rec + 4 * i, &s->text[i], 4);
+        characters(s, rec);
+        if (s->has & 2) memcpy(rec + 32, &s->folder, 4);
+        if (s->has & 4) memcpy(rec + 36, &s->version, 4);
+        if (s->has & 8) memcpy(rec + 40, &s->categories, 4);
+        if (s->has & 16) memcpy(rec + 140, s->bpm, sizeof s->bpm);   // the charts' tempos, two groups of six
+        // its mask, as the music data has it, but for the bits to unlock it (as popnhax clears them:
+        // nothing here unlocks it) and the charts' (set below, for the charts there)
+        uint32_t m = ((s->has & 1) ? s->mask : 0) & ~REMOVED & ~DIFFICULTY_BITS & ~LOCKED;
+        for (int k = 0; k < SLOTS; k++) {   // a slot without a chart: none (the left-out record's may have one)
+            rec[44 + k] = rec[164 + k] = 0;
+            memset(rec + 50 + 2 * k, 0, 2);
+        }
+        for (int k = 0; k < SLOTS && ok; k++) {
+            if (present[k] != 1) continue;
+            const unsigned at = chart_for(&s->chart[k]);
+            if (!at) ok = 0;
+            const uint16_t at16 = (uint16_t)at;
+            memcpy(rec + 50 + 2 * k, &at16, 2);
+            rec[44 + k] = (BYTE)s->chart[k].level;
+            rec[164 + k] = (BYTE)s->chart[k].hold;
+            m |= SLOT_BITS[k];
+            g_rec_slots[g_nrecs] |= (unsigned char)(1u << k);
+        }
+        if (!ok) {   // no free chart entry left: not this song (its charts' entries stay taken)
+            if (g_full++ < 5) pc32_log("songs: %u (%s) left out: no chart entry free for it", id, s->text[4]);
+            continue;
+        }
+        memcpy(rec + 28, &m, 4);
+        g_rec_ids[g_nrecs++] = id;
+        const int past = id >= g_songs;
+        if (g_nfirst[past] < 12) g_first[past][g_nfirst[past]++] = id;
+        if (past) g_past++;
+        else g_brought++;
+    }
 }
 
 void pc32_songs_install(HMODULE game) {
@@ -436,8 +561,9 @@ void pc32_songs_install(HMODULE game) {
     if (!locate(base)) return;
     IMAGE_NT_HEADERS *nt = (IMAGE_NT_HEADERS *)(base + ((IMAGE_DOS_HEADER *)base)->e_lfanew);
     g_image = base, g_image_end = base + nt->OptionalHeader.SizeOfImage;
-    if (g_nchart > sizeof g_new / sizeof *g_new || !(g_data = calloc(g_songs, sizeof *g_data)) ||
-        !(g_uses = calloc(g_nchara, sizeof *g_uses)) || !(g_banner = calloc(g_songs, 1)) || !(g_used = calloc(g_nchart, 1)))
+    g_ids = g_songs;
+    if (g_nchart > sizeof g_new / sizeof *g_new - 16 || !(g_data = calloc(g_songs, sizeof *g_data)) ||
+        !(g_uses = calloc(g_nchara, sizeof *g_uses)) || !(g_used = calloc(g_nchart, 1)) || !(g_used_game = calloc(g_nchart, 1)))
         return;
     // the music data: the last mod first, so the first one's fields win
     size_t files = 0;
@@ -450,11 +576,13 @@ void pc32_songs_install(HMODULE game) {
         free(list);
         files += n;
     }
-    if (!files) return;
+    if (!files || !(g_banner = calloc(g_ids, 1)) || !(g_recs = malloc((size_t)g_ids * RECORD)) || !(g_rec_ids = malloc(sizeof *g_rec_ids * g_ids)) ||
+        !(g_rec_slots = malloc(g_ids)))
+        return;
     game_banners();
     // the charts in use, the characters' uses (the songs the game lists, and its special ones before
     // song 0: ids -85..-1)
-    g_used[0] = 1;
+    g_used_game[0] = 1;
     for (int id = -85; id < (int)g_songs; id++) {
         const BYTE *rec = g_music + (ptrdiff_t)id * (ptrdiff_t)RECORD;
         uint32_t mask;
@@ -463,127 +591,65 @@ void pc32_songs_install(HMODULE game) {
         for (int k = 0; k < SLOTS; k++) {
             uint16_t c;
             memcpy(&c, rec + 50 + 2 * k, 2);
-            if (c < g_nchart) g_used[c] = 1;
+            if (c < g_nchart) g_used_game[c] = 1;
         }
-        for (int k = 0; k < 2; k++) {
-            uint16_t c;
-            memcpy(&c, rec + 24 + 2 * k, 2);
-            if (c < g_nchara && g_uses[c] < 65535) g_uses[c]++;
-        }
+        for (int k = 0; k < SLOTS; k++)
+            if (k < 2) {
+                uint16_t c;
+                memcpy(&c, rec + 24 + 2 * k, 2);
+                if (c < g_nchara && g_uses[c] < 65535) g_uses[c]++;
+            }
     }
-    // the songs left out that the music data has, their charts' files there
-    BYTE *recs = malloc((size_t)g_songs * RECORD);
-    unsigned *ids = malloc(sizeof *ids * g_songs), n = 0, skipped = 0, full = 0;
-    if (!recs || !ids) return;
-    for (unsigned id = 0; id < g_songs; id++) {
-        const struct song *s = &g_data[id];
-        const BYTE *native = g_music + (size_t)id * RECORD;
-        uint32_t mask;
-        memcpy(&mask, native + 28, 4);
-        if (!(mask & REMOVED) || !s->text[3] || !s->text[4] || !s->text[5]) continue;   // the game's own, or not described
-        int present[SLOTS] = {0}, ok = 1;
-        for (int k = 0; k < SLOTS; k++) {
-            const struct chart *c = &s->chart[k];
-            if (!plain_name(c->folder) || !plain_name(c->file)) continue;
-            char rel[600];
-            snprintf(rel, sizeof rel, "sd/%s/%s.ifs", c->folder, c->file);
-            present[k] = data_file(rel) && c->level <= 50 && c->type <= 64 ? 1 : 2;
-            if (present[k] == 2 && k != 4 && k != 5) ok = 0;   // a missing chart the song needs (the battle ones may be)
-        }
-        if (present[1] != 1 || !ok) {   // Normal, always
-            if (skipped++ < 20) pc32_log("songs: %u (%s) left out: its charts' files aren't there", id, s->text[4]);
-            continue;
-        }
-        if (!has_banner(id)) {
-            if (skipped++ < 20) pc32_log("songs: %u (%s) left out: no banner (tex/system/kc_diff_ifs/kc_%04u.ifs)", id, s->text[4], id);
-            continue;
-        }
-        BYTE *rec = recs + (size_t)n * RECORD;
-        memcpy(rec, native, RECORD);
-        for (int i = 0; i < 6; i++)
-            if (s->text[i]) memcpy(rec + 4 * i, &s->text[i], 4);
-        characters(s, rec);
-        if (s->has & 2) memcpy(rec + 32, &s->folder, 4);
-        if (s->has & 4) memcpy(rec + 36, &s->version, 4);
-        if (s->has & 8) memcpy(rec + 40, &s->categories, 4);
-        if (s->has & 16) memcpy(rec + 140, s->bpm, sizeof s->bpm);   // the charts' tempos, two groups of six
-        // its mask, as the music data has it, but for the bits to unlock it (as popnhax clears them:
-        // nothing here unlocks it) and the charts' (set below, for the charts there)
-        uint32_t m = ((s->has & 1) ? s->mask : 0) & ~REMOVED & ~DIFFICULTY_BITS & ~LOCKED;
-        for (int k = 0; k < SLOTS && ok; k++) {
-            if (present[k] != 1) continue;
-            const unsigned at = chart_for(&s->chart[k]);
-            if (!at) ok = 0;
-            const uint16_t at16 = (uint16_t)at;
-            memcpy(rec + 50 + 2 * k, &at16, 2);
-            rec[44 + k] = (BYTE)s->chart[k].level;
-            rec[164 + k] = (BYTE)s->chart[k].hold;
-            m |= SLOT_BITS[k];
-        }
-        if (!ok) {   // no free chart entry left: not this song (its charts' entries stay taken)
-            if (full++ < 5) pc32_log("songs: %u (%s) left out: no chart entry free for it", id, s->text[4]);
-            continue;
-        }
-        memcpy(rec + 28, &m, 4);
-        ids[n++] = id;
+    // the songs as they'd be with the tables grown (new chart entries past the game's), then the
+    // tables grown to hold them; when they can't be, the songs in the game's table only (chart
+    // entries no song uses taken)
+    plan(1);
+    unsigned top = g_songs;
+    for (unsigned i = 0; i < g_nrecs; i++)
+        if (g_rec_ids[i] + 2 > top) top = g_rec_ids[i] + 2;   // and one song more, left out (as popnhax's)
+    BYTE *music, *charts;
+    const unsigned old_nchart = g_nchart;
+    if (g_nrecs && pc32_tables_grow(game, g_music, g_songs, top, g_charts, g_nchart, g_next + 10, &music, &charts)) {
+        g_music = music, g_charts = charts, g_nchart = g_next + 10;
+    } else {
+        plan(0);
+        g_next = g_nchart;
     }
-    // the charts the music data adds to songs the game lists (Omnimix's Easy charts): a slot the game
-    // asks a mask bit for (Easy, Hyper, EX, Battle Hyper) that the song hasn't, its chart's file there
-    unsigned *kept = malloc(sizeof *kept * g_songs), nkept = 0, added = 0;
-    BYTE *kept_recs = malloc((size_t)g_songs * RECORD);
-    if (!kept || !kept_recs) return;
-    for (unsigned id = 0; id < g_songs; id++) {
-        const struct song *s = &g_data[id];
-        const BYTE *native = g_music + (size_t)id * RECORD;
-        uint32_t mask;
-        memcpy(&mask, native + 28, 4);
-        if (mask & REMOVED) continue;
-        BYTE *rec = kept_recs + (size_t)nkept * RECORD;
-        memcpy(rec, native, RECORD);
-        int more = 0;
-        for (int k = 0; k < SLOTS; k++) {
-            const struct chart *c = &s->chart[k];
-            if (!SLOT_BITS[k] || (mask & SLOT_BITS[k]) || !plain_name(c->folder) || !plain_name(c->file) || c->level > 50 || c->type > 64)
-                continue;
-            char rel[600];
-            snprintf(rel, sizeof rel, "sd/%s/%s.ifs", c->folder, c->file);
-            if (!data_file(rel)) continue;
-            const unsigned at = chart_for(c);
-            if (!at) continue;
-            const uint16_t at16 = (uint16_t)at;
-            memcpy(rec + 50 + 2 * k, &at16, 2);
-            rec[44 + k] = (BYTE)c->level;
-            rec[164 + k] = (BYTE)c->hold;
-            mask |= SLOT_BITS[k];
-            more++;
-        }
-        if (!more) continue;
-        memcpy(rec + 28, &mask, 4);
-        kept[nkept++] = id;
-        added += (unsigned)more;
-    }
-    if (!n && !nkept) {
-        pc32_log("songs: none brought back (%zu files of music data, %u songs without their files or banner)", files, skipped);
+    if (!g_nrecs) {
+        pc32_log("songs: none brought back (%zu files of music data, %u songs without their files or banner)", files, g_skipped);
         return;
     }
-    // in place (the program's data, before it runs): the charts, then each song
-    unsigned charts = 0;
-    for (unsigned j = 1; j < g_nchart; j++) {
+    // in place (the program's data, or the bigger copies, before it runs): the charts, then each song;
+    // the charts' format as the music data has it (popnhax's: the old one, unless it has hold notes
+    // or says so)
+    unsigned charts_given = 0;
+    for (unsigned j = 1; j < g_next; j++) {
         const struct chart *c = g_new[j];
         if (!c) continue;
         BYTE *e = g_charts + (size_t)j * CHART;
         memcpy(e, &c->folder, 4), memcpy(e + 4, &c->file, 4), memcpy(e + 8, c->audio, 16);
         memcpy(e + 24, &c->type, 4), memcpy(e + 28, &c->keys, 4);
-        charts++;
+        charts_given++;
     }
-    for (unsigned i = 0; i < n; i++) memcpy(g_music + (size_t)ids[i] * RECORD, recs + (size_t)i * RECORD, RECORD);
-    for (unsigned i = 0; i < nkept; i++) memcpy(g_music + (size_t)kept[i] * RECORD, kept_recs + (size_t)i * RECORD, RECORD);
-    free(kept), free(kept_recs);
-    char some[256] = "";
-    for (unsigned i = 0, at = 0; i < n && i < 12 && at < sizeof some - 8; i++) at += (unsigned)snprintf(some + at, sizeof some - at, " %u", ids[i]);
-    pc32_log("songs: the first brought back:%s", some);
-    free(recs), free(ids);
-    pc32_log("songs: %u brought back, %u charts added to %u of the game's (%u chart entries given to them; %u described without their "
-             "files or banner; %u without a chart entry; %u without a character the game has); the game's %u songs, %u charts",
-             n, added, nkept, charts, skipped, full, g_unknown_charas, g_songs, g_nchart);
+    for (unsigned i = 0; i < g_nrecs; i++) {
+        const unsigned id = g_rec_ids[i];
+        BYTE *rec = g_recs + (size_t)i * RECORD;
+        memcpy(g_music + (size_t)id * RECORD, rec, RECORD);
+        for (int k = 0; k < SLOTS; k++) {
+            uint16_t c;
+            memcpy(&c, rec + 50 + 2 * k, 2);
+            const struct chart *ch = &g_data[id].chart[k];
+            if ((g_rec_slots[i] >> k & 1) && c) pc32_chart_format(c, !(ch->format >= 0 ? ch->format : ch->hold == 1));
+        }
+    }
+    for (int past = 0; past < 2; past++) {
+        char some[256] = "";
+        for (unsigned i = 0, at = 0; i < g_nfirst[past]; i++) at += (unsigned)snprintf(some + at, sizeof some - at, " %u", g_first[past][i]);
+        if (g_nfirst[past]) pc32_log("songs: the first %s:%s", past ? "past the game's songs" : "brought back", some);
+    }
+    pc32_log("songs: %u brought back, %u past the game's songs, %u charts added to the game's (%u chart entries given to them, %u new; "
+             "%u described without their files or banner; %u without a chart entry; %u without a character the game has); the game's "
+             "%u songs, %u charts",
+             g_brought, g_past, g_added, charts_given, g_next > old_nchart ? g_next - old_nchart : 0, g_skipped, g_full, g_unknown_charas,
+             g_songs, old_nchart);
 }

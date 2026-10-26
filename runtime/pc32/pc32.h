@@ -28,8 +28,16 @@ struct pc32_avs_files {
     pc32_close_fn close;
 };
 void pc32_files_install(HMODULE core, HMODULE game, const struct pc32_avs_files *avs);
-// songs.c: the songs the game left out, back from the mods' music data (before the game starts)
+// songs.c: the songs the game left out, back from the mods' music data, and those past its songs
+// (before the game starts)
 void pc32_songs_install(HMODULE game);
+// tables.c: the music table (songs, 172 bytes each) and chart table (32 bytes each) copied into
+// bigger ones the game's code is pointed at, new_songs and new_nchart long: 1 and the copies, or 0
+// (the game's tables as they are) when its code isn't as expected
+int pc32_tables_grow(HMODULE game, BYTE *music, unsigned songs, unsigned new_songs, BYTE *charts, unsigned nchart, unsigned new_nchart,
+                     BYTE **music_out, BYTE **charts_out);
+// tables.c: a chart's file format, for the game's check (after pc32_tables_grow): 1 the old, 0 the new
+void pc32_chart_format(unsigned chart, int old);
 // A mount the game makes (main.c's hook sees each): its source as it is, or the mod's (written in
 // buf) when it's a pack inside a pack the mod has; the mount noted for its members
 const char *pc32_files_mount(const char *mountpoint, const char *source, const char *fstype, char *buf, size_t n);

@@ -2817,7 +2817,7 @@ content encrypted (`bootstrap.exe` decodes it); not read yet.
        its 13 references in the code and the count's checks moved to it.
      - The music data (popnhax's XML) of the bundle's packs: ids 1-2026 mostly left-out songs (and
        charts added to kept ones: song 5's EASY), 3000-3155 the console songs and 5600+ custom ones
-       past the table (not yet).
+       past the table (below: songs past the table).
      - **Done (2026-10-26, `runtime/pc32/songs.c`, after `runtime/pc64/songs.c`):** the tables found by
        the code that reads them (the song count from the id check, the music table from its
        characters' getters, the charts and characters with their counts from their readers); the
@@ -2847,8 +2847,36 @@ content encrypted (`bootstrap.exe` decodes it); not read yet.
        Hyper, EX, Battle Hyper) that a listed song hasn't, given by the music data with its file
        there, gets its chart entry, level and hold flag, and the bit. Checked: 837 (Omnimix's Easy
        charts), song 5 (Hi-Tekno) played on its Easy, `write_music` sheet 0.
-     - **Not yet:** songs past the table, the old songs' own backgrounds (none in the bundle's packs:
-       not needed so far).
+     - **Songs past the table** (2026-10-26, `runtime/pc32/tables.c`, after popnhax's database patcher,
+       GPL-3.0 since 2026-10-26): the music and chart tables copied into bigger ones (to the last id
+       the music data uses, +1 left out as popnhax's; the charts' new entries past the game's, +10)
+       and the code pointed at them, found by walking popn22.dll's code (`x86.c`, a length decoder
+       checked against objdump on all 704,981 instructions) for each instruction's address and
+       number: addresses in either table (48 places: 30 + 13 first-entry ones as popnhax's, and five
+       writes to given songs' masks it leaves out); the song count and count-1, the chart count and
+       count-1 (66); popnhax's per-song sizes (33: 4N, 0x18N, 6N-1, a [6][N] array of 0x18 and four
+       lists of 0x48 a song, then 0xc8 four times a song). Two of its things differ here:
+       popnhax's `0x5370 + 0xc a song` (0x6b28 in this game) is a state field of an unrelated object
+       (`cmp [ebx+0x6b28],3`), left alone; and the player's record (one object of 0x4b1da0: the songs'
+       records 0x3d0 each, then the charts' 0x9c, then the characters' 0x2a0, each array followed by
+       its own fields, a checked `std::vector` among them), whose arrays popnhax moves in its
+       constructor only, leaving the other code on the old offsets: here every offset past the songs'
+       array moves by what it grew (and past the charts' by theirs too), and the arrays' clearing
+       sizes are the new ones (147 places). Displacements on `ebp` are kept (the first try left them
+       as locals: the record's reset found its vector unbuilt and the C library aborted, 0xc0000417).
+       Also the random list (a static `u16` array of 2N, 14 places) made bigger, and the chart format
+       check (`0x100ce710`: old songs' charts below 0x6dc are the old format) hooked as popnhax's: a
+       chart from the music data is in the old format unless it has hold notes or says
+       `force_new_chart_format`. With the tables bigger, a song's new charts take new entries rather
+       than dead ones. Checked under Wine with the bundle's Omnimix 1-4 and two custom packs: songs
+       2286 -> 5911, charts 2402 -> 2645; 239 brought back, 170 past the table (the console songs
+       3000-3155, customs 5620+ and 5900+), 843 charts added to the game's; song 3000 (un-Balance) in
+       the genre list after ニューエイジREMIX, played (banner, characters, chart, `write_music` 3000);
+       the game's songs still play; with no mods the game is untouched.
+     - **Not yet:** the music select's cursor doesn't come back to a song past the table (the card's
+       last song 3000 or 3050: it opens on the recommended list; a song in the table comes back);
+       the characters the music data adds (Omnimix's `charadb`: 6 songs name characters the game
+       hasn't); the old songs' own backgrounds (none in the bundle's packs: not needed so far).
    - **5c, pictures as PNGs:** a texture pack keeps its pictures converted, under their names' MD5
      (`tex/<md5>`), listed in `tex/texturelist.xml`: a mod's `<pack>_ifs/tex/name.png` (translations,
      category icons) needs converting and listing.

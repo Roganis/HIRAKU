@@ -37,14 +37,16 @@ static struct {
 // pop'n 15's reader is read with a card held to it: it stays there 2 s (HK_PC_CARD_MS another
 // time). From pop'n 16 on the cabinet's reader is a slot: the card stays in until the game pushes
 // it out (workflow EJECT, at the credit's end), then a moment at the slot's mouth (the front sensor
-// only: "take your card"), then it's taken
+// only: "take your card"), then it's taken. popn22.dll's cabinets touch the card again (PLAN.md
+// section 35: its "take your card" waits for the card to leave)
 static int slot_reader(void) {
     static int slot = -1;
     if (slot < 0) {
-        char exe[MAX_PATH];
-        GetModuleFileNameA(NULL, exe, MAX_PATH);
-        const char *base = strrchr(exe, '\\');
-        slot = _stricmp(base ? base + 1 : exe, "popn15.exe") != 0;
+        char path[MAX_PATH];
+        GetModuleFileNameA((HMODULE)hk_program(), path, MAX_PATH);
+        const char *base = strrchr(path, '\\');
+        base = base ? base + 1 : path;
+        slot = _stricmp(base, "popn15.exe") != 0 && _stricmp(base, "popn22.dll") != 0;
     }
     return slot;
 }

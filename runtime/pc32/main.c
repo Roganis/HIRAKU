@@ -18,6 +18,8 @@
 // HK_PC_EA's a.b.c.d:port, hiraku-pc's server)
 // HK_PC32_LOG: the loader's log file (else stderr); AVS2's own log goes to the same place
 // HK_PC32_PCBID: the cabinet's PCB ID (20 hex digits)
+// HK_PC32_TRACE: the game's reads of its answers (each struct read through a descriptor: its first
+// field's name and the result; each node looked up by path), to the log, for finding what an answer lacks
 #include "../pc64/pc64.h"   // pc64_import: a module's import slot pointed elsewhere (runtime/pc64/imports.c)
 
 #include <stdarg.h>
@@ -53,13 +55,13 @@ struct avs_names {
     const char *core, *ea3, *version;
     const char *boot, *property_create, *property_insert_read, *property_read_query_memsize,
         *property_search, *property_node_create, *property_node_remove, *property_node_refer, *std_setenv,
-        *avs_fs_copy, *avs_fs_lstat, *avs_fs_mount, *ea3_boot;
+        *avs_fs_copy, *avs_fs_lstat, *avs_fs_mount, *psmap_import, *ea3_boot;
 };
 static const struct avs_names AVS[] = {
     {"libavs-win32.dll", "libavs-win32-ea3.dll", "2.15.8",
      "XCd229cc0000aa", "XCd229cc000126", "XCd229cc00009a", "XCd229cc0000ff",
      "XCd229cc00012e", "XCd229cc00002c", "XCd229cc000028", "XCd229cc000009", "XCd229cc000094",
-     "XCd229cc0000eb", "XCd229cc0000c0", "XCd229cc0000ce", "XE592acd00008c"},
+     "XCd229cc0000eb", "XCd229cc0000c0", "XCd229cc0000ce", "XCd229cc000005", "XE592acd00008c"},
 };
 
 typedef void *prop_t;
@@ -261,6 +263,21 @@ static void *hook_target(HMODULE m, void *target, void *fn) {
     return NULL;
 }
 
+// HK_PC32_TRACE: the struct reads (a descriptor: 16-byte entries, the node's name at +8) and searches
+static int (*r_psmap_import)(prop_t, node_t, void *, const uint8_t *);
+static node_t (*r_search)(prop_t, node_t, const char *);
+static int psmap_import_(prop_t p, node_t n, void *to, const uint8_t *desc) {
+    const int r = r_psmap_import(p, n, to, desc);
+    const char *first = desc ? *(const char *const *)(desc + 8) : "?";
+    say("trace: struct read from %s... -> %d", first ? first : "?", r);
+    return r;
+}
+static node_t search_(prop_t p, node_t n, const char *path) {
+    node_t r = r_search(p, n, path);
+    say("trace: search %s -> %s", path ? path : "?", r ? "found" : "none");
+    return r;
+}
+
 // The cabinet's drives the game mounts in AVS2 (/e_drive from e:/: its downloads, up/, and tmp/):
 // folders of the save folder's dev/vfs/drive_<letter> instead, as spice2x makes them
 static void make_dirs(char *path) {
@@ -401,6 +418,12 @@ int main(int argc, char **argv) {
     r_GetProcAddress = pc64_import(game, "kernel32.dll", "GetProcAddress", (void *)GetProcAddress_);
     if (!r_GetModuleHandleA || !r_GetProcAddress) say("%s doesn't find the licence key as expected", game_dll);
     if (!hook_target(game, (void *)avs_fs_mount, (void *)avs_fs_mount_)) say("%s doesn't mount drives as expected", game_dll);
+    if (getenv("HK_PC32_TRACE")) {
+        r_psmap_import = need(core, v->core, v->psmap_import);
+        r_search = (void *)property_search;
+        hook_target(game, (void *)r_psmap_import, (void *)psmap_import_);
+        hook_target(game, (void *)r_search, (void *)search_);
+    }
     int (*entry_init)(char *, node_t) = need(game, game_dll, "dll_entry_init");
     int (*entry_main)(void) = need(game, game_dll, "dll_entry_main");
 

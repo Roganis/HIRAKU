@@ -91,6 +91,7 @@ private:
     std::string answer_j39(const std::string &game, const Request &r);
     // the 64-bit PC pop'n (M39: runtime/pc64/): its module "player"
     std::string answer_hc(const Request &r);
+    std::string answer_p24(const Request &r);   // the last 32-bit PC pop'n: info24, player24 (easerver_p24.cpp)
     // beatmania IIDX 9th style (C02: runtime/pc/): its module "C02" (music, weekly, ranking, grade)
     std::string answer_c02(const Request &r);
     // One card for all (docs/EAMUSE3.md): every chart's best clear mark over all the pop'n games

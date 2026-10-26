@@ -2757,5 +2757,33 @@ content encrypted (`bootstrap.exe` decodes it); not read yet.
      a counter wrap counts one too few) whose judging is still to find); the lamps on real lights.
 4. **Players:** `player24`'s calls and the record's layout from the game's code; scores; one card
    with the other pop'n games.
+   - **Done (2026-10-26): a player made, kept and read back** (`runtime/python/easerver_p24.cpp`).
+     A new card: `cardmng.inquire` (new), the PIN twice → `authpass`, `bindmodel`, the game's terms
+     (YES is button 4, then red), CARD NAME on the 10-key (kana as on a phone; button 4 deletes, 6
+     moves on, red ends), confirmed → `player24.new` → the record. A known card: `authpass`, `read`,
+     `read_score`. Then `start` (the play id and the common info), `read_option` and `write_music`
+     for each stage, at the credit's end `write` and `logout`. The reader is a touch one again (as
+     pop'n 15's: the card held 2 s; "take your card" waits for it to leave).
+   - **The record's layout from the game:** its answers are read through AVS2's struct reader
+     (`property_psmap_import`, imported by ordinal) with 16-byte descriptors (type, flags (1: may be
+     left out), struct offset, size or count, name, default; an array's type 0x41 above its values'),
+     50 of them in the program. `player24.new`'s and `read`'s answer (`CXrpcPlayerNewMethod`'s vtable
+     slot 7) runs nine `C*GameData` handlers in turn (slot 8 each), the first that fails failing the
+     call ("receiver returns failure"): account, info, config (with option and custom_cate), item and
+     chara_param (any number), customize, netvs (its arrays given: `set_recommend`'s default is broken,
+     as in the 64-bit game), course_data and event_p28 (may be left out). The server's field tables
+     are the descriptors' fields in their order. `HK_PC32_TRACE=1` logs each struct read and node
+     looked up (the loader hooks both at the game's imports), which names the part an answer lacks.
+   - **What the server keeps** (`p24-<ref id>`): the name as sent (Shift-JIS), the parts `write`
+     sends (account, info, config, option, customize, event2021, event_p28: the burger shop's state),
+     each character's friendship (`chara_param`), the play count, the latest ten songs (from the
+     stages) and the twenty most played (from the scores); each chart's best and plays
+     (`p24s-<ref id>`), shown by the game on its result screen as BEST SCORE.
+   - **Checked under Wine:** a new card through registration and a credit; the same card again (its
+     free first play, best score shown, three stages, `write`, `logout`); the record with friendship
+     and the event read back. Server only (the game's own `write` replayed): the record as kept.
+   - **Not yet:** the burger shop's per-shop list (0x10387cc8), items (`item`) and their purchase
+     (`buy`), the common info's events (`phase`), course rankings, friends/rivals, carry-over from
+     the earlier games (`conversion`), one card with the other pop'n games (this game's song table).
 5. **Mods:** a player's data mods (Omnimix packs, ifs_layeredfs folders) laid over the data, as §34.
 6. **NET TAISEN** through `lobby24`.

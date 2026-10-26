@@ -117,6 +117,7 @@ add_library(hk_python_core OBJECT ${HK}/runtime/main.cpp ${HK}/runtime/python/co
 	${HK}/runtime/python/easerver.cpp ${HK}/runtime/python/easerver_rank.cpp ${HK}/runtime/python/easerver_gfdm.cpp
 	${HK}/runtime/python/easerver_popn.cpp ${HK}/runtime/python/easerver_share.cpp ${HK}/runtime/python/easerver_pc.cpp
 	${HK}/runtime/python/easerver_hc.cpp
+	${HK}/runtime/python/easerver_p24.cpp
 	${HK}/runtime/python/easerver_iidx.cpp
 	${HK}/runtime/python/kbin.cpp ${HK}/runtime/eamuse/protocol.cpp ${HK}/runtime/eamuse/remote.cpp)
 target_compile_definitions(hk_python_core PRIVATE HK_ROOT="${HK}")

@@ -167,7 +167,7 @@ find_package(Threads REQUIRED)
 target_link_libraries(hiraku_eamuse PUBLIC hiraku_sys Threads::Threads)
 add_library(hiraku_easerver STATIC runtime/python/easerver.cpp runtime/python/easerver_rank.cpp
             runtime/python/easerver_gfdm.cpp runtime/python/easerver_popn.cpp runtime/python/easerver_share.cpp
-            runtime/python/easerver_pc.cpp runtime/python/easerver_hc.cpp runtime/python/easerver_iidx.cpp runtime/python/kbin.cpp runtime/python/lobby.cpp
+            runtime/python/easerver_pc.cpp runtime/python/easerver_hc.cpp runtime/python/easerver_p24.cpp runtime/python/easerver_iidx.cpp runtime/python/kbin.cpp runtime/python/lobby.cpp
             runtime/python/netrelay.cpp)
 target_link_libraries(hiraku_easerver PUBLIC hiraku_eamuse)
 

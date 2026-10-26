@@ -63,12 +63,23 @@ static HRESULT WINAPI Initialize_(IAudioClient *c, AUDCLNT_SHAREMODE m, DWORD fl
                                   LPCGUID session) {
     HRESULT h = r_client.Initialize(c, m, flags, d, p, f, session);
     if (!f) return h;
+    // Windows' shared mode takes only the mix format's own rate, and the game asks for the 44.1 kHz
+    // GetMixFormat_ reported (a device at 48 kHz: AUDCLNT_E_UNSUPPORTED_FORMAT, the game's sound never
+    // started and its sound thread faulted): Windows converts it, as Wine does unasked
+    const HRESULT first = h;
+    if (FAILED(h) && !m) h = r_client.Initialize(c, m, flags | AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM | AUDCLNT_STREAMFLAGS_SRC_DEFAULT_QUALITY, d, p, f, session);
     int is_float = f->wFormatTag == WAVE_FORMAT_IEEE_FLOAT;
     if (f->wFormatTag == WAVE_FORMAT_EXTENSIBLE && f->cbSize >= 22)
         is_float = IsEqualGUID(&((const WAVEFORMATEXTENSIBLE *)f)->SubFormat, &float_format);
     const int fits = f->nSamplesPerSec == HK_PC_AUDIO_RATE && f->nChannels >= 1 && f->nChannels <= 8 &&
                      ((is_float && f->wBitsPerSample == 32) || (!is_float && (f->wBitsPerSample == 16 || f->wBitsPerSample == 32)));
-    if (SUCCEEDED(h) && pc64_link() && fits && !g_s.on && !getenv("HK_PC64_WINE_SOUND")) {   // (tests: Wine's device)
+    const int ours = pc64_link() && fits && !g_s.on && !getenv("HK_PC64_WINE_SOUND");   // (tests: Wine's device)
+    if (ours && FAILED(h)) {   // the device never plays the stream: the loader is the device all the same
+        pc64_log("sound: the PC's device refused the game's format (%08lx, %08lx): through hiraku-pc all the same", (unsigned long)first,
+                 (unsigned long)h);
+        h = S_OK;
+    }
+    if (SUCCEEDED(h) && ours) {
         InitializeCriticalSection(&g_s.lock);
         g_s.on = 1;
         g_s.channels = f->nChannels, g_s.bytes = f->wBitsPerSample / 8, g_s.is_float = is_float;

@@ -94,10 +94,15 @@ int main(int argc, char **argv) {
         }
     }
     hk::sys::make_dir(data);
-    // the game's own modules, by its model (GuitarFreaks xx39, DrumMania xx40: "D40:J:A:A")
-    hk::ea::Server server(data, [](hk::ea::Server &s, const hk::ea::Call &c, const hk::ea::Request &r, const std::string &host) {
-        const std::string g = c.model.substr(1, 2);
-        if ((g == "39" || g == "40") && c.model.compare(0, 3, "J39") != 0) return hk::k573::Eamuse::answer(s, c, r, host);
+    // GuitarFreaks xx39, DrumMania xx40 ("D40:J:A:A"), by a model's first three letters; J39 and M39
+    // are pop'n music's (18, and the later PC games)
+    auto gfdm_model = [](const std::string &m) {
+        return m.size() >= 3 && (m.compare(1, 2, "39") == 0 || m.compare(1, 2, "40") == 0) && m.compare(0, 3, "J39") != 0 &&
+               m.compare(0, 3, "M39") != 0;
+    };
+    // the game's own modules, by its model
+    hk::ea::Server server(data, [gfdm_model](hk::ea::Server &s, const hk::ea::Call &c, const hk::ea::Request &r, const std::string &host) {
+        if (gfdm_model(c.model)) return hk::k573::Eamuse::answer(s, c, r, host);
         return std::string();
     });
     hk::py::EamuseServer popn(data);   // pop'n music 9-14 (Konami Python 1), and every other model
@@ -113,14 +118,13 @@ int main(int argc, char **argv) {
         popn.log = server.log;
     }
     // GuitarFreaks and DrumMania by their model ("D40:J:A:A"), read from the call in clear
-    auto gfdm = [](const std::string &req) {
+    auto gfdm = [gfdm_model](const std::string &req) {
         std::string copy = req, model;
         hk::py::EamuseServer::edit(copy, [&](std::string &xml) {
             const size_t at = xml.find("model=\"");
             if (at != std::string::npos) model = xml.substr(at + 7, 3);
         });
-        // (J39 is pop'n music 18's, not a GuitarFreaks)
-        return model.size() == 3 && model != "J39" && (model.compare(1, 2, "39") == 0 || model.compare(1, 2, "40") == 0);
+        return gfdm_model(model);
     };
 
 #ifdef SIGPIPE

@@ -465,7 +465,26 @@ static int guard_background(BYTE *base) {
     return 1;
 }
 
+// The songs a cabinet needs a licence for (mask bit 0x20000): the game lists one only when the
+// common info's license_music names it (0x180094210), a list of 1187 songs at most (2374 bytes),
+// while those songs are far apart (18 in 2026041500, ids 670 to 2321) and unknown to a server.
+// HIRAKU is a cabinet licensed for all of them: the bit cleared (the game reads it nowhere else).
+#define LICENSED 0x20000u
+static void licensed_all(void) {
+    unsigned n = 0;
+    for (unsigned id = 0; id < g_songs; id++) {
+        BYTE *at = g_music + (size_t)id * RECORD + 60;
+        uint32_t mask;
+        memcpy(&mask, at, 4);
+        if ((mask & LICENSED) && mask != REMOVED) mask &= ~LICENSED, memcpy(at, &mask, 4), n++;
+    }
+    pc64_log("songs: %u licensed songs open", n);
+}
+
 void pc64_songs_install(HMODULE game) {
+    BYTE *base = (BYTE *)game;
+    if (!locate(base)) return;
+    licensed_all();
     const char *data = getenv("HK_PC64_DATA");
     if (!data || !*data) return;
     for (const char *d = data; *d && g_nmods < 16;) {
@@ -475,8 +494,6 @@ void pc64_songs_install(HMODULE game) {
         if (MultiByteToWideChar(CP_UTF8, 0, dir, -1, g_mods[g_nmods], MAX_PATH)) g_nmods++;
         d = end ? end + 1 : d + strlen(d);
     }
-    BYTE *base = (BYTE *)game;
-    if (!locate(base)) return;
     IMAGE_NT_HEADERS *nt = (IMAGE_NT_HEADERS *)(base + ((IMAGE_DOS_HEADER *)base)->e_lfanew);
     g_image = base, g_image_end = base + nt->OptionalHeader.SizeOfImage;
     if (!(g_data = calloc(g_songs, sizeof *g_data)) || !(g_back = calloc(g_songs, 1)) || !(g_uses = calloc(g_nchara, sizeof *g_uses)) ||

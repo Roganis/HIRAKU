@@ -118,6 +118,25 @@ try:
     check('17 room, skill, start, upgrade, record', list(r[0xa98:0xa9d]), [3, 19, 2, 1, 2])
     check('17 members', (r[0xab0:0xab4], list(r[0xb25:0xb28])), (b'AAA\0', [10, 0, 47]))
     check('17 recommend, set ojama', (list(r[0xbf4:0xbf7]), list(r[0xbf1:0xbf4])), ([5, 6, 7], [1, 16, 34]))
+    # The 64-bit PC pop'n (M39's modules info and player): the common info's events' phases (each at
+    # its last unless phases-phc says otherwise); the record's items: every song unless unlock-phc
+    # says 0, and those the game wrote
+    M39 = 'M39:K:D:A:2026041500'
+    phases = lambda a: re.findall(r'<event_id __type="s16">(\d+)</event_id><phase __type="s16">(-?\d+)', a)
+    ans = call(M39, '<info method="common" loc_id="X"/>').decode()
+    check('M39 phases', phases(ans), [('0', '7'), ('1', '1'), ('2', '3'), ('4', '11'), ('5', '2'), ('6', '1'), ('7', '1')])
+    open(os.path.join(D, 'phases-phc'), 'w').write('0=2 4=0\n')
+    got = dict(phases(call(M39, '<info method="common" loc_id="X"/>').decode()))
+    check('M39 phases set', (got['0'], got['4'], got['7']), ('2', '0', '1'))
+    who = f'<ref_id __type="str">{REF}</ref_id>'
+    call(M39, f'<player method="new">{who}<name __type="str">TEST</name></player>')
+    items = lambda: re.findall(r'<item><type __type="u8">(\d+)</type><id __type="u16">(\d+)</id><param __type="u16">(\d+)',
+                               call(M39, f'<player method="read">{who}</player>').decode())
+    check('M39 items: every song', len(items()), 2374)
+    call(M39, f'<player method="write">{who}<item><type __type="u8">1</type><id __type="u16">5</id><param __type="u16">3</param>'
+              f'<is_new __type="bool">1</is_new><get_time __type="u64">0</get_time></item></player>')
+    open(os.path.join(D, 'unlock-phc'), 'w').write('0\n')
+    check('M39 items: the one written', items(), [('1', '5', '3')])
 finally:
     srv.terminate()
     shutil.rmtree(D, ignore_errors=True)

@@ -84,7 +84,7 @@ std::string EamuseServer::answer_later(const std::string &game, const Request &r
                "<arcadefan>www.konami.jp/am</arcadefan><konaminetdx>http://am.573.jp</konaminetdx>"
                "<konamiid>http://id.konami.jp</konamiid><eagate>http://eagate.573.jp</eagate></url></share></facility>";
     }
-    if (m == "player" && game == "M39") return answer_hc(r);   // the 64-bit PC pop'n's players (easerver_hc.cpp)
+    if ((m == "player" || m == "info") && game == "M39") return answer_hc(r);   // the 64-bit PC pop'n's (easerver_hc.cpp)
     if ((m == "player24" || m == "info24" || m == "lobby24") && game == "M39") return answer_p24(r);   // the last 32-bit PC pop'n's (easerver_p24.cpp)
     if (m == "facility" && f == "get" && pc_popn(game)) {   // pop'n 15's library (libavs ea3_facility): every
         // field it imports (location, line, portfw, public, share), or it fails the start-up (5-2009);

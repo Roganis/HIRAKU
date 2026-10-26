@@ -6,6 +6,8 @@
 
 #include <ctype.h>
 #include <stdarg.h>
+#include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -122,6 +124,41 @@ void pc64_trace_install(HMODULE game) {
     r_search = pc64_import_ordinal(game, "avs2-core.dll", 162, (void *)search_);
     r_struct = pc64_import_ordinal(game, "avs2-core.dll", 179, (void *)struct_);
     pc64_log("tracing the answers' nodes and structs");
+}
+
+// HK_PC64_PEEK (tests): "SECONDS;WHAT;WHAT..." logs the game's memory every SECONDS, each WHAT an
+// address as popn.dll's (0x180...), then * (the pointer there) and +N in turn, then :SIZE, as
+// "0x180fe6270*+0xc:64" (a global's object, 64 bytes from its +0xc)
+static const char *g_peek;
+static HMODULE g_peek_game;
+static DWORD WINAPI peek_run(void *arg) {
+    (void)arg;
+    const int every = atoi(g_peek);
+    for (;;) {
+        Sleep((DWORD)(every > 0 ? every : 5) * 1000);
+        for (const char *w = strchr(g_peek, ';'); w; w = strchr(w, ';')) {
+            char *at;
+            unsigned long long a = strtoull(++w, &at, 0) - 0x180000000ull + (unsigned long long)(uintptr_t)g_peek_game;
+            int ok = 1;
+            while (ok && (*at == '*' || *at == '+')) {
+                if (*at++ == '*') ok = !IsBadReadPtr((void *)(uintptr_t)a, 8) && (a = *(unsigned long long *)(uintptr_t)a) != 0;
+                else a += strtoull(at, &at, 0);
+            }
+            const unsigned size = *at == ':' ? (unsigned)strtoul(at + 1, NULL, 0) : 16;
+            char hex[3 * 256 + 1] = "";
+            for (unsigned i = 0; ok && i < size && i < 256; i++) {
+                if (IsBadReadPtr((void *)(uintptr_t)(a + i), 1)) break;
+                sprintf(hex + 3 * i, "%02x ", ((const unsigned char *)(uintptr_t)a)[i]);
+            }
+            pc64_log("peek %.*s: %s", (int)strcspn(w, ";"), w, ok ? hex : "(no pointer)");
+        }
+    }
+    return 0;
+}
+void pc64_peek_install(HMODULE game) {
+    if (!(g_peek = getenv("HK_PC64_PEEK"))) return;
+    g_peek_game = game;
+    CloseHandle(CreateThread(NULL, 0, peek_run, NULL, 0, NULL));
 }
 
 // HK_PC64_TRACE_D3DX (tests): the game's D3DX textures, effects and shaders, each with its result

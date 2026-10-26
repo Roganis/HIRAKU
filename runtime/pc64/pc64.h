@@ -71,6 +71,7 @@ extern volatile unsigned pc64_card_presses;
 extern volatile unsigned pc64_cards_given;   // board.c: cards given to the game
 // log.c: HK_PC64_TRACE_STRUCTS's trace of the game's answer nodes and struct reads (tests)
 void pc64_trace_install(HMODULE game);
+void pc64_peek_install(HMODULE game);   // HK_PC64_PEEK: the game's memory logged (tests)
 // log.c: HK_PC64_TRACE_D3DX's trace of the game's D3DX textures, effects and shaders (tests)
 void pc64_trace_d3dx_install(HMODULE game);
 // link.c: the picture being drawn won't be shown by hiraku-pc (no need to read it back)

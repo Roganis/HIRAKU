@@ -19,7 +19,11 @@
 // 2 none (the game asks for a name, then sends player.new).
 #include "python/easerver_parts.h"
 
+#include <algorithm>
+#include <cctype>
+#include <cstdio>
 #include <cstdlib>
+#include <iterator>
 
 namespace hk::py {
 
@@ -76,12 +80,76 @@ const Field NETVS[] = {
     {"set_recommend", "s8", 3, "0"},    {"netvs_play_cnt", "u32", 0, "0"},
 };
 
+// The common info, info.common's answer (read by 0x180092e80; the game asks it at start-up and with
+// a card, not player.start): the events' phases (<phase>: event_id, phase). The game keeps eight,
+// each clamped to a last phase of its own (0x1805f4ac0: 7, 1, 3, none, 11, 2, 1, 1; event 3, the
+// earlier games' NET TAISEN, has none in this game). A song may wait for an event's phase (the
+// table at 0x1804e2d30: event, phase, song): event 0 opens new songs by stages (19 songs, phases
+// 1-7), 4 an event's songs (17, phases 1-11); event 1 gives charts (113 songs). The others' meaning
+// isn't known. Each at its last phase unless the data folder's phases-phc says otherwise ("EVENT=PHASE
+// ..."). (Its license_music, the songs a cabinet is licensed for, is HIRAKU's loader's business:
+// runtime/pc64/songs.c.)
+constexpr int SONGS = 2374;   // the game's songs: its items of type 0 (0x1804e3240)
+constexpr int LAST_PHASE[8] = {7, 1, 3, -1, 11, 2, 1, 1};
+
+std::string common(const std::string &setting) {
+    int phase[8];
+    std::copy(std::begin(LAST_PHASE), std::end(LAST_PHASE), phase);
+    for (size_t at = 0; (at = setting.find('=', at)) != std::string::npos; at++) {
+        size_t from = at;
+        while (from > 0 && std::isdigit((unsigned char)setting[from - 1])) from--;
+        const long ev = std::strtol(setting.c_str() + from, nullptr, 10);
+        if (from < at && ev >= 0 && ev < 8) phase[ev] = (int)std::strtol(setting.c_str() + at + 1, nullptr, 10);
+    }
+    std::string x;
+    for (int ev = 0; ev < 8; ev++)
+        if (phase[ev] >= 0)
+            x += "<phase><event_id __type=\"s16\">" + std::to_string(ev) + "</event_id><phase __type=\"s16\">" + std::to_string(phase[ev]) +
+                 "</phase></phase>";
+    return x;
+}
+
+// The player's items (item, 0x1807042a0: type, id, param, is_new, get_time), in arrays by type
+// (0x1804e3240: type 0 the songs, 2374): those the game wrote ("type:id:param" each), and with the
+// data folder's unlock-phc not 0 (the default), every song as type 0. A song an event or a purchase
+// opened (mask bits 0x68000006) is listed only for a player who has its item (0x180064710).
+std::string items(const Record &p, bool every_song) {
+    std::map<std::pair<int, int>, long> got;   // (type, id) -> param
+    const std::string kept = attr(p, "items");
+    for (size_t at = 0; at < kept.size();) {
+        size_t end = kept.find(' ', at);
+        if (end == std::string::npos) end = kept.size();
+        int type = 0, id = 0;
+        long param = 0;
+        if (std::sscanf(kept.substr(at, end - at).c_str(), "%d:%d:%ld", &type, &id, &param) == 3) got[{type, id}] = param;
+        at = end + 1;
+    }
+    if (every_song)
+        for (int id = 0; id < SONGS; id++) got.insert({{0, id}, 0});
+    std::string x;
+    for (const auto &[k, param] : got)
+        x += "<item><type __type=\"u8\">" + std::to_string(k.first) + "</type><id __type=\"u16\">" + std::to_string(k.second) +
+             "</id><param __type=\"u16\">" + std::to_string(param) + "</param><is_new __type=\"bool\">0</is_new>"
+             "<get_time __type=\"u64\">0</get_time></item>";
+    return x;
+}
+
 }  // namespace
 
 std::string EamuseServer::answer_hc(const Request &r) {
     const std::string &f = r.method;
+    if (r.module == "info") return f == "common" ? "<info status=\"0\">" + common(read_file("phases-phc")) + "</info>" : "<info status=\"0\"/>";
     std::string ref = child(r.inner, "ref_id");
     if (ref.empty()) ref = attr(r.attrs, "ref_id");   // start, logout: an attribute
+    if (f == "start") {   // play_id (the game's own count goes on from it), and the common info; a guest too
+        const bool known = safe_name(ref);
+        std::vector<Record> players = known ? from_lines(read_file("phc-" + ref)) : std::vector<Record>{};
+        Record p = players.empty() ? Record{} : players[0];
+        p["play_id"] = std::to_string(num(p, "play_id") + 1);
+        if (!players.empty()) write_file("phc-" + ref, to_line(p));
+        return "<player status=\"0\"><play_id __type=\"s32\">" + esc(attr(p, "play_id")) + "</play_id>" + common(read_file("phases-phc")) +
+               "</player>";
+    }
     if (!safe_name(ref)) return "<player status=\"0\"/>";
     const std::string file = "phc-" + ref, scores = "phcs-" + ref;
     std::vector<Record> players = from_lines(read_file(file));
@@ -94,7 +162,8 @@ std::string EamuseServer::answer_hc(const Request &r) {
         account["name"] = attr(p, "name");
         return "<player status=\"0\"><result __type=\"s8\">0</result>" + part("account", ACCOUNT, account) + part("info", INFO, {}) +
                part("config", CONFIG, kept(p, "config", CONFIG)) + part("option", OPTION, kept(p, "option", OPTION)) +
-               part("customize", CUSTOMIZE, kept(p, "customize", CUSTOMIZE)) + part("netvs", NETVS, {}) + "</player>";
+               items(p, read_file("unlock-phc").rfind("0", 0) != 0) + part("customize", CUSTOMIZE, kept(p, "customize", CUSTOMIZE)) +
+               part("netvs", NETVS, {}) + "</player>";
     };
     if (f == "read") {
         if (players.empty()) return "<player status=\"0\"><result __type=\"s8\">2</result></player>";   // none: the game makes one
@@ -119,11 +188,6 @@ std::string EamuseServer::answer_hc(const Request &r) {
     }
     if (f == "read_option")   // a song's options: the kept ones
         return "<player status=\"0\">" + part("option", OPTION, kept(p, "option", OPTION)) + "</player>";
-    if (f == "start") {   // play_id (the game's own count goes on from it)
-        p["play_id"] = std::to_string(num(p, "play_id") + 1);
-        write_file(file, to_line(p));
-        return "<player status=\"0\"><play_id __type=\"s32\">" + esc(attr(p, "play_id")) + "</play_id></player>";
-    }
     if (f == "write_music") {   // a song played: the chart's best kept, and the options when it asks
         const std::string music = child(r.inner, "music_num"), sheet = child(r.inner, "sheet_num");
         std::vector<Record> all = from_lines(read_file(scores));
@@ -152,6 +216,24 @@ std::string EamuseServer::answer_hc(const Request &r) {
         keep(p, "config", CONFIG, child(r.inner, "config"));
         keep(p, "option", OPTION, child(r.inner, "option"));
         keep(p, "customize", CUSTOMIZE, child(r.inner, "customize"));
+        // the items the game sends (those it gave or changed in the credit), over those kept
+        std::map<std::pair<int, int>, std::string> got;
+        const std::string had = attr(p, "items");
+        for (size_t at = 0; at < had.size();) {
+            size_t end = had.find(' ', at);
+            if (end == std::string::npos) end = had.size();
+            int type = 0, id = 0;
+            if (std::sscanf(had.substr(at, end - at).c_str(), "%d:%d:", &type, &id) == 2) got[{type, id}] = had.substr(at, end - at);
+            at = end + 1;
+        }
+        for (size_t at = r.inner.find("<item>"); at != std::string::npos; at = r.inner.find("<item>", at + 1)) {
+            const std::string item = r.inner.substr(at, r.inner.find("</item>", at) - at);
+            const int type = std::atoi(child(item, "type").c_str()), id = std::atoi(child(item, "id").c_str());
+            got[{type, id}] = std::to_string(type) + ":" + std::to_string(id) + ":" + std::to_string(std::atol(child(item, "param").c_str()));
+        }
+        std::string list;
+        for (const auto &[k, v] : got) list += (list.empty() ? "" : " ") + v;
+        if (!list.empty()) p["items"] = list;
         write_file(file, to_line(p));
         return "<player status=\"0\"/>";
     }

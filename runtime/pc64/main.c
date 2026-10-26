@@ -206,6 +206,7 @@ int main(int argc, char **argv) {
     pc64_touch_install(game);
     pc64_sound_install(game);
     pc64_trace_install(game);
+    pc64_peek_install(game);
     pc64_trace_d3dx_install(game);
     pc64_crt_install(game);
     pc64_songs_install(game);

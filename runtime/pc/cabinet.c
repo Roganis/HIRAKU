@@ -537,7 +537,12 @@ void hk_put_pixels(const void *bits, int pitch, unsigned w, unsigned h, int form
 static int capture(IDirect3DDevice9 *d) {
     IDirect3DSurface9 *bb = NULL;
     int ok = 0;
-    if (FAILED(IDirect3DDevice9_GetBackBuffer(d, 0, 0, D3DBACKBUFFER_TYPE_MONO, &bb))) return 0;
+    static int said_bb, said_rt;
+    const HRESULT hb = IDirect3DDevice9_GetBackBuffer(d, 0, 0, D3DBACKBUFFER_TYPE_MONO, &bb);
+    if (FAILED(hb)) {
+        if (!said_bb++) hk_log("hiraku-pc: the game's picture: no back buffer (%#lx)", (unsigned long)hb);
+        return 0;
+    }
     D3DSURFACE_DESC desc;
     IDirect3DSurface9_GetDesc(bb, &desc);
     if (desc.Width > HK_PC_MAX_W || desc.Height > HK_PC_MAX_H) {
@@ -557,11 +562,14 @@ static int capture(IDirect3DDevice9 *d) {
         hk_log("hiraku-pc: the pictures go to HIRAKU's window (%ux%u, format %d)", desc.Width, desc.Height, (int)desc.Format);
     }
     D3DLOCKED_RECT lr;
-    if (SUCCEEDED(IDirect3DDevice9_GetRenderTargetData(d, bb, g_readback)) &&
-        SUCCEEDED(IDirect3DSurface9_LockRect(g_readback, &lr, NULL, D3DLOCK_READONLY))) {
+    const HRESULT hr = IDirect3DDevice9_GetRenderTargetData(d, bb, g_readback);
+    const HRESULT hl = SUCCEEDED(hr) ? IDirect3DSurface9_LockRect(g_readback, &lr, NULL, D3DLOCK_READONLY) : hr;
+    if (SUCCEEDED(hl)) {
         hk_put_pixels(lr.pBits, lr.Pitch, desc.Width, desc.Height, (int)desc.Format);
         IDirect3DSurface9_UnlockRect(g_readback);
         ok = 1;
+    } else if (!said_rt++) {
+        hk_log("hiraku-pc: the game's picture not read back (%s %#lx)", FAILED(hr) ? "GetRenderTargetData" : "LockRect", (unsigned long)hl);
     }
     IDirect3DSurface9_Release(bb);
     return ok;
@@ -676,6 +684,8 @@ void hk_picture_drawn(int captured) {
 }
 
 static HRESULT WINAPI my_Present(IDirect3DDevice9 *d, const RECT *src, const RECT *dst, HWND wnd, const RGNDATA *dirty) {
+    static int said;
+    if (!said++) hk_log("hiraku-pc: the game's first Present");
     hk_present_begin();
     if (host_shows()) {   // HIRAKU's window shows it, at the time its pacing chooses
         hk_picture_drawn(capture(d));
@@ -726,6 +736,40 @@ static HRESULT WINAPI my_Reset(IDirect3DDevice9 *d, D3DPRESENT_PARAMETERS *pp) {
     return g_Reset(d, pp);
 }
 
+// The game's Present kept HIRAKU's for its first minute: on Windows something put another in its
+// place (pop'n 17 on Windows 10, GitHub issue 4: the game ran, HIRAKU's window stayed black, its
+// Present never seen). Put back, with what was put there called by ours, as the game's own was.
+static IDirect3DDevice9 *g_dev;
+static const char *module_of(const void *p, uintptr_t *offset) {
+    static char path[MAX_PATH];
+    HMODULE m = NULL;
+    GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT, (LPCSTR)p, &m);
+    *offset = (uintptr_t)p - (uintptr_t)m;
+    if (!m || !GetModuleFileNameA(m, path, sizeof path)) return "?";
+    const char *b = strrchr(path, '\\');
+    return b ? b + 1 : path;
+}
+static DWORD WINAPI present_watch(LPVOID unused) {
+    (void)unused;
+    for (int i = 0; i < 600; i++) {
+        Sleep(100);
+        void **vt = *(void ***)g_dev;   // the device's table now (it may be another)
+        if (vt[17] != (void *)my_Present) {
+            uintptr_t at;
+            const char *m = module_of(vt[17], &at);
+            hk_log("hiraku-pc: the game's Present was replaced (by %s+%lx): HIRAKU's put back, that one called by it", m, (unsigned long)at);
+            g_Present = (Present_t)vt[17];
+            patch_slot(&vt[17], (void *)my_Present);
+        }
+        if (vt[16] != (void *)my_Reset) {
+            g_Reset = (Reset_t)vt[16];
+            patch_slot(&vt[16], (void *)my_Reset);
+        }
+    }
+    IDirect3DDevice9_Release(g_dev);
+    return 0;
+}
+
 static HRESULT WINAPI my_CreateDevice(IDirect3D9 *self, UINT adapter, D3DDEVTYPE type, HWND focus, DWORD flags,
                                       D3DPRESENT_PARAMETERS *pp, IDirect3DDevice9 **dev) {
     hk_log("hiraku-pc: the game's Direct3D: %ux%u, %s, %u Hz, interval %#x", pp->BackBufferWidth, pp->BackBufferHeight,
@@ -755,6 +799,11 @@ static HRESULT WINAPI my_CreateDevice(IDirect3D9 *self, UINT adapter, D3DDEVTYPE
         if (was) g_Reset = (Reset_t)was;
         was = patch_slot(&vt[17], (void *)my_Present);
         if (was) g_Present = (Present_t)was;
+        if (!g_dev && host_shows()) {
+            g_dev = *dev;
+            IDirect3DDevice9_AddRef(g_dev);   // (the watcher's, for its minute)
+            CloseHandle(CreateThread(NULL, 0, present_watch, NULL, 0, NULL));
+        }
         was = patch_slot(&vt[23], (void *)my_CreateTexture);
         if (was) g_CreateTexture = (CreateTexture_t)was;
     } else {

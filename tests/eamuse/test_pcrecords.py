@@ -132,7 +132,8 @@ try:
     call(M39, f'<player method="new">{who}<name __type="str">TEST</name></player>')
     items = lambda: re.findall(r'<item><type __type="u8">(\d+)</type><id __type="u16">(\d+)</id><param __type="u16">(\d+)',
                                call(M39, f'<player method="read">{who}</player>').decode())
-    check('M39 items: every song', len(items()), 2374)
+    every = items()
+    check('M39 items: every song, its Hyper and EX charts', (len(every), every[2324]), (2374, ('0', '2324', '12')))
     call(M39, f'<player method="write">{who}<item><type __type="u8">1</type><id __type="u16">5</id><param __type="u16">3</param>'
               f'<is_new __type="bool">1</is_new><get_time __type="u64">0</get_time></item></player>')
     open(os.path.join(D, 'unlock-phc'), 'w').write('0\n')

@@ -111,8 +111,10 @@ std::string common(const std::string &setting) {
 
 // The player's items (item, 0x1807042a0: type, id, param, is_new, get_time), in arrays by type
 // (0x1804e3240: type 0 the songs, 2374): those the game wrote ("type:id:param" each), and with the
-// data folder's unlock-phc not 0 (the default), every song as type 0. A song an event or a purchase
-// opened (mask bits 0x68000006) is listed only for a player who has its item (0x180064710).
+// data folder's unlock-phc not 0 (the default), every song as type 0 with its locked charts. A song
+// an event or a purchase opened (mask bits 0x68000006) is listed only for a player who has its item
+// (0x180064710); a locked Hyper (mask bit 0x40) or EX (0x80) chart is there only when the item's
+// param has 4 or 8 (0x180076870; the music select shows its level as none).
 std::string items(const Record &p, bool every_song) {
     std::map<std::pair<int, int>, long> got;   // (type, id) -> param
     const std::string kept = attr(p, "items");
@@ -125,7 +127,7 @@ std::string items(const Record &p, bool every_song) {
         at = end + 1;
     }
     if (every_song)
-        for (int id = 0; id < SONGS; id++) got.insert({{0, id}, 0});
+        for (int id = 0; id < SONGS; id++) got[{0, id}] |= 4 | 8;
     std::string x;
     for (const auto &[k, param] : got)
         x += "<item><type __type=\"u8\">" + std::to_string(k.first) + "</type><id __type=\"u16\">" + std::to_string(k.second) +

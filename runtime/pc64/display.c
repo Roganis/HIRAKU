@@ -145,13 +145,22 @@ static void windowed(D3DPRESENT_PARAMETERS *p) {
     p->FullScreen_RefreshRateInHz = 0;
     if (!p->SwapEffect) p->SwapEffect = D3DSWAPEFFECT_DISCARD;
 }
+// the stages' coordinate sets and the vertices' (the missing sets, below), as Direct3D starts them
+static int g_tc_sets = 8, g_tc_shader;
+static DWORD g_tc_index[8];
+static void tc_reset(void) {
+    for (int s = 0; s < 8; s++) g_tc_index[s] = (DWORD)s;
+    g_tc_sets = 8, g_tc_shader = 0;
+}
 static HRESULT WINAPI Reset_(IDirect3DDevice9Ex *d, D3DPRESENT_PARAMETERS *p) {
     windowed(p);
+    tc_reset();
     return rdev.Reset(d, p);
 }
 static HRESULT WINAPI ResetEx_(IDirect3DDevice9Ex *d, D3DPRESENT_PARAMETERS *p, D3DDISPLAYMODEEX *m) {
     (void)m;
     windowed(p);
+    tc_reset();
     return rdev.ResetEx(d, p, NULL);
 }
 
@@ -457,6 +466,72 @@ static HRESULT WINAPI PresentEx_(IDirect3DDevice9Ex *d, const RECT *a, const REC
     return rdev.PresentEx(d, a, b, w, r, f);
 }
 
+
+// A texture stage reading a coordinate set its vertices haven't. afp-core's multiply pass (the music
+// select's chart levels) reads a 2x2 white texture at stage 1 through set 1 of vertices that carry
+// one set: Direct3D 9 gives the missing set a constant, the white keeps what is under each digit as it
+// is; DXVK's coordinates for it sample black (a black square around each digit). Such a stage reads
+// set 0 for the draw instead (the texture it reads is one colour all over). Under Wine only.
+static HRESULT WINAPI SetFVF_(IDirect3DDevice9Ex *d, DWORD fvf) {
+    g_tc_sets = (int)((fvf & D3DFVF_TEXCOUNT_MASK) >> D3DFVF_TEXCOUNT_SHIFT);
+    return rdev.SetFVF(d, fvf);
+}
+static HRESULT WINAPI SetVertexDeclaration_(IDirect3DDevice9Ex *d, IDirect3DVertexDeclaration9 *decl) {
+    D3DVERTEXELEMENT9 el[MAXD3DDECLLENGTH + 1];
+    UINT n = MAXD3DDECLLENGTH + 1;
+    g_tc_sets = 8;
+    if (decl && SUCCEEDED(IDirect3DVertexDeclaration9_GetDeclaration(decl, el, &n))) {
+        g_tc_sets = 0;
+        for (UINT i = 0; i < n && el[i].Stream != 0xff; i++)
+            if (el[i].Usage == D3DDECLUSAGE_TEXCOORD && el[i].UsageIndex + 1 > g_tc_sets) g_tc_sets = el[i].UsageIndex + 1;
+    }
+    return rdev.SetVertexDeclaration(d, decl);
+}
+static HRESULT WINAPI SetVertexShader_(IDirect3DDevice9Ex *d, IDirect3DVertexShader9 *vs) {
+    g_tc_shader = vs != NULL;
+    return rdev.SetVertexShader(d, vs);
+}
+static HRESULT WINAPI SetTextureStageState_(IDirect3DDevice9Ex *d, DWORD stage, D3DTEXTURESTAGESTATETYPE t, DWORD v) {
+    if (t == D3DTSS_TEXCOORDINDEX && stage < 8) g_tc_index[stage] = v;
+    return rdev.SetTextureStageState(d, stage, t, v);
+}
+// The stages that read a missing set, pointed at set 0 (a mask: put back after the draw)
+static unsigned tc_before(IDirect3DDevice9Ex *d) {
+    unsigned moved = 0;
+    if (g_tc_shader) return 0;   // a vertex shader's outputs are its own
+    for (int s = 0; s < 8; s++)
+        if (g_tc_index[s] >> 16 == 0 && (int)(g_tc_index[s] & 0xffff) >= g_tc_sets) rdev.SetTextureStageState(d, s, D3DTSS_TEXCOORDINDEX, 0), moved |= 1u << s;
+    return moved;
+}
+static void tc_after(IDirect3DDevice9Ex *d, unsigned moved) {
+    for (int s = 0; moved; s++, moved >>= 1)
+        if (moved & 1) rdev.SetTextureStageState(d, s, D3DTSS_TEXCOORDINDEX, g_tc_index[s]);
+}
+static HRESULT WINAPI DrawPrimitive_(IDirect3DDevice9Ex *d, D3DPRIMITIVETYPE t, UINT a, UINT b) {
+    const unsigned m = tc_before(d);
+    const HRESULT r = rdev.DrawPrimitive(d, t, a, b);
+    tc_after(d, m);
+    return r;
+}
+static HRESULT WINAPI DrawIndexedPrimitive_(IDirect3DDevice9Ex *d, D3DPRIMITIVETYPE t, INT a, UINT b, UINT c, UINT e, UINT f) {
+    const unsigned m = tc_before(d);
+    const HRESULT r = rdev.DrawIndexedPrimitive(d, t, a, b, c, e, f);
+    tc_after(d, m);
+    return r;
+}
+static HRESULT WINAPI DrawPrimitiveUP_(IDirect3DDevice9Ex *d, D3DPRIMITIVETYPE t, UINT a, const void *v, UINT s) {
+    const unsigned m = tc_before(d);
+    const HRESULT r = rdev.DrawPrimitiveUP(d, t, a, v, s);
+    tc_after(d, m);
+    return r;
+}
+static HRESULT WINAPI DrawIndexedPrimitiveUP_(IDirect3DDevice9Ex *d, D3DPRIMITIVETYPE t, UINT a, UINT b, UINT c, const void *i, D3DFORMAT f, const void *v,
+                                              UINT s) {
+    const unsigned m = tc_before(d);
+    const HRESULT r = rdev.DrawIndexedPrimitiveUP(d, t, a, b, c, i, f, v, s);
+    tc_after(d, m);
+    return r;
+}
 static HRESULT WINAPI CreateDeviceEx_(IDirect3D9Ex *d, UINT a, D3DDEVTYPE t, HWND focus, DWORD flags, D3DPRESENT_PARAMETERS *pp,
                                       D3DDISPLAYMODEEX *modes, IDirect3DDevice9Ex **dev) {
     (void)modes;
@@ -482,6 +557,18 @@ static HRESULT WINAPI CreateDeviceEx_(IDirect3D9Ex *d, UINT a, D3DDEVTYPE t, HWN
         pc64_patch(&v->Present, Present_);
         pc64_patch(&v->StretchRect, StretchRect_);
         pc64_patch(&v->PresentEx, PresentEx_);
+        HMODULE nt = GetModuleHandleA("ntdll.dll");
+        if (nt && GetProcAddress(nt, "wine_get_version")) {   // the missing coordinate sets (above)
+            pc64_patch(&v->SetFVF, SetFVF_);
+            pc64_patch(&v->SetVertexDeclaration, SetVertexDeclaration_);
+            pc64_patch(&v->SetVertexShader, SetVertexShader_);
+            pc64_patch(&v->SetTextureStageState, SetTextureStageState_);
+            pc64_patch(&v->DrawPrimitive, DrawPrimitive_);
+            pc64_patch(&v->DrawIndexedPrimitive, DrawIndexedPrimitive_);
+            pc64_patch(&v->DrawPrimitiveUP, DrawPrimitiveUP_);
+            pc64_patch(&v->DrawIndexedPrimitiveUP, DrawIndexedPrimitiveUP_);
+            tc_reset();
+        }
         IDirect3DSwapChain9 *sc;
         if (SUCCEEDED(rdev.GetSwapChain(*dev, 0, &sc))) {
             IDirect3DSwapChain9ExVtbl *sv = (IDirect3DSwapChain9ExVtbl *)sc->lpVtbl;

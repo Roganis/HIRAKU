@@ -3,7 +3,9 @@
 // number fields are, for tables.c, which finds the code that reads the game's tables by the
 // addresses and counts the instructions carry (as popnhax's database patcher does with a
 // disassembler). The instructions a C compiler emits: the one- and two-byte opcodes, x87, MMX and
-// SSE to SSE4 (0F 38 and 0F 3A), no 16-bit addressing.
+// SSE to SSE4 (0F 38 and 0F 3A), no 16-bit addressing. In 64-bit code (x86_decode64, the 64-bit PC
+// pop'n's tables: runtime/pc64/tables.c) also REX prefixes, RIP-relative addresses, 64-bit
+// immediates and VEX (AVX, AVX2; no EVEX).
 #include "x86.h"
 
 #include <string.h>
@@ -58,23 +60,38 @@ static const unsigned char TWO[256] = {
     M, M, M, M, M, M, M, M, M, M, M, M, M, M, M, M,
 };
 
-int x86_decode(const unsigned char *code, struct x86_insn *in) {
+static int decode(const unsigned char *code, struct x86_insn *in, int b64) {
     memset(in, 0, sizeof *in);
     in->base = -1;
     const unsigned char *p = code;
     int opsize16 = 0, addr16 = 0;
-    for (int n = 0;; n++) {   // prefixes
+    unsigned rex = 0;
+    for (int n = 0;; n++) {   // prefixes (in 64-bit code a REX last)
         if (n == 15) return 0;
         const unsigned char c = *p;
-        if (c == 0x66) opsize16 = 1;
-        else if (c == 0x67) addr16 = 1;
+        if (b64 && (c & 0xf0) == 0x40) rex = c;
+        else if (c == 0x66) opsize16 = 1, rex = 0;
+        else if (c == 0x67) addr16 = 1, rex = 0;
         else if (c != 0xf0 && c != 0xf2 && c != 0xf3 && c != 0x2e && c != 0x36 && c != 0x3e && c != 0x26 && c != 0x64 && c != 0x65)
             break;
+        else rex = 0;
         p++;
     }
-    if (addr16) return 0;
+    if (addr16 && !b64) return 0;
+    in->rex = (unsigned char)rex;
     unsigned op = *p++, flags;
-    if (op == 0x0f) {
+    if (b64 && (op == 0xc4 || op == 0xc5)) {   // VEX: its map (0F, 0F 38, 0F 3A), then the opcode and a ModRM
+        const unsigned map = op == 0xc5 ? 1 : p[0] & 0x1f;
+        if (op == 0xc4) rex = 0x40 | (~p[0] >> 5 & 7);   // R X B (inverted), for the ModRM's registers
+        else rex = 0x40 | (~p[0] >> 5 & 4);
+        p += op == 0xc5 ? 1 : 2;
+        if (map < 1 || map > 3) return 0;
+        op = *p++;
+        in->vex = (unsigned char)map;
+        in->escape = 1;
+        flags = (map == 1 && op == 0x77) ? 0 : M;   // vzeroupper, vzeroall: no ModRM
+        if (map == 3 || (map == 1 && ((op >= 0x70 && op <= 0x73) || op == 0xc2 || op == 0xc4 || op == 0xc5 || op == 0xc6))) flags |= B;
+    } else if (op == 0x0f) {
         op = *p++;
         if (op == 0x38) p++, flags = M;
         else if (op == 0x3a) p++, flags = M | B;
@@ -87,9 +104,10 @@ int x86_decode(const unsigned char *code, struct x86_insn *in) {
     in->opcode = (unsigned char)op;
     unsigned imm = flags & 0xf;
     if (imm == Z && opsize16 && !(flags & R)) imm = W;
-    if (!in->escape && op >= 0xa0 && op <= 0xa3) {   // mov al/eax <-> [address]
-        in->disp_at = (unsigned char)(p - code), in->disp_size = 4;
-        p += 4;
+    if (b64 && !in->escape && op >= 0xb8 && op <= 0xbf && (rex & 8)) imm = 8;   // mov r64, imm64
+    if (!in->escape && op >= 0xa0 && op <= 0xa3) {   // mov al/eax <-> [address] (8 bytes in 64-bit code)
+        in->disp_at = (unsigned char)(p - code), in->disp_size = b64 && !addr16 ? 8 : 4;
+        p += in->disp_size;
     }
     if (!in->escape && op == 0xc8) imm = 3;   // enter: a word and a byte
     if (flags & M) {
@@ -98,14 +116,17 @@ int x86_decode(const unsigned char *code, struct x86_insn *in) {
         in->modrm = 1, in->reg = (modrm >> 3) & 7;
         if (mod != 3) {
             unsigned base = rm, disp = mod == 1 ? 1 : mod == 2 ? 4 : 0;
+            int none = 0;
             if (rm == 4) {   // SIB
                 const unsigned char sib = *p++;
                 base = sib & 7;
-                if (base == 5 && mod == 0) base = 8, disp = 4;   // [index*scale + address]
+                if (base == 5 && mod == 0) none = 1, disp = 4;   // [index*scale + address]
             } else if (rm == 5 && mod == 0) {
-                base = 8, disp = 4;   // [address]
+                none = 1, disp = 4;   // [address]; in 64-bit code [rip + displacement]
+                in->rip = (unsigned char)b64;
             }
-            in->base = base == 8 ? -1 : (signed char)base;
+            if (!none && (rex & 1)) base += 8;   // r8..r15
+            in->base = none ? -1 : (signed char)base;
             if (disp) in->disp_at = (unsigned char)(p - code), in->disp_size = (unsigned char)disp;
             p += disp;
         }
@@ -119,3 +140,6 @@ int x86_decode(const unsigned char *code, struct x86_insn *in) {
     in->len = (unsigned char)(p - code);
     return in->len;
 }
+
+int x86_decode(const unsigned char *code, struct x86_insn *in) { return decode(code, in, 0); }
+int x86_decode64(const unsigned char *code, struct x86_insn *in) { return decode(code, in, 1); }

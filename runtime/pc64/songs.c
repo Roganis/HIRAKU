@@ -6,8 +6,8 @@
 // files.c, or the game's own), before the game starts. Nothing of the game's comes with HIRAKU:
 // the songs, their texts and charts are the player's.
 //
-// After the work of a friend of HIRAKU's author on the same game (popnMods, its native Omnimix, with
-// thanks), whose findings this follows: the music table's layout (312 bytes a song: its texts at
+// After Milo's work on the same game (popnMods, its native Omnimix, with thanks), whose findings
+// this follows: the music table's layout (312 bytes a song: its texts at
 // +0, +8, +16 (full width genre, title, artist), +24, +40, +48 (genre, title, artist); its two
 // characters at +56; its mask at +60, the folder at +64, the version at +68, the categories at
 // +72; the seven charts' levels at +76, their chart numbers at +84, their hold flags at +214), the

@@ -2625,9 +2625,9 @@ From 9th style (2003) to HAPPY SKY, IIDX is a Windows PC game (Konami's model C0
 The 64-bit PC pop'n keeps a slot in its music table for every song it ever had, those it left out
 marked so (mask 0x80000000: 311 of 2374). Players' Omnimix packs (popnhax's music data: XML with
 `<music id>` texts, characters, BPMs and `<chart idx>` files, the songs' packs in `sd/`, their
-banners and backgrounds in ifs_layeredfs's `_ifs` folders) fill them in again. After the work of a
-friend of HIRAKU's author on the same game (popnMods' native Omnimix: its tables' layouts, the
-difficulty bits, characters by name, the old songs' background guard; credited when it ships).
+banners and backgrounds in ifs_layeredfs's `_ifs` folders) fill them in again. After Milo's work on
+the same game (popnMods' native Omnimix: its tables' layouts, the difficulty bits, characters by
+name, the old songs' background guard), with thanks.
 Nothing of a game comes with HIRAKU: the songs are the player's.
 
 - **The mods reach the loader** (`hiraku-pc` passes the launcher's mods as `HK_PC64_DATA`); each
@@ -2668,9 +2668,33 @@ Nothing of a game comes with HIRAKU: the songs are the player's.
   `mod.toml`), and `tools/songsback.py`, which reads the game's program and the packs and says what
   will come back and why not (the loader's rules; checked: the same 226 songs).
 - **Not yet:** scores for restored songs checked on HIRAKU's e-AMUSEMENT server (it keeps any song
-  number), songs past the table (ids ≥ 2374: custom songs; popnMods' high-ID work is a staged
-  experiment), characters the game hasn't, the `_ifs` folders' PNGs (only whole members), By Medal
-  and the extra Random entries (By Medal's source is needed).
+  number), songs past the table (below), characters the game hasn't, the `_ifs` folders' PNGs (only
+  whole members), By Medal and the extra Random entries (By Medal's source is needed).
+- **Songs past the table (plan, 2026-10-26).** A player's packs describe 162 songs with ids from 2374
+  up (3000-3155 the console songs, 5600s custom ones), and the game has 85 free slots: the tables
+  have to grow, as §35's 5b did for the 32-bit game. The game's own `musicsub` (songs sent by the
+  server, read with the common info) only rewrites songs already in the table. Measured in
+  2026041500 (objdump and Ghidra):
+  - the music table (2374 x 312 bytes) is read by 42 instructions, almost all in small getters
+    (0x180075000-0x180077000): 26 RIP-relative, 16 with the table's image-relative offset as a
+    displacement (`[base + index + 0x7061fc]`, the base register holding the image's start); the
+    chart table (2490 x 40) by 20, all RIP-relative. The copies must be within 2 GB of the DLL;
+  - the counts as numbers: 2374 (42 places), 2373 (13), the id check's 2458 (2374 + 85 - 1),
+    7 x 2374 (loops over every song's seven charts), the charts' 2490 and 2489; some are other
+    things (each site classified by its pattern); a song-count getter (0x180077e70) serves most loops;
+  - per-song arrays in the player's objects: the per-chart records, 7 x 2374 x 32 bytes with a field
+    after them (+0x81d48, object 0x81d50); an object of 7 x 2374 records of 12 bytes and others
+    (+0xe8, +0x30be0, +0xc30e8, +0xf3d24: the fields after each move); a 2-byte-per-song object
+    (0x1290, a field at +0x128c), an 8-byte one (+0x4a30 on); a static 2-byte-per-song table in the
+    program (0x1804df470); the songs' item capacity (0x1804e3240). The server's own song records
+    (`musicsub`, 2374 x 0x3e0 in the common data) stay as they are, their checks too;
+  - code reached through AVX instructions too: `runtime/pc32/x86.c` decodes 64-bit code now (REX,
+    RIP-relative, 64-bit immediates, VEX), walked function by function from `.pdata` (data sits in
+    some functions: their jump tables). Checked: the same instruction starts as objdump on all
+    985,780 instructions of the 24,472 functions but those tables; the 32-bit decoding unchanged.
+  - Steps: (1) the decoder (done); (2) the tables copied and their 62 references moved; (3) the
+    counts and the player's objects; (4) the songs past 2374 from the mods' music data, tried with
+    song 3000 as in §35.
 
 ## 35. The last 32-bit PC pop'n, `popn22.dll` (written 2026-10-26)
 

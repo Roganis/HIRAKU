@@ -7,7 +7,7 @@ fills the songs in before the game starts. Nothing of the game comes with HIRAKU
 written into the game's files: the songs, their charts and pictures are the pack's, laid over the
 game as it runs (PLAN.md section 34).
 
-With thanks to a friend of HIRAKU's author, whose work on the same game showed the way.
+With thanks to Milo, whose work on the same game (popnMods) showed the way.
 
 ## What you need
 

@@ -21,6 +21,11 @@
 #include <stdlib.h>
 #include <string.h>
 
+#ifndef AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM   // (older mingw headers: Ubuntu 22.04's)
+#define AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM 0x80000000
+#define AUDCLNT_STREAMFLAGS_SRC_DEFAULT_QUALITY 0x08000000
+#endif
+
 static const GUID float_format = {0x00000003, 0x0000, 0x0010, {0x80, 0x00, 0x00, 0xaa, 0x00, 0x38, 0x9b, 0x71}};   // KSDATAFORMAT_SUBTYPE_IEEE_FLOAT
 
 #define BUF_FRAMES 2048u   // the buffer's most (a power of two)

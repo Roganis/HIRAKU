@@ -101,7 +101,10 @@ def tag(body, name):
     return v
 
 
-def read_music(mods, nsongs):
+MAX_IDS = 32768   # the music data's ids the loader keeps (past the game's table, its tables grow to them)
+
+
+def read_music(mods):
     """id -> the song's fields, the first mod's winning (read from the last mod to the first, each
     mod's files in their names' order)"""
     songs = {}
@@ -122,8 +125,7 @@ def read_music(mods, nsongs):
             text = re.sub(r"<!--.*?-->", "", text, flags=re.S)
             for mid, body in re.findall(r'<music\s+id=["\'](\d+)["\']\s*>(.*?)</music>', text, re.S):
                 i = int(mid)
-                if i >= nsongs:
-                    songs.setdefault(i, {"past": True})
+                if i >= MAX_IDS:
                     continue
                 s = songs.setdefault(i, {"charts": {}})
                 own = body.split("<chart ", 1)[0]
@@ -175,13 +177,14 @@ def main():
     g = Game(dll)
     left_out = [i for i in range(g.songs) if struct.unpack_from("<I", g.record(i), 60)[0] == REMOVED]
     print("the game: %d songs, %d left out; its characters: %d" % (g.songs, len(left_out), g.ncharas))
-    songs = read_music(a.mods, g.songs)
-    past = sorted(i for i, s in songs.items() if s.get("past"))
+    songs = read_music(a.mods)
+    # the songs past the game's table: as songs left out, in the slots the loader adds for them
+    past = sorted(i for i in songs if i >= g.songs)
     names = g.character_names()
     back, why = [], {}
     no_chara = []
     banners = game_banners(data)
-    for i in left_out:
+    for i in left_out + past:
         s = songs.get(i)
         if not s:
             continue
@@ -222,7 +225,8 @@ def main():
         for i, t, c, both in no_chara if a.verbose else no_chara[:5]:
             print("  %5d  %s: %s" % (i, t, c))
     if past:
-        print("songs past the game's table (custom songs, not brought back yet): %d" % len(past))
+        print("of them past the game's table (the console games' songs, custom ones: its tables grow to %d songs): %d" %
+              (past[-1] + 1, sum(1 for i, t in back if i >= g.songs)))
     return 0
 
 

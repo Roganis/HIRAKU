@@ -84,6 +84,13 @@ unsigned pc64_crt_inputs(unsigned in);
 int pc64_crt_view(int *x, int *y);
 void pc64_crt_cursor(int x, int y);   // (HK_SCRIPT's cursor:X:Y)
 void pc64_crt_install(HMODULE game);
+// tables.c: the music and chart tables copied into bigger ones, the code pointed at the copies
+int pc64_tables_move(HMODULE game, BYTE **music, unsigned songs, unsigned new_songs, BYTE **charts, unsigned nchart, unsigned new_nchart);
+// the same, and the code sized by the counts grown with them (the new songs' slots as songs left out)
+int pc64_tables_grow(HMODULE game, BYTE **music, unsigned songs, unsigned new_songs, BYTE **charts, unsigned nchart, unsigned new_nchart);
+// a chart's format as the music data has it (old: 8-byte events), for the game's check of it
+int pc64_chart_formats_install(HMODULE game, unsigned nchart);
+void pc64_chart_format(unsigned chart, int old);
 void pc64_songs_install(HMODULE game);   // songs.c: songs the game left out, back from the mods' music data   // crt.c: its play screen's characters, scaled to the 4:3 picture
 // link.c: a fifth of a millisecond's nap
 void pc64_nap(void);

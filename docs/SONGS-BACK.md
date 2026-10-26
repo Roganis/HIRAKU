@@ -63,7 +63,9 @@ The save folder's `pc.log` says it, at the start:
 - `songs: N brought back (M charts added; K described without their files)`: the songs back, and
   how many the pack describes without their chart files (the first 20 by name: `left out: its
   charts' files aren't there`);
-- `overlay: /ifs_image_kc/kc_0001.ifs from /hiraku_mod0/...`: a banner taken from the pack.
+- `overlay: /ifs_image_kc/kc_0001.ifs from /hiraku_mod0/...`: a banner taken from the pack;
+- `songs: room for N songs and M charts`: the pack has songs past the game's table (below), and
+  the game's tables were made bigger for them.
 
 HIRAKU's own window log says `mods: Omnimix: N files on none of the game's media, left out`: that's
 HIRAKU's general mod loader counting the pack's files the game hasn't; for this game they're used
@@ -77,14 +79,24 @@ characters the game hasn't (the cover songs' own) shows its other one, or the ga
 earlier games' banners are half this game's size: they're stretched to their frames. A music data
 file that says Shift-JIS but is UTF-8 is read as UTF-8.
 
+Songs the game never had a place for (the console games' songs from 3000, custom songs, any id from
+2374 on) come back the same way: HIRAKU makes the game's song and chart tables bigger, up to the
+pack's last song, and points the game at them. They're in the music select's lists, play, and keep
+their scores under their own numbers. A chart the pack adds is read in the old format (that of the
+earlier games) unless it has long notes or the pack says `force_new_chart_format`, as popnhax has it.
+They aren't drawn by the random choice, have no friends' scores, and the music select may not come
+back to one of them as the card's last song (it opens near it). This works with the game's build
+HIRAKU knows (2026041500); another build keeps them out and says so in `pc.log`.
+
 ## Not yet
 
-- Songs the game never had a place for (custom songs, ids from 2374 on): left out.
 - Characters the game hasn't (the pack's `charadb` only changes the game's own).
 - Pictures as PNGs in the `_ifs` folders (ifs_layeredfs converts them): only whole files are used.
 - Categories added by other mods (By Medal) and the extra Random entries.
 - The launcher doesn't check a pack; `tools/songsback.py` does.
 
-Checked (2026-10-26) with a player's Omnimix pack: the tool and the game agree (226 songs back, 12
-left out for missing chart files, 2 for missing texts, 162 custom songs past the table), and a
-restored song played through to its result from the launcher's mods folder.
+Checked (2026-10-26) with a player's Omnimix pack: the tool and the game agree (398 songs back, 161 of
+them past the game's table; 12 left out for missing chart files, 2 for missing texts, 1 without a
+Normal chart), a restored song played through to its result from the launcher's mods folder, and
+song 3000 (from the console games) listed under its genre, played to its result and its score sent
+as song 3000.

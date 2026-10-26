@@ -35,6 +35,7 @@
 #define REGIONS_AT 120u   // the regions a song is played in (the music select asks for the cabinet's)
 #define TEMPOS_AT 222u    // six charts' tempos, 12 bytes each
 #define REMOVED 0x80000000u
+#define MAX_IDS 32768u   // the music data's ids kept (past the game's table: the tables grow to them)
 #define SLOTS 7
 static const char *const SLOT_NAMES[SLOTS] = {"ep", "np", "hp", "op", "bp_n", "bp_h", "bp_ex"};
 // the difficulty bits the game asks of a song's mask before it reads a chart (Normal and Battle
@@ -104,7 +105,7 @@ static int locate(BYTE *base) {
 struct chart {
     char *folder, *file;
     int audio[4];
-    unsigned type, keys, level, hold;
+    unsigned type, keys, level, hold, force_new;   // force_new: force_new_chart_format (the 12-byte events)
 };
 struct song {
     char *text[6];   // fw_genre, fw_title, fw_artist, genre, title, artist
@@ -210,7 +211,7 @@ static void read_xml(const WCHAR *path) {
         char *id_at = strstr(m, "id=");
         unsigned id = id_at && id_at < gt && (id_at[3] == '"' || id_at[3] == '\'') ? (unsigned)strtoul(id_at + 4, NULL, 10) : ~0u;
         m = close + 8;
-        if (id >= g_songs) continue;   // a song past the game's table (its own new songs): not yet
+        if (id >= MAX_IDS) continue;
         struct song *s = &g_data[id];
         // the song's own fields come before its charts (a chart's <folder> isn't the song's)
         char *own_end = strstr(gt, "<chart");
@@ -262,6 +263,7 @@ static void read_xml(const WCHAR *path) {
             if (number_of(cgt, cend, "used_keys", &v)) ch->keys = v;
             if (number_of(cgt, cend, "diff", &v)) ch->level = v;
             if (number_of(cgt, cend, "hold_flag", &v)) ch->hold = v;
+            if (number_of(cgt, cend, "force_new_chart_format", &v)) ch->force_new = v;
         }
         count++;
     }
@@ -496,8 +498,8 @@ void pc64_songs_install(HMODULE game) {
     }
     IMAGE_NT_HEADERS *nt = (IMAGE_NT_HEADERS *)(base + ((IMAGE_DOS_HEADER *)base)->e_lfanew);
     g_image = base, g_image_end = base + nt->OptionalHeader.SizeOfImage;
-    if (!(g_data = calloc(g_songs, sizeof *g_data)) || !(g_back = calloc(g_songs, 1)) || !(g_uses = calloc(g_nchara, sizeof *g_uses)) ||
-        !(g_banner = calloc(g_songs, 1)))
+    if (!(g_data = calloc(MAX_IDS, sizeof *g_data)) || !(g_back = calloc(MAX_IDS, 1)) || !(g_uses = calloc(g_nchara, sizeof *g_uses)) ||
+        !(g_banner = calloc(MAX_IDS, 1)))
         return;
     // the music data: the last mod first, so the first one's fields win
     size_t files = 0;
@@ -512,6 +514,15 @@ void pc64_songs_install(HMODULE game) {
     }
     if (!files) return;
     game_banners();
+    // songs past the game's table (the console games' songs, players' own): the tables grown to the
+    // last one the music data describes, with room for seven charts each (tables.c); the new slots
+    // are songs left out, filled below as the others
+    unsigned last = 0, past = 0;
+    for (unsigned id = g_songs; id < MAX_IDS; id++)
+        if (g_data[id].text[3] && g_data[id].text[4] && g_data[id].text[5]) last = id, past++;
+    if (past && g_nchart + SLOTS * past < 65535 &&
+        pc64_tables_grow(game, &g_music, g_songs, last + 1, &g_charts, g_nchart, g_nchart + SLOTS * past))
+        g_songs = last + 1, g_nchart += SLOTS * past;
     // the charts in use, the characters' uses
     unsigned char *used = calloc(g_nchart, 1);
     if (!used) return;
@@ -623,6 +634,10 @@ void pc64_songs_install(HMODULE game) {
         return;
     }
     if (!guard_background(base)) return;
+    // the charts' format: old (8-byte events) unless a chart has hold notes or says otherwise, as
+    // popnhax has it (the game's own rule goes by the chart's number, tables.c)
+    if (pc64_chart_formats_install(game, g_nchart))
+        for (unsigned j = 0; j < nnew; j++) pc64_chart_format(added[j].at, !(added[j].c->hold || added[j].c->force_new));
     // in place: the charts, then each song (its mask last: the song is there once it's set)
     DWORD old_m, old_c, ignored;
     VirtualProtect(g_music, (size_t)g_songs * RECORD, PAGE_READWRITE, &old_m);

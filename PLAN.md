@@ -253,7 +253,7 @@ Durations are rough, assume one person, and are assisted. Each milestone has a c
 | **M17** | A song added to pop'n music 14 (modding pilot, §20) | A new song, packed by a tool from the modder's own files, appears in the song list, plays with its sounds and its charts, and keeps its scores, through a mod folder alone (nothing on the user's disk changed). The pieces: a new entry past the last in the song list (lisbin), the list's integrity checksum made again (FUN_017c18b8, constants 0x3f306b90 / 0x70f93885), the sounds encoded in the game's ADPCM and placed in a free 20 MB slot of the song area (from 0x20000000, LCG-scrambled: tools/popnsong.py reads them), the charts in the game's format, and the song select, unlocks and score records accepting the new number. | **not started** (split from the pilot 2026-10-20). Most of it is reverse engineering still to do: the checksum's coverage, the chart format, and what else counts the songs. |
 | **M18** | Two more shaders: Lola Retro and the CRT beam simulator (§29) | Lola Retro as a picture mode with presets chosen per board; the Blur Busters beam simulator as a motion mode on 120 Hz+ displays, paced from the game's real rate; both from the launcher. | **done 2026-10-20** (§29): the engine (feedback, frame history, FrameCount in game frames), Lola as a picture mode with looks per monitor, the CRT beam (`--crt-beam`); the owner, at 240 Hz: Lola "perfect", the beam "perfect" (after its curve and whole-refresh fixes). |
 | **M19** | The PC pop'n music games, 15–18 (§30) | Konami's program as it is (under Wine on Linux), HIRAKU's DLLs as the cabinet, `hiraku-pc` as its window, sound and controls. | **done for 15–18 under Wine** (2026-10-21/23): play, e-AMUSEMENT (players, rankings, one card for all), NET TAISEN, timed presses, mods.<br>• **Left:** pop'n 19–21 (`popn19/20/21.dll`); 18's `boss`, the expert courses' stage scores in 16's and 17's records, file mods for 16–18; real Windows, board and reader. |
-| **M20** | The 64-bit PC platform (§32, §34) | A 64-bit AVS2 game through `hiraku-pc64` and `hiraku-pc`: its two screens, 120 Hz, sound, controls, e-AMUSEMENT. | **in progress**: plays under Wine, on one 4:3 screen too (steps 1–3); players and scores kept; songs it left out back from the player's music data (§34); the events' phases and the songs' unlocks (§32).<br>• **Left:** what events 2, 5, 6 and 7 do; the shop and other items; courses, friends, one card for all; songs past the music table; By Medal; characters the game hasn't. NET battles are off in the game itself (no phase for its event). |
+| **M20** | The 64-bit PC platform (§32, §34) | A 64-bit AVS2 game through `hiraku-pc64` and `hiraku-pc`: its two screens, 120 Hz, sound, controls, e-AMUSEMENT. | **in progress**: plays under Wine, on one 4:3 screen too (steps 1–3); players and scores kept; songs it left out and songs past its music table back from the player's music data (§34); the events' phases and the songs' unlocks (§32).<br>• **Left:** what events 2, 5, 6 and 7 do; the shop and other items; courses, friends, one card for all; By Medal; characters the game hasn't. NET battles are off in the game itself (no phase for its event). |
 | **M21** | beatmania IIDX 9th style (§33) | The C02 cabinet's program as it is, through `hiraku-pc`. | **in progress** (IIDX-1 to IIDX-4): plays with its movies; e-AMUSEMENT cards for both players, scores, rankings, EXPERT courses.<br>• **Left:** the record's layout (DJ points), KONAMI ID, attract's ranking with rankers, a course for two; real Windows (the junction, MPEG-1); then 10th, RED and HAPPY SKY. |
 | **M22** | The last 32-bit PC pop'n (§35) | `popn22.dll` on AVS2 2.15 through `hiraku-pc32` and `hiraku-pc`. | **steps 1–6 done** (2026-10-26): plays, players kept, mods and songs past the music table, NET TAISEN.<br>• **Left:** see §35's "Not yet" lists. |
 
@@ -2668,9 +2668,9 @@ Nothing of a game comes with HIRAKU: the songs are the player's.
   `mod.toml`), and `tools/songsback.py`, which reads the game's program and the packs and says what
   will come back and why not (the loader's rules; checked: the same 226 songs).
 - **Not yet:** scores for restored songs checked on HIRAKU's e-AMUSEMENT server (it keeps any song
-  number), songs past the table (below), characters the game hasn't, the `_ifs` folders' PNGs (only
+  number), characters the game hasn't, the `_ifs` folders' PNGs (only
   whole members), By Medal and the extra Random entries (By Medal's source is needed).
-- **Songs past the table (plan, 2026-10-26).** A player's packs describe 162 songs with ids from 2374
+- **Songs past the table (2026-10-26).** A player's packs describe 162 songs with ids from 2374
   up (3000-3155 the console songs, 5600s custom ones), and the game has 85 free slots: the tables
   have to grow, as §35's 5b did for the 32-bit game. The game's own `musicsub` (songs sent by the
   server, read with the common info) only rewrites songs already in the table. Measured in
@@ -2692,9 +2692,30 @@ Nothing of a game comes with HIRAKU: the songs are the player's.
     RIP-relative, 64-bit immediates, VEX), walked function by function from `.pdata` (data sits in
     some functions: their jump tables). Checked: the same instruction starts as objdump on all
     985,780 instructions of the 24,472 functions but those tables; the 32-bit decoding unchanged.
-  - Steps: (1) the decoder (done); (2) the tables copied and their 62 references moved; (3) the
-    counts and the player's objects; (4) the songs past 2374 from the mods' music data, tried with
-    song 3000 as in §35.
+  - **Done (2026-10-26), `runtime/pc64/tables.c`:** the tables copied near the DLL (the 85 songs'
+    worth before the music table too: the id check's negative ids read them; the code naming the
+    variables there keeps the originals) and the 62 references moved; the counts at 45 places, each
+    found by 8 or more bytes of the code before it and all found or nothing changed (some patterns
+    hold a table's address: found before the move); the best scores' object grown (its size, its
+    field after the arrays, the charts' strides); the song items' capacity (0x1804e3240: the card's
+    last song is kept only when its item is, 0x1800a6b50). Left at 2374 behind their own id checks:
+    the server's songs and charts (musicsub, tracksub), the friends' scores (CPlayerFriendGameData,
+    4.9 MB), the licence list's buffer, the random choice (x % N by a reciprocal), debug scenes, N as
+    "no song". The new slots start as a copy of a song left out.
+  - **A chart's format:** the game reads a chart as old (8-byte events) only when its song's version
+    is under 0x18 and its number under 0x6dc (0x1801d3da0); the music data's charts are numbered
+    past that, so an old chart read as new had no tempo ("tempoがない", BPM 1, no notes, the stage
+    never ending). The function now jumps to the same rule with popnhax's for the charts the loader
+    adds: old unless hold notes or `force_new_chart_format` (also right for restored songs' charts
+    placed above 0x6dc).
+  - **Checked** (Omnimix pack): 398 songs back, 161 past the table, room for 5626 songs and 3624
+    charts; the music select's main list holds 2457 songs (the game's own availability check passes
+    161 past 2373); song 3000 (un-Balance, from the console games) listed under its genre, played to
+    its result (notes at its 159 BPM) and `write_music` sent with music 3000; `tools/songsback.py`
+    says the same. Found on the way: the category the card had (1, 2/22) holds the licensed songs or
+    a folder, not every song; test aids were a probe calling the game's checks on its own thread.
+  - **Not yet:** the music select's cursor coming back to a song past the table as the card's last
+    song (it opens a few songs away), the random choice and the friends' scores for them.
 
 ## 35. The last 32-bit PC pop'n, `popn22.dll` (written 2026-10-26)
 

@@ -314,14 +314,14 @@ elseif(NOT WIN32 AND EXISTS /usr/x86_64-w64-mingw32/lib/libkernel32.a)
   endif()
 endif()
 if(HK_PC64_CC)
-  set(HK_PC64_SOURCES main.c log.c imports.c files.c link.c display.c board.c net.c touch.c sound.c script.c crt.c songs.c)
+  set(HK_PC64_SOURCES main.c log.c imports.c files.c link.c display.c board.c net.c touch.c sound.c script.c crt.c songs.c tables.c ../pc32/x86.c)
   list(TRANSFORM HK_PC64_SOURCES PREPEND ${CMAKE_SOURCE_DIR}/runtime/pc64/ OUTPUT_VARIABLE HK_PC64_PATHS)
   add_custom_command(OUTPUT ${CMAKE_BINARY_DIR}/pc/hiraku-pc64.exe
     COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/pc
     COMMAND ${HK_PC64_CC} --target=x86_64-w64-mingw32 ${HK_PC64_SYS} -O2 -Wall -Wextra -fuse-ld=lld -static
             -o ${CMAKE_BINARY_DIR}/pc/hiraku-pc64.exe ${HK_PC64_PATHS}
             -ld3d9 -lsetupapi -lws2_32 -liphlpapi -lole32 -luuid
-    DEPENDS ${HK_PC64_PATHS} runtime/pc64/pc64.h runtime/pc/link.h
+    DEPENDS ${HK_PC64_PATHS} runtime/pc64/pc64.h runtime/pc/link.h runtime/pc32/x86.h
     COMMENT "pc/hiraku-pc64.exe (64-bit)")
   add_custom_target(hiraku-pc64 ALL DEPENDS ${CMAKE_BINARY_DIR}/pc/hiraku-pc64.exe)
 else()

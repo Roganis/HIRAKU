@@ -26,6 +26,9 @@ std::vector<Control> make_bm3() {
     c.push_back({"Coin 1", "Coin", "Cabinet", false, "key:5"});   // as DJ Main's and IIDX's (their Effect is on button 9)
     c.push_back({"Test", "Test", "Cabinet", false, "key:F2"});
     c.push_back({"Service", "Service", "Cabinet", false, "key:9"});
+    // the service panel's A and B (MAME's IN0 bits 2 and 3): the test mode's buttons
+    c.push_back({"A", "Test mode A", "Cabinet", false, "key:F3"});
+    c.push_back({"B", "Test mode B", "Cabinet", false, "key:F4"});
     return c;
 }
 

@@ -11,7 +11,8 @@ OUT: the mod folder to write (put it in the launcher's mods folder for the game,
 --mod); it holds the older game's names and texts for these characters and their hariai pictures
 (tex/system/ha_merge_ifs/, from the older game's tex/system/ha_chara*.ifs: the 64-bit game's packs
 haven't them, and it faults without one) and their names' pictures (chara_name_diff_ifs/, from its
-chara_name*.ifs, the same), nothing else.
+chara_name*.ifs, the same), made this game's size (its pictures are 2 to 2.3 times the older
+games': the older ones scaled up, Pillow), nothing else.
 DIR: the 64-bit game's folder (modules/, plain_data/ or data/); by default dumps/popn29/machine.txt's.
 
 The 64-bit game keeps a slot for each character it removed (its flags' bit 0, a stand-in's names),
@@ -31,6 +32,52 @@ import songsback  # noqa: E402
 
 REC32 = 0x4C   # a character in the 32-bit game: 7 words (name, flags, folder, gg, cs, icon1, icon2), ...
 REMOVED = 1
+
+
+def bigger(pack, scale):
+    """a picture pack (bytes) with its pictures made `scale` times bigger, as this game's own are:
+    each texture's one picture (argb8888rev, avslz) decoded, scaled, its rectangles and the
+    texture's size made so; the pack written again. None when it isn't such a pack."""
+    import hashlib
+    import tempfile
+    from PIL import Image
+    with tempfile.NamedTemporaryFile(suffix=".ifs") as f:
+        f.write(pack)
+        f.flush()
+        p = ifs.Pack(f.name)
+        if "tex/texturelist.xml" not in p.members:
+            return None
+        tl = ifs.kbin(p.read("tex/texturelist.xml"))
+        six, enc = ifs.kbin.six, ifs.kbin.encoding
+        new = {}
+        if dict(tl[4]).get("compress", b"").rstrip(b"\0") != b"avslz":
+            return None
+        for tex in tl[3]:
+            attrs = {k: v.rstrip(b"\0") for k, v in tex[4]}
+            images = [n for n in tex[3] if n[0] == "image"]
+            size = [n for n in tex[3] if n[0] == "size"]
+            if tex[0] != "texture" or attrs.get("format") != b"argb8888rev" or \
+                    len(images) != 1 or len(size) != 1:
+                return None
+            im = images[0]
+            name = dict(im[4]).get("name", b"").rstrip(b"\0")
+            uv = [n for n in im[3] if n[0] == "uvrect"][0]
+            rect = [n for n in im[3] if n[0] == "imgrect"][0]
+            member = "tex/" + hashlib.md5(name).hexdigest()
+            x0, x1, y0, y1 = rect[2]
+            w, h = (x1 - x0) // 2, (y1 - y0) // 2
+            raw = ifs.lz77_undo(p.read(member)) if member in p.members else b""
+            if x0 or y0 or len(raw) != w * h * 4:
+                return None
+            W, H = round(w * scale), round(h * scale)
+            img = Image.frombytes("RGBA", (w, h), raw).convert("RGBa").resize((W, H), Image.LANCZOS).convert("RGBA")
+            new[member] = ifs.lz77_do(img.tobytes())
+            inset = (uv[2][0] - x0, x1 - uv[2][1], uv[2][2] - y0, y1 - uv[2][3])
+            rect[2] = (0, 2 * W, 0, 2 * H)
+            uv[2] = (inset[0], 2 * W - inset[1], inset[2], 2 * H - inset[3])
+            size[0][2] = tuple(1 << (n - 1).bit_length() for n in (W, H))
+        new["tex/texturelist.xml"] = ifs.kbin_write(tl, six, enc)
+        return p.rebuild(new)
 
 
 class Older:
@@ -140,15 +187,23 @@ def main():
         if any(pics[k] not in own[k] and pics[k] + ".ifs" not in pictures[k] for k in pics):
             no_pic.append((i, r["chara_id"].decode("cp932")))   # described all the same: another mod may have them
         out.append((i, r, pics))
-    copied = 0
+    # the older game's pictures are smaller than this game's: the hariai by the slot's size over the
+    # older game's (2.3 for the old style, 2 for the newer), the names' 2 times
+    copied, small = 0, []
     for i, r, pics in out:
-        for k, folder in (("ha", "ha_merge_ifs"), ("gg", "chara_name_diff_ifs")):
+        slot = struct.unpack_from("<H", g.d, g.at(g.charas + i * 128) + 0x38)[0]
+        ha_scale = slot / r["chara_xw"] if slot and r["chara_xw"] else 2.0 if r["lapis_shape"] else 2.3
+        for k, folder, scale in (("ha", "ha_merge_ifs", ha_scale), ("gg", "chara_name_diff_ifs", 2.0)):
             m = pics[k] + ".ifs"
             if pics[k] in own[k] or m not in pictures[k]:
                 continue
+            b = pictures[k][m].read(m)
+            big = bigger(b, scale) if 1.2 < scale < 4 else None
+            if big is None:
+                small.append(m)
             os.makedirs(os.path.join(a.out, "tex", "system", folder), exist_ok=True)
             with open(os.path.join(a.out, "tex", "system", folder, m), "wb") as f:
-                f.write(pictures[k][m].read(m))
+                f.write(big or b)
             copied += 1
     x = [b"<?xml version='1.0' encoding='shift-jis'?>", b"<database>"]
     for i, r, pics in out:
@@ -158,7 +213,10 @@ def main():
         for k, t in (("flags", "u32"), ("display_flags", "u32"), ("file_type", "u32"), ("game_version", "u32"),
                      ("chara_xw", "u16"), ("chara_yh", "u16"), ("flavor_idx", "s16")):
             x.append(b'    <%s __type="%s">%d</%s>' % (k.encode(), t.encode(), r[k], k.encode()))
-        x.append(b'    <lapis_shape __type="str">%s</lapis_shape>' % (b"dia" if r["lapis_shape"] == 1 else b""))
+        # the gem's shape in popnhax's terms (dia 1; the others by number): set for the newer characters,
+        # whose hariai is the newer kind in the 64-bit game (its +0x74)
+        shape = b"dia" if r["lapis_shape"] == 1 else b"%d" % r["lapis_shape"] if r["lapis_shape"] else b""
+        x.append(b'    <lapis_shape __type="str">%s</lapis_shape>' % shape)
         x.append(b"  </chara>")
     x.append(b"</database>")
     with open(os.path.join(a.out, "charadb_older.xml"), "wb") as f:
@@ -170,7 +228,9 @@ def main():
     print("the 64-bit game: %d characters, %d removed; the older game's table: %d (ids %+d)" %
           (g.ncharas, sum(1 for c in names if c["flags"] & REMOVED), old.n, shift))
     print("described again: %d -> %s" % (len(out), os.path.join(a.out, "charadb_older.xml")))
-    print("pictures copied from the older game (hariai, names): %d" % copied)
+    print("pictures copied from the older game (hariai, names) and made this game's size: %d" % copied)
+    if small:
+        print("left at the older game's size (not one picture a texture, or not argb8888rev): %d (%s)" % (len(small), ", ".join(small[:8])))
     if no_pic:
         print("a picture of theirs isn't in the older game's tex/system/ha_*.ifs or chara_name*.ifs: %d (%s); they come back when "
               "another mod has it (tex/system/ha_merge_ifs/, chara_name_diff_ifs/)" % (len(no_pic), ", ".join(n for _, n in no_pic[:10])))

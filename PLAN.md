@@ -2673,8 +2673,9 @@ Nothing of a game comes with HIRAKU: the songs are the player's.
   the ids are the same in every game (the last 32-bit game's mimi_28a 2409, shoten 442, as here), so
   no table grows. The record: name +0, flags +8, folder +0x10, gg/cs/icon1/icon2 +0x18..+0x30, size
   +0x38, display flags +0x3c, phrases' number +0x40, sort/display names +0x48/+0x50, file type +0x58,
-  ha +0x60, catch text +0x68, version +0x70, gem shape +0x74 (the 32-bit game's 0x4c bytes, the same
-  fields). `runtime/pc64/songs.c` reads popnhax's `<chara id>` entries from the mods and fills a
+  ha +0x60, catch text +0x68, version +0x70, the hariai's kind +0x74 (0 the old style, 1 the newer,
+  2 big: the clips ha_chara_usr, ha_newsize_usr, ha_bigsize_usr, picked in 0x18005c5e0; the 32-bit
+  game's +0x34, popnhax's lapis_shape) (the 32-bit game's 0x4c bytes, the same fields). `runtime/pc64/songs.c` reads popnhax's `<chara id>` entries from the mods and fills a
   removed slot with them, before the songs' characters are found by name. The game needs a
   character's hariai (`/ifs_image_hariai/ha_X.ifs`) and name picture (`/ifs_image_chara_name/gg_X.ifs`)
   and faults without them (a null write after `HariaiFile CHR = N is not exist`); its packs haven't
@@ -2683,6 +2684,17 @@ Nothing of a game comes with HIRAKU: the songs are the player's.
   by name) and the two pictures from its `ha_chara*.ifs`/`chara_name*.ifs` (`tools/ifs.py`: the
   packs' file lists, kbin; folders are nodes with a time, files three s32): 28 characters, 53
   pictures; song 650 played with its own (mario). Its small icon (`cs_X` in `icon.ifs`) is blank.
+- **The older games' pictures made this game's size (2026-10-27).** The hariai (the still picture in
+  the music select's and the VS screen's windows) and the name's picture are 2.3 times bigger here
+  for the old-style characters (2 for the newer: the records' sizes too), and the game draws each at
+  its pixels, so an older game's was a small figure (the owner). Neither an `imgrect` made bigger
+  (the decoder takes it as the pixels: garbage) nor the texture call (ordinal 137: the hariai don't
+  pass there) does it; `tools/oldcharas.py` scales the pictures (Pillow, premultiplied alpha) by the
+  slot's size over the older game's and writes the packs again (`tools/ifs.py`: kbin written back,
+  avslz undone and done, the pack's list, `_info_` MD5 and size and the header's MD5 of the list made
+  again; the 53 packs rewritten unchanged are byte for byte the same): 14 MB, 20 s. Checked: mario at
+  its full size in both windows, its name too. A pack's own characters' hariai (the 4 newer in a
+  player's Omnimix pack) are still the older size.
 - **Not yet:** scores for restored songs checked on HIRAKU's e-AMUSEMENT server (it keeps any song
   number), the `_ifs` folders' PNGs (only whole members: the removed characters' icons need them),
   By Medal and the extra Random entries (By Medal's source is needed); umaru_23a (no older PC game

@@ -48,8 +48,9 @@ With thanks to Milo, whose work on the same game (popnMods) showed the way.
 5. Characters the game removed (the cover songs' own: anime, TV themes, games): the game keeps a
    place for each, and an older PC pop'n of yours still describes them. `tools/oldcharas.py` reads
    that game's `popn22.dll` (pop'n 22 to the last 32-bit game) and writes a mod with them: their
-   names and texts, and their hariai and name pictures from that game's packs (this game's packs
-   haven't them; their own pictures it still has):
+   names and texts, and their hariai and name pictures from that game's packs, scaled up to this
+   game's size (this game's packs haven't them; their own pictures it still has; it needs Pillow,
+   `python3 -m pip install pillow`):
    ```bash
    python3 tools/oldcharas.py <older game>/modules/popn22.dll ~/.local/share/hiraku/mods/popn29/Characters
    ```
@@ -105,7 +106,8 @@ HIRAKU knows (2026041500); another build keeps them out and says so in `pc.log`.
 ## Not yet
 
 - Characters no older PC game describes (one in a player's pack: umaru_23a), and the small icons of
-  those that come back (pictures inside the game's `icon.ifs`: their place is blank).
+  those that come back (pictures inside the game's `icon.ifs`: their place is blank). A pack's own
+  characters' pictures (its `ha_merge_ifs`) are the older games' size: small in the windows.
 - The characters the pack put in for songs whose own it hadn't (the console games', pop'n music
   Mickey Tunes', old anime): the originals from the older games' data.
 - Pictures as PNGs in the `_ifs` folders (ifs_layeredfs converts them): only whole files are used.

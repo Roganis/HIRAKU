@@ -522,13 +522,21 @@ static unsigned charas_back(void) {
             const int16_t fl = (int16_t)c->flavor;
             memcpy(r + 0x40, &fl, 2);
         }
+        // +0x74: the hariai's kind (0 the old style, 1 the newer; the older games give it as the
+        // gem's shape, any for the newer, popnhax's lapis_shape)
+        if (c->shape) {
+            const uint32_t kind = *c->shape ? 1 : 0;
+            memcpy(r + 0x74, &kind, 4);
+        }
+        // the size (where its hariai goes): the slot's, this game's; else the older game's, made this
+        // game's (2.3 times for the old style, 2 for the newer, as the pictures)
+        uint32_t kind;
+        memcpy(&kind, r + 0x74, 4);
+        const float ratio = kind == 1 ? 2.0f : 2.3f;
         uint16_t size[2];
         memcpy(size, r + 0x38, 4);
-        if (!size[0] && !size[1] && (c->has & 16)) size[0] = (uint16_t)c->xw, size[1] = (uint16_t)c->yh, memcpy(r + 0x38, size, 4);
-        if (c->shape) {   // the gem's shape: "dia" 1 (the only one checked), none 0
-            const uint32_t shape = !strcmp(c->shape, "dia") ? 1 : 0;
-            if (shape || !*c->shape) memcpy(r + 0x74, &shape, 4);
-        }
+        if (!size[0] && !size[1] && (c->has & 16))
+            size[0] = (uint16_t)(c->xw * ratio + 0.5f), size[1] = (uint16_t)(c->yh * ratio + 0.5f), memcpy(r + 0x38, size, 4);
         memcpy(slot + 0x10, r + 0x10, 128 - 0x10);
         MemoryBarrier();
         memcpy(slot, r, 0x10);   // its name and flags last

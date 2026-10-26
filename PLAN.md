@@ -2801,7 +2801,23 @@ content encrypted (`bootstrap.exe` decodes it); not read yet.
      sounds (`sd/system/system28_ifs/system28.2dx` ...) read from the mod, the game's sound playing;
      a whole file (`sys/font24.ifs`) from a mod. `HK_PC32_TRACE` also logs each mount and open.
    - **5b, the songs a pack adds:** the music data written into the game's music table (as §34 does
-     for the 64-bit game), so its packs' charts and sounds are listed.
+     for the 64-bit game), so its packs' charts and sounds are listed. Found so far (2025092400):
+     - **The music table** is static, in popn22.dll's data, indexed by song id from `0x102dda68`,
+       172 bytes a song; ids -85..2285 (the id check `0x100fb0f0`: `cmp ax,0xffab` .. `mov ecx,0x8ee`),
+       one getter per field at `0x100fb1xx`-`0x100fbaxx`. Fields: +0..+20 six Shift-JIS text pointers
+       (fw_genre, fw_title, fw_artist, genre, title, artist), +24 and +26 the two characters (numbers),
+       +28 mask (0x80000000: left out, 316 songs), +32 folder, +36 cs_version, +40 categories, +44 six
+       levels (bytes), +50 seven chart numbers (u16), +64 a text pointer (empty for most), +68, +72,
+       +76 32 u16 (slots 18-31 scanned for item numbers), +140 and +152 the charts' tempos (two
+       groups of six u16), +164 a hold flag per chart. A left-out slot has no characters and no chart
+       numbers. (A second table, 0x4d0 bytes a song in memory, is used instead when the byte at
+       `0x10de7981` is set.)
+     - **The chart table** at `0x102ca980`, 32 bytes a chart (folder and file pointers, audio_param1-4,
+       file_type, used_keys), 2402 of them (`0x962` in the code), full: new charts need a bigger copy,
+       its 13 references in the code and the count's checks moved to it.
+     - The music data (popnhax's XML) of the bundle's packs: ids 1-2026 mostly left-out songs (and
+       charts added to kept ones: song 5's EASY), 3000-3155 the console songs and 5600+ custom ones
+       past the table (not yet).
    - **5c, pictures as PNGs:** a texture pack keeps its pictures converted, under their names' MD5
      (`tex/<md5>`), listed in `tex/texturelist.xml`: a mod's `<pack>_ifs/tex/name.png` (translations,
      category icons) needs converting and listing.

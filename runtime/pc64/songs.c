@@ -33,6 +33,8 @@
 
 #define RECORD 312u
 #define REGIONS_AT 120u   // the regions a song is played in (the music select asks for the cabinet's)
+#define LOW_AT 186u       // seven charts' lowest tempos (u16), the music select's "BPM"
+#define HIGH_AT 200u      // and highest
 #define TEMPOS_AT 222u    // six charts' tempos, 12 bytes each
 #define REMOVED 0x80000000u
 #define MAX_IDS 32768u   // the music data's ids kept (past the game's table: the tables grow to them)
@@ -271,10 +273,11 @@ static void read_xml(const WCHAR *path) {
             if (number_of(gt, own_end, NUMS[i], &v)) *at[i] = v, s->has |= 1u << i;
         }
         char *bpm = text_of(gt, own_end, "display_bpm", 0);
-        if (bpm) {
+        if (bpm) {   // (all 0 in some packs: none given)
             char *p = bpm;
-            for (int i = 0; i < 12; i++) s->bpm[i] = (unsigned short)strtoul(p, &p, 10);
-            s->has |= 16;
+            unsigned any = 0;
+            for (int i = 0; i < 12; i++) any |= s->bpm[i] = (unsigned short)strtoul(p, &p, 10);
+            if (any) s->has |= 16;
             free(bpm);
         }
         for (char *c = gt; (c = strstr(c, "<chart")) && c < close;) {
@@ -346,8 +349,8 @@ static void xml_files(const WCHAR *dir, WCHAR ***list, size_t *n, size_t *cap, i
 // --- the files a song needs: in a mod's folder (over the game's data), or the game's own
 static WCHAR g_mods[16][MAX_PATH];
 static int g_nmods;
-static int data_file(const char *rel) {   // rel: under the game's data folder, Shift-JIS
-    WCHAR w[MAX_PATH], path[MAX_PATH * 2];
+static int data_path(const char *rel, WCHAR *path) {   // rel: under the game's data folder, Shift-JIS; path: MAX_PATH * 2
+    WCHAR w[MAX_PATH];
     if (!MultiByteToWideChar(932, 0, rel, -1, w, MAX_PATH)) return 0;
     for (WCHAR *c = w; *c; c++)
         if (*c == L'/') *c = L'\\';
@@ -364,7 +367,162 @@ static int data_file(const char *rel) {   // rel: under the game's data folder, 
     }
     return 0;
 }
+static int data_file(const char *rel) {
+    WCHAR path[MAX_PATH * 2];
+    return data_path(rel, path);
+}
 static int plain_name(const char *s) { return s && *s && !strpbrk(s, "/\\:") && !strstr(s, ".."); }
+
+// --- a chart's tempos, from its file: the music data gives them for some songs only (display_bpm;
+// the older games read them from the chart), and the music select shows this game's table's. The
+// song's pack (sd/FOLDER/FILE.ifs) holds FILE_np.bin: events of 8 bytes (12 in the new format),
+// the time in milliseconds at +0, 45 04 a tempo (its value at +6), 45 06 the end.
+// A pack: its header (to its file list's end at +16), a binary XML (kbin) list from +0x24 whose
+// files are three s32 (where from the list's end, the size, a time); names six bits a letter, '_'
+// written "__" and '.' "_E". The list read as runtime/python/kbin.cpp and tools/ifs.py read it.
+static int ifs_member(HANDLE f, const char *want, uint32_t *at, uint32_t *size) {
+    static const unsigned char SZ[57][2] = {
+        {0, 0}, {0, 0}, {1, 1}, {1, 1}, {2, 1}, {2, 1}, {4, 1}, {4, 1}, {8, 1}, {8, 1}, {1, 0}, {1, 0}, {4, 1}, {4, 1}, {4, 1}, {8, 1},
+        {1, 2}, {1, 2}, {2, 2}, {2, 2}, {4, 2}, {4, 2}, {8, 2}, {8, 2}, {4, 2}, {8, 2}, {1, 3}, {1, 3}, {2, 3}, {2, 3}, {4, 3}, {4, 3},
+        {8, 3}, {8, 3}, {4, 3}, {8, 3}, {1, 4}, {1, 4}, {2, 4}, {2, 4}, {4, 4}, {4, 4}, {8, 4}, {8, 4}, {4, 4}, {8, 4}, {0, 0}, {0, 0},
+        {1, 16}, {1, 16}, {2, 8}, {2, 8}, {1, 1}, {1, 2}, {1, 3}, {1, 4}, {1, 16}};
+    static const char SIX[] = "0123456789:ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz";
+    char name[128];   // the name as the list has it
+    size_t nn = 0;
+    if (want[0] >= '0' && want[0] <= '9') name[nn++] = '_';
+    for (const char *c = want; *c && nn + 3 < sizeof name; c++)
+        if (*c == '_') name[nn++] = '_', name[nn++] = '_';
+        else if (*c == '.') name[nn++] = '_', name[nn++] = 'E';
+        else name[nn++] = *c;
+    name[nn] = 0;
+    BYTE head[0x24];
+    DWORD got;
+    if (!ReadFile(f, head, sizeof head, &got, NULL) || got != sizeof head || head[0] != 0x6c || head[1] != 0xad || head[2] != 0x8f ||
+        head[3] != 0x89)
+        return 0;
+    const uint32_t data_at = (uint32_t)head[16] << 24 | (uint32_t)head[17] << 16 | (uint32_t)head[18] << 8 | head[19];
+    const uint32_t ver = (uint32_t)head[4] << 8 | head[5];
+    if (ver < 2 || data_at <= 0x24 + 12 || data_at > (1u << 20)) return 0;
+    const size_t n = data_at - 0x24;
+    BYTE *b = malloc(n);
+    if (!b || !ReadFile(f, b, (DWORD)n, &got, NULL) || got != n || b[0] != 0xa0 || b[1] != 0x42) return free(b), 0;
+#define BE32(p) ((uint32_t)(p)[0] << 24 | (uint32_t)(p)[1] << 16 | (uint32_t)(p)[2] << 8 | (p)[3])
+    const size_t node_end = 8 + BE32(b + 4), data = node_end + 4;
+    size_t off = 0, byte_off = 0, word_off = 0, i = 8;
+    int depth = 0, found = 0;
+    while (i < node_end && data < n && !found) {
+        int t = b[i++];
+        if (!t) continue;
+        const int arr = t & 64;
+        t &= ~64;
+        if (t == 190) {
+            depth--;
+            continue;
+        }
+        if (t == 191 || i >= node_end) break;
+        char nm[128];
+        const size_t len = b[i], bytes = (len * 6 + 7) / 8;
+        if (len >= sizeof nm || i + 1 + bytes > node_end) break;
+        for (size_t k = 0; k < len; k++) {
+            unsigned v = 0;
+            for (size_t bit = k * 6; bit < k * 6 + 6; bit++) v = v << 1 | (b[i + 1 + bit / 8] >> (7 - bit % 8) & 1);
+            nm[k] = SIX[v];
+        }
+        nm[len] = 0;
+        i += 1 + bytes;
+        if (t == 46 || (t < 57 && SZ[t][0] && !SZ[t][1]) || (arr && t < 57 && SZ[t][0])) {   // a length, then the bytes
+            if (data + off + 4 > n) break;
+            off = (off + 4 + BE32(b + data + off) + 3) & ~(size_t)3;
+            if (t != 46) depth++;
+            continue;
+        }
+        if (t >= 57 || (t != 1 && !SZ[t][0])) break;
+        const int top = depth == 1;
+        depth++;
+        if (t == 1) continue;
+        const size_t sz = (size_t)SZ[t][0] * SZ[t][1];
+        if (byte_off % 4 == 0) byte_off = off;
+        if (word_off % 4 == 0) word_off = off;
+        size_t where;
+        if (sz == 1) where = byte_off, byte_off += 1;
+        else if (sz == 2) where = word_off, word_off += 2;
+        else where = off, off = (off + sz + 3) & ~(size_t)3;
+        const size_t trailing = byte_off > word_off ? byte_off : word_off;
+        if (off < trailing) off = (trailing + 3) & ~(size_t)3;
+        if (top && t == 30 && data + where + 12 <= n && !strcmp(nm, name))
+            *at = data_at + BE32(b + data + where), *size = BE32(b + data + where + 4), found = 1;
+    }
+#undef BE32
+    free(b);
+    return found;
+}
+// the chart's tempos as the game keeps them: up to three, the longest first, each with its share
+// of the song in thousandths, in tens (the rest the other tempos'). Checked against the game's own
+// songs from their charts: 263 of 293 the same, the others hand-set (one tempo only, shares)
+static int chart_tempos(const struct chart *c, int16_t t[6], unsigned short *low, unsigned short *high) {
+    if (!plain_name(c->folder) || !plain_name(c->file)) return 0;
+    char rel[600], member[300];
+    WCHAR path[MAX_PATH * 2];
+    snprintf(rel, sizeof rel, "sd/%s/%s.ifs", c->folder, c->file);
+    snprintf(member, sizeof member, "%s_np.bin", c->file);
+    if (!data_path(rel, path)) return 0;
+    HANDLE f = CreateFileW(path, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
+    if (f == INVALID_HANDLE_VALUE) return 0;
+    uint32_t at = 0, size = 0;
+    BYTE *b = NULL;
+    DWORD got = 0;
+    LARGE_INTEGER to;
+    to.QuadPart = 0;
+    if (ifs_member(f, member, &at, &size) && size && size < (16u << 20) && (b = malloc(size))) {
+        to.QuadPart = at;
+        if (!SetFilePointerEx(f, to, NULL, FILE_BEGIN) || !ReadFile(f, b, size, &got, NULL)) got = 0;
+    }
+    CloseHandle(f);
+    const unsigned rs = c->hold || c->force_new ? 12 : 8;
+    unsigned tempo[32] = {0}, nt = 0, now = 0, end = 0;
+    uint64_t dur[32] = {0}, total = 0;
+    int cur = -1;
+    for (DWORD o = 0; b && o + rs <= got; o += rs) {
+        uint32_t time;
+        memcpy(&time, b + o, 4);
+        if (b[o + 4] != 0x45 || (b[o + 5] != 4 && b[o + 5] != 6)) continue;
+        if (cur >= 0 && time > now) dur[cur] += time - now, total += time - now;
+        now = time;
+        if (b[o + 5] == 6) {
+            end = 1;
+            break;
+        }
+        const unsigned v = (unsigned)b[o + 6] | (unsigned)b[o + 7] << 8;
+        int k = 0;
+        while (k < (int)nt && tempo[k] != v) k++;
+        if (k == (int)nt && nt < 32) tempo[nt++] = v;
+        if (k < (int)nt) cur = k;
+    }
+    free(b);
+    (void)end;
+    if (!nt) return 0;
+    *low = *high = 0;
+    for (unsigned k = 0; k < nt; k++)   // the tempos played (a moment's left out)
+        if (dur[k] || nt == 1) {
+            if (!*low || tempo[k] < *low) *low = (unsigned short)tempo[k];
+            if (tempo[k] > *high) *high = (unsigned short)tempo[k];
+        }
+    memset(t, 0, 12);
+    unsigned share_left = 1000;
+    for (int slot = 0; slot < 3 && slot < (int)nt; slot++) {
+        int best = -1;
+        for (int k = 0; k < (int)nt; k++)
+            if (tempo[k] && (best < 0 || dur[k] > dur[best])) best = k;
+        if (best < 0) break;
+        unsigned share = total ? (unsigned)((dur[best] * 100 + total / 2) / total) * 10 : 1000;
+        if (share > share_left) share = share_left;
+        if (slot && !share) break;
+        t[2 * slot] = (int16_t)tempo[best], t[2 * slot + 1] = (int16_t)(share ? share : 1000);
+        share_left -= share;
+        tempo[best] = 0;
+    }
+    return t[0] > 0;
+}
 
 // --- the banners: a song brought back needs one (the music select asks for it until it comes): the
 // game's own packs (tex/system/kc*.ifs: their pictures named kc_NNNN inside) or a mod's folders
@@ -551,6 +709,7 @@ static unsigned charas_back(void) {
 // --- the background: a song brought back has none of its own (the game's packs don't hold it):
 // the game's way for a song without one
 static unsigned char *g_back;   // by id: brought back
+static unsigned g_tempos;       // songs whose tempos come from their charts
 static int guard_background(BYTE *base) {
     // a page near the game's code (a jump of 32 bits from the site)
     BYTE *page = NULL;
@@ -721,8 +880,22 @@ void pc64_songs_install(HMODULE game) {
         // the regions it's played in (bits the music select asks for one of: the game's own songs' 0x17)
         const uint16_t regions = 0x17;
         memcpy(rec + REGIONS_AT, &regions, 2);
-        // each chart's tempos (12 bytes from +222: a tempo, how much of the song it lasts in
-        // thousandths, twice more): display_bpm's two groups (low and high, the same when it's one)
+        // each chart's tempos: its lowest and highest (+186, +200: what the music select shows) and
+        // up to three with how much of the song each lasts in thousandths (12 bytes from +222):
+        // display_bpm's two groups (each chart's low, then high), else the Normal chart's (as the
+        // game's own songs, the same for each chart)
+        int16_t from_chart[6];
+        unsigned short low = 0, high = 0;
+        if (!(s->has & 16) && chart_tempos(&s->chart[1], from_chart, &low, &high)) {
+            for (int k = 0; k < 6; k++) memcpy(rec + TEMPOS_AT + 12 * k, from_chart, sizeof from_chart);
+            for (int k = 0; k < SLOTS; k++)
+                if (k < 6 || present[k] == 1) memcpy(rec + LOW_AT + 2 * k, &low, 2), memcpy(rec + HIGH_AT + 2 * k, &high, 2);
+            g_tempos++;
+        }
+        for (int k = 0; k < 6 && (s->has & 16); k++) {
+            const unsigned short a = s->bpm[k] ? s->bpm[k] : s->bpm[k + 6], b = s->bpm[k + 6] ? s->bpm[k + 6] : s->bpm[k];
+            memcpy(rec + LOW_AT + 2 * k, a < b ? &a : &b, 2), memcpy(rec + HIGH_AT + 2 * k, a < b ? &b : &a, 2);
+        }
         for (int k = 0; k < 6 && (s->has & 16); k++) {
             const unsigned short a = s->bpm[k], b = s->bpm[k + 6];
             int16_t t[6] = {0};
@@ -798,6 +971,7 @@ void pc64_songs_install(HMODULE game) {
     }
     VirtualProtect(g_charts, (size_t)g_nchart * 40, old_c, &ignored);
     VirtualProtect(g_music, (size_t)g_songs * RECORD, old_m, &ignored);
-    pc64_log("songs: %u brought back (%u charts added; %u described without their files or banner; %u without a character the game has); "
-             "the game's %u songs, %u charts", n, nnew, skipped, g_unknown_charas, g_songs, g_nchart);
+    pc64_log("songs: %u brought back (%u charts added; %u described without their files or banner; %u without a character the game has; "
+             "%u with their tempos read from their charts); the game's %u songs, %u charts", n, nnew, skipped, g_unknown_charas, g_tempos,
+             g_songs, g_nchart);
 }

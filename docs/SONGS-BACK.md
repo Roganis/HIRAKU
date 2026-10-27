@@ -87,7 +87,9 @@ all the same (the songs' files, banners and music data are new to it).
 A song comes back when the game left it out, the pack describes it (genre, title, artist), its
 Normal chart's file is there and it has a banner (the pack's, or one the game kept); its Easy,
 Hyper and EX charts come with it when their files are there (a missing one leaves the song out),
-the battle charts are optional. Characters are found by name among the game's own and those the
+the battle charts are optional. A song's tempos (the music select's BPM) are the pack's
+`display_bpm`, or read from its Normal chart when the pack gives none (`N with their tempos read
+from their charts` in the `brought back` line). Characters are found by name among the game's own and those the
 mods describe again (`songs: N characters back` in `pc.log`: only in the places the game kept for
 them, and only with their pictures, hariai and name picture there, the game faults without them);
 a song whose characters the game hasn't shows its other one, or the game's first. The

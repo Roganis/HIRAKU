@@ -2642,8 +2642,13 @@ Nothing of a game comes with HIRAKU: the songs are the player's.
   unlock bits (0x08020080) cleared. Found by the code that reads the tables, not by addresses.
 - **What the game needs besides** (found here): the regions a song is listed for (+120: the game's
   songs' 0x17; 0 in the slots left out, so the music select never listed them: popnMods' Unlock All
-  hid this), each chart's tempos (+222, 12 bytes a chart: tempo, share of the song in thousandths,
-  twice more), from `display_bpm`'s two groups.
+  hid this), each chart's tempos: its lowest and highest (+186 and +200, seven u16 each: what the
+  music select and the VS screen show, "BPM 150~300"; popnhax's `display_bpm` is these two groups)
+  and up to three with their shares of the song (+222, 12 bytes a chart: tempo, thousandths in
+  tens, twice more). The players' packs give `display_bpm` all 0 (the 32-bit games read the tempo
+  from the chart): the loader reads the Normal chart (`sd/F/F.ifs`'s `F_np.bin`: events `45 04`
+  a tempo, `45 06` the end) and fills both, as the game's own (its 263 of 293 songs checked the same
+  from their charts; the others hand-set). Before 2026-10-27 the songs showed BPM "-", 0 in play.
 - **Pictures inside the game's packs**: a song's banner (`/ifs_image_kc/kc_NNNN.ifs`), background,
   characters' names and pictures are read one by one through AVS2's open and stat (ordinals 79,
   100); a mod's `tex/system/kc_diff_ifs/kc_NNNN.ifs` (and the other names the packs had) is given

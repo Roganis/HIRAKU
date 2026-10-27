@@ -30,6 +30,9 @@ public:
     // The reader has taken it in (the game holds it until it gives it back); false while it only
     // waits at the slot
     virtual bool card_inside() const { return card_offered(); }
+    // The game has opened the slot since the start (an old reader's does only with e-AMUSEMENT on
+    // in its test mode, and pop'n 9 only after Start)
+    virtual bool slot_ever_opened() const { return true; }
     // A line for the window title ("card in the reader", ...), "" when nothing to say.
     virtual std::string state() const = 0;
 };

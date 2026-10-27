@@ -163,7 +163,7 @@ bool CardUnit::write(const uint8_t *d, uint32_t n, std::vector<uint8_t> &reply) 
             read_ready_ = false;
             switch (arg[0]) {
             case 1:   // open the slot: takes the card the player holds there
-                accepting_ = true;
+                accepting_ = opened_ = true;
                 if (offered_) { inside_ = true; accepting_ = false; }
                 break;
             case 2:   // close / eject: the card comes back out

@@ -51,6 +51,7 @@ public:
     std::string state() const override;
 
     bool card_inside() const override { return inside_; }
+    bool slot_ever_opened() const override { return opened_; }
 
     // Carrying a player to this game from the one before (docs/EAMUSE3.md, "One card for all"):
     // until the game writes the card, it is shown `older`, that game's card with the same number.
@@ -85,6 +86,7 @@ private:
     bool offered_ = false;   // the player has put the card in the slot
     bool inside_ = false;    // the reader has it
     bool accepting_ = false; // the game has opened the slot
+    bool opened_ = false;    // ... at least once
     bool read_ready_ = false, buffer_ready_ = false;
     std::deque<uint8_t> keys_;   // 10-key events not yet sent
 };

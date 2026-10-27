@@ -29,4 +29,8 @@ struct Banner {
 };
 bool banner(Banner &b);
 
+// A hint from the game's core (any thread), shown after what is on screen, for `seconds`, edged
+// in amber
+void hint(const std::vector<std::string> &lines, double seconds = 12);
+
 }  // namespace hk::host::notice

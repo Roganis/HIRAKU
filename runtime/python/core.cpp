@@ -89,6 +89,7 @@
 #include "pcsx2/VMManager.h"
 
 #include "host/macro.h"
+#include "host/notice.h"
 #include "python/cardunit.h"
 #include "python/icca.h"
 #include "python/eanet.h"
@@ -1141,6 +1142,7 @@ private:
         if (net_) net_->poll();   // online answers that arrived
         if (autoplay_) apply_autoplay();
         if (card_ && ea_.autocard[0]) autocard();
+        if (card_) card_hint();
         // HK_PY_EE_DUMP=FRAME[-LAST]:FILE: EE RAM (32 MiB) at that frame (FILE; the IOP's in FILE.iop),
         // or at each frame to LAST (FILE.FRAME), for reading a game that only exists in RAM (pop'n 13 and 14 load
         // theirs from a second stage)
@@ -1372,6 +1374,28 @@ private:
     std::mutex net_log_mutex_;
     std::map<std::string, int> held_;   // the card button's and 10-key's last values
     std::string card_state_;
+    // A card left at a slot the game has never opened: said once, on the window too, after 5 s
+    // there in all (the player pressing the card key again only takes it back)
+    void card_hint() {
+        if (card_hinted_ || card_->slot_ever_opened() || !card_->card_offered() || card_->card_inside()) return;
+        if (++card_waited_ < 5 * 60) return;
+        card_hinted_ = true;
+        const std::vector<std::string> lines = {
+            "The card waits at the slot: the game hasn't opened it.",
+            "Is e-AMUSEMENT on in its test mode? (e-AMUSEMENT OPTIONS,",
+            "under NETWORK OPTIONS from pop'n 10; SAVE AND EXIT, start again)",
+            "pop'n 9 opens it after Start."};
+        printf("card:");
+        for (const std::string &l : lines) printf(" %s", l.c_str());
+        printf("\n");
+        fflush(stdout);
+#ifdef HK_WITH_SDL
+        hk::host::notice::hint(lines);
+#endif
+    }
+    bool card_hinted_ = false;
+    uint64_t card_waited_ = 0;   // frames at a slot never opened
+
     void card_changed() {
         const std::string s = card_->state();
         if (s == card_state_) return;

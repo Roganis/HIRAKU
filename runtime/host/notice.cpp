@@ -38,6 +38,7 @@ struct Item {
     uint32_t edge;
 };
 std::vector<Item> g_queue;
+std::vector<Item> g_hints;   // hint()'s, under g_mu, for banner() to queue
 bool g_showing = false;
 std::vector<uint32_t> g_pixels;
 int g_w = 0, g_h = 0;
@@ -166,8 +167,19 @@ void warn(const std::vector<std::string> &lines, double seconds) {
     g_queue.insert(g_queue.begin() + (g_showing ? 1 : 0), Item{lines, seconds, 0xd03030});
 }
 
+void hint(const std::vector<std::string> &lines, double seconds) {
+    if (lines.empty()) return;
+    std::lock_guard<std::mutex> lk(g_mu);
+    g_hints.push_back(Item{lines, seconds, 0xe8a018});
+}
+
 bool banner(Banner &b) {
     const auto now = Clock::now();
+    {
+        std::lock_guard<std::mutex> lk(g_mu);
+        for (Item &i : g_hints) g_queue.push_back(std::move(i));
+        g_hints.clear();
+    }
     auto secs = [&](Clock::time_point t) { return std::chrono::duration<double>(now - t).count(); };
     if (g_state == State::waiting) {
         bool newer;

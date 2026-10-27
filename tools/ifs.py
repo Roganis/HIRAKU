@@ -329,3 +329,36 @@ class Pack:
         struct.pack_into(">I", head, 16, 0x24 + len(listing))
         head[0x14:0x24] = hashlib.md5(listing).digest()
         return bytes(head) + listing + bytes(data)
+
+
+def write(members, when=0, tree=1212):
+    """a new pack (version 3) of members [(path, bytes)], in that order: the folders as they first
+    come; the header's tree size 2 per letter of the members' and folders' names and `tree` (what
+    Konami's packs have: 1212 a character's, folders tex, afp, afp/bsi and geo; 1042 one picture's,
+    tex only)"""
+    import hashlib
+    root = ["imgfs", 1, None, [], [], 0]
+    info = ["_info_", 1, None, [["md5", 10, b"", [], [], 0], ["size", 7, (0,), [], [], 0]], [], 0]
+    root[3].append(info)
+    data, letters = bytearray(), 0
+    folders = {"": root}
+    for path, b in members:
+        parts = path.split("/")
+        for i in range(1, len(parts)):
+            key = "/".join(parts[:i])
+            if key not in folders:
+                node = [mangle(parts[i - 1]), 6, (when,), [], [], 0]
+                folders["/".join(parts[:i - 1])][3].append(node)
+                folders[key] = node
+                letters += len(parts[i - 1])
+        folders["/".join(parts[:-1])][3].append([mangle(parts[-1]), 30, (len(data), len(b), when), [], [], 0])
+        letters += len(parts[-1])
+        data.extend(b)
+        data.extend(b"\0" * (-len(data) % 4))
+    data.extend(b"\0" * (-len(data) % 16))
+    info[3][0][2] = hashlib.md5(data).digest()
+    info[3][1][2] = (len(data),)
+    listing = kbin_write(root, True, 0)
+    listing += b"\0" * (-(0x24 + len(listing)) % 16)
+    head = struct.pack(">IHHIII", 0x6CAD8F89, 3, 0xFFFC, when, 2 * letters + tree, 0x24 + len(listing))
+    return head + hashlib.md5(listing).digest() + listing + bytes(data)

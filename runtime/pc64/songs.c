@@ -37,6 +37,8 @@
 #define LOW_AT 186u       // seven charts' lowest tempos (u16), the music select's "BPM"
 #define HIGH_AT 200u      // and highest
 #define TEMPOS_AT 222u    // six charts' tempos, 12 bytes each
+#define OWN_HARIAI_AT 104u   // the song's own hariai's name, when its mask has OWN_HARIAI (0x18005d930)
+#define OWN_HARIAI 0x00800000u
 #define REMOVED 0x80000000u
 #define MAX_IDS 32768u   // the music data's ids kept (past the game's table: the tables grow to them)
 #define SLOTS 7
@@ -113,6 +115,7 @@ struct chart {
 struct song {
     char *text[6];   // fw_genre, fw_title, fw_artist, genre, title, artist
     char *chara[2];
+    char *ha;   // its own hariai (the mask's OWN_HARIAI): a pack's picture for a song, "" none
     unsigned mask, folder, version, categories, has;   // has: bit 0-3 the numbers given, 4 the BPMs
     unsigned short bpm[12];   // display_bpm: each chart's (but the last) tempos, two groups of six
     struct chart chart[SLOTS];
@@ -267,6 +270,8 @@ static void read_xml(const WCHAR *path) {
             char *t = text_of(gt, own_end, i ? "chara2" : "chara1", utf8);
             if (t) s->chara[i] = t;
         }
+        char *ha = text_of(gt, own_end, "ha", utf8);
+        if (ha) s->ha = ha;
         static const char *const NUMS[4] = {"mask", "folder", "cs_version", "categories"};
         unsigned *const at[4] = {&s->mask, &s->folder, &s->version, &s->categories};
         for (int i = 0; i < 4; i++) {
@@ -925,6 +930,11 @@ void pc64_songs_install(HMODULE game) {
         // its mask, as the music data has it, but for the bits to unlock it (as popnhax clears them:
         // nothing here unlocks it) and the charts' (set below, for the charts there)
         uint32_t m = ((s->has & 1) ? s->mask : 0) & ~REMOVED & ~DIFFICULTY_BITS & ~LOCKED;
+        // its own hariai (the music select's picture in place of its character's): the game reads
+        // the name at +104 and faults when the picture isn't there; without both, its character's
+        static const char *const HA[] = {"ha_merge_ifs", "ha_merge_jka_ifs", NULL};
+        if ((m & OWN_HARIAI) && s->ha && plain_name(s->ha) && picture(HA, 0x60, s->ha)) memcpy(rec + OWN_HARIAI_AT, &s->ha, 8);
+        else m &= ~OWN_HARIAI;
         const unsigned nnew_was = nnew;
         for (int k = 0; k < SLOTS && ok; k++) {
             if (present[k] != 1) continue;

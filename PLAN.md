@@ -2738,12 +2738,45 @@ Nothing of a game comes with HIRAKU: the songs are the player's.
 - **Not yet:** scores for restored songs checked on HIRAKU's e-AMUSEMENT server (it keeps any song
   number), the `_ifs` folders' PNGs (only whole members: the removed characters' icons need them),
   By Medal and the extra Random entries (By Medal's source is needed).
-- **Later (modding roadmap): the characters the pack substituted.** For songs whose own character
-  the pack's game didn't have, Omnimix names a similar one it had (the owner: pop'n music Mickey
-  Tunes' characters, old anime, the console games' own). Their originals are in older data: Mickey
-  Tunes is a Firebeat game (`popnmt2` in `dumps/`, its own picture formats), the console games' on
-  their discs. A step per source: read its character pictures and records, convert them to this
-  game's packs, and a mod naming them for those songs.
+- **The characters the pack substituted (2026-10-27).** For songs whose own character the pack's
+  game didn't have, Omnimix names one it had (the owner: Mickey Tunes', old anime, the console
+  games'): the 14 Mickey Tunes songs (3140-3153) all `tdl`, the 24 Animelo songs (3004-3027) a
+  licence character or a look-alike, the console songs AC characters.
+  - **Mickey Tunes, done.** The program disc (Firebeat, 976 JBA): each song's dancer a sheet
+    (`/NAME.GCZ`: u32 LE size and Konami's LZSS as the program's own, `fbexe.py`; "GC", width and
+    height at 12, RGB555 big-endian, bit 15 opaque); the program's sheet records (name, a byte,
+    then animations, steps, pieces, pictures): animations (first step, steps), steps (picture,
+    60ths) of 12 bytes, pictures (first piece, pieces), pieces of 16 bytes (from the anchor x, y,
+    w, h, -, on the sheet x, y), in data the program copies to 0x80100000 as it starts (at
+    0x80073bc4 in its image). A dancer's 8: the dance, in trouble, lost, a stumble, good, great,
+    the cheer, cheering on; the player's sheets (Mickey, Minnie) 5 (drumming, the hat trick). The
+    song cards (`SS_00`) name the actors: Mickey and Minnie for the two songs (3140, 3144) whose
+    dancers the disc hasn't (the first Mickey Tunes').
+  - **This game's character pack, written.** `tools/afp.py`: the old characters' animations (AP2,
+    big-endian, version 8, 30 fps, 320 x 640: a sprite showing whole pictures one after the other,
+    each at a new depth with a script giving the frame it was placed at (`37 F`, `07 F32` past
+    127), the one before removed, the same timeline again at the top), their byte-swap list
+    (`afp/bsi`: 16-bit runs, [b15 the count's low bit][14-8 bytes to skip, in twos][6-5 size: 2
+    u32, 1 u16][4-0 the count's other bits], the count less one, 0 ends), shapes (`geo/A_shapeN`,
+    GE2D: the quad, the picture's name, UVs = uvrect / twice the texture), `afp/afplist.xml`, the
+    texture list (pictures BGRA in memory, `argb8888rev`, a pixel's border); `ifs.write` a new pack
+    (header tree size 2 per letter of the names and 1212, a picture's pack 1042). Checked: an old
+    character's (hiro_2a) 8 of 10 animations (all with one picture at a time) and 178 shapes
+    written again byte for byte, its pack too. `tools/fbcharas.py`: 14 characters, each picture
+    made whole and 2.5 times bigger (Pillow), the hariai the cheer's biggest picture, the name
+    drawn, in 14 of the 19 removed slots left (size 0: the mod gives it).
+  - **The songs' own hariai (loader).** A song's mask bit 23 (0x800000) makes the music select show
+    the song's own hariai (`0x18005d930`: its name at +104) in place of its character's: the pack
+    sets it for the Mickey Tunes songs and 3139 (`<ha>`); the loader didn't read `<ha>`, so the
+    name was empty and the game faulted (`mountpoint = /afp28/ifs_image_hariai/.ifs`, a null write
+    at 0x180394b20): these songs crashed the music select. The loader reads it and keeps the bit
+    only when the picture is there. `fbcharas.py`'s songs give an empty `<ha>`: their characters'.
+  - Checked: 3141 (Donald on skates) and 3153 (Goofy) to the result, their hariai and names.
+  - **Left:** Animelo (its 2's disc has all 35 anime songs, two sheets each, `X_1`, `X_02`: the
+    characters are cut-out pictures of the series' characters, a few poses; its program lists the
+    sheets by number, its tables not found yet); the console songs' own characters (their discs);
+    room: 5 removed slots left, the rest needs the character table (2507 x 128, the id 2507 the
+    getters' "none", 0x9d2 their bound) made bigger.
 - **Songs past the table (2026-10-26).** A player's packs describe 162 songs with ids from 2374
   up (3000-3155 the console songs, 5600s custom ones), and the game has 85 free slots: the tables
   have to grow, as §35's 5b did for the 32-bit game. The game's own `musicsub` (songs sent by the

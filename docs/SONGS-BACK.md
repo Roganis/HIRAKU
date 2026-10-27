@@ -61,6 +61,18 @@ With thanks to Milo, whose work on the same game (popnMods) showed the way.
    folders says how many come back. One character no older game describes but whose pictures it
    has (umaru_23a) is described from them.
 
+6. The pop'n music Mickey Tunes! songs' own characters: the pack gives these 14 songs a stand-in
+   (`tdl`, a character the game no longer shows). Their own dancers are on the Mickey Tunes!
+   program disc (Firebeat, 976 JBA: Donald, Goofy, Daisy, Scrooge, Pluto, Chip 'n Dale...; Mickey
+   and Minnie for the two songs whose dancers the disc hasn't, as its song cards name them).
+   `tools/fbcharas.py` reads the disc and writes a mod with each as this game's character: its
+   animations from the disc's (the dance, good, great, a miss, lost, the cheer), its pictures 2.5
+   times bigger, its hariai and name; and the songs given them (found by their titles in the pack):
+   ```bash
+   python3 tools/fbcharas.py --pack ~/.local/share/hiraku/mods/popn29/Omnimix <disc>.cue ~/.local/share/hiraku/mods/popn29/MickeyTunes
+   ```
+   Tick it before the pack (it takes 14 of the places the game keeps for removed characters).
+
 ## Run
 
 1. In the launcher, right-click the game, **Mods…**, tick the pack (and the others, in order: the
@@ -96,7 +108,9 @@ the battle charts are optional (a chart's pack is named by its `file_type`, as t
 from their charts` in the `brought back` line). Characters are found by name among the game's own and those the
 mods describe again (`songs: N characters back` in `pc.log`: only in the places the game kept for
 them, and only with their pictures, hariai and name picture there, the game faults without them);
-a song whose characters the game hasn't shows its other one, or the game's first. The
+a song whose characters the game hasn't shows its other one, or the game's first. A song the pack
+gives its own hariai (`<ha>`, its mask's 0x800000: the Mickey Tunes songs' cards) shows it in the
+music select when its picture is there, its character's otherwise. The
 earlier games' banners are half this game's size: they're stretched to their frames. A music data
 file that says Shift-JIS but is UTF-8 is read as UTF-8.
 
@@ -123,8 +137,11 @@ HIRAKU knows (2026041500); another build keeps them out and says so in `pc.log`.
   `every-market` (in **Mods…**) lists every song and character in every market. The USA's
   market needs its pictures (`tex/system/*_u.ifs`), which some data hasn't: the mod
   `usa-pictures` takes the other markets' instead.
-- The characters the pack put in for songs whose own it hadn't (the console games', pop'n music
-  Mickey Tunes', old anime): the originals from the older games' data.
+- The characters the pack put in for songs whose own it hadn't, but for Mickey Tunes' (step 6):
+  the console games' and pop'n music Animelo's (its anime songs: the characters are cut-out
+  pictures of the series', on the Animelo discs, their tables not read yet). There are 5 of the
+  game's places for removed characters left after Mickey Tunes': the others need its character
+  table made bigger.
 - Pictures as PNGs in the `_ifs` folders (ifs_layeredfs converts them): only whole files are used.
 - Categories added by other mods (By Medal) and the extra Random entries.
 - The launcher doesn't check a pack; `tools/songsback.py` does.

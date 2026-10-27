@@ -11,7 +11,8 @@
 // +0, +8, +16 (full width genre, title, artist), +24, +40, +48 (genre, title, artist); its two
 // characters at +56; its mask at +60, the folder at +64, the version at +68, the categories at
 // +72; the seven charts' levels at +76, their chart numbers at +84, their hold flags at +214), the
-// chart table's (40 bytes: type, keys, the folder and file names, four audio parameters), the
+// chart table's (40 bytes: the folder and file names, four audio parameters, type, keys: the type
+// read by the game at +32, 0x180079f10, which names the chart's pack), the
 // difficulty bits the game asks of the mask, characters found by name, and the old songs' own
 // background, which the game waits for forever when it isn't there. HIRAKU's own findings: a song
 // is listed only for the regions at +120 (0 in the slots left out), and the music select shows each
@@ -20,7 +21,7 @@
 // The tables are found by the code that reads them, not by the program's date:
 //   - the music table: its mask getter (imul rax,rcx,0x138; lea rcx,[image]; mov eax,[rax+rcx+X]);
 //     its songs: the id check (lea eax,[rcx+0x55]; mov edx,N; cmp ax,dx: ids -85..N-0x55);
-//   - the charts: their file reader (lea rcx,[table+8]; lea rax,[r8+r8*4]; mov rax,[rcx+rax*8]) and
+//   - the charts: their name readers (lea rcx,[table or +8]; lea rax,[r8+r8*4]; mov rax,[rcx+rax*8]: the first the entries' start) and
 //     its check (mov eax,X; mov edx,N; cmp cx,dx; cmovae cx,ax);
 //   - the characters: their name getter (shl rdx,7; lea rax,[table]; mov r8d,0x100; mov rdx,[rdx+rax])
 //     and its check (mov edx,N-1; mov eax,X; cmp cx,dx; cmovbe ax,cx);
@@ -89,7 +90,7 @@ static int locate(BYTE *base) {
     if ((p = find(base, songs, sizeof songs / sizeof *songs))) g_songs = (unsigned)i32(p + 4) - 0x55 + 1;
     BYTE *hits[4];   // the folder's reader (+8) and the file's (+16)
     for (int i = 0, k = find_all(base, charts, sizeof charts / sizeof *charts, hits, 4); i < k && i < 4; i++)
-        if (!g_charts || hits[i] + 7 + i32(hits[i] + 3) - 8 < g_charts) g_charts = hits[i] + 7 + i32(hits[i] + 3) - 8;
+        if (!g_charts || hits[i] + 7 + i32(hits[i] + 3) < g_charts) g_charts = hits[i] + 7 + i32(hits[i] + 3);
     if ((p = find(base, nchart, sizeof nchart / sizeof *nchart))) g_nchart = (unsigned)i32(p + 6);
     if ((p = find(base, charas, sizeof charas / sizeof *charas))) g_charas = p + 11 + i32(p + 7);
     if ((p = find(base, nchara, sizeof nchara / sizeof *nchara))) g_nchara = (unsigned)i32(p + 1) + 1;
@@ -372,6 +373,16 @@ static int data_file(const char *rel) {
     return data_path(rel, path);
 }
 static int plain_name(const char *s) { return s && *s && !strpbrk(s, "/\\:") && !strstr(s, ".."); }
+// a chart's pack, as the game names it from the chart's file type (0x180079f50): sd/F/X.ifs, from 1
+// to 5 sd/F/X_0N.ifs, past 5 sd/F/X_diff.ifs (a pack's songs from later games are there). When
+// that isn't there and X.ifs is (the older game had a later pack this game hasn't), the chart's
+// type is made 0: the game opens X.ifs
+static void chart_pack(const struct chart *c, char *rel, size_t n) {
+    const int type = (int)c->type;
+    if (type <= 0) snprintf(rel, n, "sd/%s/%s.ifs", c->folder, c->file);
+    else if (type <= 5) snprintf(rel, n, "sd/%s/%s_%02d.ifs", c->folder, c->file, type);
+    else snprintf(rel, n, "sd/%s/%s_diff.ifs", c->folder, c->file);
+}
 
 // --- a chart's tempos, from its file: the music data gives them for some songs only (display_bpm;
 // the older games read them from the chart), and the music select shows this game's table's. The
@@ -463,7 +474,7 @@ static int chart_tempos(const struct chart *c, int16_t t[6], unsigned short *low
     if (!plain_name(c->folder) || !plain_name(c->file)) return 0;
     char rel[600], member[300];
     WCHAR path[MAX_PATH * 2];
-    snprintf(rel, sizeof rel, "sd/%s/%s.ifs", c->folder, c->file);
+    chart_pack(c, rel, sizeof rel);
     snprintf(member, sizeof member, "%s_np.bin", c->file);
     if (!data_path(rel, path)) return 0;
     HANDLE f = CreateFileW(path, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
@@ -853,13 +864,21 @@ void pc64_songs_install(HMODULE game) {
         if (mask != REMOVED || !s->text[3] || !s->text[4] || !s->text[5]) continue;   // the game's own, or not described
         int present[SLOTS] = {0}, ok = 1;
         for (int k = 0; k < SLOTS; k++) {
-            const struct chart *c = &s->chart[k];
+            struct chart *c = &g_data[id].chart[k];
             if (!plain_name(c->folder) || !plain_name(c->file)) continue;
             char rel[600];
-            snprintf(rel, sizeof rel, "sd/%s/%s.ifs", c->folder, c->file);
-            present[k] = data_file(rel) && c->level <= 50 && c->type <= 64 ? 1 : 2;
+            chart_pack(c, rel, sizeof rel);
+            int there = data_file(rel);
+            if (!there && (int)c->type > 0) {   // its later pack (X_diff, X_0N) not there, the first one is: that
+                snprintf(rel, sizeof rel, "sd/%s/%s.ifs", c->folder, c->file);
+                if ((there = data_file(rel))) c->type = 0;
+            }
+            present[k] = there && c->level <= 50 && c->type <= 64 ? 1 : 2;
             if (present[k] == 2 && k != 4 && k != 5 && k != 6) ok = 0;   // a missing chart the song needs
         }
+        if (getenv("HK_PC64_SONG_LOG") && (unsigned)atoi(getenv("HK_PC64_SONG_LOG")) == id)   // a test aid
+            pc64_log("songs: %u: charts %d %d %d %d %d %d %d, banner %d", id, present[0], present[1], present[2], present[3], present[4],
+                     present[5], present[6], has_banner(id));
         if (present[1] != 1 || !ok) {   // Normal, always
             if (skipped++ < 20) pc64_log("songs: %u (%s) left out: its charts' files aren't there", id, s->text[4]);
             continue;
@@ -933,6 +952,11 @@ void pc64_songs_install(HMODULE game) {
             continue;
         }
         memcpy(rec + 60, &m, 4);
+        if (getenv("HK_PC64_SONG_LOG") && (unsigned)atoi(getenv("HK_PC64_SONG_LOG")) == id) {   // a test aid: the record written
+            char hex[RECORD * 3 + 1];
+            for (unsigned i = 0; i < RECORD; i++) sprintf(hex + 3 * i, "%02x ", rec[i]);
+            pc64_log("songs: %u written: %s", id, hex);
+        }
         ids[n++] = id;
         // its background: a mod's (files.c gives it from the mod's bg pack folder), else none
         char bg[64];
@@ -957,9 +981,9 @@ void pc64_songs_install(HMODULE game) {
     for (unsigned j = 0; j < nnew; j++) {
         BYTE *e = g_charts + (size_t)added[j].at * 40;
         const struct chart *c = added[j].c;
-        memcpy(e, &c->type, 4), memcpy(e + 4, &c->keys, 4);
-        memcpy(e + 8, &c->folder, 8), memcpy(e + 16, &c->file, 8);
-        memcpy(e + 24, c->audio, 16);
+        memcpy(e, &c->folder, 8), memcpy(e + 8, &c->file, 8);
+        memcpy(e + 16, c->audio, 16);
+        memcpy(e + 32, &c->type, 4), memcpy(e + 36, &c->keys, 4);
     }
     MemoryBarrier();
     for (unsigned i = 0; i < n; i++) {

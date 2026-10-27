@@ -2698,12 +2698,31 @@ Nothing of a game comes with HIRAKU: the songs are the player's.
   slot's size over the older game's and writes the packs again (`tools/ifs.py`: kbin written back,
   avslz undone and done, the pack's list, `_info_` MD5 and size and the header's MD5 of the list made
   again; the 53 packs rewritten unchanged are byte for byte the same): 14 MB, 20 s. Checked: mario at
-  its full size in both windows, its name too. A pack's own characters' hariai (the 4 newer in a
-  player's Omnimix pack) are still the older size.
+  its full size in both windows, its name too. `--pack DIR` does the same for a pack's own
+  characters' pictures (copies in the new mod, which goes before the pack).
+- **The last ones (2026-10-27).** umaru_23a: no older PC game describes it (a stand-in there too),
+  its pictures are in the last 32-bit game's packs; its slot is 2062, the one stand-in amid pop'n
+  23's characters (2044-2065) and with this game's size; `tools/oldcharas.py` makes its record from
+  its pictures' names. 12 songs were left out as missing `sd/omni/X.ifs`: the game names a chart's
+  pack by its file type (0x180079f50: up to 0 `X`, 1-5 `X_0N`, past 5 `X_diff`; the chart table's
+  own files follow it: 72 of 73 `_diff`, 42 of 42 `_0N`), and the pack has them as `X_diff.ifs`;
+  the loader and `songsback.py` name them so, and when that pack isn't there and `X.ifs` is (a
+  later pack the older game had, umaru's `popn23/umaru_diff.ifs`) the chart's type is made 0. A
+  chart entry is folder, file, four audio values, type (+32), keys (+36): the loader had it as type
+  and keys first, so it wrote each added chart's type and keys into the entry before (unseen while
+  they were 0 and the usual keys; the game read umaru's chart as `_diff` from its neighbour); the
+  table's copy now starts at the entries (the 2-byte variable just before it, 0x1807bb168, three
+  places, stays where it is). 410 songs back, 33 characters, none left with another's. Checked in
+  the game: 993 (`_diff`), 1475 (umaru_23a and its pictures, 99~139) played, their scores sent.
+- **Songs the game keeps from its region.** The player's data says `<dest>K</dest>` (ea3-config:
+  model M39:K:D:A, the Korean market: the Korean texts). The music list leaves out song 0x649
+  (1609, the Disney medley) unless the region (0x1800a72f0) is 0, and the mask's bit 20 songs (49 of
+  the game's own, GRADIUS among them; 1570, 1571 from the pack) weren't in the list either: the
+  game's rules for that market, the same for its own songs. A setting for the destination (`J`)
+  would open them: not done (the player's choice).
 - **Not yet:** scores for restored songs checked on HIRAKU's e-AMUSEMENT server (it keeps any song
   number), the `_ifs` folders' PNGs (only whole members: the removed characters' icons need them),
-  By Medal and the extra Random entries (By Medal's source is needed); umaru_23a (no older PC game
-  describes it; its pictures are in the last 32-bit game's packs).
+  By Medal and the extra Random entries (By Medal's source is needed).
 - **Later (modding roadmap): the characters the pack substituted.** For songs whose own character
   the pack's game didn't have, Omnimix names a similar one it had (the owner: pop'n music Mickey
   Tunes' characters, old anime, the console games' own). Their originals are in older data: Mickey

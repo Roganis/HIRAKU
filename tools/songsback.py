@@ -63,7 +63,7 @@ class Game:
         va, ro, at = m[0]
         self.music = struct.unpack_from("<i", d, at + 35)[0] - 60   # an RVA (the image's base + mask offset)
         self.songs = struct.unpack_from("<i", d, s[0][2] + 4)[0] - 0x55 + 1
-        self.charts = min(rva(va, ro, at) + 7 + struct.unpack_from("<i", d, at + 3)[0] - 8 for va, ro, at in c)
+        self.charts = min(rva(va, ro, at) + 7 + struct.unpack_from("<i", d, at + 3)[0] for va, ro, at in c)   # (folder +0, file +8, type +32)
         va, ro, at = ch[0]
         self.charas = rva(va, ro, at) + 11 + struct.unpack_from("<i", d, at + 7)[0]
         self.ncharas = struct.unpack_from("<i", d, nch[0][2] + 1)[0] + 1
@@ -143,7 +143,7 @@ def read_music(mods):
                 for slot, cbody in re.findall(r'<chart\s+idx=["\'](\w+)["\']\s*>(.*?)</chart>', body, re.S):
                     folder, file = tag(cbody, "folder"), tag(cbody, "filename")
                     if slot in SLOTS and folder and file:
-                        s["charts"][slot] = (folder, file, tag(cbody, "diff"))
+                        s["charts"][slot] = (folder, file, tag(cbody, "diff"), int(tag(cbody, "file_type") or 0))
     return songs
 
 
@@ -164,7 +164,7 @@ def read_charas(mods):
                 text = raw.decode("cp932" if sj else "utf-8", "replace")
             for cid, body in re.findall(r'<chara\s+id=["\'](\d+)["\']\s*>(.*?)</chara>', text, re.S):
                 c = charas.setdefault(int(cid), {})
-                for k in ("chara_id", "folder", "gg", "ha"):
+                for k in ("chara_id", "folder", "gg", "ha", "chara_xw", "lapis_shape"):
                     v = tag(body, k)
                     if v is not None:
                         c[k] = v
@@ -211,6 +211,11 @@ def game_banners(data):
     return ids
 
 
+def pack_name(folder, file, ftype):
+    """a chart's pack as the game names it from the chart's file type: X, X_0N (1 to 5), X_diff"""
+    return "sd/%s/%s%s.ifs" % (folder, file, "" if ftype <= 0 else "_%02d" % ftype if ftype <= 5 else "_diff")
+
+
 def exists(mods, data, rel):
     return any(os.path.isfile(os.path.join(m, rel)) for m in mods) or os.path.isfile(os.path.join(data, rel))
 
@@ -250,11 +255,14 @@ def main():
         elif "np" not in s["charts"]:
             reason = "no Normal chart"
         else:
-            for slot, (folder, file, diff) in s["charts"].items():
+            for slot, (folder, file, diff, ftype) in s["charts"].items():
                 if "/" in folder + file or "\\" in folder + file or ".." in folder + file:
                     continue
-                if not exists(a.mods, data, "sd/%s/%s.ifs" % (folder, file)) and slot in ("ep", "np", "hp", "op"):
-                    reason = "missing sd/%s/%s.ifs (%s)" % (folder, file, slot)
+                pack = pack_name(folder, file, ftype)
+                if not exists(a.mods, data, pack) and ftype > 0:   # its later pack not there: the first one (the loader's)
+                    pack = pack_name(folder, file, 0)
+                if not exists(a.mods, data, pack) and slot in ("ep", "np", "hp", "op"):
+                    reason = "missing %s (%s)" % (pack, slot)
                     break
         if not reason and i not in banners and not any(
                 exists(a.mods, data, "tex/system/%s/kc_%04d.ifs" % (d, i)) for d in ("kc_diff_ifs", "kc_jka_diff_ifs", "kc_jka_ifs")):

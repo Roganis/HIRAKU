@@ -8,7 +8,7 @@ songs brought back that are theirs.
 
 OLDER: an older PC pop'n's program, a 32-bit popn22.dll (pop'n 22 to the last 32-bit game).
 OUT: the mod folder to write (put it in the launcher's mods folder for the game, or give it with
---mod); it holds the older game's names and texts for these characters and their hariai pictures
+--mod, before the Omnimix pack); it holds the older game's names and texts for these characters and their hariai pictures
 (tex/system/ha_merge_ifs/, from the older game's tex/system/ha_chara*.ifs: the 64-bit game's packs
 haven't them, and it faults without one) and their names' pictures (chara_name_diff_ifs/, from its
 chara_name*.ifs, the same), made this game's size (its pictures are 2 to 2.3 times the older
@@ -29,6 +29,11 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import ifs  # noqa: E402
 import songsback  # noqa: E402
+
+# characters no older PC game describes (a stand-in there too) whose pictures the older game still
+# has: the record made from them, in the slot found for it (2062: the one removed amid pop'n 23's
+# characters, 2044-2065, with this game's size for it; the names its pictures carry)
+BY_PICTURES = {2062: ("umaru_23a", "23", "ウマル", "うまる", 23)}
 
 REC32 = 0x4C   # a character in the 32-bit game: 7 words (name, flags, folder, gg, cs, icon1, icon2), ...
 REMOVED = 1
@@ -145,6 +150,9 @@ def main():
     ap.add_argument("--game", help="the 64-bit game's folder (modules/, plain_data/ or data/)")
     ap.add_argument("older", help="an older PC pop'n's popn22.dll")
     ap.add_argument("out", help="the mod folder to write")
+    ap.add_argument("--pack", action="append", default=[], metavar="DIR",
+                    help="a mod (an Omnimix pack) whose own characters' pictures are made this game's size too, "
+                         "into OUT (which then goes before it in the mods' order)")
     a = ap.parse_args()
     game = songsback.game_folder(a.game)
     data = os.path.join(game, "plain_data") if os.path.isdir(os.path.join(game, "plain_data")) else os.path.join(game, "data")
@@ -177,6 +185,13 @@ def main():
         if not names[i]["flags"] & REMOVED or not 0 <= i + shift < old.n:
             continue
         r = old.record(i + shift)
+        if (r["flags"] & REMOVED or not r["chara_id"]) and i in BY_PICTURES:
+            cid, folder, sort, disp, ver = BY_PICTURES[i]
+            c = cid.encode()
+            r = {"chara_id": c, "flags": 0, "folder": folder.encode(), "gg": b"gg_" + c, "cs": b"cs_" + c, "icon1": b"cs_" + c,
+                 "icon2": b"cs_" + c[:-1] + b"b", "chara_xw": 0, "chara_yh": 0, "display_flags": 0, "flavor_idx": -1,
+                 "sort_name": sort.encode("cp932"), "disp_name": disp.encode("cp932"), "file_type": 0, "lapis_shape": 1,
+                 "ha": b"ha_" + c, "catchtext": b"", "game_version": ver}
         if r["flags"] & REMOVED or not r["chara_id"]:
             continue
         rel = os.path.join("tex", r["folder"].decode("cp932"), r["chara_id"].decode("cp932") + ".ifs")
@@ -205,6 +220,32 @@ def main():
             with open(os.path.join(a.out, "tex", "system", folder, m), "wb") as f:
                 f.write(big or b)
             copied += 1
+    # a pack's own characters (its <chara id> for the slots removed) and their pictures, the older
+    # games' size too: scaled copies here, which win over the pack's when this mod is before it
+    from_packs = 0
+    for pack in a.pack:
+        for i, c in songsback.read_charas([pack]).items():
+            if not 0 < i < g.ncharas or not names[i]["flags"] & REMOVED:
+                continue
+            at = g.at(g.charas + i * 128)
+            slot, kind = struct.unpack_from("<H", g.d, at + 0x38)[0], struct.unpack_from("<I", g.d, at + 0x74)[0]
+            xw = int(c.get("chara_xw") or 0)
+            ha_scale = slot / xw if slot and xw else 2.0 if kind == 1 or c.get("lapis_shape") else 2.3
+            for k, folders, scale in (("ha", ("ha_merge_ifs",), ha_scale), ("gg", ("chara_name_diff_ifs", "chara_name_new_diff_ifs"), 2.0)):
+                for folder in folders:
+                    src = os.path.join(pack, "tex", "system", folder, (c.get(k) or "") + ".ifs")
+                    if not c.get(k) or not os.path.isfile(src):
+                        continue
+                    b = open(src, "rb").read()
+                    big = bigger(b, scale) if 1.2 < scale < 4 else None
+                    if big is None:
+                        small.append(os.path.basename(src))
+                        break
+                    os.makedirs(os.path.join(a.out, "tex", "system", folder), exist_ok=True)
+                    with open(os.path.join(a.out, "tex", "system", folder, os.path.basename(src)), "wb") as f:
+                        f.write(big)
+                    from_packs += 1
+                    break
     x = [b"<?xml version='1.0' encoding='shift-jis'?>", b"<database>"]
     for i, r, pics in out:
         x.append(b'  <chara id="%d">' % i)
@@ -229,6 +270,8 @@ def main():
           (g.ncharas, sum(1 for c in names if c["flags"] & REMOVED), old.n, shift))
     print("described again: %d -> %s" % (len(out), os.path.join(a.out, "charadb_older.xml")))
     print("pictures copied from the older game (hariai, names) and made this game's size: %d" % copied)
+    if a.pack:
+        print("the packs' own characters' pictures made this game's size: %d (put this mod before the packs)" % from_packs)
     if small:
         print("left at the older game's size (not one picture a texture, or not argb8888rev): %d (%s)" % (len(small), ", ".join(small[:8])))
     if no_pic:

@@ -4,6 +4,7 @@
 #include <QCheckBox>
 #include <QComboBox>
 #include <QDialogButtonBox>
+#include <QDir>
 #include <QFileInfo>
 #include <QGroupBox>
 #include <QHBoxLayout>
@@ -118,14 +119,39 @@ QString UnlocksDialog::save() const {
     return QFileInfo::exists(s) ? s : cfg::nvramDir(m_game);
 }
 
-QJsonObject UnlocksDialog::run(const QStringList &extra, QString *err) {
+// <game> and each <game>+<mod>+... beside it
+QStringList UnlocksDialog::saves() const {
+    const QFileInfo clean(cfg::nvramDir(m_game));
+    QStringList l;
+    for (const QFileInfo &d : QDir(clean.path()).entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name))
+        if (d.fileName() == m_game || d.fileName().startsWith(m_game + "+")) l << d.filePath();
+    return l;
+}
+
+// An unlock goes to every save of the game, so it holds whichever mods are on (a save not made yet
+// by the game is left: the mods' first start copies the clean one)
+void UnlocksDialog::applyAll(const QStringList &extra) {
+    QStringList errors;
+    int done = 0;
+    for (const QString &s : saves()) {
+        QString e;
+        run(extra, &e, s);
+        if (e.isEmpty()) ++done;
+        else if (!e.contains("no save yet")) errors << QFileInfo(s).fileName() + ": " + e;
+    }
+    if (!done && errors.isEmpty()) errors << "No save yet: start the game once (with its first-boot setup), quit, then come back.";
+    if (!errors.isEmpty()) QMessageBox::warning(this, m_title, errors.join("\n\n"));
+    rebuild();
+}
+
+QJsonObject UnlocksDialog::run(const QStringList &extra, QString *err, const QString &nvram) {
     const QStringList py = cfg::python();
     if (py.isEmpty()) {
         *err = "tools/unlock.py needs Python 3 (python.org)";
         return {};
     }
     QProcess p;
-    p.start(py[0], py.mid(1) + QStringList{cfg::rootDir() + "/tools/unlock.py", m_game, "--json", "--nvram", save()} + extra);
+    p.start(py[0], py.mid(1) + QStringList{cfg::rootDir() + "/tools/unlock.py", m_game, "--json", "--nvram", nvram} + extra);
     if (!p.waitForFinished(15000)) {
         *err = "tools/unlock.py did not answer (is Python 3 installed?)";
         return {};
@@ -143,18 +169,28 @@ void UnlocksDialog::rebuild() {
     v->setContentsMargins(0, 0, 0, 0);
     m_body->insertWidget(0, m_content);
     QString err;
-    QJsonObject st = QFileInfo::exists(gameFile(m_game, "unlocks.toml")) ? run({}, &err) : QJsonObject{};
+    QJsonObject st = QFileInfo::exists(gameFile(m_game, "unlocks.toml")) ? run({}, &err, save()) : QJsonObject{};
     const QStringList mods = cfg::modsOn(m_game);
     QString with;
     if (!mods.isEmpty())
-        with = QString(save() == cfg::saveDir(m_game) ? "<br>the one with the mods on now: %1"
-                                                      : "<br>the mods on now (%1) get a copy of it at their first start")
+        with = QString(save() == cfg::saveDir(m_game) ? "The one with the mods on now: %1."
+                                                      : "The mods on now (%1) get a copy of it at their first start.")
                    .arg(mods.join(", ").toHtmlEscaped());
-    auto *where = new QLabel("Save: <tt>" + save().toHtmlEscaped() + "</tt>" + with);
+    if (const QStringList all = saves(); all.size() > 1) {
+        QStringList names;
+        for (const QString &s : all) names << QFileInfo(s).fileName().toHtmlEscaped();
+        with += QString(with.isEmpty() ? "" : " ") + "Apply writes to all of the game's saves: " + names.join(", ") + ".";
+    }
+    auto *where = new QLabel("Save: <tt>" + save().toHtmlEscaped() + "</tt>");
     where->setTextInteractionFlags(Qt::TextSelectableByMouse);
     where->setToolTip(save());
     where->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);   // a long path is cut, not the dialog widened
     v->addWidget(where);
+    if (!with.isEmpty()) {
+        auto *w = new QLabel(with);
+        w->setWordWrap(true);
+        v->addWidget(w);
+    }
     if (!err.isEmpty()) {
         auto *e = new QLabel(err);
         e->setTextFormat(Qt::PlainText);   // (a traceback's "<module>" isn't a tag)
@@ -200,10 +236,7 @@ void UnlocksDialog::rebuild() {
             connect(apply, &QPushButton::clicked, this, [this, checks] {
                 QStringList args;
                 for (const auto &[id, c] : checks) args << id + "=" + (c->isChecked() ? "1" : "0");
-                QString e;
-                run(args, &e);
-                if (!e.isEmpty()) QMessageBox::warning(this, m_title, e);
-                rebuild();
+                applyAll(args);
             });
             v->addWidget(box);
             continue;
@@ -241,10 +274,7 @@ void UnlocksDialog::rebuild() {
         bv->addWidget(apply, 0, Qt::AlignRight);
         QString id = u["id"].toString();
         connect(apply, &QPushButton::clicked, this, [this, id, combo] {
-            QString e;
-            run({id + "=" + QString::number(combo->currentData().toInt())}, &e);
-            if (!e.isEmpty()) QMessageBox::warning(this, m_title, e);
-            rebuild();
+            applyAll({id + "=" + QString::number(combo->currentData().toInt())});
         });
         v->addWidget(box);
     }
@@ -268,10 +298,7 @@ void UnlocksDialog::rebuild() {
             bv->addLayout(row);
             QString id = p["id"].toString();
             connect(apply, &QPushButton::clicked, this, [this, id, combo] {
-                QString e;
-                run({id + "=" + combo->currentData().toString()}, &e);
-                if (!e.isEmpty()) QMessageBox::warning(this, m_title, e);
-                rebuild();
+                applyAll({id + "=" + combo->currentData().toString()});
             });
         }
         v->addWidget(box);

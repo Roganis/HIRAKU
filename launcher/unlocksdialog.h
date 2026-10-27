@@ -29,8 +29,10 @@ public:
 private:
     void addMacros(class QVBoxLayout *v);
 
-    QString save() const;   // the save Play uses with the mods on now
-    QJsonObject run(const QStringList &extra, QString *err);
+    QString save() const;          // the save Play uses with the mods on now (what the page shows)
+    QStringList saves() const;     // every save of the game: the clean one and each set of mods'
+    QJsonObject run(const QStringList &extra, QString *err, const QString &nvram);
+    void applyAll(const QStringList &extra);   // to every save
     void rebuild();
 
     QString m_game, m_title;

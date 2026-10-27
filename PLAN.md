@@ -2718,8 +2718,12 @@ Nothing of a game comes with HIRAKU: the songs are the player's.
   model M39:K:D:A, the Korean market: the Korean texts). The music list leaves out song 0x649
   (1609, the Disney medley) unless the region (0x1800a72f0) is 0, and the mask's bit 20 songs (49 of
   the game's own, GRADIUS among them; 1570, 1571 from the pack) weren't in the list either: the
-  game's rules for that market, the same for its own songs. A setting for the destination (`J`)
-  would open them: not done (the player's choice).
+  game's rules for that market, the same for its own songs. Set to `J` (the owner, 2026-10-27):
+  `dest` in the game's ea3-config and in the save folders' copies (copied again only when the size
+  changes), and the market mark `dev/raw/k.dest` renamed: `dll_entry_init` (0x1802a5250) maps
+  the letter to the region (A 1, J 0, K 2, U 4; 0x18152e8a8) and, once a `/dev/raw/X.dest` of j, a,
+  k or u is there, fails unless the current one's is (0x1802a51a0; the first start writes it).
+  Japanese texts then, and 1609 and 1570 listed and played.
 - **Not yet:** scores for restored songs checked on HIRAKU's e-AMUSEMENT server (it keeps any song
   number), the `_ifs` folders' PNGs (only whole members: the removed characters' icons need them),
   By Medal and the extra Random entries (By Medal's source is needed).

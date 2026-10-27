@@ -115,7 +115,12 @@ HIRAKU knows (2026041500); another build keeps them out and says so in `pc.log`.
   place is blank).
 - Some songs come back but the music select doesn't list them, as it doesn't list some of the
   game's own: the game's rules for the market its data is set to (`prop/ea3-config.xml`'s `dest`;
-  `K`, Korea, in some players' data: the Disney medley is Japan's only, and others).
+  `K`, Korea, in some players' data: the Disney medley and the songs with the mask's bit 20 are
+  Japan's only). The data has every market's texts; to play it as Japan's (its texts too):
+  `<dest __type="str">J</dest>` in the game's `prop/ea3-config.xml` and in the save folder's copy
+  (`<saves>/popn29/run/prop/`, and `popn29+<mod>` for each mods set: HIRAKU copies it again only
+  when its size changes), and the cabinet's market mark renamed away (`run/dev/raw/k.dest`: the
+  game refuses another market while it's there, and writes `j.dest`). Back: the same with `K`.
 - The characters the pack put in for songs whose own it hadn't (the console games', pop'n music
   Mickey Tunes', old anime): the originals from the older games' data.
 - Pictures as PNGs in the `_ifs` folders (ifs_layeredfs converts them): only whole files are used.

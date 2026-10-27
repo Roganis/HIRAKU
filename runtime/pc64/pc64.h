@@ -88,6 +88,8 @@ void pc64_crt_install(HMODULE game);
 int pc64_tables_move(HMODULE game, BYTE **music, unsigned songs, unsigned new_songs, BYTE **charts, unsigned nchart, unsigned new_nchart);
 // the same, and the code sized by the counts grown with them (the new songs' slots as songs left out)
 int pc64_tables_grow(HMODULE game, BYTE **music, unsigned songs, unsigned new_songs, BYTE **charts, unsigned nchart, unsigned new_nchart);
+// the character table made bigger: characters past the game's own (tables.c)
+int pc64_charas_grow(HMODULE game, BYTE **charas, unsigned n, unsigned new_n);
 // a chart's format as the music data has it (old: 8-byte events), for the game's check of it
 int pc64_chart_formats_install(HMODULE game, unsigned nchart);
 void pc64_chart_format(unsigned chart, int old);

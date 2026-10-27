@@ -41,6 +41,7 @@
 #define OWN_HARIAI 0x00800000u
 #define REMOVED 0x80000000u
 #define MAX_IDS 32768u   // the music data's ids kept (past the game's table: the tables grow to them)
+#define MAX_CHARAS 8192u   // the characters' ids kept (past the game's table: it grows to them)
 #define SLOTS 7
 static const char *const SLOT_NAMES[SLOTS] = {"ep", "np", "hp", "op", "bp_n", "bp_h", "bp_ex"};
 // the difficulty bits the game asks of a song's mask before it reads a chart (Normal and Battle
@@ -225,7 +226,7 @@ static void read_xml(const WCHAR *path) {
         char *id_at = strstr(m, "id=");
         unsigned id = id_at && id_at < gt && (id_at[3] == '"' || id_at[3] == '\'') ? (unsigned)strtoul(id_at + 4, NULL, 10) : ~0u;
         m = close + 8;
-        if (id >= g_nchara) continue;
+        if (id >= MAX_CHARAS) continue;
         struct chara *c = &g_cdata[id];
         char *fl = strstr(gt, "<flavor>"), *fl_end = fl ? strstr(fl, "</flavor>") : NULL;   // its phrases: not read (the slot's kept)
         if (fl && fl_end && fl_end < close) memset(fl, ' ', (size_t)(fl_end + 9 - fl));
@@ -811,8 +812,8 @@ void pc64_songs_install(HMODULE game) {
     }
     IMAGE_NT_HEADERS *nt = (IMAGE_NT_HEADERS *)(base + ((IMAGE_DOS_HEADER *)base)->e_lfanew);
     g_image = base, g_image_end = base + nt->OptionalHeader.SizeOfImage;
-    if (!(g_data = calloc(MAX_IDS, sizeof *g_data)) || !(g_back = calloc(MAX_IDS, 1)) || !(g_uses = calloc(g_nchara, sizeof *g_uses)) ||
-        !(g_banner = calloc(MAX_IDS, 1)) || !(g_cdata = calloc(g_nchara, sizeof *g_cdata)) || !(g_chara_back = calloc(g_nchara, 1)))
+    if (!(g_data = calloc(MAX_IDS, sizeof *g_data)) || !(g_back = calloc(MAX_IDS, 1)) || !(g_uses = calloc(MAX_CHARAS, sizeof *g_uses)) ||
+        !(g_banner = calloc(MAX_IDS, 1)) || !(g_cdata = calloc(MAX_CHARAS, sizeof *g_cdata)) || !(g_chara_back = calloc(MAX_CHARAS, 1)))
         return;
     // the music data: the last mod first, so the first one's fields win
     size_t files = 0;
@@ -826,6 +827,12 @@ void pc64_songs_install(HMODULE game) {
         files += n;
     }
     if (!files) return;
+    // characters past the game's table (a mod's for songs whose own the game hasn't): the table grown
+    // to the last one described (tables.c), its new places removed characters' to be filled as those
+    unsigned last_chara = 0;
+    for (unsigned i = g_nchara; i < MAX_CHARAS; i++)
+        if (g_cdata[i].text[0]) last_chara = i;
+    if (last_chara && pc64_charas_grow(game, &g_charas, g_nchara, last_chara + 1)) g_nchara = last_chara + 1;
     charas_back();
     game_banners();
     // songs past the game's table (the console games' songs, players' own): the tables grown to the

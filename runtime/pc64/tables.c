@@ -335,3 +335,117 @@ int pc64_chart_formats_install(HMODULE game, unsigned nchart) {
     FlushInstructionCache(GetCurrentProcess(), hit, sizeof jump);
     return 1;
 }
+
+// --- The character table made bigger (PLAN.md section 34: the characters past the table): the
+// table (2507 x 128 bytes, read only by its getters) copied into a bigger one, the places past the
+// game's own filled with a removed character's record (its flags' bit 0: the loader fills them as it
+// does the game's removed ones), the code pointed at the copy as for the music table. The getters
+// take an id through two checks, the id's (-7 to N-1, else the default 0x6e6, a warning) and a clamp
+// (0 to N-1, else 0x98d); N itself is the game's "no character" everywhere. Both are written again
+// in place, in their own bytes, to let ids past N through too (N stays "none"). The rest of the game
+// keeps its N: its loops over every character (the character select) and its arrays by character
+// (the player's), behind their own checks of an id, leave the new ones out: they are songs'
+// characters, not the player's.
+static BYTE *find_code(BYTE *code, BYTE *end, const short *pat, size_t n) {
+    for (BYTE *p = code; p + n <= end; p++) {
+        size_t k = 0;
+        while (k < n && (pat[k] == X || p[k] == pat[k])) k++;
+        if (k == n) return p;
+    }
+    return NULL;
+}
+int pc64_charas_grow(HMODULE game, BYTE **charas, unsigned n, unsigned new_n) {
+    BYTE *base = (BYTE *)game, *end;
+    BYTE *code = code_range(base, &end);
+    size_t nf;
+    const uint32_t *f = functions(base, &nf);
+    if (!code || !f || new_n <= n || new_n > 0x7fff) return 0;
+    // sub rsp,0x28; lea eax,[rcx+7]; mov edx,N+6; cmp ax,dx; ja
+    static const short check_pat[] = {0x48, 0x83, 0xec, 0x28, 0x8d, 0x41, 0x07, 0xba, X, X, 0, 0, 0x66, 0x3b, 0xc2, 0x77};
+    // mov edx,N-1; mov eax,DEFAULT; cmp cx,dx; cmovbe ax,cx; ret
+    static const short clamp_pat[] = {0xba, X, X, 0, 0, 0xb8, X, X, 0, 0, 0x66, 0x3b, 0xca, 0x66, 0x0f, 0x46, 0xc1, 0xc3};
+    BYTE *check = find_code(code, end, check_pat, sizeof check_pat / sizeof *check_pat);
+    BYTE *clamp = find_code(code, end, clamp_pat, sizeof clamp_pat / sizeof *clamp_pat);
+    uint32_t v1 = 0, v2 = 0, def2 = 0, def1 = 0;
+    if (check) memcpy(&v1, check + 8, 4);
+    if (clamp) memcpy(&v2, clamp + 1, 4), memcpy(&def2, clamp + 6, 4);
+    for (BYTE *p = check; p && p < check + 0x3b && !def1; p++)   // mov eax,DEFAULT; add rsp,0x28; ret
+        if (p[0] == 0xb8 && p[5] == 0x48 && p[6] == 0x83 && p[7] == 0xc4 && p[8] == 0x28 && p[9] == 0xc3) memcpy(&def1, p + 1, 4);
+    int room = clamp != NULL;
+    for (int k = 18; clamp && k < 24; k++) room &= clamp[k] == 0xcc;   // the clamp's new code: 23 bytes
+    if (!check || !clamp || v1 != n + 6 || v2 != n - 1 || !def1 || !room) {
+        pc64_log("songs: the character table's checks not found: no characters past it");
+        return 0;
+    }
+    // the copy: the game's records, then a removed one's for each new place
+    BYTE *old = *charas, *mem = near_image(base, (size_t)new_n * 128);
+    const BYTE *removed = NULL;
+    for (unsigned i = 1; i < n && !removed; i++) {
+        uint32_t flags;
+        memcpy(&flags, old + (size_t)i * 128 + 8, 4);
+        if (flags & 1) removed = old + (size_t)i * 128;
+    }
+    if (!mem || !removed) return 0;
+    struct patch *patches = NULL;
+    size_t np = 0, cap = 0, short_of = 0;
+    BYTE *const hi = old + (size_t)n * 128;
+    for (size_t i = 0; i < nf; i++) {
+        BYTE *p = base + f[3 * i], *fend = base + f[3 * i + 1];
+        while (p < fend) {
+            struct x86_insn in;
+            const int len = x86_decode64(p, &in);
+            if (!len) break;
+            if (in.disp_size == 4) {
+                int32_t disp;
+                memcpy(&disp, p + in.disp_at, 4);
+                BYTE *target = in.rip ? p + len + disp : (in.base >= 0 && disp > 0) ? base + disp : NULL;
+                if (target && target >= old && target < hi) {
+                    BYTE *moved = mem + (target - old);
+                    const int64_t v = in.rip ? moved - (p + len) : moved - base;
+                    if (v != (int32_t)v || (!in.rip && v < 0)) short_of++;
+                    else {
+                        if (np == cap && !(patches = realloc(patches, (cap = cap ? 2 * cap : 64) * sizeof *patches))) return 0;
+                        patches[np++] = (struct patch){p + in.disp_at, (int32_t)v};
+                    }
+                }
+            }
+            p += len;
+        }
+    }
+    if (short_of || !np) {
+        pc64_log("songs: the character table can't be moved (%zu places): no characters past it", short_of);
+        VirtualFree(mem, 0, MEM_RELEASE);
+        free(patches);
+        return 0;
+    }
+    memcpy(mem, old, (size_t)n * 128);
+    for (unsigned i = n; i < new_n; i++) memcpy(mem + (size_t)i * 128, removed, 128);
+    // the id's check: -7 to N-1, or past N to the new count; else the default
+    const uint16_t none = (uint16_t)n, count = (uint16_t)new_n;
+    BYTE c1[33] = {0x8d, 0x41, 0x07, 0x66, 0x3d, 0, 0, 0x72, 0x0e, 0x66, 0x81, 0xf9, 0, 0, 0x74, 0x0b,
+                   0x66, 0x81, 0xf9, 0, 0, 0x73, 0x04, 0x0f, 0xb7, 0xc1, 0xc3, 0xb8, 0, 0, 0, 0, 0xc3};
+    const uint16_t none7 = (uint16_t)(n + 7);
+    memcpy(c1 + 5, &none7, 2), memcpy(c1 + 12, &none, 2), memcpy(c1 + 19, &count, 2), memcpy(c1 + 28, &def1, 4);
+    // the clamp: 0 to N-1, or past N to the new count; else its default
+    BYTE c2[23] = {0x0f, 0xb7, 0xc1, 0x66, 0x3d, 0, 0, 0x72, 0x0d, 0x74, 0x06, 0x66, 0x3d, 0, 0, 0x72, 0x05,
+                   0xb8, 0, 0, 0, 0, 0xc3};
+    memcpy(c2 + 5, &none, 2), memcpy(c2 + 13, &count, 2), memcpy(c2 + 18, &def2, 4);
+    struct { BYTE *at; const BYTE *bytes; size_t n; } code_writes[2] = {{check, c1, sizeof c1}, {clamp, c2, sizeof c2}};
+    for (size_t i = 0; i < np; i++) {
+        DWORD o;
+        VirtualProtect(patches[i].at, 4, PAGE_EXECUTE_READWRITE, &o);
+        memcpy(patches[i].at, &patches[i].value, 4);
+        VirtualProtect(patches[i].at, 4, o, &o);
+    }
+    for (int k = 0; k < 2; k++) {
+        DWORD o;
+        VirtualProtect(code_writes[k].at, code_writes[k].n, PAGE_EXECUTE_READWRITE, &o);
+        memcpy(code_writes[k].at, code_writes[k].bytes, code_writes[k].n);
+        VirtualProtect(code_writes[k].at, code_writes[k].n, o, &o);
+    }
+    FlushInstructionCache(GetCurrentProcess(), NULL, 0);
+    free(patches);
+    pc64_log("songs: the character table moved for %u characters (%zu places)", new_n, np);
+    *charas = mem;
+    return 1;
+}

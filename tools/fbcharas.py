@@ -78,11 +78,92 @@ ANIMS = {
 }
 # the removed characters' slots this goes in (their sizes 0: the loader takes the mod's)
 SLOTS = [1502, 1809, 1810, 2040, 2041, 2042, 2043, 2284, 2285, 2286, 2287, 2442, 2443, 2444, 2471, 2472]
-FOLDER = "mickeytunes"
+FOLDER = "mickeytunes"   # the packs' folder (tex/FOLDER/NAME.ifs): this one's, "animelo" Animelo's
 SCALE = 2.5
 HARIAI = (572, 738)   # the old characters' (a pixel's border round)
 NAME = (262, 112)
 ICON = (162, 162)
+
+
+# pop'n music Animelo 2 (Firebeat, A02 JAC): an anime song's character is a few cut-out pictures of
+# the series' characters on its sheet `CODE_02.GCZ` (the game shows them in its "DATA" screens, not
+# while playing: its play screen has the player's navigator), taken from the rectangles here (each
+# trimmed to its pixels): the character's own poses, the first its hariai's. Animelo moves them about, it doesn't
+# animate them: this game's animations are made by moving them so (a bob, hops, a shake, a fall:
+# each step a shape of its own, its quad moved, as the old characters' are all shown at one place).
+# The songs whose character the game itself has from the same series (the pack names them: db,
+# saint, niku, devil, moon) keep it.
+ANIMELO = {
+    "GE1": ("ゲゲゲの鬼太郎", "an_kitaro", "鬼太郎", [(0, 0, 470, 384)]),
+    "GET": ("ゲッターロボ！", "an_getter", "ゲッター1", [(512, 0, 800, 384)]),
+    "GIN": ("銀河鉄道999", "an_maetel", "メーテル", [(600, 0, 900, 480)]),
+    "RUN": ("花の子ルンルン", "an_lunlun", "ルンルン", [(730, 585, 1024, 1024)]),
+    "CAP": ("キャプテンハーロック", "an_harlock", "ハーロック", [(130, 645, 500, 1024)]),
+    "AK1": ("ひみつのアッコちゃん", "an_akko", "アッコちゃん", [(490, 386, 690, 770), (690, 386, 870, 770)]),
+    "GE2": ("カランコロンの歌", "an_kitaro2", "鬼太郎", [(0, 0, 420, 384)]),
+    "SAR": ("魔法使いサリー", "an_sally", "サリー", [(0, 0, 210, 300), (0, 300, 150, 600)]),
+    "TIG": ("タイガーマスク", "an_tiger", "タイガーマスク", [(0, 180, 340, 640)]),
+    "SLP": ("ワイワイワールド", "an_arale", "アラレちゃん", [(0, 256, 500, 640), (500, 230, 900, 530)]),
+    "ENM": ("ドロロンえん魔くん", "an_enma", "えん魔くん", [(512, 0, 960, 384)]),
+    "GRM": ("グレートマジンガー", "an_greatmazin", "グレートマジンガー", [(540, 60, 1024, 1024)]),
+    "LAL": ("ハロー・ララベル", "an_lalabel", "ララベル", [(0, 0, 505, 960), (512, 0, 1024, 520)]),
+    "WI2": ("異次元ストーリー", "an_aoi", "あおい", [(0, 600, 850, 980)]),
+    "MAY": ("メイプルタウン物語", "an_patty", "パティ", [(0, 200, 170, 387), (0, 571, 170, 757), (0, 760, 170, 950)]),
+    "UFO": ("とべ！グレンダイザー", "an_duke", "デューク・フリード", [(370, 380, 700, 740), (0, 380, 370, 740)]),
+    "MEM": ("とんがり帽子のメモル", "an_memol", "メモル", [(0, 386, 330, 780)]),
+    "KIN": ("わぴこ元気予報！", "an_wapiko", "わぴこ", [(512, 380, 1000, 765)]),
+    "WI1": ("WING LOVE", "an_wingman", "ウイングマン", [(100, 0, 400, 380), (560, 0, 900, 380)]),
+}
+# the removed characters' slots left after Mickey Tunes', then places past the game's table
+ANIMELO_SLOTS = [1144, 2138, 2320, 2471, 2472] + list(range(2508, 2508 + 14))
+# the moves: (picture, frames held, x and y off the stage's middle, in pixels), the frames at 30 a
+# second; P0 the character's first picture, P1 its second (else its first)
+def _bob(p, h=8, hold=8):
+    return [(p, hold, 0, 0), (p, hold, 0, -h // 2), (p, hold, 0, -h), (p, hold, 0, -h // 2)]
+def _hop(p, h, hold=3):
+    return [(p, hold, 0, 0), (p, hold, 0, -h // 2), (p, hold, 0, -h), (p, hold, 0, -h // 2), (p, hold, 0, 0)]
+def _shake(p, w, hold=2):
+    return [(p, hold, x, 0) for x in (0, -w, w, -w, w, 0)]
+MOVES = {
+    "stand": lambda P0, P1: [(P0, 37, 0, 0)],
+    "neu": lambda P0, P1: _bob(P0),
+    "fev": lambda P0, P1: _bob(P0, h=12, hold=4) + _bob(P1, h=12, hold=4),
+    "goo": lambda P0, P1: _hop(P1, 36) + [(P1, 10, 0, 0)],
+    "gre": lambda P0, P1: _hop(P1, 36) + _hop(P1, 36) + [(P1, 10, 0, 0)],
+    "mis": lambda P0, P1: _shake(P0, 14) + [(P0, 8, 0, 0)],
+    "jam1": lambda P0, P1: _shake(P0, 14) + _shake(P0, 14),
+    "jam2": lambda P0, P1: _shake(P0, 14) + [(P0, 10, 0, 0)],
+    "los": lambda P0, P1: [(P0, 6, 0, y) for y in (0, 12, 24, 36)] + [(P0, 30, 0, 36)],
+    "win1": lambda P0, P1: _hop(P1, 36) + _hop(P1, 36) + _hop(P1, 36) + [(P1, 20, 0, 0)],
+    "win2": lambda P0, P1: _hop(P1, 36) + [(P1, 6, 0, 0)],
+}
+
+
+def animelo_character(sheet, rects, chara_id, name):
+    """an Animelo character: its pictures each at most 280 x 540 (and 3 times bigger), on the stage's
+    bottom less 40 pixels and in its middle; its animations moving them about there (a shape for
+    each place: a picture's quad moved)"""
+    from PIL import Image
+    W, H = afp.STAGE
+    pics, places = {}, {}
+    for k, r in enumerate(rects):
+        part = sheet.crop(r)
+        part = part.crop(part.getbbox())
+        z = min(3.0, (W - 40) / part.width, (H - 100) / part.height)
+        part = part.convert("RGBa").resize((round(part.width * z), round(part.height * z)), Image.LANCZOS).convert("RGBA")
+        pic = Image.new("RGBA", (part.width + 2, part.height + 2))
+        pic.paste(part, (1, 1))
+        pics[k], places[k] = pic, ((W - part.width) // 2, H - 40 - part.height)
+    P0, P1 = 0, 1 if len(pics) > 1 else 0
+    shows = {}
+    for anim, move in MOVES.items():
+        out, t = [], 0
+        for p, hold, x, y in move(P0, P1):
+            if not out or out[-1][1:] != (p, (x, y)):   # (one shape never twice in a row, as the game's)
+                out.append((t, p, (x, y)))
+            t += hold
+        shows[anim] = (out, t)
+    return build(pics, shows, chara_id, name, hariai_of=0, places=places)
 
 
 class Program:
@@ -189,8 +270,67 @@ def picture_pack(name, img, tree=1042):
                       ("magic", b"NGPF")], tree=tree)
 
 
+def build(pics, shows, chara_id, names, hariai_of=None, places={}):
+    """a character's pack from its pictures ({key: a picture with a pixel's border round}, each the
+    stage's size or at places[key] on it) and animations ({name: ([(frame, key[, (x, y) moved by,
+    in pixels])], frames)}): each step a shape, its quad the picture's place, moved. Its hariai
+    (hariai_of's picture, else the biggest of its cheer), its name's picture and where its face is
+    in the hariai"""
+    # each animation's shapes: a picture, where it's moved to
+    shapes_of = {}
+    for name in sorted(shows):
+        keys = {}
+        for show in shows[name][0]:
+            keys.setdefault((show[1],) + tuple(show[2:3]), show[1])
+        shapes_of[name] = keys
+    images_of = sorted({show[1] for s, _ in shows.values() for show in s})
+    names_of = {p: "%03d" % k for k, p in enumerate(images_of)}
+    # the icon (its face: the top of the dance's first picture) and the name's picture
+    first = pics[shows["neu"][0][0][1]]
+    bx = first.getbbox()
+    side = min(bx[2] - bx[0], (bx[3] - bx[1]) // 2)
+    cx = (bx[0] + bx[2]) // 2
+    icon = fit(first.crop((cx - side // 2, bx[1], cx + side // 2, bx[1] + side)), ICON, bottom=False)
+    gg = name_picture(names)
+    images = [(names_of[p], *pics[p].size) for p in images_of] + [("cs_a", *ICON), ("cs_b", *ICON), ("gg_" + chara_id, *NAME)]
+    tl, uv = afp.texturelist(images)
+    members = []
+    for p in images_of:
+        members.append(("tex/" + afp.md5(names_of[p]), ifs.lz77_do(pics[p].tobytes("raw", "BGRA"))))
+    for n, img in (("cs_a", icon), ("cs_b", icon), ("gg_" + chara_id, gg)):
+        members.append(("tex/" + afp.md5(n), ifs.lz77_do(img.tobytes("raw", "BGRA"))))
+    members.append(("tex/texturelist.xml", ifs.kbin_write(tl)))
+    members.append(("magic", b"NGPF"))
+    lists, geos, bsis, afps = [], [], [], []
+    for name in sorted(shows):
+        out, frames = shows[name]
+        ids = {key: 10 + 3 * k for k, key in enumerate(shapes_of[name])}
+        sprite = 10 + 3 * len(ids) + 10
+        # each placed picture's object number the frame it ends at (the next one's, the last the
+        # animation's length), as the game's own: the player takes it as when to take it off
+        ends = [show[0] for show in out[1:]] + [frames]
+        steps = [(show[0], ids[(show[1],) + tuple(show[2:3])], ends[k]) for k, show in enumerate(out)]
+        a, b = afp.flipbook(name, frames, steps, list(ids.values()), sprite)
+        afps.append(("afp/" + afp.md5(name), a))
+        bsis.append(("afp/bsi/" + afp.md5(name), b))
+        geos.append(("geo/" + afp.md5(f"{name}_shape5"), afp.MASK))
+        for key, sid in ids.items():
+            n, (w, h) = names_of[shapes_of[name][key]], pics[key[0]].size
+            x, y = places.get(key[0], (0, 0))
+            dx, dy = key[1] if len(key) > 1 else (0, 0)
+            geos.append(("geo/" + afp.md5(f"{name}_shape{sid}"), afp.ge2d(n, w - 2.0, h - 2.0, uv[n], (x + dx, y + dy))))
+        lists.append((name, [5] + list(ids.values())))
+    members += bsis + afps + [("afp/afplist.xml", ifs.kbin_write(afp.afplist(lists)))] + geos
+    cheer = [show[1] for show in shows["win1"][0]]
+    big = max(cheer, key=lambda p: (lambda b: (b[2] - b[0]) * (b[3] - b[1]))(pics[p].getbbox() or (0, 0, 0, 0)))
+    hariai = fit(pics[big if hariai_of is None else hariai_of], HARIAI)
+    hb = hariai.getbbox()
+    face = ((hb[0] + hb[2]) // 2, hb[1] + (hb[3] - hb[1]) // 5)
+    return ifs.write(members), hariai, gg, face
+
+
 def character(prog, sheet_name, chara_id, names, kind):
-    from PIL import Image
+    """a Mickey Tunes dancer"""
     anims, pieces = prog.sheet(sheet_name)
     sheet = prog.picture_sheet(sheet_name)
     reach = max(max(abs(dx), abs(dx + w)) for ps in pieces.values() for dx, dy, w, h, *_ in ps)
@@ -208,46 +348,8 @@ def character(prog, sheet_name, chara_id, names, kind):
                 out.append((f, pic))
             t += dur
         shows[name] = (out, max(1, round(t / 2)) if which else 37)
-    used = sorted({p for s, _ in shows.values() for _, p in s})
-    pics = {p: whole(sheet, pieces[p], scale) for p in used}
-    # the icon (its face: the top of the dance's first picture) and the name's picture
-    first = pics[shows["neu"][0][0][1]]
-    bx = first.getbbox()
-    side = min(bx[2] - bx[0], (bx[3] - bx[1]) // 2)
-    cx = (bx[0] + bx[2]) // 2
-    icon = fit(first.crop((cx - side // 2, bx[1], cx + side // 2, bx[1] + side)), ICON, bottom=False)
-    gg = name_picture(names)
-    images = [("%03d" % p, 322, 642) for p in used] + [("cs_a", *ICON), ("cs_b", *ICON), ("gg_" + chara_id, *NAME)]
-    tl, uv = afp.texturelist(images)
-    members = []
-    for p in used:
-        members.append(("tex/" + afp.md5("%03d" % p), ifs.lz77_do(pics[p].tobytes("raw", "BGRA"))))
-    for n, img in (("cs_a", icon), ("cs_b", icon), ("gg_" + chara_id, gg)):
-        members.append(("tex/" + afp.md5(n), ifs.lz77_do(img.tobytes("raw", "BGRA"))))
-    members.append(("tex/texturelist.xml", ifs.kbin_write(tl)))
-    members.append(("magic", b"NGPF"))
-    lists, geos, bsis, afps = [], [], [], []
-    for name, _ in ANIMS[kind]:
-        out, frames = shows[name]
-        ids = {}
-        for _, p in out:
-            ids.setdefault(p, 10 + 3 * len(ids))
-        sprite = 10 + 3 * len(ids) + 10
-        a, b = afp.flipbook(name, frames, [(f, ids[p], 2 * (k + 1)) for k, (f, p) in enumerate(out)], list(ids.values()), sprite)
-        afps.append(("afp/" + afp.md5(name), a))
-        bsis.append(("afp/bsi/" + afp.md5(name), b))
-        geos.append(("geo/" + afp.md5(f"{name}_shape5"), afp.MASK))
-        for p, sid in ids.items():
-            geos.append(("geo/" + afp.md5(f"{name}_shape{sid}"), afp.ge2d("%03d" % p, 320.0, 640.0, uv["%03d" % p])))
-        lists.append((name, [5] + list(ids.values())))
-    members += bsis + afps + [("afp/afplist.xml", ifs.kbin_write(afp.afplist(lists)))] + geos
-    # the hariai: the biggest picture of the cheer
-    cheer = [p for _, p in shows["win1"][0]]
-    big = max(cheer, key=lambda p: (lambda b: (b[2] - b[0]) * (b[3] - b[1]))(pics[p].getbbox() or (0, 0, 0, 0)))
-    hariai = fit(pics[big], HARIAI)
-    hb = hariai.getbbox()
-    face = ((hb[0] + hb[2]) // 2, hb[1] + (hb[3] - hb[1]) // 5)
-    return ifs.write(members), hariai, gg, face
+    used = {show[1] for s, _ in shows.values() for show in s}
+    return build({p: whole(sheet, pieces[p], scale) for p in used}, shows, chara_id, names)
 
 
 def pack_songs(pack):
@@ -266,26 +368,10 @@ def esc(s):
     return s.replace("&", "&amp;").replace("<", "&lt;")
 
 
-def main():
-    ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    ap.add_argument("--pack", default=os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "out", "omnimix-mod"))
-    ap.add_argument("disc")
-    ap.add_argument("out")
-    a = ap.parse_args()
-    prog = Program(a.disc)
-    songs = pack_songs(a.pack)
-    os.makedirs(os.path.join(a.out, "tex", FOLDER), exist_ok=True)
-    for sub in ("ha_merge_ifs", "chara_name_diff_ifs"):
-        os.makedirs(os.path.join(a.out, "tex", "system", sub), exist_ok=True)
-    charas, music = [], []
-    for slot, (sheet, (cid, names, kind)) in zip(SLOTS, SHEETS.items()):
-        pack, hariai, gg, face = character(prog, sheet, cid, names, kind)
-        open(os.path.join(a.out, "tex", FOLDER, cid + ".ifs"), "wb").write(pack)
-        open(os.path.join(a.out, "tex", "system", "ha_merge_ifs", "ha_" + cid + ".ifs"), "wb").write(picture_pack("ha_" + cid, hariai))
-        open(os.path.join(a.out, "tex", "system", "chara_name_diff_ifs", "gg_" + cid + ".ifs"), "wb").write(picture_pack("gg_" + cid, gg))
-        charas.append(f"""  <chara id="{slot}">
+def chara_entry(slot, cid, names, face, folder=FOLDER):
+    return f"""  <chara id="{slot}">
     <chara_id __type="str">{cid}</chara_id>
-    <folder __type="str">{FOLDER}</folder>
+    <folder __type="str">{folder}</folder>
     <gg __type="str">gg_{cid}</gg>
     <cs __type="str">cs_{cid}</cs>
     <icon1 __type="str">cs_{cid}_a</icon1>
@@ -302,25 +388,66 @@ def main():
     <chara_yh __type="u16">{round(face[1] / 2.3)}</chara_yh>
     <flavor_idx __type="s16">-1</flavor_idx>
     <lapis_shape __type="str"></lapis_shape>
-  </chara>""")
-        print(f"{sheet}: {cid} (slot {slot})")
-    for title, (one, two) in SONGS.items():
-        sid = songs.get(title)
-        if sid is None:
-            print(f"no song titled {title} in {a.pack}: none given {SHEETS[one][0]}")
-            continue
-        # its character's hariai in the music select (the pack's own song card is an older game's size)
-        music.append(f"""  <music id="{sid}">
-    <chara1 __type="str">{SHEETS[one][0]}</chara1>
-    <chara2 __type="str">{SHEETS[two][0]}</chara2>
+  </chara>"""
+
+
+def music_entry(sid, one, two):
+    # its character's hariai in the music select (a pack's own song card is an older game's size)
+    return f"""  <music id="{sid}">
+    <chara1 __type="str">{one}</chara1>
+    <chara2 __type="str">{two}</chara2>
     <ha __type="str"></ha>
-  </music>""")
-        print(f"song {sid}, {title}: {SHEETS[one][0]}, {SHEETS[two][0]}")
-    with open(os.path.join(a.out, "charadb_mickeytunes.xml"), "w", encoding="utf-8") as f:
+  </music>"""
+
+
+def write_pictures(out, cid, pack, hariai, gg, folder=FOLDER):
+    os.makedirs(os.path.join(out, "tex", folder), exist_ok=True)
+    open(os.path.join(out, "tex", folder, cid + ".ifs"), "wb").write(pack)
+    open(os.path.join(out, "tex", "system", "ha_merge_ifs", "ha_" + cid + ".ifs"), "wb").write(picture_pack("ha_" + cid, hariai))
+    open(os.path.join(out, "tex", "system", "chara_name_diff_ifs", "gg_" + cid + ".ifs"), "wb").write(picture_pack("gg_" + cid, gg))
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
+    ap.add_argument("--pack", default=os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "out", "omnimix-mod"))
+    ap.add_argument("disc")
+    ap.add_argument("out")
+    a = ap.parse_args()
+    prog = Program(a.disc)
+    songs = pack_songs(a.pack)
+    for sub in ("ha_merge_ifs", "chara_name_diff_ifs"):
+        os.makedirs(os.path.join(a.out, "tex", "system", sub), exist_ok=True)
+    charas, music = [], []
+    if "CRAZY.GCZ" in prog.files:
+        what, title, desc = "mickeytunes", "Mickey Tunes characters", "The Mickey Tunes! songs' own dancers, from the Firebeat disc"
+        for slot, (sheet, (cid, names, kind)) in zip(SLOTS, SHEETS.items()):
+            pack, hariai, gg, face = character(prog, sheet, cid, names, kind)
+            write_pictures(a.out, cid, pack, hariai, gg)
+            charas.append(chara_entry(slot, cid, names, face))
+            print(f"{sheet}: {cid} (slot {slot})")
+        for t, (one, two) in SONGS.items():
+            if t in songs:
+                music.append(music_entry(songs[t], SHEETS[one][0], SHEETS[two][0]))
+                print(f"song {songs[t]}, {t}: {SHEETS[one][0]}, {SHEETS[two][0]}")
+            else:
+                print(f"no song titled {t} in {a.pack}: none given {SHEETS[one][0]}")
+    elif "GRM_02.GCZ" in prog.files:
+        what, title, desc = "animelo", "Animelo characters", "The Animelo anime songs' own characters, from the Animelo 2 disc"
+        for slot, (code, (t, cid, names, rects)) in zip(ANIMELO_SLOTS, ANIMELO.items()):
+            pack, hariai, gg, face = animelo_character(prog.picture_sheet(code + "_02"), rects, cid, names)
+            write_pictures(a.out, cid, pack, hariai, gg, "animelo")
+            charas.append(chara_entry(slot, cid, names, face, "animelo"))
+            if t in songs:
+                music.append(music_entry(songs[t], cid, cid))
+                print(f"{code}: {cid} (slot {slot}) for song {songs[t]}, {t}")
+            else:
+                print(f"{code}: {cid} (slot {slot}), no song titled {t} in {a.pack}")
+    else:
+        raise SystemExit(a.disc + ": not a disc this knows (pop'n music Mickey Tunes!, 976 JBA; Animelo 2, A02 JAC)")
+    with open(os.path.join(a.out, f"charadb_{what}.xml"), "w", encoding="utf-8") as f:
         f.write("<?xml version='1.0' encoding='utf-8'?>\n<database>\n" + "\n".join(charas + music) + "\n</database>\n")
     with open(os.path.join(a.out, "mod.toml"), "w", encoding="utf-8") as f:
-        f.write('name = "Mickey Tunes characters"\ngame = "popn29"\n'
-                'description = "The Mickey Tunes! songs\' own dancers, from the Firebeat disc (before Omnimix)"\n')
+        f.write(f'name = "{title}"\ngame = "popn29"\ndescription = "{desc} (before Omnimix)"\n')
 
 
 if __name__ == "__main__":

@@ -153,7 +153,8 @@ def _remove(depth):
 
 def flipbook(name, frames, shows, shapes, sprite, at=(160 * 20, 320 * 20)):
     """an animation `frames` long (at 30 a second) showing the shapes of `shows` [(frame, shape,
-    object)], the first at frame 0; `shapes` the picture shapes' ids in their tags' order, `sprite`
+    object[, where])] (object: the frame the shape ends at, as the game's own number them), the first at frame 0 (where: its place, in twentieths, the stage's middle `at`
+    if not given); `shapes` the picture shapes' ids in their tags' order, `sprite`
     the animation's sprite id. Returns (afp, bsi)."""
     table, sat = strings(name)
     o = Out()
@@ -181,12 +182,14 @@ def flipbook(name, frames, shows, shapes, sprite, at=(160 * 20, 320 * 20)):
 
     timeline = []   # tags, frames
     by_frame = {}
-    for k, (f, shape, obj) in enumerate(shows):
+    for k, show in enumerate(shows):
+        f, shape, obj = show[:3]
+        where = show[3] if len(show) > 3 else at
         if k == 0:
             assert f == 0
-            by_frame[f] = [(0x7F, _place(2, obj, shape, f, at, False))]
+            by_frame[f] = [(0x7F, _place(2, obj, shape, f, where, False))]
         else:
-            by_frame[f] = [(0x7F, _place(2 + k, obj, shape, f, at, True)), (0x80, _remove(1 + k))]
+            by_frame[f] = [(0x7F, _place(2 + k, obj, shape, f, where, True)), (0x80, _remove(1 + k))]
     tframes, n = [], 0
     for f in range(frames):
         t = by_frame.get(f, [])
@@ -224,11 +227,14 @@ MASK = bytes.fromhex(
     "418000000409ffff00060000ff00ffff00000074000000010002000200010003")
 
 
-def ge2d(name, w, h, uv):
+def ge2d(name, w, h, uv, at=(0, 0)):
+    """the quad w x h from `at` (its bounds, then its corners), the picture's UVs"""
     assert len(name) == 3
     u0, v0, u1, v1 = uv
-    return (_GE2D_HEAD + struct.pack(">fffI", w, 0, h, 0x48) + name.encode() + b"\0" +
-            struct.pack(">8f", 0, 0, w, 0, 0, h, w, h) + struct.pack(">8f", u0, v0, u1, v0, u0, v1, u1, v1) + _GE2D_TAIL)
+    x, y = at
+    return (_GE2D_HEAD[:0x34] + struct.pack(">ffffI", x, x + w, y, y + h, 0x48) + name.encode() + b"\0" +
+            struct.pack(">8f", x, y, x + w, y, x, y + h, x + w, y + h) + struct.pack(">8f", u0, v0, u1, v0, u0, v1, u1, v1) +
+            _GE2D_TAIL)
 
 
 def texturelist(images, size=2048):

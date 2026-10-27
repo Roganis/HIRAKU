@@ -2772,11 +2772,42 @@ Nothing of a game comes with HIRAKU: the songs are the player's.
     at 0x180394b20): these songs crashed the music select. The loader reads it and keeps the bit
     only when the picture is there. `fbcharas.py`'s songs give an empty `<ha>`: their characters'.
   - Checked: 3141 (Donald on skates) and 3153 (Goofy) to the result, their hariai and names.
-  - **Left:** Animelo (its 2's disc has all 35 anime songs, two sheets each, `X_1`, `X_02`: the
-    characters are cut-out pictures of the series' characters, a few poses; its program lists the
-    sheets by number, its tables not found yet); the console songs' own characters (their discs);
-    room: 5 removed slots left, the rest needs the character table (2507 x 128, the id 2507 the
-    getters' "none", 0x9d2 their bound) made bigger.
+  - **Animelo (2026-10-28).** The Animelo 2 disc (A02 JAC) has all 35 anime songs (Animelo 1's
+    and its own), two sheets each: `X_1` (two framed stills, a small icon), `X_02` (cut-out
+    pictures of the series' characters and props), `X_1.XCZ`/`X_02.XCZ` the play field's
+    backgrounds. What the game draws, logged at the GCU (a scratch log of `draw_object`'s sources,
+    and VRAM dumps, in its attract demo and a played credit): while playing, only the play field,
+    its background, the lyrics and an 80x104 portrait of the player's navigator (a mode mascot's
+    frames: not the song's); the cut-outs are shown in the attract's "DATA" screens. So a song's
+    character has no animation of its own: `fbcharas.py` takes its cut-outs (rectangles in a table
+    by sheet, trimmed to their pixels: the character's own poses, a few series' group pictures)
+    and makes this game's animations by moving them (each place a shape of its own, its quad
+    moved: `afp.ge2d`'s `at`), a bob, hops, a shake, a fall; its hariai the first. The
+    songs by their charts' names in the pack (`animelo1_*`, `animelo2_*`) and the lyrics in the
+    program (in song order), the two Devilman and two Wingman songs by that order and their
+    pictures (WI1 "WING LOVE", WI2 "異次元ストーリー"; DM1, DM2 the opening and ending). Five songs
+    keep the pack's stand-in, the game's own character of the same series (db, saint, niku,
+    devil, moon); 19 get theirs.
+  - **The character table made bigger.** The game's 40 unused licence characters are all the
+    pack's restored songs', so the 19 need room past the table: `pc64_charas_grow` (tables.c)
+    copies the table (2507 x 128) near the image, places past the game's own filled with a
+    removed character's record, the getters' 27 references pointed at the copy, and writes the
+    two id checks again in place (0x18005d640: -7 to 2506, else 0x6e6 with a warning; the clamp
+    0x18005d680: 0 to 2506, else 0x98d), letting ids past 2507 through while 2507 stays the
+    game's "no character". The rest of the game keeps 2507 (about 60 places: loops over every
+    character, the character select, arrays by character in the player's data, the random
+    character, all behind their own id checks): the new ones are songs' characters, not the
+    player's. The loader reads `<chara id>` up to 8191 and grows the table to the last.
+  - **A placed picture's object number is the frame it ends at** (the next picture's frame, the
+    last the animation's length: so in all 120 animations of 12 old characters checked); the
+    player takes the picture off there. `afp.flipbook`'s callers numbered them 2, 4, 6...: a
+    picture held longer was taken off early and the character's window was empty most of a song
+    (Mickey Tunes' change every 2 frames: barely seen; Animelo's held 8: mostly empty). Found by
+    elimination: an Animelo character made one still picture stayed, a native old character on
+    the same song stayed, the same moving ones went.
+  - Checked: 3008 (Harlock, a removed slot) to the result; Akko-chan (id 2508, past the table) on
+    3153 played to the result, in its window through the song.
+  - **Left:** the console songs' own characters (their discs).
 - **Songs past the table (2026-10-26).** A player's packs describe 162 songs with ids from 2374
   up (3000-3155 the console songs, 5600s custom ones), and the game has 85 free slots: the tables
   have to grow, as §35's 5b did for the 32-bit game. The game's own `musicsub` (songs sent by the

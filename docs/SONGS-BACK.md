@@ -73,6 +73,20 @@ With thanks to Milo, whose work on the same game (popnMods) showed the way.
    ```
    Tick it before the pack (it takes 14 of the places the game keeps for removed characters).
 
+7. The pop'n music Animelo anime songs' own characters: the pack gives 24 songs from the Animelo
+   games a stand-in. Five keep it, as it's the game's own character of the same series (Dragon
+   Ball, Saint Seiya, Kinnikuman, Devilman, Sailor Moon); the other 19 get their own from the
+   pop'n music Animelo 2 program disc (A02 JAC, which has every Animelo song): the series' characters
+   as Animelo shows them, cut-out pictures (Akko-chan, Sally, Kitaro, Maetel, Harlock, Great
+   Mazinger...). Animelo doesn't animate them, so their animations are made by moving those
+   pictures (a bob, hops, a shake, a fall). The same tool, given that disc:
+   ```bash
+   python3 tools/fbcharas.py --pack ~/.local/share/hiraku/mods/popn29/Omnimix <animelo 2 disc>.cue ~/.local/share/hiraku/mods/popn29/Animelo
+   ```
+   Tick it before the pack too. It takes the game's last 5 places for removed characters and 14
+   past the game's own (HIRAKU makes its character table bigger: they're songs' characters, not
+   in the player's character select).
+
 ## Run
 
 1. In the launcher, right-click the game, **Mods…**, tick the pack (and the others, in order: the
@@ -137,11 +151,8 @@ HIRAKU knows (2026041500); another build keeps them out and says so in `pc.log`.
   `every-market` (in **Mods…**) lists every song and character in every market. The USA's
   market needs its pictures (`tex/system/*_u.ifs`), which some data hasn't: the mod
   `usa-pictures` takes the other markets' instead.
-- The characters the pack put in for songs whose own it hadn't, but for Mickey Tunes' (step 6):
-  the console games' and pop'n music Animelo's (its anime songs: the characters are cut-out
-  pictures of the series', on the Animelo discs, their tables not read yet). There are 5 of the
-  game's places for removed characters left after Mickey Tunes': the others need its character
-  table made bigger.
+- The characters the pack put in for the console games' songs (their own are on the console
+  discs).
 - Pictures as PNGs in the `_ifs` folders (ifs_layeredfs converts them): only whole files are used.
 - Categories added by other mods (By Medal) and the extra Random entries.
 - The launcher doesn't check a pack; `tools/songsback.py` does.

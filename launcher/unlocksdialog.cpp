@@ -111,6 +111,13 @@ UnlocksDialog::UnlocksDialog(const QString &game, const QString &title, bool run
     rebuild();
 }
 
+// With mods on, the game plays on a save of their own (cfg::saveDir), made from a copy of the clean
+// game's at the first start with them: until then the clean one is the one they'll start from.
+QString UnlocksDialog::save() const {
+    const QString s = cfg::saveDir(m_game);
+    return QFileInfo::exists(s) ? s : cfg::nvramDir(m_game);
+}
+
 QJsonObject UnlocksDialog::run(const QStringList &extra, QString *err) {
     const QStringList py = cfg::python();
     if (py.isEmpty()) {
@@ -118,7 +125,7 @@ QJsonObject UnlocksDialog::run(const QStringList &extra, QString *err) {
         return {};
     }
     QProcess p;
-    p.start(py[0], py.mid(1) + QStringList{cfg::rootDir() + "/tools/unlock.py", m_game, "--json", "--nvram", cfg::nvramDir(m_game)} + extra);
+    p.start(py[0], py.mid(1) + QStringList{cfg::rootDir() + "/tools/unlock.py", m_game, "--json", "--nvram", save()} + extra);
     if (!p.waitForFinished(15000)) {
         *err = "tools/unlock.py did not answer (is Python 3 installed?)";
         return {};
@@ -137,9 +144,15 @@ void UnlocksDialog::rebuild() {
     m_body->insertWidget(0, m_content);
     QString err;
     QJsonObject st = QFileInfo::exists(gameFile(m_game, "unlocks.toml")) ? run({}, &err) : QJsonObject{};
-    auto *where = new QLabel("Save: <tt>" + cfg::nvramDir(m_game).toHtmlEscaped() + "</tt>");
+    const QStringList mods = cfg::modsOn(m_game);
+    QString with;
+    if (!mods.isEmpty())
+        with = QString(save() == cfg::saveDir(m_game) ? "<br>the one with the mods on now: %1"
+                                                      : "<br>the mods on now (%1) get a copy of it at their first start")
+                   .arg(mods.join(", ").toHtmlEscaped());
+    auto *where = new QLabel("Save: <tt>" + save().toHtmlEscaped() + "</tt>" + with);
     where->setTextInteractionFlags(Qt::TextSelectableByMouse);
-    where->setToolTip(cfg::nvramDir(m_game));
+    where->setToolTip(save());
     where->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);   // a long path is cut, not the dialog widened
     v->addWidget(where);
     if (!err.isEmpty()) {

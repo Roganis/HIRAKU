@@ -29,6 +29,7 @@ public:
 private:
     void addMacros(class QVBoxLayout *v);
 
+    QString save() const;   // the save Play uses with the mods on now
     QJsonObject run(const QStringList &extra, QString *err);
     void rebuild();
 

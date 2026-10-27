@@ -114,13 +114,15 @@ HIRAKU knows (2026041500); another build keeps them out and says so in `pc.log`.
 - The small icons of the characters that come back (pictures inside the game's `icon.ifs`: their
   place is blank).
 - Some songs come back but the music select doesn't list them, as it doesn't list some of the
-  game's own: the game's rules for the market its data is set to (`prop/ea3-config.xml`'s `dest`;
-  `K`, Korea, in some players' data: the Disney medley and the songs with the mask's bit 20 are
-  Japan's only). The data has every market's texts; to play it as Japan's (its texts too):
-  `<dest __type="str">J</dest>` in the game's `prop/ea3-config.xml` and in the save folder's copy
-  (`<saves>/popn29/run/prop/`, and `popn29+<mod>` for each mods set: HIRAKU copies it again only
-  when its size changes), and the cabinet's market mark renamed away (`run/dev/raw/k.dest`: the
-  game refuses another market while it's there, and writes `j.dest`). Back: the same with `K`.
+  game's own: the cabinet's market's rules (licensed songs some countries' only: the Disney medley
+  and two others outside Japan, each song's and character's own markets). The market is the
+  game's data's (`prop/ea3-config.xml`'s `dest`; `K`, Korea, in some players' data) unless the
+  launcher's **Market** says otherwise (right-click the game: Japan, Asia (English), Korea, USA;
+  `--market J|A|K|U`), which also sets the screens' language; HIRAKU keeps the cabinet's mark of
+  its market in line (the game won't start as another while one is there). The mod
+  `every-market` (in **Mods…**) lists every song and character in every market. The USA's
+  market needs its pictures (`tex/system/*_u.ifs`), which some data hasn't: the mod
+  `usa-pictures` takes the other markets' instead.
 - The characters the pack put in for songs whose own it hadn't (the console games', pop'n music
   Mickey Tunes', old anime): the originals from the older games' data.
 - Pictures as PNGs in the `_ifs` folders (ifs_layeredfs converts them): only whole files are used.

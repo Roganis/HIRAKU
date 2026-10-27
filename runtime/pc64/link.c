@@ -161,6 +161,7 @@ void pc64_nap(void) {
 // waits until hiraku-pc has shown it and its pacing starts the next frame (a quarter of a second
 // at most, if it has stopped answering)
 void pc64_link_picture(unsigned w, unsigned h) {
+    pc64_patches_apply();   // (the mods' patches: each frame, as the 32-bit games' DLL)
     struct hk_pc_link *l = pc64_link();
     l->frame_w = w, l->frame_h = h;
     MemoryBarrier();

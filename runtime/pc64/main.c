@@ -210,6 +210,7 @@ int main(int argc, char **argv) {
     pc64_trace_d3dx_install(game);
     pc64_crt_install(game);
     pc64_songs_install(game);
+    pc64_patches_install();
     int (*entry_init)(char *, node_t) = need(game, game_dll, "dll_entry_init");
     int (*entry_main)(void) = need(game, game_dll, "dll_entry_main");
 
@@ -225,6 +226,31 @@ int main(int argc, char **argv) {
     text(e, "/ea3/id/softid", softid, sizeof softid);
     text(e, "/ea3/id/hardid", hardid, sizeof hardid);
     text(e, "/ea3/id/accountid", account, sizeof account);
+    // HK_PC64_MARKET: the cabinet's market (dest: J Japan, A Asia, K Korea, U the USA) in place of
+    // ea3-config's. The game writes a mark of its market (dev/raw/X.dest) at its first start and
+    // won't start as another while one is there (dll_entry_init): the others' put aside
+    // (X.dest.hiraku) and the market's own back if it was, for the market in use (so the
+    // setting can change, and go back to the data's)
+    const char *market = getenv("HK_PC64_MARKET");
+    if (market && market[0] && !market[1] && strchr("JAKU", market[0])) {
+        dest[0] = market[0], dest[1] = 0;
+        node_t soft = property_search(e, NULL, "/ea3/soft");
+        drop(e, soft, "dest");
+        property_node_create(e, soft, NODE_STR, "dest", dest);
+        pc64_log("market %s (HIRAKU's setting)", dest);
+    }
+    if (dest[0] && !dest[1] && strchr("JAKU", dest[0]))
+        for (const char *c = "jaku"; *c; c++) {
+            char mark[32], aside[40];
+            snprintf(mark, sizeof mark, "dev\\raw\\%c.dest", *c);
+            snprintf(aside, sizeof aside, "%s.hiraku", mark);
+            const int ours = *c == (char)(dest[0] - 'A' + 'a');
+            if (ours && GetFileAttributesA(mark) == INVALID_FILE_ATTRIBUTES) MoveFileA(aside, mark);
+            else if (!ours && GetFileAttributesA(mark) != INVALID_FILE_ATTRIBUTES) {
+                DeleteFileA(aside);
+                if (MoveFileA(mark, aside)) pc64_log("market %s: the cabinet's mark of %c set aside", dest, *c - 'a' + 'A');
+            }
+        }
     if (!hardid[0]) property_node_create(e, NULL, NODE_STR, "/ea3/id/hardid", strcpy(hardid, "0100DEADBEEF"));
     if (!account[0]) property_node_create(e, NULL, NODE_STR, "/ea3/id/accountid", strcpy(account, "012018008135"));
     char security[32], soft_id[64], init_code[64];

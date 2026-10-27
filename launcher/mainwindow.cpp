@@ -3,6 +3,7 @@
 #include "nvidia.h"
 
 #include <QAction>
+#include <QActionGroup>
 #include <QApplication>
 #include <QClipboard>
 #include <QCollator>
@@ -925,6 +926,7 @@ QStringList MainWindow::arguments(const Game &g) const {
         if (s.value("eamuse/autopin", false).toBool()) a << "-autopin";
     }
     if (g.loader == "pc64" && s.value("singleScreen/" + g.id).toBool()) a << "--single-screen";   // (Game menu)
+    if (g.loader == "pc64" && !s.value("market/" + g.id).toString().isEmpty()) a << "--market" << s.value("market/" + g.id).toString();
     if (g.core == "pc") {   // pop'n music 15-18's presses (runtime/pc/press.c)
         if (s.value("game/pressTime", false).toBool()) a << "--press-time";
         if (int ms = s.value("game/judgeOffset", 0).toInt(); ms) a << "--judge-offset" << QString::number(ms);
@@ -1111,6 +1113,23 @@ void MainWindow::fillGameMenu(QMenu *menu, const Game &g) {
         one->setChecked(cfg::settings().value("singleScreen/" + id).toBool());
         one->setToolTip("For an older cabinet: the main screen at 640x480, no touch screen or big buttons; "
                         "the save folder's single-screen/ layout when there is one");
+        // the cabinet's market (runtime/pc64/main.c): its language and the songs it lists
+        auto *market = menu->addMenu("Market");
+        market->setToolTip("The country the cabinet was sold for: its texts' language and the songs it lists "
+                           "(licensed songs are some countries' only)");
+        auto *group = new QActionGroup(market);
+        const QString now = cfg::settings().value("market/" + id).toString();
+        for (const auto &[code, label] : std::vector<std::pair<QString, QString>>{
+                 {"", "As the game's data says"}, {"J", "Japan"}, {"A", "Asia (English)"}, {"K", "Korea"}, {"U", "USA"}}) {
+            auto *m = market->addAction(label, this, [this, id, code] {
+                if (code.isEmpty()) cfg::settings().remove("market/" + id);
+                else cfg::settings().setValue("market/" + id, code);
+                gameChanged();
+            });
+            m->setCheckable(true);
+            m->setChecked(code == now);
+            group->addAction(m);
+        }
     }
     menu->addSeparator();
     QString nv = cfg::nvramDir(id);

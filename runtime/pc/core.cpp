@@ -201,6 +201,15 @@ public:
             crt_ = true;
             return true;
         }
+        if (name == "--market") {
+            market_ = value();
+            for (char &c : market_) c = (char)std::toupper((unsigned char)c);
+            if (market_ != "J" && market_ != "A" && market_ != "K" && market_ != "U") {
+                fprintf(stderr, "--market: J (Japan), A (Asia), K (Korea) or U (the USA), not '%s'\n", market_.c_str());
+                exit(2);
+            }
+            return true;
+        }
         if (name == "--press-time") {
             press_time_ = true;
             return true;
@@ -235,6 +244,8 @@ public:
                            "                       later from the controls to the screen, for a PC too slow otherwise\n"
                            "  --single-screen      the 64-bit PC games on one 4:3 screen with nine buttons (an older\n"
                            "                       cabinet's): the main screen's middle at 640x480, no touch screen\n"
+                           "  --market J|A|K|U     the 64-bit PC games: the cabinet's market (Japan, Asia, Korea, the\n"
+                           "                       USA) in place of the game's prop/ea3-config.xml's\n"
                            "  --press-time         pop'n 15-18: each press judged by when it happened, not by the frame\n"
                            "                       the game read it in (as the game does: up to a frame later)\n"
                            "  --judge-offset MS    pop'n 15-18: each press judged MS milliseconds earlier (positive:\n"
@@ -453,6 +464,7 @@ public:
         // under Wine, whatever the window asks): SDL's joystick events in the background too
         set_env("SDL_JOYSTICK_ALLOW_BACKGROUND_EVENTS", "1");
         if (crt_) set_env("HK_PC64_OUTPUT", "crt");   // the loader's single-screen mode (runtime/pc64/crt.c)
+        set_env("HK_PC64_MARKET", market_);           // (runtime/pc64/main.c)
         save_ = o.nvram_dir.empty() ? hk::user_data_dir(o.root) + "/" + game_ : o.nvram_dir;
         mkdirs(save_ + "/run");
         const std::string bin_dir = hk::sys::exe_path().substr(0, hk::sys::exe_path().rfind('/'));
@@ -484,6 +496,26 @@ public:
             set_env("HK_PC64_DATA", data_mods);
             printf("hiraku-pc: %zu mod%s over the game's data\n", mods.size(), mods.size() == 1 ? "" : "s");
         }
+        // their memory patches ([[patch]], with module = "popn.dll" at an offset in it): the loader
+        // puts them in (runtime/pc64/patches.c), a line each: "WHERE ONCE ORIGINAL REPLACE"
+        patches_ = hk::mods::memory_patches();
+        std::string plist;
+        for (const auto &p : patches_) {
+            char a[96];
+            snprintf(a, sizeof a, "%s%s%08x %d ", p.module.c_str(), p.module.empty() ? "" : "+", p.address, p.once ? 1 : 0);
+            std::string o, r;
+            char x[3];
+            for (uint8_t v : p.original) snprintf(x, sizeof x, "%02x", v), o += x;
+            for (uint8_t v : p.replace) snprintf(x, sizeof x, "%02x", v), r += x;
+            plist += a + (o.empty() ? std::string("-") : o) + " " + r + "\n";
+        }
+        if (patches_.size() > 256) {
+            fprintf(stderr, "mods: %zu memory patches; a PC game takes 256\n", patches_.size());
+            return false;
+        }
+        std::ofstream(save_ + "/mods-patches.txt", std::ios::trunc) << plist;
+        set_env("HK_PC_PATCHES", plist.empty() ? "" : win_path(save_ + "/mods-patches.txt"));
+        if (!plist.empty()) printf("mods: %zu memory patches go to the game\n", patches_.size());
         { std::ofstream(save_ + "/pc.log", std::ios::trunc); }
         printf("hiraku-pc: %s from %s; saves in %s\n", game_.c_str(), contents_.c_str(), save_.c_str());
         fflush(stdout);
@@ -1013,8 +1045,15 @@ private:
             std::ofstream(run_prog_ + "/dat.bin", std::ios::binary | std::ios::trunc) << d;
             if (changed) printf("mods: %zu of the game's files changed in its list of its files (dat.bin)\n", changed);
         }
-        // the patches: "ADDRESS ONCE ORIGINAL REPLACE" (hex; "-": no original, a cheat)
+        // the patches: "ADDRESS ONCE ORIGINAL REPLACE" (hex; "-": no original, a cheat); those in a
+        // module (the 64-bit loader's) aren't this DLL's
         patches_ = hk::mods::memory_patches();
+        for (size_t i = patches_.size(); i-- > 0;)
+            if (!patches_[i].module.empty()) {
+                fprintf(stderr, "mods: %s: a patch in %s isn't for this game's loader (left out)\n", patches_[i].mod.c_str(),
+                        patches_[i].module.c_str());
+                patches_.erase(patches_.begin() + (long)i);
+            }
         if (!texts_in_program(patches_)) return false;
         if (patches_.size() > 256) {
             fprintf(stderr, "mods: %zu memory patches; a PC game takes 256\n", patches_.size());
@@ -1267,6 +1306,7 @@ private:
     std::string data_as_;             // the name the game gives its data folder (HK_PC_MAP)
     int tt_frac_[2] = {};             // turntable_add's counts not yet a whole step
     bool crt_ = false;                // --single-screen: the 64-bit loader's single-screen mode
+    std::string market_;              // --market: the 64-bit loader's HK_PC64_MARKET
     std::string contents_, loader_;   // its game folder, hiraku-pc64.exe (contents_: the 32-bit one's too)
     hk::EaOptions ea_;
     std::unique_ptr<hk::py::EamuseServer> server_;

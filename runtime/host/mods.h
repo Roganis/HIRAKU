@@ -28,12 +28,14 @@ std::vector<std::string> describe();
 
 // For a core whose game runs as a program of its own (the PC games: core().mem() has nothing),
 // what the mods change there, for the core to hand to the game's process:
-// - the memory patches (not those tied to a [[rate]]), at the program's own addresses;
+// - the memory patches (not those tied to a [[rate]]), at the program's own addresses, or (module
+//   given) at an offset in one of the program's modules, wherever Windows put it;
 // - the game's files that a mod's file takes the place of, in a folder medium of machine.txt
 //   (the PC games' data=): the game's file -> the mod's, absolute paths.
 struct MemoryPatch {
     std::string mod;
     uint32_t address = 0;
+    std::string module;   // a module of the program's ("popn.dll"): address is an offset in it
     std::vector<uint8_t> original, replace;   // original empty: written every frame (a cheat)
     bool once = false;
 };

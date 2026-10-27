@@ -91,6 +91,9 @@ int pc64_tables_grow(HMODULE game, BYTE **music, unsigned songs, unsigned new_so
 // a chart's format as the music data has it (old: 8-byte events), for the game's check of it
 int pc64_chart_formats_install(HMODULE game, unsigned nchart);
 void pc64_chart_format(unsigned chart, int old);
+// patches.c: the mods' memory patches (HK_PC_PATCHES), put in once the game is loaded, then each frame
+void pc64_patches_install(void);
+void pc64_patches_apply(void);
 void pc64_songs_install(HMODULE game);   // songs.c: songs the game left out, back from the mods' music data   // crt.c: its play screen's characters, scaled to the 4:3 picture
 // link.c: a fifth of a millisecond's nap
 void pc64_nap(void);

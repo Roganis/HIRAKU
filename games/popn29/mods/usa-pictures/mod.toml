@@ -1,0 +1,37 @@
+name = "The USA market on the other markets' pictures"
+version = "1.0"
+game = "popn29"
+author = "HIRAKU"
+description = "As the USA's cabinet (Market: USA), the backgrounds, banners, hariai and names from the Japan, Korea and Asia packs, for data without the USA's own (_u)."
+
+# Each of the six packs' names: the USA's (market 4) only when the data has them; these take the others'
+[[patch]]   # bg
+module = "popn.dll"
+address = 0x5e330
+original = "83f90174 07"
+replace  = "83f90190 90"
+[[patch]]   # ha_merge
+module = "popn.dll"
+address = 0x5e360
+original = "83f90174 07"
+replace  = "83f90190 90"
+[[patch]]   # kc_diff
+module = "popn.dll"
+address = 0x5e390
+original = "83f90174 07"
+replace  = "83f90190 90"
+[[patch]]   # kc
+module = "popn.dll"
+address = 0x5e3c4
+original = "83fa0175 59"
+replace  = "83fa01eb 59"
+[[patch]]   # chara_name_diff
+module = "popn.dll"
+address = 0x5e4b0
+original = "83f90174 07"
+replace  = "83f90190 90"
+[[patch]]   # chara_name
+module = "popn.dll"
+address = 0x5e4e4
+original = "83fa0175 57"
+replace  = "83fa01eb 57"

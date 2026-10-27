@@ -95,6 +95,7 @@ std::vector<Table> parse(const std::string &text, const std::string &file) {
 struct Patch {
     std::string mod;
     uint32_t address = 0;
+    std::string module;   // the PC games' (a module of the program's, address an offset in it): not frame()'s
     std::vector<uint8_t> original, replace;
     bool once = false, done = false, logged = false;
     bool while_rate = false;   // in place only while a [[rate]] is on; the original bytes otherwise
@@ -508,10 +509,13 @@ bool load(const std::vector<std::string> &dirs, const std::string &game, const s
                     mod.version = str("version", false);
                     if (const std::string g = str("game", true); g != game) fail("this mod is for " + g + ", not " + game);
                 } else if (t.kind == "patch") {
-                    known({"address", "original", "replace", "once", "while_rate", "between_ticks"});
+                    known({"address", "module", "original", "replace", "once", "while_rate", "between_ticks"});
                     Patch p;
                     p.mod = mod.name;
                     p.address = (uint32_t)num("address");
+                    p.module = str("module", false);
+                    if (!p.module.empty() && (p.while_rate || flag("while_rate") || flag("between_ticks")))
+                        fail("a patch in a module (the PC games) can't be tied to a [[rate]]");
                     if (t.values.count("original")) p.original = hex("original");   // none: written every frame (a cheat)
                     p.replace = hex("replace");
                     p.once = flag("once");
@@ -692,7 +696,7 @@ void frame() {
         }
     }
     for (Patch &p : g_patches) {
-        if (p.done) continue;
+        if (p.done || !p.module.empty()) continue;   // (a module's: the PC games' process puts it in)
         if (p.while_rate && (!rate_on || (p.between_ticks && g_tick))) {   // the original back, if the patch is there
             const size_t n = p.original.size();
             auto *m = const_cast<uint8_t *>(core().mem(p.address, (uint32_t)n));
@@ -719,7 +723,7 @@ void frame() {
 std::vector<MemoryPatch> memory_patches() {
     std::vector<MemoryPatch> out;
     for (const Patch &p : g_patches)
-        if (!p.while_rate) out.push_back({p.mod, p.address, p.original, p.replace, p.once});
+        if (!p.while_rate) out.push_back({p.mod, p.address, p.module, p.original, p.replace, p.once});
     return out;
 }
 

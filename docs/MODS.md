@@ -182,6 +182,7 @@ description = "What it does, in a line or two."
 
 [[patch]]                       # bytes in the game's memory
 address = 0x0191cdb8            # where, as the core's mem() takes it (the main CPU's address)
+# module = "popn.dll"           # the PC games: address is an offset in this module of the game's
 original = "46524545 20504c41 59"   # hex: what must be there (spaces are ignored)
 replace  = "4d4f4444 45442120 21"   # hex: what goes there (as long as original)
 # once = true                   # apply the first time only (default: whenever original is there again)
@@ -403,7 +404,13 @@ so their memory and files are the game's own process's, not an emulated machine'
   the songs the game left out, each whose Normal chart's `sd/<folder>/<file>.ifs` is there; a
   picture the game reads from inside one of its packs (a song's banner `kc_NNNN.ifs`, its
   background) can be a whole file in the mod's folder named after the pack, as ifs_layeredfs's
-  (`tex/system/kc_diff_ifs/kc_0001.ifs`). The save folder's `pc.log` lists the songs brought back
+  (`tex/system/kc_diff_ifs/kc_0001.ifs`). Its `[[patch]]`es name the module they're in
+  (`module = "popn.dll"`, `address` an offset in it: the 64-bit game's addresses don't fit the
+  table), each put in when the game is loaded and checked each frame (`mods: patch at ... in place`
+  in `pc.log`); a patch with a module isn't for the 32-bit games (left out, and said). HIRAKU's
+  `games/popn29/mods/`: `every-market` (the songs and characters a cabinet's market leaves out,
+  listed in every one) and `usa-pictures` (the USA's market on data without its pictures).
+  The save folder's `pc.log` lists the songs brought back
   and those left out (PLAN.md section 34; how to install a pack: [SONGS-BACK.md](SONGS-BACK.md)). Not yet: songs past the game's own (custom songs), PNGs
   in the `_ifs` folders, and their scores on HIRAKU's e-AMUSEMENT server.
 

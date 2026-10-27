@@ -2714,16 +2714,27 @@ Nothing of a game comes with HIRAKU: the songs are the player's.
   table's copy now starts at the entries (the 2-byte variable just before it, 0x1807bb168, three
   places, stays where it is). 410 songs back, 33 characters, none left with another's. Checked in
   the game: 993 (`_diff`), 1475 (umaru_23a and its pictures, 99~139) played, their scores sent.
-- **Songs the game keeps from its region.** The player's data says `<dest>K</dest>` (ea3-config:
-  model M39:K:D:A, the Korean market: the Korean texts). The music list leaves out song 0x649
-  (1609, the Disney medley) unless the region (0x1800a72f0) is 0, and the mask's bit 20 songs (49 of
-  the game's own, GRADIUS among them; 1570, 1571 from the pack) weren't in the list either: the
-  game's rules for that market, the same for its own songs. Set to `J` (the owner, 2026-10-27):
-  `dest` in the game's ea3-config and in the save folders' copies (copied again only when the size
-  changes), and the market mark `dev/raw/k.dest` renamed: `dll_entry_init` (0x1802a5250) maps
-  the letter to the region (A 1, J 0, K 2, U 4; 0x18152e8a8) and, once a `/dev/raw/X.dest` of j, a,
-  k or u is there, fails unless the current one's is (0x1802a51a0; the first start writes it).
-  Japanese texts then, and 1609 and 1570 listed and played.
+- **The cabinet's market.** The player's data says `<dest>K</dest>` (ea3-config: model
+  M39:K:D:A, Korea: the Korean texts). `dll_entry_init` (0x1802a5250) maps the letter to the
+  market (A 1, J 0, K 2, U 4: 0x18152e8a8) and, once a `/dev/raw/X.dest` of j, a, k or u is there,
+  fails unless the current one's is (0x1802a51a0; the first start writes it). What the market
+  does: the screens' language (`tex/system29/*_j/_k/_e`), the picture packs (0x18005e310-0x18005e540:
+  `bg`, `ha_merge`, `kc`, `kc_diff`, `chara_name`, `chara_name_diff`: `_u` for the USA, `_jka`
+  for the others; some data has no `_u`: the USA stops at the card entry, 5-1509), and the songs:
+  outside Japan the three licensed songs 1570, 1571, 1609 are marked removed as the game starts
+  (0x1800765bc: after the loader, so they never showed), 1609 also wants a setting's 0
+  (0x1800a72f0), each song's +120 and each character's own markets are bits tested against it.
+  (Earlier read as the mask's bit 20: wrong; GRADIUS not opening was the cursor's.)
+  - **Done (2026-10-27):** HIRAKU's setting (launcher **Market**, `--market`, the loader's
+    `HK_PC64_MARKET`: ea3's dest in the loader's copy of ea3-config, the identity and init code),
+    the marks kept in line for the market in use (the others' set aside as `X.dest.hiraku`, back
+    when it's theirs again); `[[patch]]` for the 64-bit game (`module = "popn.dll"`, an offset:
+    `runtime/pc64/patches.c`, the list from hiraku-pc); `games/popn29/mods/every-market` (the
+    markets' getters for songs and characters return every market, the three songs kept, 1609's
+    check skipped) and `usa-pictures` (the six packs' choice: `_jka` for the USA too). Checked:
+    Korea with every-market lists the Disney medley; the USA with both plays a credit; back to
+    the data's market. The owner's data was set to `J` by hand before (its prop copies and the
+    mark): the setting does that now. (The loader copies `prop` into the save folder once.)
 - **Not yet:** scores for restored songs checked on HIRAKU's e-AMUSEMENT server (it keeps any song
   number), the `_ifs` folders' PNGs (only whole members: the removed characters' icons need them),
   By Medal and the extra Random entries (By Medal's source is needed).

@@ -1,0 +1,33 @@
+name = "Every song in every market"
+version = "1.0"
+game = "popn29"
+author = "HIRAKU"
+description = "The songs and characters a cabinet's market leaves out (licensed songs some countries' only) listed in every market."
+
+# Each song's markets (the getter of its record's +120, a bit a market): all of them
+[[patch]]
+module = "popn.dll"
+address = 0x770d0
+original = "4883ec28 e897"
+replace  = "b8ffff00 00c3"   # mov eax,0xffff; ret
+
+# Each character's markets: all of them
+[[patch]]
+module = "popn.dll"
+address = 0x5e150
+original = "4883ec28 e827"
+replace  = "b8ffff00 00c3"
+
+# Outside Japan the game marks three licensed songs removed as it starts (1570, 1571, 1609): not
+[[patch]]
+module = "popn.dll"
+address = 0x765bc
+original = "833de582 4b010074 1e"   # cmp dword [market],0; je
+replace  = "833de582 4b0100eb 1e"   # ... jmp
+
+# Song 1609 is listed only when the cabinet's setting there (0x1800a72f0) is 0: always
+[[patch]]
+module = "popn.dll"
+address = 0x64781
+original = "b8490600 00663bd8 7509"   # mov eax,0x649; cmp bx,ax; jne
+replace  = "b8490600 00663bd8 eb09"   # ... jmp

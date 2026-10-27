@@ -314,7 +314,7 @@ elseif(NOT WIN32 AND EXISTS /usr/x86_64-w64-mingw32/lib/libkernel32.a)
   endif()
 endif()
 if(HK_PC64_CC)
-  set(HK_PC64_SOURCES main.c log.c imports.c files.c link.c display.c board.c net.c touch.c sound.c script.c crt.c songs.c tables.c ../pc32/x86.c)
+  set(HK_PC64_SOURCES main.c log.c imports.c files.c link.c display.c board.c net.c touch.c sound.c script.c crt.c songs.c tables.c patches.c ../pc32/x86.c)
   list(TRANSFORM HK_PC64_SOURCES PREPEND ${CMAKE_SOURCE_DIR}/runtime/pc64/ OUTPUT_VARIABLE HK_PC64_PATHS)
   add_custom_command(OUTPUT ${CMAKE_BINARY_DIR}/pc/hiraku-pc64.exe
     COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/pc

@@ -45,7 +45,7 @@ QString script() { return upd::packageRoot() + "/tools/update.py"; }
 
 // the last lines the script wrote, as its error
 QString lastLines(const QByteArray &out) {
-    const QStringList l = QString::fromLocal8Bit(out).trimmed().split('\n');
+    const QStringList l = QString::fromUtf8(out).trimmed().split('\n');
     return l.mid(std::max<qsizetype>(0, l.size() - 3)).join('\n');
 }
 
@@ -108,7 +108,7 @@ UpdateDialog::UpdateDialog(const QJsonObject &rel, QWidget *parent) : QDialog(pa
 
     connect(&m_proc, &QProcess::readyReadStandardOutput, this, [this] {
         while (m_proc.canReadLine()) {
-            const QString line = QString::fromLocal8Bit(m_proc.readLine()).trimmed();
+            const QString line = QString::fromUtf8(m_proc.readLine()).trimmed();
             if (line.startsWith("progress ")) {
                 const QStringList p = line.split(' ');
                 const qint64 done = p.value(1).toLongLong(), total = p.value(2).toLongLong();

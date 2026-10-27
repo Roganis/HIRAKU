@@ -124,7 +124,7 @@ QJsonObject UnlocksDialog::run(const QStringList &extra, QString *err) {
         return {};
     }
     QJsonObject o = QJsonDocument::fromJson(p.readAllStandardOutput()).object();
-    if (o.isEmpty()) *err = QString::fromLocal8Bit(p.readAllStandardError()).trimmed();
+    if (o.isEmpty()) *err = QString::fromUtf8(p.readAllStandardError()).trimmed();
     else if (o.contains("error")) *err = o["error"].toString();
     return o;
 }
@@ -144,6 +144,7 @@ void UnlocksDialog::rebuild() {
     v->addWidget(where);
     if (!err.isEmpty()) {
         auto *e = new QLabel(err);
+        e->setTextFormat(Qt::PlainText);   // (a traceback's "<module>" isn't a tag)
         e->setWordWrap(true);
         v->addWidget(e);
     }

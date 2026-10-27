@@ -51,9 +51,20 @@ static void restore_environment() {
 #endif
 }
 
+// The tools (Python) write UTF-8 to the launcher, which reads them so. On Windows Python writes a
+// pipe in the PC's code page otherwise (cp1252 on a western PC), and a tool printing Japanese (an
+// unlock's title) stopped at its first character with nothing printed.
+static void python_utf8() {
+#ifdef Q_OS_WIN
+    qputenv("PYTHONUTF8", "1");
+    qputenv("PYTHONIOENCODING", "utf-8");
+#endif
+}
+
 int main(int argc, char **argv) {
     QApplication app(argc, argv);
     restore_environment();
+    python_utf8();
     QApplication::setApplicationName("hiraku");
     QApplication::setApplicationDisplayName("HIRAKU");
     QApplication::setDesktopFileName("hiraku");

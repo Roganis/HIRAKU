@@ -419,7 +419,7 @@ MainWindow::MainWindow() {
         if (m_filesGame.isEmpty()) return;   // stopped for another game's (checkFiles)
         const QJsonObject o = QJsonDocument::fromJson(m_files.readAllStandardOutput()).object();
         if (st == QProcess::NormalExit && code == 0 && !o.isEmpty()) m_fileLists[m_filesGame] = o;
-        else m_fileLists[m_filesGame] = QJsonObject{{"error", QString::fromLocal8Bit(m_files.readAllStandardError()).trimmed()}};
+        else m_fileLists[m_filesGame] = QJsonObject{{"error", QString::fromUtf8(m_files.readAllStandardError()).trimmed()}};
         const QString id = m_filesGame;
         m_filesGame.clear();
         if (const Game *g = selected(); g && g->id == id) showDetails();
@@ -428,7 +428,7 @@ MainWindow::MainWindow() {
     // ---- the game process ----
     m_ingest.setProcessChannelMode(QProcess::MergedChannels);
     connect(&m_ingest, &QProcess::readyRead, this, [this] {
-        QString t = QString::fromLocal8Bit(m_ingest.readAll());
+        QString t = QString::fromUtf8(m_ingest.readAll());
         m_ingestOutput += t;
         log(t);
     });

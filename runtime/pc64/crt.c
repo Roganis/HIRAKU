@@ -19,8 +19,16 @@
 //     order (it picks one of fourteen orders; the loader has it pick the plain one), each digit a
 //     touch on its button, 00 the pad's clear.
 //   - The music select in nine-button mode: on entering it, once a credit, its category list is
-//     opened (the "play with 9 buttons" panel) and "by title" chosen: every category but "giant
-//     pop-kun" (the big buttons' charts, which can't be played here) uses the nine buttons.
+//     opened (the "play with 9 buttons" panel) and "by title" chosen (market J's panel: by genre),
+//     then the index's letter it shows chosen: every category but "giant pop-kun" (the big buttons'
+//     charts, which can't be played here) uses the nine buttons. Each step once the touch screen's
+//     picture (read back, not shown) shows the screen it needs.
+//   - Menus on the cabinet's colours, shown on the touch screen's view with the cursor on the item:
+//     at the options, green (3, 7) the previous and next option of the FULL OPTION editor, blue (4,
+//     6) its value, red (5) done; at the music select, green the categories, blue the previous and
+//     next, red the one chosen, then the same for its choices (letters, levels, versions..., found
+//     on the picture; the list dragged on past its last row, the cursor's choice found again after
+//     by its label). Each touch is checked on the picture and made again if the game let it go.
 //   - The play screen's characters, smaller and in the 4:3 picture's side columns (as pop'n's 4:3
 //     games have them): the game moves each to its place each frame (AFP's layer position, which
 //     popn.dll imports by ordinal); for its characters' layers the whole matrix is set instead. Their
@@ -79,33 +87,66 @@ int pc64_crt(void) {
     return on;
 }
 
-// The touches, made on a thread of their own (a touch takes 160 ms: the board's reads go on): a
-// place, or two with a second between (a list opened, then a choice in it)
+// The touches, made on a thread of their own (a touch takes 160 ms: the board's reads go on):
+// sequences of up to four in turn, a second between (a list opened, then a choice in it): touches,
+// drags, or a button pressed for the game (PRESS: a.x its number); a few sequences waiting their
+// turn (the buttons pressed quicker than the touches go)
+enum { TOUCH, DRAG, PRESS };
+struct act { struct place a, b; int drag; DWORD wait; };
+struct seq { struct act acts[4]; int count; };
+#define QUEUE 8
 static HANDLE g_wake;
-static volatile LONG g_pending;
-static struct place g_touches[2];
-static int g_count;
+static struct seq g_queue[QUEUE];
+static volatile LONG g_queued, g_done;   // sequences put in, and made
+static volatile LONG g_pending;          // some waiting or being made
+static CRITICAL_SECTION g_queue_lock;
 static DWORD WINAPI toucher(void *unused) {
     (void)unused;
     for (;;) {
         WaitForSingleObject(g_wake, INFINITE);
-        if (!InterlockedExchange(&g_pending, 0)) continue;
-        for (int i = 0; i < g_count; i++) {
-            if (i) Sleep(1000);
-            pc64_touch(g_touches[i].x, g_touches[i].y);
+        while (g_done != g_queued) {
+            const struct seq q = g_queue[g_done % QUEUE];
+            for (int i = 0; i < q.count; i++) {
+                if (i) Sleep(q.acts[i].wait);
+                if (q.acts[i].drag == DRAG) {
+                    pc64_drag(q.acts[i].a.x, q.acts[i].a.y, q.acts[i].b.x, q.acts[i].b.y);
+                } else if (q.acts[i].drag == PRESS) {
+                    pc64_held |= PC64_IN_BUTTON(q.acts[i].a.x);
+                    Sleep(120);
+                    pc64_held &= ~PC64_IN_BUTTON(q.acts[i].a.x);
+                } else {
+                    pc64_touch(q.acts[i].a.x, q.acts[i].a.y);
+                }
+            }
+            Sleep(60);   // the game's frame between two sequences
+            InterlockedIncrement(&g_done);
         }
+        g_pending = g_done != g_queued;
     }
     return 0;
 }
-static void touch_soon(int count, struct place a, struct place b) {
+static int run_acts(const struct act *acts, int count) {
     if (!g_wake) {
+        InitializeCriticalSection(&g_queue_lock);
         g_wake = CreateEventA(NULL, FALSE, FALSE, NULL);
         CreateThread(NULL, 0, toucher, NULL, 0, NULL);
     }
-    if (g_pending) return;   // one sequence at a time
-    g_touches[0] = a, g_touches[1] = b, g_count = count;
-    InterlockedExchange(&g_pending, 1);
-    SetEvent(g_wake);
+    EnterCriticalSection(&g_queue_lock);
+    const int full = g_queued - g_done >= QUEUE;
+    if (!full) {
+        struct seq *q = &g_queue[g_queued % QUEUE];
+        for (int i = 0; i < count; i++) q->acts[i] = acts[i];
+        q->count = count;
+        g_pending = 1;
+        InterlockedIncrement(&g_queued);
+    }
+    LeaveCriticalSection(&g_queue_lock);
+    if (!full) SetEvent(g_wake);
+    return !full;
+}
+static void touch_soon(int count, struct place a, struct place b) {
+    const struct act acts[2] = {{a, a, TOUCH, 0}, {b, b, TOUCH, 1000}};
+    run_acts(acts, count);
 }
 
 // The touch screen's view: on, and its cursor in the touch screen's 1280x800
@@ -148,13 +189,441 @@ static void move_cursor(unsigned in, unsigned keys) {
     g_cy = y < 0 ? 0 : y > 799 ? 799 : y;
 }
 
+// The menus, for the cabinet's buttons (green 3 and 7, blue 4 and 6, red 5), shown on the touch
+// screen's view (the cursor on the item chosen):
+//   - the options (green at the options): the FULL OPTION editor opened, green the previous and next
+//     option, blue its value (a slider's arrows; a list's previous or next choice, the one the game
+//     shows chosen found by its pink frame), red done;
+//   - the categories (green at the music select): their panel opened, blue the previous and next, red
+//     the one chosen; then the choices it has (letters, levels, versions...: the buttons found on the
+//     picture, the list dragged on past its last or first), blue and red again; green closes.
+static int g_menu;            // 0 none, MENU_*
+enum { MENU_OPTIONS = 1, MENU_CATEGORIES, MENU_CHOICES };
+static int g_item;            // the option, the category
+static int g_editing;         // the option editor opened (by the shortcut, a menu or a touch in the view)
+static int g_page = -1;       // the editor's page: its FULL OPTION category, or -1 (SIMPLE, or not known)
+static DWORD g_menu_at;       // the choices: when their category was touched; a drag: when it was made
+static int g_dragged;         // the choices: dragged by (pixels, up < 0), the cursor to be put after it
+static int g_steps;           // the choices: blue's steps pressed while the list was moving
+static int g_closing;         // the choice touched: the menu closes once it has taken
+static const struct place EDIT_FULL = {133, 609}, CLOSE = {117, 107};
+static const int FULL_PAGE_X = 328, FULL_PAGE_Y[4] = {206, 307, 408, 509};   // サポート, アレンジ, エリア, ガイド
+#define CHOICE_Y_4 {142, 267, 392, 517}
+static const struct option {
+    const char *name;
+    int page, x;
+    int up, down;             // a slider's arrows (y)
+    int n, y[4];              // a list's choices (y)
+    int toggle;               // a slider that's off until its label is touched (HIDDEN, SUDDEN): its label's y
+} OPTIONS_LIST[] = {
+    {"HI-SPEED", 0, 584, 88, 555, 0, {0}, 0},
+    {"JUDGE ADJUST", 0, 785, 88, 555, 0, {0}, 0},
+    {"LONG POP", 0, 987, 0, 0, 2, {147, 267}, 0},
+    {"POP-KUN", 1, 507, 0, 0, 4, CHOICE_Y_4, 0},
+    {"GAUGE", 1, 709, 0, 0, 4, CHOICE_Y_4, 0},
+    {"JUDGE+", 1, 909, 0, 0, 4, CHOICE_Y_4, 0},
+    {"RANDOM", 1, 1109, 0, 0, 4, CHOICE_Y_4, 0},
+    {"HIDDEN", 2, 506, 91, 552, 0, {0}, 617},
+    {"SUDDEN", 2, 706, 91, 552, 0, {0}, 617},
+    {"LIFT", 2, 906, 91, 552, 0, {0}, 0},
+    {"ROOF", 2, 1106, 91, 552, 0, {0}, 0},
+    {"GUIDE SE", 3, 709, 0, 0, 4, {144, 270, 395, 520}, 0},
+    {"GUIDE SE VOL", 3, 909, 88, 555, 0, {0}, 0},
+};
+#define NOPTIONS ((int)(sizeof OPTIONS_LIST / sizeof OPTIONS_LIST[0]))
+#define OPTION_LABEL_Y 610
+// The categories' panel (でっかポップ君, the big buttons', left out)
+static const struct place CATEGORY[] = {{518, 187}, {770, 187}, {1025, 187}, {269, 338}, {518, 338},
+                                        {770, 338}, {1025, 338}, {269, 490}, {518, 490}, {770, 490}};
+#define NCATEGORIES ((int)(sizeof CATEGORY / sizeof CATEGORY[0]))
+
+// The touch screen's picture (half its size), as the view last showed it
+static uint32_t g_sub[640 * 400], g_before[640 * 400];
+static volatile DWORD g_sub_at;
+void pc64_crt_sub_picture(const uint32_t *px, int w, int h) {
+    if (w != 640 || h > 400) return;
+    memcpy(g_sub, px, sizeof(uint32_t) * (size_t)w * (size_t)h);
+    g_sub_at = GetTickCount();
+}
+static uint32_t sub_px(int x, int y) {   // (x, y) of the 1280x800
+    x /= 2, y /= 2;
+    return x < 0 || y < 0 || x >= 640 || y >= 400 ? 0xffffff : g_sub[y * 640 + x];
+}
+// the buttons' edge (dark teal) and the chosen one's frame (pink)
+static int teal(uint32_t p) {
+    const int r = p >> 16 & 255, g = p >> 8 & 255, b = p & 255;
+    return r < 50 && g >= 95 && g <= 145 && b >= 65 && b <= 115;
+}
+static int pink(uint32_t p) {
+    const int r = p >> 16 & 255, g = p >> 8 & 255, b = p & 255;
+    return r > 215 && g < 110 && b >= 100 && b <= 180;
+}
+
+// The choices' buttons on the picture: rows found down the first column's left edge (x 164), the
+// columns by the second's edge (5 across: lefts 160, 360...; 4 across, the versions' logos: 161, 413...)
+#define MAX_CELLS 40
+static int find_cells(struct place *cell, int *chosen) {
+    static const int LEFT5[5] = {160, 360, 560, 760, 960}, LEFT4[4] = {161, 413, 665, 917};
+    int rows[12], len[12], nrows = 0, run = -1, longest = 0;
+    for (int y = 80; y <= 696 && nrows < 12; y += 2) {
+        const int on = teal(sub_px(164, y));
+        if (on && run < 0) run = y;
+        if ((!on || y == 696) && run >= 0) {
+            if (y - run >= 20 && run > 80 && y < 696) {   // (a level button: 45 high)
+                rows[nrows] = (run + y) / 2, len[nrows] = y - run;
+                if (len[nrows] > longest) longest = len[nrows];
+                nrows++;
+            }
+            run = -1;
+        }
+    }
+    int whole = 0;   // the rows seen whole (one cut by the panel's edge can't be touched)
+    for (int r = 0; r < nrows; r++)
+        if (len[r] * 10 >= longest * 9) rows[whole++] = rows[r];
+    nrows = whole;
+    if (!nrows) return 0;
+    const int five = teal(sub_px(364, rows[0]));
+    const int *left = five ? LEFT5 : LEFT4, ncols = five ? 5 : 4, half = five ? 84 : 107;
+    int n = 0;
+    *chosen = -1;
+    for (int r = 0; r < nrows; r++)
+        for (int c = 0; c < ncols && n < MAX_CELLS; c++) {
+            if (!teal(sub_px(left[c] + 4, rows[r]))) continue;
+            for (int dx = 4; dx <= 14 && *chosen < 0; dx += 2)
+                if (pink(sub_px(left[c] - dx, rows[r]))) *chosen = n;
+            cell[n++] = (struct place){left[c] + half, rows[r]};
+        }
+    return n;
+}
+static int cells_seen(void) {
+    struct place cell[MAX_CELLS];
+    int chosen;
+    return find_cells(cell, &chosen) > 0;
+}
+// the list's chosen choice (its pink frame), or -1
+static int chosen_choice(const struct option *o) {
+    for (int i = 0; i < o->n; i++)
+        for (int dx = 52; dx <= 74; dx += 2)
+            if (pink(sub_px(o->x - dx, o->y[i]))) return i;
+    return -1;
+}
+
+// HIDDEN's, SUDDEN's value says "OFF" (red letters on its label, below its name)
+static int off_label(const struct option *o) {
+    int red = 0;
+    for (int x = o->x - 26; x <= o->x + 26; x += 2) {
+        const uint32_t p = sub_px(x, o->toggle + 15);
+        red += (p >> 16 & 255) > 170 && (p >> 8 & 255) < 70 && (p & 255) < 70;
+    }
+    return red >= 4;
+}
+
+static void cursor_to(struct place p) { g_cx = p.x, g_cy = p.y; }
+
+static void options_menu_show(void) {
+    const struct option *o = &OPTIONS_LIST[g_item];
+    cursor_to((struct place){o->x, OPTION_LABEL_Y});
+    struct act acts[4];
+    int n = 0;
+    if (!g_editing) acts[n++] = (struct act){EDIT_OPTIONS, EDIT_OPTIONS, TOUCH, 0};
+    if (g_page != o->page) {
+        if (g_page < 0) acts[n++] = (struct act){EDIT_FULL, EDIT_FULL, TOUCH, 700};
+        const struct place page = {FULL_PAGE_X, FULL_PAGE_Y[o->page]};
+        acts[n++] = (struct act){page, page, TOUCH, 500};
+    }
+    if (n && run_acts(acts, n)) g_editing = 1, g_page = o->page;
+    pc64_log("crt: the options' %s", o->name);
+}
+static void option_change(int up) {
+    const struct option *o = &OPTIONS_LIST[g_item];
+    if (o->n) {
+        // the choice the game shows chosen, or the one just touched (the picture not caught up yet)
+        static int last_item = -1, last_choice;
+        static DWORD last_at;
+        int now = chosen_choice(o);
+        if (last_item == g_item && GetTickCount() - last_at < 1200) now = last_choice;
+        int next = now < 0 ? 0 : now + (up ? 1 : -1);
+        if (next < 0) next = o->n - 1;
+        if (next >= o->n) next = 0;
+        touch_soon(1, (struct place){o->x, o->y[next]}, (struct place){0, 0});
+        last_item = g_item, last_choice = next, last_at = GetTickCount();
+    } else if (o->toggle && off_label(o)) {
+        // HIDDEN, SUDDEN: off (its value "OFF" in red under its name) until its label is touched
+        const struct place label = {o->x, o->toggle};
+        touch_soon(1, label, label);
+    } else {
+        const struct place arrow = {o->x, up ? o->up : o->down};
+        touch_soon(1, arrow, arrow);
+    }
+}
+
+static void choices_step(int forward) {
+    struct place cell[MAX_CELLS];
+    int chosen, n = find_cells(cell, &chosen);
+    if (!n) return;
+    int at = 0, best = 1 << 30;   // the cell the cursor is on
+    for (int i = 0; i < n; i++) {
+        const int d = abs(cell[i].x - g_cx) + abs(cell[i].y - g_cy);
+        if (d < best) best = d, at = i;
+    }
+    const int next = at + (forward ? 1 : -1);
+    if (next >= 0 && next < n) {
+        cursor_to(cell[next]);
+        return;
+    }
+    // past the end: the list dragged on two rows (as far as its rows go apart), the cursor put after
+    int rowgap = 96;
+    for (int i = 1; i < n; i++)
+        if (cell[i].y > cell[0].y) {
+            rowgap = cell[i].y - cell[0].y;
+            break;
+        }
+    const int dy = forward ? -2 * rowgap : 2 * rowgap;
+    const struct place from = {640, forward ? 560 : 260}, to = {640, from.y + dy};
+    const struct act drag = {from, to, DRAG, 0};
+    if (run_acts(&drag, 1)) {
+        memcpy(g_before, g_sub, sizeof g_sub);   // to measure how far it moved (less at the list's ends)
+        g_dragged = dy;
+        g_menu_at = GetTickCount();
+    }
+}
+
+// The list still after a drag (it moves as the drag lets go, and glides on): the picture the same
+// (its panel) at three of its refreshes 150 ms apart, from a second after the drag was asked for
+static int settled(void) {
+    static uint32_t last[640 * 400];
+    static DWORD last_at;
+    static int quiet;
+    const DWORD since = GetTickCount() - g_menu_at;
+    if (since < 1000) {
+        quiet = 0;
+        return 0;
+    }
+    if (g_sub_at - last_at < 150) return 0;
+    long diff = 0;
+    for (int y = 45; y < 345; y += 3)
+        for (int x = 40; x < 600; x += 5) {
+            const uint32_t a = last[y * 640 + x], b = g_sub[y * 640 + x];
+            diff += abs((int)(a >> 8 & 255) - (int)(b >> 8 & 255));
+        }
+    memcpy(last, g_sub, sizeof last);
+    last_at = g_sub_at;
+    quiet = diff < 1500 ? quiet + 1 : 0;
+    return quiet >= 2 || since > 4000;
+}
+
+// How different a cell's label is in two pictures (its button's middle: opaque, the panel behind
+// doesn't show through): the brightness compared, a cell's half width less its edges
+static long long cell_diff(const uint32_t *pa, struct place ca, const uint32_t *pb, struct place cb, int half) {
+    long long d = 0;
+    const int w = half / 2 - 10;
+    for (int dy = -9; dy <= 9; dy++)
+        for (int dx = -w; dx <= w; dx++) {
+            const int xa = ca.x / 2 + dx, ya = ca.y / 2 + dy, xb = cb.x / 2 + dx, yb = cb.y / 2 + dy;
+            if (xa < 0 || xb < 0 || ya < 0 || yb < 0 || xa >= 640 || xb >= 640 || ya >= 400 || yb >= 400) return 1LL << 40;
+            const uint32_t p = pa[ya * 640 + xa], q = pb[yb * 640 + xb];
+            d += abs((int)((p >> 16 & 255) + (p >> 8 & 255) + (p & 255)) - (int)((q >> 16 & 255) + (q >> 8 & 255) + (q & 255)));
+        }
+    return d;
+}
+
+// The music select's screens on the touch screen's picture: its category header (its box's sides),
+// the categories' panel (its buttons' left edges)
+static int header_seen(void) { return teal(sub_px(117, 100)) && teal(sub_px(345, 100)); }
+static int panel_seen(void) { return teal(sub_px(153, 338)) && teal(sub_px(405, 338)) && teal(sub_px(657, 338)); }
+
+// A touch checked: made again (three times at most, 1.2 s apart) until the screen it should bring is
+// seen (the game lets some touches go, in its screens' animations)
+enum { SEE_PANEL = 1, SEE_NO_PANEL, SEE_NO_CELLS };
+static struct place g_check_at;
+static int g_check, g_check_tries, g_check_failed;
+static DWORD g_check_time;
+static int cells_seen(void);
+static int seen(int want) {
+    switch (want) {
+    case SEE_PANEL: return panel_seen();
+    case SEE_NO_PANEL: return !panel_seen();
+    default: return !panel_seen() && !cells_seen();
+    }
+}
+static void touch_checked(struct place p, int want) {
+    touch_soon(1, p, p);
+    g_check_at = p, g_check = want, g_check_tries = 1, g_check_failed = 0, g_check_time = GetTickCount();
+}
+// 1 while a checked touch is waiting for its screen (g_check_failed: given up)
+static int checking(void) {
+    if (!g_check) return 0;
+    const DWORD now = GetTickCount();
+    if (g_pending || now - g_check_time < 400 || g_sub_at < g_check_time + 300) return 1;
+    if (seen(g_check)) {
+        g_check = 0;
+        return 0;
+    }
+    if (now - g_check_time < 1200) return 1;
+    if (g_check_tries >= 3) {
+        pc64_log("crt: the touch at %d,%d didn't take", g_check_at.x, g_check_at.y);
+        g_check = 0, g_check_failed = 1;
+        return 0;
+    }
+    touch_soon(1, g_check_at, g_check_at);
+    g_check_tries++, g_check_time = now;
+    return 1;
+}
+
+// The music select's first index, each step once the screen it needs is seen: its header (the
+// panel opened), the panel (the index chosen: market K's by title, J's by genre), the index's letters
+// (the one it shows chosen, else the first, touched); given up if a screen isn't seen in time
+static volatile int g_auto;      // the step: 0 none, 1 the header, 2 the panel, 3 the letters
+static DWORD g_auto_at;          // the step's start
+int pc64_crt_wants_sub(void) { return g_auto != 0 || pc64_scene == MUSIC_SELECT; }
+static void auto_index(void) {
+    const DWORD now = GetTickCount(), since = now - g_auto_at;
+    if (g_sub_at < g_auto_at + 200 || checking()) return;   // a picture since the step began; a touch's screen
+    if (g_check_failed) {
+        pc64_log("crt: the music select's index: left at step %d", g_auto);
+        g_auto = 0, g_check_failed = 0;
+        return;
+    }
+    struct place cell[MAX_CELLS];
+    int chosen, n;
+    switch (g_auto) {
+    case 1:   // the header seen: the panel opened
+        if (header_seen()) {
+            touch_checked((struct place){CATEGORIES_X, CATEGORIES_Y}, SEE_PANEL);
+            g_auto = 2, g_auto_at = now;
+            return;
+        }
+        break;
+    case 2:   // the panel opened: the index chosen
+        touch_checked((struct place){BY_TITLE_X, BY_TITLE_Y}, SEE_NO_PANEL);
+        g_auto = 3, g_auto_at = now;
+        return;
+    case 3:   // the index's letters seen: the one shown chosen touched
+        if (since >= 500 && (n = find_cells(cell, &chosen)) > 0) {
+            const struct place p = cell[chosen >= 0 ? chosen : 0];
+            touch_checked(p, SEE_NO_CELLS);
+            pc64_log("crt: the music select's index, its letter at %d,%d", p.x, p.y);
+            g_auto = 4, g_auto_at = now;
+            return;
+        }
+        break;
+    case 4:   // done
+        g_auto = 0;
+        return;
+    }
+    if (since > (g_auto == 1 ? 10000u : 4000u)) {
+        pc64_log("crt: the music select's index: step %d not seen, left as it is", g_auto);
+        g_auto = 0;
+    }
+}
+
+// The buttons while a menu is shown
+static void menu(unsigned in, unsigned in_down) {
+    const unsigned green = PC64_IN_BUTTON(3) | PC64_IN_BUTTON(7), blue = PC64_IN_BUTTON(4) | PC64_IN_BUTTON(6);
+    const DWORD now = GetTickCount();
+    static DWORD held_since, step_at;
+    int go = 0;   // blue's step: at the press, then every 0.2 s from 0.4 s held (the options' sliders)
+    if (!(in & blue)) held_since = 0;
+    else if (in_down & blue) held_since = now, step_at = now, go = 1;
+    else if (g_menu == MENU_OPTIONS && held_since && now - held_since >= 400 && now - step_at >= 200) step_at = now, go = 1;
+    const int up = (in & PC64_IN_BUTTON(6)) != 0;
+    if (checking()) return;   // a touch waiting for its screen
+    if (g_closing || g_check_failed) {   // the choice made (or a touch that didn't take): the menu closed
+        if (g_check_failed && g_menu != MENU_OPTIONS) pc64_log("crt: the menu closed");
+        g_view = 0, g_menu = 0, g_closing = 0, g_check_failed = 0;
+        return;
+    }
+    switch (g_menu) {
+    case MENU_OPTIONS:
+        if (in_down & green) {
+            g_item = (g_item + ((in_down & PC64_IN_BUTTON(7)) ? 1 : NOPTIONS - 1)) % NOPTIONS;
+            options_menu_show();
+        } else if (go) {
+            option_change(up);
+        } else if (in_down & PC64_IN_BUTTON(5)) {
+            g_view = 0, g_menu = 0;
+            pc64_log("crt: the options' menu closed");
+        }
+        return;
+    case MENU_CATEGORIES:
+        if (in_down & green) {
+            touch_soon(1, CLOSE, CLOSE);
+            g_view = 0, g_menu = 0;
+        } else if (go) {
+            g_item = (g_item + (up ? 1 : NCATEGORIES - 1)) % NCATEGORIES;
+            cursor_to(CATEGORY[g_item]);
+        } else if (in_down & PC64_IN_BUTTON(5)) {
+            touch_checked(CATEGORY[g_item], SEE_NO_PANEL);
+            g_menu = MENU_CHOICES, g_menu_at = now, g_dragged = 0, g_steps = 0;
+            pc64_log("crt: the category %d chosen", g_item);
+        }
+        return;
+    case MENU_CHOICES: {
+        struct place cell[MAX_CELLS];
+        int chosen, n;
+        if (g_menu_at && g_dragged && !settled()) return;   // the list still gliding
+        if (g_menu_at && now - g_menu_at >= 700 && g_sub_at > g_menu_at + 300) {
+            n = find_cells(cell, &chosen);   // its choices shown (or none)
+            if (g_dragged) {   // after a drag: the cursor's choice found again (its label), then the next
+                int found = -1;
+                long long best = 1LL << 40;
+                const int half = n > 1 && cell[1].x - cell[0].x > 230 ? 107 : 84;   // a cell's half width (4 or 5 across)
+                for (int i = 0; i < n; i++) {
+                    const long long d = cell_diff(g_before, (struct place){g_cx, g_cy}, g_sub, cell[i], half);
+                    if (d < best) best = d, found = i;
+                }
+                pc64_log("crt: the list dragged %d: the choice found again at %d,%d", g_dragged, found >= 0 ? cell[found].x : -1,
+                         found >= 0 ? cell[found].y : -1);
+                if (found >= 0) {
+                    const int next = found + (g_dragged < 0 ? 1 : -1);
+                    cursor_to(cell[next < 0 ? 0 : next >= n ? n - 1 : next]);
+                }
+                g_menu_at = 0, g_dragged = 0;
+                return;
+            }
+            if (n) {
+                cursor_to(cell[chosen >= 0 ? chosen : 0]);
+            } else if (now - g_menu_at >= 2000) {   // a category without choices: done
+                g_view = 0, g_menu = 0;
+                pc64_log("crt: the category has no choices");
+                return;
+            } else {
+                return;
+            }
+            g_menu_at = 0, g_dragged = 0;
+        }
+        if (g_menu_at) {   // waiting for the picture: blue's presses kept for after
+            if (go) g_steps += up ? 1 : -1;
+            return;
+        }
+        if (g_steps && !g_pending) {   // ... and made now, one at a time
+            const int forward = g_steps > 0;
+            g_steps += forward ? -1 : 1;
+            choices_step(forward);
+            return;
+        }
+        if (in_down & green) {
+            touch_soon(1, CLOSE, CLOSE);
+            g_view = 0, g_menu = 0;
+        } else if (go) {
+            choices_step(up);
+        } else if (in_down & PC64_IN_BUTTON(5)) {
+            const struct place p = {g_cx, g_cy};
+            touch_checked(p, SEE_NO_CELLS);
+            g_closing = 1;
+            pc64_log("crt: the choice at %d,%d", p.x, p.y);
+        }
+        return;
+    }
+    }
+}
+
 // What the player does, watched on a thread of its own every 2 ms (a tap the game's board reads
 // would miss, when it's busy, is seen): button 5's presses in the scenes above made touches, the
 // music select's nine buttons chosen, the touch screen's view
 static void watch(unsigned in, unsigned keys) {
     static int scene_seen = -1, step, nine_done;
     static unsigned cards_seen;
-    static int editing;            // the option editor opened (by the shortcut, or touched in the view)
     static DWORD speed_at;         // HI-SPEED's last step
     static unsigned in_was = ~0u, keys_was = ~0u;   // nothing pressed at the start
     static DWORD scene_at;
@@ -163,21 +632,39 @@ static void watch(unsigned in, unsigned keys) {
     // the view, in and out: the decimal point, or buttons 1 and 9 together
     const unsigned both = PC64_IN_BUTTON(1) | PC64_IN_BUTTON(9);
     if ((keys_down & KEY_DECIMAL) || ((in & both) == both && (in_down & both))) {
-        g_view = !g_view;
+        g_view = !g_view, g_menu = 0;
         pc64_log("crt: the touch screen %s", g_view ? "shown" : "hidden");
         return;
     }
     const int scene = pc64_scene;
     if (scene != scene_seen) {   // a new scene: its first place first, the touch screen hidden
-        scene_seen = scene, step = 0, scene_at = GetTickCount(), cards_seen = pc64_cards_given, editing = 0;
+        scene_seen = scene, step = 0, scene_at = GetTickCount(), cards_seen = pc64_cards_given, g_editing = 0, g_page = -1, g_menu = 0;
+        g_auto = 0, g_check = 0, g_check_failed = 0, g_closing = 0;
         if (scene == TITLE) nine_done = 0;   // a new credit
         if (g_view) g_view = 0, pc64_log("crt: the touch screen hidden (scene %d)", scene);
+    }
+    if (g_view && g_menu) {
+        menu(in, in_down);
+        return;
+    }
+    const unsigned green = PC64_IN_BUTTON(3) | PC64_IN_BUTTON(7);
+    if (!g_view && (in_down & green) && scene == OPTIONS) {   // the options' menu
+        g_menu = MENU_OPTIONS, g_item = 0, g_view = 1;
+        options_menu_show();
+        return;
+    }
+    if (!g_view && (in_down & green) && scene == MUSIC_SELECT && !g_pending && !g_auto && header_seen()) {   // the categories' menu
+        touch_checked((struct place){CATEGORIES_X, CATEGORIES_Y}, SEE_PANEL);
+        g_menu = MENU_CATEGORIES, g_item = 0, g_view = 1;
+        cursor_to(CATEGORY[0]);
+        pc64_log("crt: the categories' menu");
+        return;
     }
     if (g_view) {
         move_cursor(in, keys);
         if ((keys_down & KEY(5)) || (in_down & PC64_IN_BUTTON(5))) {
             pc64_log("crt: the touch screen touched at %d,%d", g_cx, g_cy);
-            if (scene == OPTIONS) editing = 1;
+            if (scene == OPTIONS) g_editing = 1, g_page = -1;
             touch_soon(1, (struct place){g_cx, g_cy}, (struct place){g_cx, g_cy});
         }
         return;
@@ -185,8 +672,9 @@ static void watch(unsigned in, unsigned keys) {
     if (scene == MUSIC_SELECT && !nine_done && GetTickCount() - scene_at > 1500) {   // once it has come in
         nine_done = 1;
         pc64_log("crt: the music select in nine-button mode (its songs by title)");
-        touch_soon(2, (struct place){CATEGORIES_X, CATEGORIES_Y}, (struct place){BY_TITLE_X, BY_TITLE_Y});
+        g_auto = 1, g_auto_at = GetTickCount();
     }
+    if (g_auto) auto_index();
     if (scene == OPTIONS) {   // HI-SPEED: a step at the press, then every 0.2 s from 0.4 s held
         static DWORD held_since;
         const unsigned speed = in & (PC64_IN_BUTTON(4) | PC64_IN_BUTTON(6));
@@ -197,8 +685,8 @@ static void watch(unsigned in, unsigned keys) {
         else if (held_since && now - held_since >= 400 && now - speed_at >= 200) speed_at = now, go = 1;
         if (go) {
             const struct place arrow = (speed & PC64_IN_BUTTON(6)) ? SPEED_UP : SPEED_DOWN;
-            if (!editing) {
-                editing = 1;
+            if (!g_editing) {
+                g_editing = 1, g_page = -1;
                 pc64_log("crt: the option editor opened for HI-SPEED");
                 touch_soon(2, EDIT_OPTIONS, arrow);
             } else {

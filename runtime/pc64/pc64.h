@@ -62,6 +62,8 @@ void pc64_link_picture(unsigned w, unsigned h);   // it's there: counted, then w
 
 // touch.c: a touch on the sub screen at (x, y) of its 1280x800: down, held 160 ms, up
 void pc64_touch(int x, int y);
+// touch.c: a drag on the sub screen (a list scrolled), held still at its end before it lets go
+void pc64_drag(int x0, int y0, int x1, int y1);
 // touch.c: a mouse click posted to the sub screen's window there (the mouse's way to a touch)
 void pc64_click(int x, int y);
 // link.c: the card held to the reader (a count that moves on with each) and its UID; HK_SCRIPT's
@@ -83,6 +85,10 @@ int pc64_crt(void);
 unsigned pc64_crt_inputs(unsigned in);
 int pc64_crt_view(int *x, int *y);
 void pc64_crt_cursor(int x, int y);   // (HK_SCRIPT's cursor:X:Y)
+// crt.c: the touch screen's picture while its view is shown (640x400, 0x00RRGGBB), kept for the
+// menus to find the buttons on it (display.c gives it)
+void pc64_crt_sub_picture(const uint32_t *px, int w, int h);
+int pc64_crt_wants_sub(void);   // ... and wanted while not shown (a menu's step at work)
 void pc64_crt_install(HMODULE game);
 // tables.c: the music and chart tables copied into bigger ones, the code pointed at the copies
 int pc64_tables_move(HMODULE game, BYTE **music, unsigned songs, unsigned new_songs, BYTE **charts, unsigned nchart, unsigned new_nchart);

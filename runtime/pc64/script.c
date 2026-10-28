@@ -4,6 +4,7 @@
 //   HK_SCRIPT="s12+2:service,s12+4:touch:640:470,s35+1:up:service,..."
 //   STEP = sSCENE+SECONDS:ACTION (when scene SCENE is entered, SECONDS later) or SECONDS:ACTION
 //   ACTION = touch:X:Y (the sub screen, 1280x800) | click:X:Y (a mouse click there) |
+//   drag:X:Y:X1:Y1 (a touch moved from one place to the other, held still before it lets go) |
 //   mash:INPUT+INPUT:SECONDS:MS (the two pressed in turn, each for half of MS, for SECONDS) | card (the card,
 //   the link's or HK_PC64_CARD's, held to the reader) | [down:|up:]INPUT (held 300 ms, or held, or let go)
 //   INPUT = test | service | coin | b1..b9 | red | blue | headphones | key0..key9 | key00 | keydot (the
@@ -44,6 +45,12 @@ static DWORD WINAPI run(void *arg) {
         if (sscanf(action, "touch:%d:%d", &x, &y) == 2) {
             pc64_log("script: touch %d,%d (scene %d, picture %u)", x, y, pc64_scene, pc64_frames);
             pc64_touch(x, y);
+            continue;
+        }
+        int x1, y1;
+        if (sscanf(action, "drag:%d:%d:%d:%d", &x, &y, &x1, &y1) == 4) {
+            pc64_log("script: drag %d,%d to %d,%d (scene %d, picture %u)", x, y, x1, y1, pc64_scene, pc64_frames);
+            pc64_drag(x, y, x1, y1);
             continue;
         }
         char a[16], b[16];

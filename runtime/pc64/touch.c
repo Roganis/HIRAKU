@@ -185,6 +185,26 @@ void pc64_touch(int x, int y) {
     event(w, x, y, TOUCHEVENTF_UP);
 }
 
+// A drag on the sub screen from (x0, y0) to (x1, y1) of its 1280x800: down, moved in steps over 0.3 s,
+// held still a moment (no fling), up
+void pc64_drag(int x0, int y0, int x1, int y1) {
+    HWND w = sub_screen();
+    if (!w) return;
+    int x, y;
+    client_point(w, x0, y0, &x, &y);
+    event(w, x, y, TOUCHEVENTF_DOWN | TOUCHEVENTF_INRANGE);
+    for (int i = 1; i <= 12; i++) {
+        Sleep(25);
+        client_point(w, x0 + (x1 - x0) * i / 12, y0 + (y1 - y0) * i / 12, &x, &y);
+        event(w, x, y, TOUCHEVENTF_MOVE | TOUCHEVENTF_INRANGE);
+    }
+    for (int i = 0; i < 6; i++) {
+        Sleep(33);
+        event(w, x, y, TOUCHEVENTF_MOVE | TOUCHEVENTF_INRANGE);
+    }
+    event(w, x, y, TOUCHEVENTF_UP);
+}
+
 void pc64_touch_install(HMODULE game) {
     r_RegisterTouchWindow = pc64_import(game, "user32.dll", "RegisterTouchWindow", (void *)RegisterTouchWindow_);
     r_GetTouchInputInfo = pc64_import(game, "user32.dll", "GetTouchInputInfo", (void *)GetTouchInputInfo_);

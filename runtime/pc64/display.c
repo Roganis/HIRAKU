@@ -239,7 +239,7 @@ static HRESULT WINAPI StretchRect_(IDirect3DDevice9Ex *d, IDirect3DSurface9 *src
 // (640x400), and shown instead with black above and below and the cursor drawn on it
 static IDirect3DSurface9 *g_sub_small, *g_sub_readback;
 static void keep_sub(IDirect3DSwapChain9 *s) {
-    if (!pc64_crt() || !pc64_crt_view(NULL, NULL)) return;
+    if (!pc64_crt() || (!pc64_crt_view(NULL, NULL) && !pc64_crt_wants_sub())) return;
     IDirect3DSurface9 *bb = NULL;
     if (FAILED(IDirect3DSwapChain9_GetBackBuffer(s, 0, D3DBACKBUFFER_TYPE_MONO, &bb))) return;
     D3DSURFACE_DESC d;
@@ -266,6 +266,26 @@ static void draw_cursor(uint32_t *out, int w, int h, int x, int y) {
         }
 }
 
+// The touch screen's picture, not shown, read back for crt.c's menus to look at (10 times a second)
+static void sub_for_menus(void) {
+    static uint32_t px[640 * 400];
+    static DWORD at;
+    if (GetTickCount() - at < 100) return;
+    at = GetTickCount();
+    D3DSURFACE_DESC sd;
+    D3DLOCKED_RECT lr;
+    if (!g_sub_small || FAILED(IDirect3DSurface9_GetDesc(g_sub_small, &sd)) || sd.Width != 640 || sd.Height > 400 ||
+        FAILED(IDirect3DDevice9_GetRenderTargetData((IDirect3DDevice9 *)g_dev, g_sub_small, g_sub_readback)) ||
+        FAILED(IDirect3DSurface9_LockRect(g_sub_readback, &lr, NULL, D3DLOCK_READONLY)))
+        return;
+    for (UINT y = 0; y < sd.Height; y++) {
+        const uint32_t *p = (const uint32_t *)((const uint8_t *)lr.pBits + (size_t)y * lr.Pitch);
+        for (UINT x = 0; x < 640; x++) px[y * 640 + x] = p[x] & 0xffffff;
+    }
+    IDirect3DSurface9_UnlockRect(g_sub_readback);
+    pc64_crt_sub_picture(px, 640, (int)sd.Height);
+}
+
 static int to_link_view(uint32_t *out) {
     enum { W = 640, H = 480 };
     D3DSURFACE_DESC sd;
@@ -282,6 +302,7 @@ static int to_link_view(uint32_t *out) {
         for (UINT x = 0; x < W; x++) o[x] = p[x] & 0xffffff;
     }
     IDirect3DSurface9_UnlockRect(g_sub_readback);
+    pc64_crt_sub_picture(out + (size_t)top * W, W, (int)sd.Height);
     int cx, cy;
     pc64_crt_view(&cx, &cy);
     draw_cursor(out, W, H, cx / 2, cy / 2 + (int)top);
@@ -293,6 +314,7 @@ static int to_link_crt(IDirect3DSurface9 *bb, const D3DSURFACE_DESC *d, uint32_t
     enum { W = 640, H = 480 };
     static IDirect3DSurface9 *half, *small, *readback;
     if (pc64_crt_view(NULL, NULL) && !pc64_link_not_shown() && to_link_view(out)) return 1;
+    if (pc64_crt_wants_sub()) sub_for_menus();
     if (!readback) {
         IDirect3DDevice9 *dev = (IDirect3DDevice9 *)g_dev;
         if (FAILED(IDirect3DDevice9_CreateRenderTarget(dev, W * 3 / 2, H * 3 / 2, d->Format, D3DMULTISAMPLE_NONE, 0, FALSE, &half, NULL)) ||

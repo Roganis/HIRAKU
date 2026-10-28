@@ -26,9 +26,10 @@
 //     popn.dll imports by ordinal); for its characters' layers the whole matrix is set instead. Their
 //     windows are made smaller in the layout (hiraku-pc's single-screen/); the songs' pictures the
 //     game puts in them, fitted to them.
-//   - The characters' big pictures (the music select's, the VS screen's, the result's): the game
-//     gives them at their own size, which the engine keeps whatever the clip's scale; given as
-//     PICTURE_SCALE of it (the newer characters' animated ones are made smaller in the layout).
+//   - The characters' big pictures (the character select's, the music select's, the VS screen's,
+//     the result's): the game gives them at their own size, which the engine keeps whatever the
+//     clip's scale; given as PICTURE_SCALE of it (the newer characters' animated ones are made
+//     smaller in the layout).
 #include "pc64.h"
 
 #include <stdlib.h>
@@ -42,6 +43,7 @@ static const struct { int scene; int count; struct place at[3]; } SCENES[] = {
 };
 #define MUSIC_SELECT 28
 #define RESULT 23
+#define CHARACTER_SELECT 21
 #define CATEGORIES_X 300                 // the music select's category panel (touch screen, 1280x800)
 #define CATEGORIES_Y 100
 #define BY_TITLE_X 755                   // ... and in its list, "by title"
@@ -321,7 +323,8 @@ static int big_picture(const void *texture) {
 static int set_texture(int clip, const void *texture, char fit) {
     for (int i = 0; i < WINDOW_CLIPS && !fit; i++) fit = g_window_clips[i] == clip;
     const int scene = pc64_scene;   // (the VS screen's pictures are given as the music select ends)
-    if (!fit && texture && (scene == MUSIC_SELECT || scene == OPTIONS || scene == RESULT) && big_picture(texture)) {
+    if (!fit && texture && (scene == CHARACTER_SELECT || scene == MUSIC_SELECT || scene == OPTIONS || scene == RESULT) &&
+        big_picture(texture)) {
         // its texture's size made smaller for the call: the picture's size is taken from it then
         unsigned *size = (unsigned *)((BYTE *)texture + 4);
         const unsigned w = size[0], h = size[1];

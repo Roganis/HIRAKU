@@ -1473,6 +1473,43 @@ def sound_lists(data: str) -> list[str]:
     return written
 
 
+# The song pictures' packs a game's music select has room for (graph/sys/mdata: a 1024x15360 area in
+# DistorteD, which 0.gcz-5.gcz fill)
+PICTURE_PACKS = {"iidx13": 6}
+
+
+def picture_packs(data: str, gid: str) -> int:
+    """graph/sys/mdata/system.idx lists the song pictures' packs (the count at +6, then a 32-byte name
+    each from +0x18). A DistorteD dump going around lists a seventh, 6.gcz, whose pictures land past
+    the area the game keeps for them: the music select crashes. The cabinet's lists six (the same file
+    with the count 6 and the seventh name blanked). Such an index is made so, the original kept beside
+    it as system.idx.orig. The packs dropped (0 if none)."""
+    most = PICTURE_PACKS.get(gid)
+    path = os.path.join(data, "graph", "sys", "mdata", "system.idx")
+    if most is None or not os.path.isfile(path):
+        return 0
+    with open(path, "rb") as fh:
+        idx = bytearray(fh.read())
+    count = struct.unpack_from("<H", idx, 6)[0] if len(idx) >= 8 else 0
+    if count <= most or len(idx) < 0x18 + count * 0x20:
+        return 0
+    names = [bytes(idx[0x18 + i * 0x20:0x38 + i * 0x20]).rstrip(b"\0") for i in range(count)]
+    if names != [f"/sys/mdata/{i}.gcz".encode() for i in range(count)]:   # not the one known
+        print(f"warning  graph/sys/mdata/system.idx lists {count} picture packs, the game has room for {most}: its music select may crash")
+        return 0
+    struct.pack_into("<H", idx, 6, most)
+    idx[0x18 + most * 0x20:0x18 + count * 0x20] = bytes((count - most) * 0x20)
+    try:
+        if not os.path.exists(path + ".orig"):
+            shutil.copy2(path, path + ".orig")
+        with open(path, "wb") as fh:
+            fh.write(idx)
+    except OSError as e:
+        print(f"warning  graph/sys/mdata/system.idx lists {count} picture packs and couldn't be repaired ({e.strerror}): the music select crashes")
+        return 0
+    return count - most
+
+
 def ingest_pc(args, game: dict, program: str, data: str) -> int:
     """A PC game: its folder is read where it is (several GB); hiraku-pc copies the program folder
     into the save folder to run it, with HIRAKU's DLLs (runtime/pc/host.cpp)."""
@@ -1491,6 +1528,9 @@ def ingest_pc(args, game: dict, program: str, data: str) -> int:
     print(f"data     {data} (read where it is{'' if data.startswith(os.path.abspath(args.out)) else ': keep it there'})")
     for d in sound_lists(data):
         print(f"repaired sd_data/{d}/owl.bin (the song's sound list, missing from the dump: made from its files)")
+    if (n := picture_packs(data, gid)):
+        print(f"repaired graph/sys/mdata/system.idx ({n} picture pack{'s' if n > 1 else ''} past the game's room left out, "
+              "as the cabinet's; the original kept as system.idx.orig)")
     print(f"OK       dumps/{gid}/machine.txt")
     return 0
 

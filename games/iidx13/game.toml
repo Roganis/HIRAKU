@@ -5,7 +5,7 @@ family = "iidx"         # IIDX cabinet: 7 keys and a turntable per player, VEFX,
 core = "pc"             # Konami's own program in HIRAKU's cabinet (runtime/pc/, PLAN.md section 36)
 
 [pc]
-exe = "bm2dx.exe"       # in FDD/JAx/, a folder by revision: the last (JAF) is run
+exe = "bm2dx.exe"       # in FDD/JAx/, a folder by revision: the last (JAG, else JAF) is run
 mark = "FDD.music"      # what tells this game's program from 9th style's to HAPPY SKY's (all bm2dx.exe)
 layout = "revisions"
 board = "c02-driver"    # the C02 cabinet's board under its driver (runtime/pc/ezusb_dev.c), from RtEffect.dll

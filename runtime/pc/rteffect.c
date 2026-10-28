@@ -10,6 +10,9 @@
 // (rteffect.def).
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
+#include <strmif.h>
+#include <amvideo.h>
+#include <dvdmedia.h>
 #include <stdint.h>
 #include <string.h>
 
@@ -177,12 +180,100 @@ static void set_up_cabinet(void) {
     hk_log("hiraku-pc: C02: the operator settings' loader not found: a new cabinet stops at BACKUP DATA and CLOCK ERROR");
 }
 
+// --- the movies (HAPPY SKY and DistorteD): the game plays them through DirectShow into a renderer of
+// its own ("TEXTURERENDERER"), which takes RGB24 described by a VIDEOINFOHEADER2 only (the
+// cabinet's CyberLink MPEG-2 decoder's way). Wine's MPEG video decoder offers RGB24 with a
+// VIDEOINFOHEADER: refused, the graph put a renderer of its own in, the game's texture was never
+// made and the stages stayed black (RED's renderer takes a VIDEOINFOHEADER: its movies played).
+// The renderer's CheckMediaType and SetMediaType (found by shape: both compare the format with
+// FORMAT_VideoInfo2, then read the size from it) are given the same picture in a VIDEOINFOHEADER2;
+// a decoder that offers one goes straight through.
+typedef HRESULT(__thiscall *media_type_fn)(void *self, const AM_MEDIA_TYPE *mt);
+static media_type_fn g_check_media_type, g_set_media_type;
+
+static const GUID format_video_info = {0x05589f80, 0xc356, 0x11ce, {0xbf, 0x01, 0x00, 0xaa, 0x00, 0x55, 0x59, 0x5a}};
+static const GUID format_video_info2 = {0xf72a76a0, 0xeb0a, 0x11d0, {0xac, 0xe4, 0x00, 0x00, 0xc0, 0xcc, 0x16, 0xba}};
+
+// mt as the game's renderer wants it (in m and v2), or mt itself
+static const AM_MEDIA_TYPE *as_video_info2(const AM_MEDIA_TYPE *mt, AM_MEDIA_TYPE *m, VIDEOINFOHEADER2 *v2) {
+    if (!mt || !IsEqualGUID(&mt->formattype, &format_video_info) || !mt->pbFormat || mt->cbFormat < sizeof(VIDEOINFOHEADER))
+        return mt;
+    const VIDEOINFOHEADER *v = (const VIDEOINFOHEADER *)mt->pbFormat;
+    memset(v2, 0, sizeof *v2);
+    v2->rcSource = v->rcSource;
+    v2->rcTarget = v->rcTarget;
+    v2->dwBitRate = v->dwBitRate;
+    v2->dwBitErrorRate = v->dwBitErrorRate;
+    v2->AvgTimePerFrame = v->AvgTimePerFrame;
+    v2->bmiHeader = v->bmiHeader;
+    *m = *mt;
+    m->formattype = format_video_info2;
+    m->cbFormat = sizeof *v2;
+    m->pbFormat = (BYTE *)v2;
+    return m;
+}
+
+static HRESULT __thiscall check_media_type(void *self, const AM_MEDIA_TYPE *mt) {
+    AM_MEDIA_TYPE m;
+    VIDEOINFOHEADER2 v2;
+    return g_check_media_type(self, as_video_info2(mt, &m, &v2));
+}
+
+static HRESULT __thiscall set_media_type(void *self, const AM_MEDIA_TYPE *mt) {
+    static int said;
+    AM_MEDIA_TYPE m;
+    VIDEOINFOHEADER2 v2;
+    const AM_MEDIA_TYPE *to = as_video_info2(mt, &m, &v2);
+    if (to != mt && !said++) hk_log("hiraku-pc: a movie's pictures handed to the game as its renderer wants them (VIDEOINFOHEADER2)");
+    return g_set_media_type(self, to);
+}
+
+// each pointer to fn in the program's data (its vtables) set to to
+static int patch_pointers(uint8_t *fn, void *to) {
+    char *base = (char *)hk_program();
+    IMAGE_NT_HEADERS *nt = (IMAGE_NT_HEADERS *)(base + ((IMAGE_DOS_HEADER *)base)->e_lfanew);
+    IMAGE_SECTION_HEADER *sec = IMAGE_FIRST_SECTION(nt);
+    int n = 0;
+    for (WORD s = 0; s < nt->FileHeader.NumberOfSections; s++, sec++) {
+        if (sec->Characteristics & IMAGE_SCN_MEM_EXECUTE) continue;
+        uint32_t *p = (uint32_t *)(base + sec->VirtualAddress);
+        for (size_t i = 0; i < sec->Misc.VirtualSize / 4; i++)
+            if (p[i] == (uint32_t)(uintptr_t)fn && hk_patch_slot((void **)&p[i], to)) n++;
+    }
+    return n;
+}
+
+static void movies_as_on_the_cabinet(void) {
+    // CheckMediaType: format FORMAT_VideoInfo2 (else E_INVALIDARG), then MEDIATYPE_Video and MEDIASUBTYPE_RGB24
+    static const uint8_t check[] = {0x8b, 0x54, 0x24, 0x04, 0x53, 0x56, 0x57, 0xb9, 0x04, 0, 0, 0, 0xbf, 0, 0, 0, 0,
+                                    0x8d, 0x72, 0x2c, 0x33, 0xdb, 0xf3, 0xa7, 0xb8, 0x05, 0x40, 0x00, 0x80, 0x74, 0,
+                                    0x5f, 0x5e, 0xb8, 0x57, 0x00, 0x07, 0x80, 0x5b, 0xc2, 0x04, 0x00};
+    static const uint8_t check_m[] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0, 0, 0, 0,
+                                      0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0,
+                                      0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
+    // SetMediaType: the same format compared, then the picture's size read from the VIDEOINFOHEADER2
+    static const uint8_t set[] = {0x8b, 0x44, 0x24, 0x04, 0x83, 0xec, 0x20, 0x53, 0x56, 0x57, 0x8b, 0xd9, 0xb9, 0x04, 0, 0, 0,
+                                  0xbf, 0, 0, 0, 0, 0x8d, 0x70, 0x2c, 0x33, 0xd2, 0xf3, 0xa7, 0x74};
+    static const uint8_t set_m[] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+                                    0xff, 0, 0, 0, 0, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
+    uint8_t *c = find(check, check_m, sizeof check, NULL);
+    uint8_t *s = find(set, set_m, sizeof set, NULL);
+    if (!c || !s) return;   // 9th style's and RED's renderers take a VIDEOINFOHEADER
+    const GUID *format = (const GUID *)(uintptr_t)*(const uint32_t *)(c + 13);
+    if (*(const uint32_t *)(s + 18) != (uint32_t)(uintptr_t)format || !IsEqualGUID(format, &format_video_info2)) return;
+    g_check_media_type = (media_type_fn)(void *)c;
+    g_set_media_type = (media_type_fn)(void *)s;
+    const int nc = patch_pointers(c, (void *)check_media_type), ns = patch_pointers(s, (void *)set_media_type);
+    hk_log("hiraku-pc: C02: the movies' renderer found (CheckMediaType in %d vtable%s, SetMediaType in %d)", nc, nc == 1 ? "" : "s", ns);
+}
+
 BOOL WINAPI DllMain(HINSTANCE h, DWORD why, LPVOID r) {
     (void)h, (void)r;
     if (why == DLL_PROCESS_ATTACH) {
         hk_ezusb_dev_start();
         hk_cabinet_start();
         set_up_cabinet();
+        movies_as_on_the_cabinet();
     }
     return TRUE;
 }

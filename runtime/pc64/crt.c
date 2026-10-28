@@ -6,24 +6,22 @@
 //   - The touches the game waits for, made by button 5: in each of these scenes its presses touch
 //     the scene's places in turn (title: START; entry: START without a pass; mode select: OK, then
 //     CREDIT START).
-//   - The touch screen, shown instead (the 10-key's decimal point, or buttons 1 and 9 together, in
-//     and out): its picture at 640x400 with a cursor, moved by the 10-key's 8, 2, 4, 6 (and 7, 9,
-//     1, 3) or buttons 4, 6, 3, 7 (up, down, left, right), touching with the 10-key's 5 or button 5.
-//     The game gets none of the buttons meanwhile. Whatever the touch screen asks for (the options,
-//     the PIN, a name, events) can be done there.
-//   - A new card's terms (after its PIN): button 5 touches YES, then OK, and the touch screen is
-//     shown for the name. Leaving a scene hides it.
+//   - No touch screen and no view of it: what the player needs of it (a menu, the PIN typed) is
+//     shown over the main screen's picture, its part of the touch screen (display.c), the item the
+//     buttons are on marked.
+//   - A new card's terms (after its PIN): button 5 touches YES, then OK; then its name (below).
+//     A card's data shown: button 5 touches OK.
 //   - HI-SPEED on buttons 4 (down) and 6 (up) at the options (held: again every 0.2 s), the option
 //     editor opened first when it isn't (the main screen then shows the game's preview).
 //   - The PIN, typed on the 10-key: the game's pad (on the touch screen) always in its digits'
 //     order (it picks one of fourteen orders; the loader has it pick the plain one), each digit a
-//     touch on its button, 00 the pad's clear.
+//     touch on its button, 00 the pad's clear; the digits typed (the pad's boxes) shown.
 //   - The music select in nine-button mode: on entering it, once a credit, its category list is
 //     opened (the "play with 9 buttons" panel) and "by title" chosen (market J's panel: by genre),
 //     then the index's letter it shows chosen: every category but "giant pop-kun" (the big buttons'
 //     charts, which can't be played here) uses the nine buttons. Each step once the touch screen's
 //     picture (read back, not shown) shows the screen it needs.
-//   - Menus on the cabinet's colours, shown on the touch screen's view with the cursor on the item:
+//   - Menus on the cabinet's colours, over the main screen (their part of the touch screen):
 //     at the options, green (3, 7) the previous and next option of the FULL OPTION editor, blue (4,
 //     6) its value, red (5) done; at the music select, green the categories, blue the previous and
 //     next, red the one chosen, then the same for its choices (letters, levels, versions..., found
@@ -65,7 +63,9 @@ static const short PIN_X[3] = {496, 636, 776}, PIN_Y[4] = {126, 264, 406, 544}; 
 #define PIN_CLEAR_Y 544
 #define OPTIONS 22                       // the options before a song (the touch screen's editor):
 static const struct place EDIT_OPTIONS = {653, 623}, SPEED_UP = {362, 87}, SPEED_DOWN = {362, 555};
-static const struct place TERMS[2] = {{393, 450}, {650, 747}};   // a new card's terms: YES, then OK
+static const struct place YES = {393, 450}, ENTRY_OK = {645, 744};   // a new card's terms (YES, then OK), a card's data (OK)
+#define START_X 640                      // the options' START
+#define START_Y 738
 
 // The characters (1080-line coordinates): scaled by CHARA_SCALE about a point at the bottom of the
 // 16:9 picture's side columns (x 300 and 1620), that point moved into the 4:3 picture's (x 427 and
@@ -149,48 +149,15 @@ static void touch_soon(int count, struct place a, struct place b) {
     run_acts(acts, count);
 }
 
-// The touch screen's view: on, and its cursor in the touch screen's 1280x800
-static volatile int g_view, g_cx = 640, g_cy = 400;
-int pc64_crt_view(int *x, int *y) {
-    if (x) *x = g_cx;
-    if (y) *y = g_cy;
-    return g_view;
-}
-
-void pc64_crt_cursor(int x, int y) {
-    g_cx = x < 0 ? 0 : x > 1279 ? 1279 : x;
-    g_cy = y < 0 ? 0 : y > 799 ? 799 : y;
-}
+// The item a menu is on: its place on the touch screen (1280x800)
+static volatile int g_cx = 640, g_cy = 400;
 
 #define KEY(n) (1u << (n))           // the 10-key's digits (runtime/pc/link.h)
-#define KEY_DECIMAL (1u << 11)
-#define VIEW_BUTTONS (PC64_IN_BUTTON(1) | PC64_IN_BUTTON(2) | PC64_IN_BUTTON(3) | PC64_IN_BUTTON(4) | PC64_IN_BUTTON(5) | \
+#define MENU_BUTTONS (PC64_IN_BUTTON(1) | PC64_IN_BUTTON(2) | PC64_IN_BUTTON(3) | PC64_IN_BUTTON(4) | PC64_IN_BUTTON(5) | \
                       PC64_IN_BUTTON(6) | PC64_IN_BUTTON(7) | PC64_IN_BUTTON(8) | PC64_IN_BUTTON(9))
 
-// The cursor moved by what's held: a step at once, then on every 16 ms after a quarter of a
-// second, faster the longer it's held
-static void move_cursor(unsigned in, unsigned keys) {
-    static DWORD since, last;
-    const int up = (keys & (KEY(8) | KEY(7) | KEY(9))) || (in & PC64_IN_BUTTON(4));
-    const int down = (keys & (KEY(2) | KEY(1) | KEY(3))) || (in & PC64_IN_BUTTON(6));
-    const int left = (keys & (KEY(4) | KEY(7) | KEY(1))) || (in & PC64_IN_BUTTON(3));
-    const int right = (keys & (KEY(6) | KEY(9) | KEY(3))) || (in & PC64_IN_BUTTON(7));
-    const DWORD now = GetTickCount();
-    if (!(up | down | left | right)) {
-        since = 0;
-        return;
-    }
-    int step;
-    if (!since) since = now, last = now, step = 4;
-    else if (now - since < 250 || now - last < 16) return;
-    else last = now, step = now - since < 750 ? 6 : now - since < 1500 ? 12 : 24;
-    int x = g_cx + (right - left) * step, y = g_cy + (down - up) * step;
-    g_cx = x < 0 ? 0 : x > 1279 ? 1279 : x;
-    g_cy = y < 0 ? 0 : y > 799 ? 799 : y;
-}
-
-// The menus, for the cabinet's buttons (green 3 and 7, blue 4 and 6, red 5), shown on the touch
-// screen's view (the cursor on the item chosen):
+// The menus, for the cabinet's buttons (green 3 and 7, blue 4 and 6, red 5), shown over the main
+// screen (their part of the touch screen, the item they're on marked):
 //   - the options (green at the options): the FULL OPTION editor opened, green the previous and next
 //     option, blue its value (a slider's arrows; a list's previous or next choice, the one the game
 //     shows chosen found by its pink frame), red done;
@@ -198,9 +165,9 @@ static void move_cursor(unsigned in, unsigned keys) {
 //     the one chosen; then the choices it has (letters, levels, versions...: the buttons found on the
 //     picture, the list dragged on past its last or first), blue and red again; green closes.
 static int g_menu;            // 0 none, MENU_*
-enum { MENU_OPTIONS = 1, MENU_CATEGORIES, MENU_CHOICES };
+enum { MENU_OPTIONS = 1, MENU_CATEGORIES, MENU_CHOICES, MENU_NAME };
 static int g_item;            // the option, the category
-static int g_editing;         // the option editor opened (by the shortcut, a menu or a touch in the view)
+static int g_editing;         // the option editor opened (by HI-SPEED's buttons or the menu)
 static int g_page = -1;       // the editor's page: its FULL OPTION category, or -1 (SIMPLE, or not known)
 static DWORD g_menu_at;       // the choices: when their category was touched; a drag: when it was made
 static int g_dragged;         // the choices: dragged by (pixels, up < 0), the cursor to be put after it
@@ -237,7 +204,7 @@ static const struct place CATEGORY[] = {{518, 187}, {770, 187}, {1025, 187}, {26
                                         {770, 338}, {1025, 338}, {269, 490}, {518, 490}, {770, 490}};
 #define NCATEGORIES ((int)(sizeof CATEGORY / sizeof CATEGORY[0]))
 
-// The touch screen's picture (half its size), as the view last showed it
+// The touch screen's picture (half its size), as last read back
 static uint32_t g_sub[640 * 400], g_before[640 * 400];
 static volatile DWORD g_sub_at;
 void pc64_crt_sub_picture(const uint32_t *px, int w, int h) {
@@ -427,9 +394,16 @@ static long long cell_diff(const uint32_t *pa, struct place ca, const uint32_t *
     return d;
 }
 
-// The music select's screens on the touch screen's picture: its category header (its box's sides),
-// the categories' panel (its buttons' left edges)
-static int header_seen(void) { return teal(sub_px(117, 100)) && teal(sub_px(345, 100)); }
+// The music select's screens on the touch screen's picture: its category header (its box's sides, the
+// category's colour: dark teal, blue...), the categories' panel (its buttons' left edges), the panel or
+// a category's choices up (the close button's pink)
+static int header_seen(void) {
+    const uint32_t a = sub_px(117, 100), b = sub_px(345, 100);
+    const int same = abs((int)(a >> 16 & 255) - (int)(b >> 16 & 255)) < 30 && abs((int)(a >> 8 & 255) - (int)(b >> 8 & 255)) < 30 &&
+                     abs((int)(a & 255) - (int)(b & 255)) < 30;
+    return same && (a >> 16 & 255) < 60 && ((a >> 8 & 255) > 70 || (a & 255) > 70);
+}
+static int close_seen(void) { return pink(sub_px(100, 107)) && pink(sub_px(117, 90)); }
 static int panel_seen(void) { return teal(sub_px(153, 338)) && teal(sub_px(405, 338)) && teal(sub_px(657, 338)); }
 
 // A touch checked: made again (three times at most, 1.2 s apart) until the screen it should bring is
@@ -475,7 +449,7 @@ static int checking(void) {
 // (the one it shows chosen, else the first, touched); given up if a screen isn't seen in time
 static volatile int g_auto;      // the step: 0 none, 1 the header, 2 the panel, 3 the letters
 static DWORD g_auto_at;          // the step's start
-int pc64_crt_wants_sub(void) { return g_auto != 0 || pc64_scene == MUSIC_SELECT; }
+int pc64_crt_wants_sub(void) { return g_auto != 0 || g_menu != 0 || pc64_scene == MUSIC_SELECT || pc64_scene == ENTRY; }
 static void auto_index(void) {
     const DWORD now = GetTickCount(), since = now - g_auto_at;
     if (g_sub_at < g_auto_at + 200 || checking()) return;   // a picture since the step began; a touch's screen
@@ -517,6 +491,105 @@ static void auto_index(void) {
     }
 }
 
+// A new card's name, on the game's keyboard: its keys ten across and five down (the kana's; the other
+// pages' keys in the same places), the pages' keys to their left (rows 1-4), the small row under them
+// (小, ー, ゛, ゜, then the delete and layout keys), OK at the foot
+static const int KEY_Y[7] = {180, 265, 352, 438, 524, 620, 740};
+#define KEYS_X(c) (207 + 100 * (c))
+#define PAGES_X 80
+static int g_kc, g_kr;        // the key: column (-1 the pages), row (5 the small row, 6 OK)
+static struct place key_at(int c, int r, int *w, int *h) {
+    *w = 40, *h = 36;
+    if (r == 6) {
+        *w = 125, *h = 46;
+        return ENTRY_OK;
+    }
+    if (c < 0) {
+        *w = 52;
+        return (struct place){PAGES_X, KEY_Y[r]};
+    }
+    if (r == 5 && c > 3) {   // the delete and layout keys
+        *w = 88;
+        return (struct place){c <= 7 ? 857 : 1057, KEY_Y[5]};
+    }
+    return (struct place){KEYS_X(c), KEY_Y[r]};
+}
+static void key_move(int right, int down) {
+    if (down) {
+        g_kr += down;
+        if (g_kr < 0) g_kr = 0;
+        if (g_kr > 6) g_kr = 6;
+        if (g_kc < 0 && (g_kr == 0 || g_kr >= 5)) g_kc = 0;   // (no page key there)
+        return;
+    }
+    if (g_kr == 6) return;
+    if (g_kr == 5 && g_kc > 3) {   // the wide keys: from one to the next
+        g_kc = right > 0 ? 8 : g_kc <= 7 ? 3 : 6;
+        return;
+    }
+    g_kc += right;
+    if (g_kr == 5 && g_kc == 4) g_kc = 6;
+    const int least = g_kr >= 1 && g_kr <= 4 ? -1 : 0;
+    if (g_kc < least) g_kc = least;
+    if (g_kc > 9) g_kc = 9;
+}
+static int yellow(uint32_t p) {
+    const int r = p >> 16 & 255, g = p >> 8 & 255, b = p & 255;
+    return r > 230 && g >= 185 && g <= 240 && b < 140;
+}
+static int keyboard_seen(void) {
+    return yellow(sub_px(KEYS_X(0) - 27, KEY_Y[0] - 20)) && yellow(sub_px(KEYS_X(9) - 27, KEY_Y[4] - 20)) &&
+           yellow(sub_px(KEYS_X(4) - 27, KEY_Y[3] - 20));
+}
+// The terms' question (its YES red, its NO dark blue); an OK at the foot (the terms' once YES is
+// touched, the name's question's, a card's data's)
+static int terms_seen(void) {
+    const uint32_t y = sub_px(340, 450), n = sub_px(870, 450);
+    return (y >> 16 & 255) > 200 && (y >> 8 & 255) < 100 && (n >> 16 & 255) < 40 && (n >> 8 & 255) < 40 && (n & 255) < 70;
+}
+static int ok_seen(void) {
+    const uint32_t p = sub_px(560, 745);
+    return (p >> 16 & 255) > 200 && (p >> 8 & 255) < 100 && (p & 255) < 120;
+}
+
+// The PIN pad up (its keys' yellow)
+static int pad_seen(void) {
+    static const struct place KEYS[3] = {{455, 95}, {600, 230}, {740, 370}};
+    for (int i = 0; i < 3; i++)
+        if (!yellow(sub_px(KEYS[i].x, KEYS[i].y))) return 0;
+    return 1;
+}
+
+// What's shown over the main screen (display.c, at each of its pictures): the open menu's part of the
+// touch screen, the item it's on marked (the options: the FULL OPTION editor's columns at half size,
+// the option's; the music select: the panel at 0.55, its button), or the PIN pad's boxes while it's
+// up (over the main screen's picture of a cabinet); a new card's name: the keyboard at 0.54
+int pc64_crt_panel(struct pc64_panel *p) {
+    struct pc64_panel q;
+    const int menu = g_menu;
+    if (menu == MENU_OPTIONS) {
+        q = (struct pc64_panel){410, 10, 820, 660, 115, 105, 410, 330, OPTIONS_LIST[g_item].x - 88, 30, 176, 640};
+    } else if (menu == MENU_CATEGORIES) {
+        q = (struct pc64_panel){100, 80, 1090, 600, 20, 95, 600, 330, g_cx - 120, g_cy - 52, 240, 104};
+    } else if (menu == MENU_CHOICES) {
+        const int five = teal(sub_px(364, g_cy)), w = five ? 88 : 111, h = five ? 30 : 46;   // 5 across, or 4
+        q = (struct pc64_panel){100, 80, 1090, 600, 20, 95, 600, 330, g_cx - w, g_cy - h, 2 * w, 2 * h};
+        if (g_menu_at) q.hw = 0;   // (the choices not found yet)
+    } else if (menu == MENU_NAME) {
+        int w, h;
+        const struct place k = key_at(g_kc, g_kr, &w, &h);
+        q = (struct pc64_panel){20, 20, 1140, 770, 12, 32, 616, 416, k.x - w, k.y - h, 2 * w, 2 * h};
+    } else if (pc64_scene == MUSIC_SELECT && close_seen()) {   // the game's panel, opened by its own buttons
+        q = (struct pc64_panel){100, 80, 1090, 600, 20, 95, 600, 330, 0, 0, 0, 0};
+    } else if (pc64_scene == ENTRY && pad_seen()) {
+        q = (struct pc64_panel){44, 296, 352, 180, 218, 191, 211, 108, 0, 0, 0, 0};
+    } else {
+        return 0;
+    }
+    if (p) *p = q;
+    return 1;
+}
+
 // The buttons while a menu is shown
 static void menu(unsigned in, unsigned in_down) {
     const unsigned green = PC64_IN_BUTTON(3) | PC64_IN_BUTTON(7), blue = PC64_IN_BUTTON(4) | PC64_IN_BUTTON(6);
@@ -530,7 +603,7 @@ static void menu(unsigned in, unsigned in_down) {
     if (checking()) return;   // a touch waiting for its screen
     if (g_closing || g_check_failed) {   // the choice made (or a touch that didn't take): the menu closed
         if (g_check_failed && g_menu != MENU_OPTIONS) pc64_log("crt: the menu closed");
-        g_view = 0, g_menu = 0, g_closing = 0, g_check_failed = 0;
+        g_menu = 0, g_closing = 0, g_check_failed = 0;
         return;
     }
     switch (g_menu) {
@@ -541,14 +614,14 @@ static void menu(unsigned in, unsigned in_down) {
         } else if (go) {
             option_change(up);
         } else if (in_down & PC64_IN_BUTTON(5)) {
-            g_view = 0, g_menu = 0;
+            g_menu = 0;
             pc64_log("crt: the options' menu closed");
         }
         return;
     case MENU_CATEGORIES:
         if (in_down & green) {
             touch_soon(1, CLOSE, CLOSE);
-            g_view = 0, g_menu = 0;
+            g_menu = 0;
         } else if (go) {
             g_item = (g_item + (up ? 1 : NCATEGORIES - 1)) % NCATEGORIES;
             cursor_to(CATEGORY[g_item]);
@@ -556,6 +629,22 @@ static void menu(unsigned in, unsigned in_down) {
             touch_checked(CATEGORY[g_item], SEE_NO_PANEL);
             g_menu = MENU_CHOICES, g_menu_at = now, g_dragged = 0, g_steps = 0;
             pc64_log("crt: the category %d chosen", g_item);
+        }
+        return;
+    case MENU_NAME:   // blue left and right, green up and down, red the key; white 1 the delete key, 9 to OK
+        if (in_down & (blue | green)) {
+            const unsigned b = in_down;
+            key_move(b & PC64_IN_BUTTON(6) ? 1 : b & PC64_IN_BUTTON(4) ? -1 : 0,
+                     b & PC64_IN_BUTTON(7) ? 1 : b & PC64_IN_BUTTON(3) ? -1 : 0);
+        } else if (in_down & PC64_IN_BUTTON(9)) {
+            g_kr = 6;
+        } else if (in_down & PC64_IN_BUTTON(1)) {
+            touch_soon(1, (struct place){857, KEY_Y[5]}, (struct place){0, 0});
+        } else if (in_down & PC64_IN_BUTTON(5)) {
+            int w, h;
+            const struct place k = key_at(g_kc, g_kr, &w, &h);
+            touch_soon(1, k, k);
+            pc64_log("crt: the name's key at %d,%d", k.x, k.y);
         }
         return;
     case MENU_CHOICES: {
@@ -584,7 +673,7 @@ static void menu(unsigned in, unsigned in_down) {
             if (n) {
                 cursor_to(cell[chosen >= 0 ? chosen : 0]);
             } else if (now - g_menu_at >= 2000) {   // a category without choices: done
-                g_view = 0, g_menu = 0;
+                g_menu = 0;
                 pc64_log("crt: the category has no choices");
                 return;
             } else {
@@ -604,7 +693,7 @@ static void menu(unsigned in, unsigned in_down) {
         }
         if (in_down & green) {
             touch_soon(1, CLOSE, CLOSE);
-            g_view = 0, g_menu = 0;
+            g_menu = 0;
         } else if (go) {
             choices_step(up);
         } else if (in_down & PC64_IN_BUTTON(5)) {
@@ -629,44 +718,27 @@ static void watch(unsigned in, unsigned keys) {
     static DWORD scene_at;
     const unsigned in_down = in & ~in_was, keys_down = keys & ~keys_was;
     in_was = in, keys_was = keys;
-    // the view, in and out: the decimal point, or buttons 1 and 9 together
-    const unsigned both = PC64_IN_BUTTON(1) | PC64_IN_BUTTON(9);
-    if ((keys_down & KEY_DECIMAL) || ((in & both) == both && (in_down & both))) {
-        g_view = !g_view, g_menu = 0;
-        pc64_log("crt: the touch screen %s", g_view ? "shown" : "hidden");
-        return;
-    }
     const int scene = pc64_scene;
-    if (scene != scene_seen) {   // a new scene: its first place first, the touch screen hidden
+    if (scene != scene_seen) {   // a new scene: its first place first, no menu
         scene_seen = scene, step = 0, scene_at = GetTickCount(), cards_seen = pc64_cards_given, g_editing = 0, g_page = -1, g_menu = 0;
         g_auto = 0, g_check = 0, g_check_failed = 0, g_closing = 0;
         if (scene == TITLE) nine_done = 0;   // a new credit
-        if (g_view) g_view = 0, pc64_log("crt: the touch screen hidden (scene %d)", scene);
     }
-    if (g_view && g_menu) {
+    if (g_menu) {
         menu(in, in_down);
         return;
     }
     const unsigned green = PC64_IN_BUTTON(3) | PC64_IN_BUTTON(7);
-    if (!g_view && (in_down & green) && scene == OPTIONS) {   // the options' menu
-        g_menu = MENU_OPTIONS, g_item = 0, g_view = 1;
+    if ((in_down & green) && scene == OPTIONS) {   // the options' menu
+        g_menu = MENU_OPTIONS, g_item = 0;
         options_menu_show();
         return;
     }
-    if (!g_view && (in_down & green) && scene == MUSIC_SELECT && !g_pending && !g_auto && header_seen()) {   // the categories' menu
+    if ((in_down & green) && scene == MUSIC_SELECT && !g_pending && !g_auto && header_seen()) {   // the categories' menu
         touch_checked((struct place){CATEGORIES_X, CATEGORIES_Y}, SEE_PANEL);
-        g_menu = MENU_CATEGORIES, g_item = 0, g_view = 1;
+        g_menu = MENU_CATEGORIES, g_item = 0;
         cursor_to(CATEGORY[0]);
         pc64_log("crt: the categories' menu");
-        return;
-    }
-    if (g_view) {
-        move_cursor(in, keys);
-        if ((keys_down & KEY(5)) || (in_down & PC64_IN_BUTTON(5))) {
-            pc64_log("crt: the touch screen touched at %d,%d", g_cx, g_cy);
-            if (scene == OPTIONS) g_editing = 1, g_page = -1;
-            touch_soon(1, (struct place){g_cx, g_cy}, (struct place){g_cx, g_cy});
-        }
         return;
     }
     if (scene == MUSIC_SELECT && !nine_done && GetTickCount() - scene_at > 1500) {   // once it has come in
@@ -700,11 +772,21 @@ static void watch(unsigned in, unsigned keys) {
             if (keys_down & KEY(d)) p = d ? (struct place){PIN_X[(d - 1) % 3], PIN_Y[2 - (d - 1) / 3]} : (struct place){PIN_X[0], PIN_Y[3]};
         touch_soon(1, p, p);
     }
-    if ((in_down & PC64_IN_BUTTON(5)) && scene == ENTRY && pc64_cards_given != cards_seen) {   // a card's: its terms
-        const struct place p = TERMS[step % 2];
-        pc64_log("crt: button 5 touches %d,%d (a new card's terms)", p.x, p.y);
+    if (scene == ENTRY && keyboard_seen()) {   // a new card's name
+        g_menu = MENU_NAME, g_kc = 0, g_kr = 0;
+        pc64_log("crt: the name's keyboard");
+        return;
+    }
+    if ((in_down & PC64_IN_BUTTON(5)) && scene == ENTRY && pc64_cards_given != cards_seen) {   // a card's: the terms' YES, else OK
+        const int yes = terms_seen() && !ok_seen();
+        const struct place p = yes ? YES : ENTRY_OK;
+        pc64_log("crt: button 5 touches %d,%d (a card's %s)", p.x, p.y, yes ? "terms" : "OK");
         touch_soon(1, p, p);
-        if (step++ % 2) g_cx = 640, g_cy = 400, g_view = 1, pc64_log("crt: the touch screen shown (the name)");
+        return;
+    }
+    if ((in_down & PC64_IN_BUTTON(5)) && scene == OPTIONS && GetTickCount() - scene_at > 1500) {   // START (not the song's own press)
+        pc64_log("crt: button 5 touches START");
+        touch_soon(1, (struct place){START_X, START_Y}, (struct place){0, 0});
         return;
     }
     if (in_down & PC64_IN_BUTTON(5))
@@ -727,12 +809,12 @@ static DWORD WINAPI watcher(void *unused) {
 }
 
 // The board's inputs as the game reads them (board.c, each status read): none of the buttons while
-// the touch screen is shown
+// a menu is open
 unsigned pc64_crt_inputs(unsigned in) {
     if (!pc64_crt()) return in;
     static int started;
     if (!started) started = 1, CreateThread(NULL, 0, watcher, NULL, 0, NULL);
-    return g_view ? in & ~VIEW_BUTTONS : in;
+    return g_menu ? in & ~MENU_BUTTONS : in;
 }
 
 // The play screen's characters. The game keeps its two players' characters in a table (0xe0 bytes

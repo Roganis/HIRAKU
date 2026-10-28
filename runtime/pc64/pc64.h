@@ -79,16 +79,18 @@ void pc64_trace_d3dx_install(HMODULE game);
 // link.c: the picture being drawn won't be shown by hiraku-pc (no need to read it back)
 int pc64_link_not_shown(void);
 // crt.c: the single-screen mode (HK_PC64_OUTPUT=crt): on; the board's inputs for its touches (those
-// the game gets back: none of the buttons while the touch screen is shown); the touch screen shown
-// instead of the main screen, and its cursor (1280x800)
+// the game gets back: none of the buttons while a menu is open)
 int pc64_crt(void);
 unsigned pc64_crt_inputs(unsigned in);
-int pc64_crt_view(int *x, int *y);
-void pc64_crt_cursor(int x, int y);   // (HK_SCRIPT's cursor:X:Y)
-// crt.c: the touch screen's picture while its view is shown (640x400, 0x00RRGGBB), kept for the
-// menus to find the buttons on it (display.c gives it)
+// crt.c: a part of the touch screen shown over the main screen's picture (a menu, the PIN): its place
+// on the touch screen (1280x800), where it goes on the 640x480, the item marked on it (touch screen
+// places; hw 0: none)
+struct pc64_panel { int sx, sy, sw, sh, dx, dy, dw, dh, hx, hy, hw, hh; };
+int pc64_crt_panel(struct pc64_panel *p);
+// crt.c: the touch screen's picture (640x400, 0x00RRGGBB), kept for the menus to find the buttons on
+// it (display.c gives it, 10 times a second while wanted)
 void pc64_crt_sub_picture(const uint32_t *px, int w, int h);
-int pc64_crt_wants_sub(void);   // ... and wanted while not shown (a menu's step at work)
+int pc64_crt_wants_sub(void);
 void pc64_crt_install(HMODULE game);
 // tables.c: the music and chart tables copied into bigger ones, the code pointed at the copies
 int pc64_tables_move(HMODULE game, BYTE **music, unsigned songs, unsigned new_songs, BYTE **charts, unsigned nchart, unsigned new_nchart);

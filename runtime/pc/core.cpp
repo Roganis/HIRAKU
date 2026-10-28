@@ -168,6 +168,37 @@ std::string md5_file(const std::string &path) {
     return out;
 }
 
+// The DLLs a Windows program file imports (its import table's names), and whether it is 64-bit;
+// false when it isn't a PE file
+[[maybe_unused]] bool pe_imports(const std::string &path, std::vector<std::string> &names, bool &pe64) {
+    std::ifstream f(path, std::ios::binary);
+    std::vector<uint8_t> d((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+    auto u16 = [&](size_t o) { return o + 2 <= d.size() ? (uint32_t)(d[o] | d[o + 1] << 8) : 0u; };
+    auto u32 = [&](size_t o) { return o + 4 <= d.size() ? (uint32_t)(u16(o) | u16(o + 2) << 16) : 0u; };
+    if (u16(0) != 0x5a4d) return false;
+    const size_t nt = u32(0x3c), opt = nt + 24;
+    if (u32(nt) != 0x4550) return false;
+    pe64 = u16(opt) == 0x20b;
+    const size_t dirs = opt + (pe64 ? 112 : 96), sections = opt + u16(nt + 20);
+    const uint32_t imports = u32(dirs + 8), count = u16(nt + 6);
+    auto offset = [&](uint32_t rva) -> size_t {   // a virtual address's place in the file
+        for (uint32_t i = 0; i < count; i++) {
+            const size_t s = sections + 40 * i;
+            const uint32_t va = u32(s + 12), size = std::max(u32(s + 8), u32(s + 16));
+            if (rva >= va && rva < va + size) return rva - va + u32(s + 20);
+        }
+        return 0;
+    };
+    if (!imports) return true;
+    for (size_t e = offset(imports); e && e + 20 <= d.size() && u32(e + 12); e += 20) {
+        size_t n = offset(u32(e + 12));
+        std::string name;
+        while (n && n < d.size() && d[n]) name += (char)d[n++];
+        if (!name.empty()) names.push_back(name);
+    }
+    return true;
+}
+
 // Windows' name for a path of this machine: Wine's Z: is the root
 std::string win_path(std::string p) {
 #ifndef _WIN32
@@ -1223,6 +1254,47 @@ private:
         char s[48];
         if (!started_ || !GetExitCodeProcess(pi_.hProcess, &code)) return "";
         snprintf(s, sizeof s, " (exit code %#lx)", (unsigned long)code);
+        if (code == 0xc0000135) return s + missing_dlls();
+        return s;
+    }
+    // A game Windows couldn't start for a DLL it can't find (0xc0000135): the ones its program and
+    // the DLLs beside it import that are neither beside it nor in Windows' folder for its kind
+    // (System32 for 64-bit, SysWOW64 for 32-bit on a 64-bit Windows). API sets aren't files.
+    std::string missing_dlls() {
+        if (pc64_ || pc32_) return "";
+        char sys[MAX_PATH] = "", wow[MAX_PATH] = "";
+        GetSystemDirectoryA(sys, MAX_PATH);
+        const bool wow64 = GetSystemWow64DirectoryA(wow, MAX_PATH) > 0;
+        std::vector<std::string> todo = {exe_}, missing;
+        std::map<std::string, bool> seen;
+        while (!todo.empty()) {
+            const std::string file = todo.back();
+            todo.pop_back();
+            std::vector<std::string> names;
+            bool pe64 = false;
+            if (!pe_imports(run_prog_ + "/" + file, names, pe64)) continue;
+            const std::string system = !pe64 && wow64 ? wow : sys;
+            for (const std::string &n : names) {
+                std::string low = n;
+                for (char &c : low) c = (char)tolower((unsigned char)c);
+                if (seen[low] || low.rfind("api-ms-", 0) == 0 || low.rfind("ext-ms-", 0) == 0) continue;
+                seen[low] = true;
+                if (GetFileAttributesA(win_path(run_prog_ + "/" + n).c_str()) != INVALID_FILE_ATTRIBUTES) todo.push_back(n);
+                else if (GetFileAttributesA((system + "\\" + n).c_str()) == INVALID_FILE_ATTRIBUTES) missing.push_back(n + " (for " + file + ")");
+            }
+        }
+        if (missing.empty()) return "";
+        std::string s = ": Windows can't find";
+        bool directx = false;
+        for (const std::string &m : missing) {
+            s += " " + m;
+            std::string low = m;
+            for (char &c : low) c = (char)tolower((unsigned char)c);
+            directx |= low.rfind("d3dx", 0) == 0 || low.rfind("xinput", 0) == 0 || low.rfind("d3dcompiler", 0) == 0 ||
+                       low.rfind("xaudio", 0) == 0 || low.rfind("x3daudio", 0) == 0;
+        }
+        s += ". It belongs in the game's program folder, as the game came";
+        if (directx) s += "; Microsoft's DirectX End-User Runtime (June 2010) installs it too";
         return s;
     }
     void stop_game() {

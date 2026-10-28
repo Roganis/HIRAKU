@@ -26,6 +26,9 @@
 //     popn.dll imports by ordinal); for its characters' layers the whole matrix is set instead. Their
 //     windows are made smaller in the layout (hiraku-pc's single-screen/); the songs' pictures the
 //     game puts in them, fitted to them.
+//   - The characters' big pictures (the music select's, the VS screen's, the result's): the game
+//     gives them at their own size, which the engine keeps whatever the clip's scale; given as
+//     PICTURE_SCALE of it (the newer characters' animated ones are made smaller in the layout).
 #include "pc64.h"
 
 #include <stdlib.h>
@@ -38,6 +41,7 @@ static const struct { int scene; int count; struct place at[3]; } SCENES[] = {
     {20, 2, {{640, 736}, {640, 350}}},   // mode select: OK, CREDIT START
 };
 #define MUSIC_SELECT 28
+#define RESULT 23
 #define CATEGORIES_X 300                 // the music select's category panel (touch screen, 1280x800)
 #define CATEGORIES_Y 100
 #define BY_TITLE_X 755                   // ... and in its list, "by title"
@@ -56,6 +60,7 @@ static const struct place TERMS[2] = {{393, 450}, {650, 747}};   // a new card's
 // 16:9 picture's side columns (x 300 and 1620), that point moved into the 4:3 picture's (x 427 and
 // 1493: between its edges at 240 and 1680 and the lanes at 614 and 1306), a little up
 #define CHARA_SCALE 0.8f
+#define PICTURE_SCALE 0.8f   // the characters' big pictures (their top left kept)
 #define CHARA_SCALE_LOST 0.64f   // the lost move (a close-up, wider than the others)
 #define CHARA_LOST 2
 #define CHARA_FROM_Y 1080.0f
@@ -301,8 +306,30 @@ static int find_clip(unsigned layer, const char *name) {
     return first;
 }
 
+// A character's big picture (the hariai): drawn the size of one of the layouts' shapes for them
+// (570x736, 760x1000, 960x1080; its texture's size at +4, its part drawn at +12: u0, u1, v0, v1)
+static int big_picture(const void *texture) {
+    static const float SIZES[][2] = {{570, 736}, {760, 1000}, {960, 1080}};
+    const unsigned *size = (const unsigned *)((const BYTE *)texture + 4);
+    const float *uv = (const float *)((const BYTE *)texture + 12);
+    const float w = (uv[1] - uv[0]) * size[0], h = (uv[3] - uv[2]) * size[1];
+    for (size_t i = 0; i < sizeof SIZES / sizeof SIZES[0]; i++)
+        if (w > SIZES[i][0] - 2 && w < SIZES[i][0] + 2 && h > SIZES[i][1] - 2 && h < SIZES[i][1] + 2) return 1;
+    return 0;
+}
+
 static int set_texture(int clip, const void *texture, char fit) {
     for (int i = 0; i < WINDOW_CLIPS && !fit; i++) fit = g_window_clips[i] == clip;
+    const int scene = pc64_scene;   // (the VS screen's pictures are given as the music select ends)
+    if (!fit && texture && (scene == MUSIC_SELECT || scene == OPTIONS || scene == RESULT) && big_picture(texture)) {
+        // its texture's size made smaller for the call: the picture's size is taken from it then
+        unsigned *size = (unsigned *)((BYTE *)texture + 4);
+        const unsigned w = size[0], h = size[1];
+        size[0] = (unsigned)(w * PICTURE_SCALE), size[1] = (unsigned)(h * PICTURE_SCALE);
+        const int r = g_set_texture(clip, texture, fit);
+        size[0] = w, size[1] = h;
+        return r;
+    }
     return g_set_texture(clip, texture, fit);
 }
 

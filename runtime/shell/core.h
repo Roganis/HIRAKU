@@ -83,6 +83,9 @@ public:
     virtual bool set_vsync_rate(double hz) { (void)hz; return false; }
     // The machine's own vsync rate (the cabinet's ticks, host/mods.h between_ticks)
     virtual double native_rate() const { return 59.94; }
+    // This frame shows the last picture again, the game having drawn none (a game in a process of its
+    // own, loading or held up): a [[rate]]'s watched word can't have changed, so it isn't looked at
+    virtual bool frame_repeated() const { return false; }
     // Between the machine's frames, for a display faster than the game (--smooth-motion): the last
     // frame with what moves drawn `t` (0 < t < 1) of a frame further along its move, w x h.
     // nullptr: the core can't (or not yet)

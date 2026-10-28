@@ -19,6 +19,11 @@
 //                 memory patches put in place as docs/MODS.md says, before each picture
 //   HK_PC_THREADLOG for bringing a game up: each thread the game's modules start (its routine,
 //                 and where it was started from), to the log
+//   HK_PC_DUMP    for mods: "PICTURE,PICTURE...:DIR", the program's globals (its writable sections)
+//                 written to DIR at those pictures, to find the game's counters ("+N:DIR": N, N + 10
+//                 and N + 100 pictures after a [[rate]] comes on); HK_PC_DUMP_HEAP=1 its heaps too
+//   HK_PC_WATCH   for mods: "ADDRESS[:PICTURE]", a data watchpoint (the debug registers) on that word:
+//                 the places that write it, to the log
 //   HK_PC_PRESS_TIME 1: presses judged by when they happened, not by the frame the game read them
 //                 in (pop'n 15-18; press.c)
 //   HK_PC_JUDGE_OFFSET milliseconds taken off each press's time before it's judged (positive: the

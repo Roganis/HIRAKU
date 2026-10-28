@@ -6,6 +6,7 @@
 #define COBJMACROS
 #include <d3d9.h>
 #include <psapi.h>
+#include <tlhelp32.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -363,7 +364,8 @@ static void waits_report(void);
 // --- mods: memory patches (HK_PC_PATCHES), each in place whenever its original bytes are there
 // (or, without original bytes, every time: a cheat), once if asked; at the program's own addresses
 
-static struct patch { uint8_t *at, *original, *replace; size_t n; int once, done; } *g_patches;
+// rate: 1 tied to a [[rate]] (in place only while it's on), 2 also only between the cabinet's ticks
+static struct patch { uint8_t *at, *original, *replace; size_t n; int once, done, rate; } *g_patches;
 static int g_npatches;
 
 static int unhex(const char *h, uint8_t **out) {
@@ -382,11 +384,13 @@ static void read_patches(void) {
     for (char *line = t ? strtok(t, "\r\n") : NULL; line && g_npatches < 256; line = strtok(NULL, "\r\n")) {
         unsigned long addr;
         int once;
-        char orig[2048], repl[2048];
-        if (sscanf(line, "%lx %d %2047s %2047s", &addr, &once, orig, repl) != 4) continue;
-        struct patch p = {(uint8_t *)(uintptr_t)addr, NULL, NULL, 0, once, 0};
+        char orig[2048], repl[2048], kind[8] = "";
+        // "ADDRESS ONCE ORIGINAL REPLACE [rate|ticks]"
+        if (sscanf(line, "%lx %d %2047s %2047s %7s", &addr, &once, orig, repl, kind) < 4) continue;
+        struct patch p = {(uint8_t *)(uintptr_t)addr, NULL, NULL, 0, once, 0, !strcmp(kind, "rate") ? 1 : !strcmp(kind, "ticks") ? 2 : 0};
         const int n = unhex(repl, &p.replace);
         if (n <= 0 || (strcmp(orig, "-") && unhex(orig, &p.original) != n)) continue;
+        if (p.rate && (!p.original || once)) continue;   // (mods.cpp refuses these)
         p.n = (size_t)n;
         g_patches = realloc(g_patches, sizeof *g_patches * (size_t)(g_npatches + 1));
         g_patches[g_npatches++] = p;
@@ -404,16 +408,41 @@ static int present(const uint8_t *p, size_t n) {
     return 1;
 }
 
+static void put(uint8_t *at, const uint8_t *bytes, size_t n) {
+    DWORD old;
+    VirtualProtect(at, n, PAGE_EXECUTE_READWRITE, &old);
+    memcpy(at, bytes, n);
+    VirtualProtect(at, n, old, &old);
+    FlushInstructionCache(GetCurrentProcess(), at, n);
+}
+
+// A [[rate]]'s state for the coming frame (hiraku-pc's game_hz_milli: above the cabinet's 60 while
+// one is on): on, and whether the frame ends a cabinet frame's worth of time (1/59.94 s, as
+// mods.cpp counts it for the emulated machines): between_ticks patches are out then
+static int g_rate_on, g_tick = 1;
+static void rate_frame(void) {
+    static double owed;
+    const uint32_t hz = hk_link()->game_hz_milli;
+    g_rate_on = hz > 60500;
+    if (!g_rate_on) {
+        owed = 0, g_tick = 1;
+        return;
+    }
+    owed += 59940.0 / hz;
+    g_tick = owed >= 1 - 1e-9;
+    if (g_tick) owed -= 1;
+}
+
 static void apply_patches(void) {
     for (int i = 0; i < g_npatches; i++) {
         struct patch *p = &g_patches[i];
+        if (p->rate && (!g_rate_on || (p->rate == 2 && g_tick))) {   // the original back, if the patch is there
+            if (present(p->at, p->n) && !memcmp(p->at, p->replace, p->n)) put(p->at, p->original, p->n);
+            continue;
+        }
         if (p->done || !present(p->at, p->n) || !memcmp(p->at, p->replace, p->n)) continue;   // gone, not there, in place
         if (p->original && memcmp(p->at, p->original, p->n)) continue;   // not loaded (yet): wait
-        DWORD old;
-        VirtualProtect(p->at, p->n, PAGE_EXECUTE_READWRITE, &old);
-        memcpy(p->at, p->replace, p->n);
-        VirtualProtect(p->at, p->n, old, &old);
-        FlushInstructionCache(GetCurrentProcess(), p->at, p->n);
+        put(p->at, p->replace, p->n);
         if (!hk_link()->patch_done[i]) hk_log("hiraku-pc: mods: patch at %p (%u bytes) in place", (void *)p->at, (unsigned)p->n);
         hk_link()->patch_done[i] = 1;
         if (p->once) p->done = 1;
@@ -661,11 +690,155 @@ static void dbg_records(void) {
     }
 }
 
+// debug HK_PC_DUMP=PICTURE[,PICTURE...]:DIR (or +N:DIR: N, N + 10 and N + 100 pictures after a
+// [[rate]] first comes on): the program's writable sections (its globals), each written whole at those pictures (DIR\\dump_f<picture>_<address>.bin): two dumps a few frames apart
+// show the game's counters (the words that grew by as many), for mods that change its frame rate
+static void dbg_dumps(void) {
+    static int on = -1, n, after_rate;
+    static uint32_t at[16], rate_from;
+    static char dir[MAX_PATH];
+    if (on < 0) {
+        on = 0;
+        const char *e = getenv("HK_PC_DUMP");
+        const char *colon = e ? strchr(e, ':') : NULL;
+        if (colon && colon - e < 200 && *e == '+') {   // "+N": N, N + 10 and N + 100 pictures after a [[rate]] comes on
+            char *end;
+            const uint32_t k = (uint32_t)strtoul(e + 1, &end, 10);
+            const int run = *end == '/' ? atoi(end + 1) : 0;   // "+N/K": K pictures in a row from N
+            if (run > 0) {
+                for (n = 0; n < run && n < 16; n++) at[n] = k + (uint32_t)n;
+            } else {
+                at[0] = k, at[1] = k + 10, at[2] = k + 100, n = 3;
+            }
+            after_rate = 1;
+            snprintf(dir, sizeof dir, "%s", colon + 1);
+            on = 1;
+        } else if (colon && colon - e < 200) {
+            for (const char *p = e; p < colon && n < 16; p = strchr(p, ',') ? strchr(p, ',') + 1 : colon) at[n++] = (uint32_t)strtoul(p, NULL, 10);
+            snprintf(dir, sizeof dir, "%s", colon + 1);
+            on = n > 0;
+        }
+    }
+    if (on <= 0) return;
+    uint32_t frame = hk_link()->frames;
+    if (after_rate) {
+        if (!rate_from && g_rate_on) rate_from = frame;
+        if (!rate_from) return;
+        frame -= rate_from;
+    }
+    for (int i = 0; i < n; i++) {
+        if (at[i] != frame) continue;
+        char *base = (char *)hk_program();
+        IMAGE_NT_HEADERS *nt = (IMAGE_NT_HEADERS *)(base + ((IMAGE_DOS_HEADER *)base)->e_lfanew);
+        IMAGE_SECTION_HEADER *sec = IMAGE_FIRST_SECTION(nt);
+        for (WORD k = 0; k < nt->FileHeader.NumberOfSections; k++, sec++) {
+            if (!(sec->Characteristics & IMAGE_SCN_MEM_WRITE) || (sec->Characteristics & IMAGE_SCN_MEM_EXECUTE)) continue;
+            char f[MAX_PATH + 48];
+            snprintf(f, sizeof f, "%s\\dump_f%u_%08x.bin", dir, (unsigned)frame, (unsigned)(uintptr_t)(base + sec->VirtualAddress));
+            FILE *o = fopen(f, "wb");
+            if (o) fwrite(base + sec->VirtualAddress, 1, sec->Misc.VirtualSize, o), fclose(o);
+        }
+        // HK_PC_DUMP_HEAP=1: the game's own memory too (committed, private, read-write: its heaps and
+        // the objects in them), each region a file, up to 1 GB
+        if (getenv("HK_PC_DUMP_HEAP")) {
+            size_t total = 0;
+            MEMORY_BASIC_INFORMATION mi;
+            for (uint8_t *q = (uint8_t *)0x10000; q < (uint8_t *)0x7fff0000 && VirtualQuery(q, &mi, sizeof mi); q = (uint8_t *)mi.BaseAddress + mi.RegionSize) {
+                if (mi.State != MEM_COMMIT || mi.Type != MEM_PRIVATE || mi.Protect != PAGE_READWRITE || total > (1u << 30)) continue;
+                char f[MAX_PATH + 48];
+                snprintf(f, sizeof f, "%s\\heap_f%u_%08x.bin", dir, (unsigned)frame, (unsigned)(uintptr_t)mi.BaseAddress);
+                FILE *o = fopen(f, "wb");
+                if (o) fwrite(mi.BaseAddress, 1, mi.RegionSize, o), fclose(o);
+                total += mi.RegionSize;
+            }
+        }
+        hk_log("hiraku-pc: debug: the program's globals dumped at picture %u", (unsigned)frame);
+    }
+}
+
+// debug HK_PC_WATCH=ADDRESS[:PICTURE]: a data watchpoint (the CPU's debug registers, every thread of
+// the game's) on the word at ADDRESS from that picture on: each place that writes it (the
+// instruction after the write) to the log once, the first 32. For mods: what counts a counter
+// found by HK_PC_DUMP that's reached through a pointer
+static LONG CALLBACK watch_hit(EXCEPTION_POINTERS *e) {
+    if (e->ExceptionRecord->ExceptionCode != EXCEPTION_SINGLE_STEP || !(e->ContextRecord->Dr6 & 15)) return EXCEPTION_CONTINUE_SEARCH;
+    const int which = e->ContextRecord->Dr6 & 1 ? 0 : e->ContextRecord->Dr6 & 2 ? 1 : e->ContextRecord->Dr6 & 4 ? 2 : 3;
+    const DWORD dr[4] = {e->ContextRecord->Dr0, e->ContextRecord->Dr1, e->ContextRecord->Dr2, e->ContextRecord->Dr3};
+    static uintptr_t seen[32];
+    static int n;
+    const uintptr_t at = e->ContextRecord->Eip;
+    int k = 0;
+    while (k < n && seen[k] != at) k++;
+    if (k == n && n < 32) {
+        seen[n++] = at;
+        hk_log("hiraku-pc: debug: %08lx written before %08lx (thread %lu, now %08x)", (unsigned long)dr[which], (unsigned long)at,
+               GetCurrentThreadId(), *(const uint32_t *)(uintptr_t)dr[which]);
+    }
+    e->ContextRecord->Dr6 = 0;
+    return EXCEPTION_CONTINUE_EXECUTION;
+}
+
+static void dbg_watch(void) {
+    static int state = -1, naddr;
+    static uint32_t addr[4], from;
+    if (state < 0) {   // "ADDRESS[,ADDRESS...]:PICTURE", up to four
+        const char *e = getenv("HK_PC_WATCH");
+        state = 2;
+        for (const char *p = e; p && *p && naddr < 4;) {
+            char *end;
+            addr[naddr++] = (uint32_t)strtoul(p, &end, 16);
+            if (*end == ',') p = end + 1;
+            else {
+                if (*end == ':') from = (uint32_t)strtoul(end + 1, NULL, 10);
+                break;
+            }
+        }
+        if (naddr) state = 0;
+    }
+    if (state != 0 || hk_link()->frames < from) return;
+    state = 1;
+    AddVectoredExceptionHandler(1, watch_hit);
+    HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
+    THREADENTRY32 te;
+    memset(&te, 0, sizeof te);
+    te.dwSize = sizeof te;
+    int threads = 0;
+    for (BOOL ok = Thread32First(snap, &te); ok; ok = Thread32Next(snap, &te)) {
+        if (te.th32OwnerProcessID != GetCurrentProcessId()) continue;
+        const int self = te.th32ThreadID == GetCurrentThreadId();
+        HANDLE t = OpenThread(THREAD_GET_CONTEXT | THREAD_SET_CONTEXT | THREAD_SUSPEND_RESUME, FALSE, te.th32ThreadID);
+        if (!t) continue;
+        if (!self) SuspendThread(t);
+        CONTEXT c = {.ContextFlags = CONTEXT_DEBUG_REGISTERS};
+        if (GetThreadContext(t, &c)) {
+            DWORD *dr[4] = {&c.Dr0, &c.Dr1, &c.Dr2, &c.Dr3};
+            for (int i = 0; i < naddr; i++) {   // Li, write, 4 bytes
+                *dr[i] = addr[i];
+                c.Dr7 = (c.Dr7 & ~(3u << (2 * i)) & ~(0xfu << (16 + 4 * i))) | (1u << (2 * i)) | (0xdu << (16 + 4 * i));
+            }
+            if (SetThreadContext(t, &c)) threads++;
+        }
+        if (!self) ResumeThread(t);
+        CloseHandle(t);
+    }
+    CloseHandle(snap);
+    hk_log("hiraku-pc: debug: watching writes to %d words from %08x (%d threads)", naddr, addr[0], threads);
+}
+
 // Each Present, Direct3D 9's or 8's (d3d8.c): the mods' patches and the debug watch first, before
 // the next frame runs
 void hk_present_begin(void) {
+    // the words a mod's [[rate]] looks at, for hiraku-pc (link.h, v9)
+    struct hk_pc_link *l = hk_link();
+    for (uint32_t i = 0; i < HK_PC_WATCHES; i++) {
+        const uint8_t *w = (const uint8_t *)(uintptr_t)l->watch_addr[i];
+        if (w) l->watch_val[i] = present(w, 4) ? *(const uint32_t *)w : 0;
+    }
+    rate_frame();
     if (g_npatches) apply_patches();
     dbg_records();
+    dbg_watch();
+    dbg_dumps();
 }
 
 // A picture the game has drawn, in HIRAKU's window (its pixels in the link if `captured`): counted

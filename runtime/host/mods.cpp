@@ -620,7 +620,7 @@ void display_rate(double hz) { g_display_hz = hz; }
 
 void frame() {
     for (Rate &r : g_rates) {
-        if (r.refused) continue;
+        if (r.refused || core().frame_repeated()) continue;
         if (r.always) {
             r.changed = 2, r.still = 0;
         } else {
@@ -724,6 +724,22 @@ std::vector<MemoryPatch> memory_patches() {
     std::vector<MemoryPatch> out;
     for (const Patch &p : g_patches)
         if (!p.while_rate) out.push_back({p.mod, p.address, p.module, p.original, p.replace, p.once});
+    return out;
+}
+
+std::vector<RatePatch> rate_patches() {
+    std::vector<RatePatch> out;
+    for (const Patch &p : g_patches)
+        if (p.while_rate && p.module.empty()) out.push_back({{p.mod, p.address, p.module, p.original, p.replace, false}, p.between_ticks});
+    return out;
+}
+
+std::vector<uint32_t> rate_words() {
+    std::vector<uint32_t> out;
+    for (const Rate &r : g_rates) {
+        if (!r.always) out.push_back(r.address);
+        if (r.gated) out.push_back(r.gate);
+    }
     return out;
 }
 

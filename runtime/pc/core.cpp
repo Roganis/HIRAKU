@@ -35,6 +35,7 @@
 #include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -374,6 +375,7 @@ public:
         }
         return true;
     }
+
     // The C02 board under its driver (IIDX RED): HIRAKU's RtEffect.dll in the program's copy (the
     // game imports it: HIRAKU's way in, ezusb_dev.c and rteffect.c), the plug's code for it, and the
     // cabinet's software id beside the program folders, which the cabinet's install writes (without it:
@@ -494,6 +496,11 @@ public:
         link_->host_shows = 1;
         if (ea_.card[0].size() == 16)   // player 1's card, for a card key the game's DLL sees itself
             for (int i = 0; i < 8; i++) link_->card_uid[i] = (uint8_t)std::stoul(ea_.card[0].substr(2 * i, 2), nullptr, 16);
+        // the words the mods' [[rate]]s watch: the DLL copies them in before each picture (mem())
+        const std::vector<uint32_t> words = hk::mods::rate_words();
+        if (words.size() > HK_PC_WATCHES) fprintf(stderr, "mods: %zu words for [[rate]]s; a PC game watches %u\n", words.size(), HK_PC_WATCHES);
+        for (size_t i = 0; i < words.size() && i < HK_PC_WATCHES; i++) link_->watch_addr[i] = words[i];
+        link_->game_hz_milli = (uint32_t)std::lround(ghz() * 1000);
         link_->version = HK_PC_LINK_VERSION;
         link_->magic = HK_PC_LINK_MAGIC;
         black_.assign(640 * 480, 0);
@@ -636,13 +643,32 @@ public:
     int audio_rate() const override { return HK_PC_AUDIO_RATE; }
     bool audio_per_frame() const override { return true; }   // each picture brings its frame's sound
     void set_on_fatal(std::function<void()> f) override { on_fatal_ = std::move(f); }
-    double native_rate() const override { return ghz(); }
+    double native_rate() const override { return pc64_ ? 120.0 : HZ; }   // the cabinet's (a [[rate]]'s ticks)
     int monitor_khz() const override { return 31; }   // a PC's VGA monitor
     // the 64-bit PC pop'n: 1920x1080, square pixels; IIDX's 640x480 shown on its cabinet's widescreen
     // monitor (as Twinkle's IIDX)
     double display_aspect() const override { return pc64_ ? 0.0 : family_ == "iidx" ? 16.0 / 9.0 : 4.0 / 3.0; }
-    double seconds() const override { return (double)tick_ / ghz(); }
-    const uint8_t *mem(uint32_t, uint32_t) const override { return nullptr; }
+    double seconds() const override { return sec0_ + (double)(tick_ - t0_) / ghz(); }
+    // The game's memory is its own process's: only the words a mod's [[rate]] watches, as the DLL
+    // last copied them (link.h, v9)
+    const uint8_t *mem(uint32_t addr, uint32_t len) const override {
+        if (!link_ || len > 4) return nullptr;
+        for (uint32_t i = 0; i < HK_PC_WATCHES; i++)
+            if (link_->watch_addr[i] == addr && addr) {
+                watch_copy_[i] = link_->watch_val[i];
+                return (const uint8_t *)&watch_copy_[i];
+            }
+        return nullptr;
+    }
+    // A mod's [[rate]] (docs/MODS.md): the game draws hz pictures a second from the next shown frame
+    // (0: the cabinet's 60 again). Its clock, its sound's samples and the shell's time go on
+    // without a jump; the DLL counts the cabinet's ticks for the patches tied to the rate
+    bool frame_repeated() const override { return repeating_; }
+    bool set_vsync_rate(double hz) override {
+        if (pc64_) return false;
+        want_hz_ = hz > 0 ? hz : HZ;
+        return true;
+    }
     uint64_t frame_count() const override { return frame_; }
     // The C02 cabinet's turntables: the host's counts (1024 a turn) to the board's 0-255
     void turntable_add(int player, int delta) override {
@@ -751,7 +777,9 @@ public:
                 last = std::chrono::steady_clock::now();
             } else if (now - last > std::chrono::microseconds((long long)(1e6 * per_frame_ / ghz()))) {
                 // no picture (starting, loading): the last again
+                repeating_ = true;
                 show(last_rgb_ ? last_rgb_ : black_.data(), last_w_, last_h_);
+                repeating_ = false;
                 repeats_++;
                 last = now;
             } else if (sound_on_ && !ahead_ && now - go_at_ > std::chrono::microseconds((long long)(5e5 * per_frame_ / ghz())) &&
@@ -1109,6 +1137,10 @@ private:
                 patches_.erase(patches_.begin() + (long)i);
             }
         if (!texts_in_program(patches_)) return false;
+        // ... then those tied to a [[rate]] ("rate", "ticks": between the cabinet's ticks only)
+        const auto rated = hk::mods::rate_patches();
+        const size_t plain = patches_.size();
+        for (const auto &r : rated) patches_.push_back(r.patch);
         if (patches_.size() > 256) {
             fprintf(stderr, "mods: %zu memory patches; a PC game takes 256\n", patches_.size());
             return false;
@@ -1120,10 +1152,11 @@ private:
             for (uint8_t v : b) snprintf(x, sizeof x, "%02x", v), h += x;
             return h.empty() ? std::string("-") : h;
         };
-        for (const auto &p : patches_) {
+        for (size_t i = 0; i < patches_.size(); i++) {
+            const auto &p = patches_[i];
             char a[32];
             snprintf(a, sizeof a, "%08x %d ", p.address, p.once ? 1 : 0);
-            text += a + hex(p.original) + " " + hex(p.replace) + "\n";
+            text += a + hex(p.original) + " " + hex(p.replace) + (i < plain ? "" : rated[i - plain].between_ticks ? " ticks" : " rate") + "\n";
         }
         std::ofstream(save_ + "/mods-patches.txt", std::ios::trunc) << text;
         set_env("HK_PC_PATCHES", text.empty() ? "" : win_path(save_ + "/mods-patches.txt"));
@@ -1151,22 +1184,27 @@ private:
         go_at_ = std::chrono::steady_clock::now();
         link_->go_host_us = host_us(go_at_);
         link_->not_shown = !ahead_ && pics_ + 1 < per_frame_;
+        link_->game_hz_milli = (uint32_t)std::lround(ghz() * 1000);
         std::atomic_thread_fence(std::memory_order_release);
         link_->frame_go = seq;
     }
 
     // The game's time in its own frames (ticks: 60 a second, the 64-bit PC pop'n's 120), each
     // shown frame per_frame_ of them; its sound, 44.1 kHz: where it ends with tick `t`
-    double ghz() const { return pc64_ ? 120.0 : HZ; }
-    uint64_t samples_at(uint64_t t) const { return t * HK_PC_AUDIO_RATE / (uint64_t)ghz(); }
+    double ghz() const { return pc64_ ? 120.0 : hz_; }
+    uint64_t samples_at(uint64_t t) const {
+        return samp0_ + (uint64_t)std::floor((double)(t - t0_) * HK_PC_AUDIO_RATE / ghz() + 1e-9);
+    }
     uint32_t sound_for(uint64_t t) const { return sound_base_ + (uint32_t)samples_at(t); }
-    // The game's pictures for each frame shown: a 120 Hz game draws two on a display under 100 Hz
-    // (the first not shown; display sync's grid then fits 60 Hz), else one (120 and 240 Hz fit it;
-    // on others the core paces itself at 120)
+    // The game's pictures for each frame shown: a 120 Hz game (the 64-bit pop'n) draws two on a
+    // display under 100 Hz (the first not shown; display sync's grid then fits 60 Hz), else one; a
+    // [[rate]]'s, the rate over the display's, rounded, at least one; a 60 Hz game, or no display
+    // known, one (the core then paces itself)
     int pictures_per_frame() const {
-        if (!pc64_) return 1;
+        if (ghz() < 61) return 1;
         const double hz = hk::host::pacing::refresh_hz();
-        return hz > 0 && hz < 100 ? 2 : 1;
+        if (pc64_) return hz > 0 && hz < 100 ? 2 : 1;
+        return hz > 0 ? std::clamp((int)std::lround(ghz() / hz), 1, 8) : 1;
     }
 
     // The sound mixed at least to `end`: the DLL's mixer asked (audio_want moved on, never back),
@@ -1238,7 +1276,14 @@ private:
         last_rgb_ = rgb, last_w_ = w, last_h_ = h;
         tick_ += per_frame_;
         ++frame_;
-        if (frame_hook_) frame_hook_(frame_, rgb, w, h);
+        if (frame_hook_) frame_hook_(frame_, rgb, w, h);   // (mods::frame: set_vsync_rate)
+        if (want_hz_ > 0 && want_hz_ != hz_) {   // the new rate from here on, its time and sound continued
+            samp0_ = samples_at(tick_);
+            sec0_ = seconds();
+            t0_ = tick_;
+            hz_ = want_hz_;
+        }
+        want_hz_ = 0;
     }
 
     [[noreturn]] void fatal() {
@@ -1432,6 +1477,11 @@ private:
     std::function<void()> on_fatal_;
     uint64_t frame_ = 0, repeats_ = 0;
     uint64_t tick_ = 0;    // the game's time in its frames (ghz())
+    // ghz() and where it last changed (a [[rate]]): the tick, the time and the sound samples then
+    double hz_ = HZ, want_hz_ = 0, sec0_ = 0;
+    uint64_t t0_ = 0, samp0_ = 0;
+    mutable uint32_t watch_copy_[HK_PC_WATCHES] = {};
+    bool repeating_ = false;   // show() of the last picture again (frame_repeated)
     int per_frame_ = 1;    // its pictures for each frame shown (pictures_per_frame())
     int pics_ = 0;         // ... of the frame being made, received so far
     std::vector<uint32_t> black_, picture_;

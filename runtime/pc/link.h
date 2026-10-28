@@ -16,7 +16,8 @@
 #include <stdint.h>
 
 #define HK_PC_LINK_MAGIC 0x4b50484bu   // "HKPK"
-#define HK_PC_LINK_VERSION 8u
+#define HK_PC_LINK_VERSION 9u
+#define HK_PC_WATCHES 8u                           // [[rate]]'s words of the game's memory
 
 // The pad's bits, as Konami's ezusb.dll gives them to pop'n music (usbPadRead)
 #define HK_PC_PAD_SERVICE (1u << 6)
@@ -114,6 +115,12 @@ struct hk_pc_link {
     volatile uint8_t top_lamp, top_neon, led;
     // (v8) the C02 cabinet's player 2: the 10-key (as keypad) and the card (as card_seq)
     volatile uint32_t keypad2, card_seq2;
+    // (v9) Mods' high frame rates ([[rate]], docs/MODS.md): the words of the game's memory a rate
+    // watches (hiraku-pc sets watch_addr; the DLL copies each word into watch_val before each
+    // picture, 0 where it can't be read), and the game's pictures a second now (thousandths:
+    // 60000 the cabinet's, more while a rate is on; the DLL counts the cabinet's ticks from it)
+    volatile uint32_t watch_addr[HK_PC_WATCHES], watch_val[HK_PC_WATCHES];
+    volatile uint32_t game_hz_milli;
 };
 
 #define HK_PC_PIXELS 4096u                         // where the pixels start in the file

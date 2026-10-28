@@ -329,6 +329,41 @@ Checked on each at 119.88 Hz: the rate on from the song's start, a new picture o
 the clock at 8.34 ms a vsync; on pop'n 12 an object's frame counter at the cabinet's pace (500
 times in 1,000 vsyncs).
 
+pop'n music 15 to 18 on the PC (`games/popn<N>/mods/smooth-notes`, 2026-10-27; each for its newest
+program date): the same design as 9-14's, found by the same shapes in all four programs.
+- The song's clock is `timeGetTime` from the song's start, divided by a rate (1.0) and kept in
+  milliseconds (pop'n 15's 0x43cc50; its main loop takes it `>> 2`, the 4 ms steps it judges in),
+  and the play screen's phase is a halfword (the same code in all four) that is the song's while it
+  plays: 4 in pop'n 15 and 16, 2 in 17 and 18 (their phases renumbered, stepped with `add`): the rate
+  is on while the clock changes and the phase is the song's.
+- Held to the cabinet's pace (`between_ticks`, each `+1` made `+0`): every animated object's frame
+  (each `add dword [reg(+x)], 1` right after a call of the sprites' draw routine, which draws an
+  object at its frame: 11 to 21 places a game, characters, hit effects, the lanes' and judgements'
+  animations, on any screen though held only while the rate is on), the play screen's frame
+  counter, the frames since the song's start (the RETIRE? wait after the gauge runs out reads it:
+  without it a failing guest's stage ended early), the attract demo's length (2000 frames, counted
+  down), a counter to 1200 frames, and in pop'n 17 and 18 a set of counters a loop steps by one
+  (`add [ebp+esi*4+x], reg`, the register also stepping the loop: the add itself made a 7-byte
+  no-op) and a timer to 240 frames beside them, found with a data watchpoint (`HK_PC_WATCH`)
+  since they're reached through a pointer.
+- How they were found and checked: the game's memory (its globals and heaps: `HK_PC_DUMP`,
+  `HK_PC_DUMP_HEAP`; `+N/K`: K pictures in a row from N pictures after the rate comes on) dumped on
+  consecutive pictures of a song at 120 Hz: a value held to the cabinet's pace moves on every other
+  picture, one still counting the pictures on every one. (A first version compared dumps 10 and 100
+  pictures apart, which misses every counter that wraps sooner, an animation's loop: the owner saw
+  the characters and effects at 240 Hz's speed.) Checked under Wine at 120 Hz (a 60 Hz display, two
+  pictures drawn a frame): pop'n 15 in a credit's song (1,101 values at the cabinet's pace, no game
+  counter at the pictures': only times and sound positions move each picture), 16-18 in the attract
+  demo's song; the rate on from the song's start to its end; the sound unbroken across the
+  switches.
+
+| game | program | song clock | play phase (the song's) | patches |
+|---|---|---|---|---|
+| pop'n 15 | 2007091800 | 0x00c71008 | 0x00c5bd3c (4) | 25 |
+| pop'n 16 | 2008052700 | 0x00d27f78 | 0x00d12c4c (4) | 20 |
+| pop'n 17 | 2009022500 | 0x010408f8 | 0x0102b520 (2) | 18 |
+| pop'n 18 | 2010040500 | 0x0107c030 | 0x0106699c (2) | 20 |
+
 The Firebeat pop'n music (4-8) are another case (checked on pop'n 4, 2026-10-19, with the
 Firebeat core's frame period halved by hand): the attract demo's song lasts the same number of
 frames at twice the rate (about 2,400 at both), so its play goes by frames, not by a clock, and
@@ -336,7 +371,7 @@ so does DJ Main's pop'n music 1. A faster vsync would only make them faster: on 
 display's extra refreshes get in-between pictures instead (`--smooth-motion`, docs/SMOOTH.md),
 for every game on them, with no mod.
 
-Only the Python and DJ Main cores change their rate so far; elsewhere `[[rate]]` says so in the
+Only the Python, DJ Main and PC (32-bit) cores change their rate so far; elsewhere `[[rate]]` says so in the
 log and does nothing.
 
 ## How the layers work
@@ -378,8 +413,14 @@ so their memory and files are the game's own process's, not an emulated machine'
   which looks at each one as the program is loaded (before any of its code runs) and before each
   picture, with the same rules: `original` there, `replace` goes in (read-only pages too: code,
   constant text); `once`; no `original`, written every time (a cheat). The log (`mods: ... patch
-  at ... in place`) says when the game's process has put one in. `[[rate]]` doesn't apply (the
-  game draws at the cabinet's 60 a second), nor patches tied to one.
+  at ... in place`) says when the game's process has put one in.
+- **`[[rate]]`** (the 32-bit PC games, 2026-10-27): the words it watches are the game's own, which
+  HIRAKU's DLL copies out before each picture; while it is on, hiraku-pc lets the game draw `hz`
+  pictures a second (its clock, its sound and the window's pacing go on without a jump; on a
+  display slower than the rate, the pictures between two shown ones aren't shown), and the DLL
+  counts the cabinet's ticks itself, putting `while_rate` and `between_ticks` patches in and out
+  before each picture. A frame that only shows the last picture again (the game drew none: a load,
+  a hitch) isn't counted as the watched word standing still. Not the 64-bit pop'n (already 120).
 - **Files**: the PC games' mods are folders of files at their paths, as
   [ifs_layeredfs](https://github.com/mon/ifs_layeredfs) has them for the later games: a file at
   `<mod>/a/b` is the game's `data/a/b` (any case). The game opens the mod's file instead, whole,

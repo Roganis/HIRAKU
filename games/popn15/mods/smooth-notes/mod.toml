@@ -1,0 +1,189 @@
+name = "Smooth notes (high frame rate)"
+version = "0.1"
+game = "popn15"
+description = "While a song plays, the game draws at the display's refresh rate (120, 144, 240 Hz...): its notes come from its song clock, so they move at the display's rate, and it judges as before. The animated objects (characters, hit effects), its frame counters and the demo's length keep the cabinet's pace. For the program of 2007091800 (the newest)."
+
+[[rate]]
+hz = "display"                 # the display's refresh rate (no window: 119.88); or a number, up to 1000
+while_changing = 0x00c71008    # the song clock (ms: timeGetTime from the song's start)
+while_equal = 0x00c5bd3c       # ... and while the play screen's phase is 4: the song itself
+value = 4
+
+# Between the cabinet's ticks these count by 0 (each `+1` made `+0`), so they keep its pace: every
+# animated object's frame (each `add dword [reg(+x)], 1` right after the call of the sprites' draw
+# routine), the play screen's counters, the demo's length
+
+[[patch]]
+# an animated object's frame, stepped after the sprites' draw routine draws it
+address = 0x0043269c
+original = "830601"
+replace = "830600"
+between_ticks = true
+
+[[patch]]
+# an animated object's frame, stepped after the sprites' draw routine draws it
+address = 0x00437b7e
+original = "830601"
+replace = "830600"
+between_ticks = true
+
+[[patch]]
+# an animated object's frame, stepped after the sprites' draw routine draws it
+address = 0x00437c08
+original = "830601"
+replace = "830600"
+between_ticks = true
+
+[[patch]]
+# an animated object's frame, stepped after the sprites' draw routine draws it
+address = 0x004388c7
+original = "830701"
+replace = "830700"
+between_ticks = true
+
+[[patch]]
+# an animated object's frame, stepped after the sprites' draw routine draws it
+address = 0x00438922
+original = "830601"
+replace = "830600"
+between_ticks = true
+
+[[patch]]
+# an animated object's frame, stepped after the sprites' draw routine draws it
+address = 0x00438efb
+original = "83463001"
+replace = "83463000"
+between_ticks = true
+
+[[patch]]
+# an animated object's frame, stepped after the sprites' draw routine draws it
+address = 0x0043bda0
+original = "83430c01"
+replace = "83430c00"
+between_ticks = true
+
+[[patch]]
+# an animated object's frame, stepped after the sprites' draw routine draws it
+address = 0x00453863
+original = "83465001"
+replace = "83465000"
+between_ticks = true
+
+[[patch]]
+# an animated object's frame, stepped after the sprites' draw routine draws it
+address = 0x0045c692
+original = "830601"
+replace = "830600"
+between_ticks = true
+
+[[patch]]
+# an animated object's frame, stepped after the sprites' draw routine draws it
+address = 0x0045c7da
+original = "830601"
+replace = "830600"
+between_ticks = true
+
+[[patch]]
+# an animated object's frame, stepped after the sprites' draw routine draws it
+address = 0x0045c974
+original = "830601"
+replace = "830600"
+between_ticks = true
+
+[[patch]]
+# an animated object's frame, stepped after the sprites' draw routine draws it
+address = 0x0047a255
+original = "83862803000001"
+replace = "83862803000000"
+between_ticks = true
+
+[[patch]]
+# an animated object's frame, stepped after the sprites' draw routine draws it
+address = 0x0047a305
+original = "83866403000001"
+replace = "83866403000000"
+between_ticks = true
+
+[[patch]]
+# an animated object's frame, stepped after the sprites' draw routine draws it
+address = 0x0047a7f6
+original = "83865803000001"
+replace = "83865803000000"
+between_ticks = true
+
+[[patch]]
+# an animated object's frame, stepped after the sprites' draw routine draws it
+address = 0x0047a973
+original = "83862c03000001"
+replace = "83862c03000000"
+between_ticks = true
+
+[[patch]]
+# an animated object's frame, stepped after the sprites' draw routine draws it
+address = 0x0047ad73
+original = "83863003000001"
+replace = "83863003000000"
+between_ticks = true
+
+[[patch]]
+# an animated object's frame, stepped after the sprites' draw routine draws it
+address = 0x0047ae05
+original = "830601"
+replace = "830600"
+between_ticks = true
+
+[[patch]]
+# an animated object's frame, stepped after the sprites' draw routine draws it
+address = 0x00480ed2
+original = "83861803000001"
+replace = "83861803000000"
+between_ticks = true
+
+[[patch]]
+# an animated object's frame, stepped after the sprites' draw routine draws it
+address = 0x004813c0
+original = "83864008000001"
+replace = "83864008000000"
+between_ticks = true
+
+[[patch]]
+# an animated object's frame, stepped after the sprites' draw routine draws it
+address = 0x00495067
+original = "8387ac1f000001"
+replace = "8387ac1f000000"
+between_ticks = true
+
+[[patch]]
+# an animated object's frame, stepped after the sprites' draw routine draws it
+address = 0x00495c58
+original = "8387b81f000001"
+replace = "8387b81f000000"
+between_ticks = true
+
+[[patch]]
+# the play screen's frame counter
+address = 0x004304c9
+original = "83059862240201"
+replace = "83059862240200"
+between_ticks = true
+
+[[patch]]
+# the attract demo's length (2000 frames, counted down)
+address = 0x00430e32
+original = "6683057c21c700ff"
+replace = "6683057c21c70000"
+between_ticks = true
+
+[[patch]]
+# frames since the song's start (the retire's wait after the gauge runs out reads it)
+address = 0x0043c440
+original = "8305bc62240201"
+replace = "8305bc62240200"
+between_ticks = true
+
+[[patch]]
+# a counter to 1200 frames
+address = 0x004261e5
+original = "83c001"
+replace = "83c000"
+between_ticks = true

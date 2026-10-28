@@ -1,0 +1,155 @@
+name = "Smooth notes (high frame rate)"
+version = "0.1"
+game = "popn18"
+description = "While a song plays, the game draws at the display's refresh rate (120, 144, 240 Hz...): its notes come from its song clock, so they move at the display's rate, and it judges as before. The animated objects (characters, hit effects), its frame counters and the demo's length keep the cabinet's pace. For the program of 2010040500 (the newest)."
+
+[[rate]]
+hz = "display"                 # the display's refresh rate (no window: 119.88); or a number, up to 1000
+while_changing = 0x0107c030    # the song clock (ms: timeGetTime from the song's start)
+while_equal = 0x0106699c       # ... and while the play screen's phase is 2: the song itself
+value = 2
+
+# Between the cabinet's ticks these count by 0 (each `+1` made `+0`), so they keep its pace: every
+# animated object's frame (each `add dword [reg(+x)], 1` right after the call of the sprites' draw
+# routine), the play screen's counters, the demo's length
+
+[[patch]]
+# an animated object's frame, stepped after the sprites' draw routine draws it
+address = 0x0048ecd1
+original = "830601"
+replace = "830600"
+between_ticks = true
+
+[[patch]]
+# an animated object's frame, stepped after the sprites' draw routine draws it
+address = 0x0048ed5a
+original = "830601"
+replace = "830600"
+between_ticks = true
+
+[[patch]]
+# an animated object's frame, stepped after the sprites' draw routine draws it
+address = 0x0048ee30
+original = "830601"
+replace = "830600"
+between_ticks = true
+
+[[patch]]
+# an animated object's frame, stepped after the sprites' draw routine draws it
+address = 0x0048f8db
+original = "830601"
+replace = "830600"
+between_ticks = true
+
+[[patch]]
+# an animated object's frame, stepped after the sprites' draw routine draws it
+address = 0x0048f956
+original = "830601"
+replace = "830600"
+between_ticks = true
+
+[[patch]]
+# an animated object's frame, stepped after the sprites' draw routine draws it
+address = 0x0048ff70
+original = "8346f401"
+replace = "8346f400"
+between_ticks = true
+
+[[patch]]
+# an animated object's frame, stepped after the sprites' draw routine draws it
+address = 0x004935bf
+original = "83430c01"
+replace = "83430c00"
+between_ticks = true
+
+[[patch]]
+# an animated object's frame, stepped after the sprites' draw routine draws it
+address = 0x0049ea5f
+original = "83861807000001"
+replace = "83861807000000"
+between_ticks = true
+
+[[patch]]
+# an animated object's frame, stepped after the sprites' draw routine draws it
+address = 0x004a905c
+original = "8386c000000001"
+replace = "8386c000000000"
+between_ticks = true
+
+[[patch]]
+# an animated object's frame, stepped after the sprites' draw routine draws it
+address = 0x004aa392
+original = "8386cc00000001"
+replace = "8386cc00000000"
+between_ticks = true
+
+[[patch]]
+# an animated object's frame, stepped after the sprites' draw routine draws it
+address = 0x004aa413
+original = "8386d000000001"
+replace = "8386d000000000"
+between_ticks = true
+
+[[patch]]
+# an animated object's frame, stepped after the sprites' draw routine draws it
+address = 0x004aa889
+original = "8386dc00000001"
+replace = "8386dc00000000"
+between_ticks = true
+
+[[patch]]
+# an animated object's frame, stepped after the sprites' draw routine draws it
+address = 0x004aaabc
+original = "8386d800000001"
+replace = "8386d800000000"
+between_ticks = true
+
+[[patch]]
+# the play screen's frame counter
+address = 0x00486516
+original = "83051410090101"
+replace = "83051410090100"
+between_ticks = true
+
+[[patch]]
+# the attract demo's length (2000 frames, counted down)
+address = 0x004871a4
+original = "66830564d10701ff"
+replace = "66830564d1070100"
+between_ticks = true
+
+[[patch]]
+# frames since the song's start (the retire's wait after the gauge runs out reads it)
+address = 0x00493f00
+original = "83053810090101"
+replace = "83053810090100"
+between_ticks = true
+
+[[patch]]
+# a counter to 1200 frames
+address = 0x0045ee7f
+original = "83c001"
+replace = "83c000"
+between_ticks = true
+
+[[patch]]
+# a timer counted up to a limit (add dword [eax], 1; the limit at [eax - 0x188])
+address = 0x0046d451
+original = "830001"
+replace = "830000"
+between_ticks = true
+
+[[patch]]
+# a set of counters stepped by one in a loop (add [ebp+esi*4+x], reg: the reg also steps the
+# loop, so the add itself goes: nop dword [eax+0])
+address = 0x0046cbff
+original = "01bcb504090000"
+replace = "0f1f8000000000"
+between_ticks = true
+
+[[patch]]
+# a 4-second timer (counted to 240 frames: add [ebp+x], reg, the reg 1; the add goes: nop word [eax+eax+0])
+address = 0x0046cd31
+original = "01bd80090000"
+replace = "660f1f440000"
+between_ticks = true

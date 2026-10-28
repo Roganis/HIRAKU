@@ -40,6 +40,17 @@ struct MemoryPatch {
     bool once = false;
 };
 std::vector<MemoryPatch> memory_patches();
+// ... and those tied to a [[rate]] (while_rate; between_ticks: only on the frames between the
+// cabinet's ticks), which the game's process puts in and takes out itself as the rate goes on and
+// off (no module: the program's own addresses)
+struct RatePatch {
+    MemoryPatch patch;
+    bool between_ticks = false;
+};
+std::vector<RatePatch> rate_patches();
+// The words of the game's memory the [[rate]]s look at (while_changing, while_equal): such a core
+// reads them for frame() through core().mem(address, 4)
+std::vector<uint32_t> rate_words();
 std::vector<std::pair<std::string, std::string>> folder_files();
 std::vector<std::string> folders();   // the mods' folders, in the list's order (the first wins)
 

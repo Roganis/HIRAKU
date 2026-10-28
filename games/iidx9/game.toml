@@ -6,6 +6,7 @@ core = "pc"             # Konami's own program in HIRAKU's cabinet (runtime/pc/,
 
 [pc]
 exe = "bm2dx.exe"       # in C02/JAx/, a folder by revision: the last (JAH) is run
+mark = "C02 STARTUP"    # what tells this game's program from 10th style's and RED's (all bm2dx.exe)
 layout = "revisions"
 board = "c02"           # the C02 cabinet's EZ-USB board (runtime/pc/ezusb_c02.c)
 drive = 'D:\C02'        # where the game is: its program in JAx, its data beside it

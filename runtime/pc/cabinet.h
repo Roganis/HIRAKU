@@ -50,6 +50,9 @@ int hk_pad_samples(uint16_t last[10]);
 void hk_press_patch_program(void);
 uint32_t hk_coins_now(void);
 void hk_set_coin_mode(int mode);   // usbCoinMode: 1, coins as the coin switch's pulses on the pad
+// A device under its driver (ezusb_dev.c): its hook for an import, given the cabinet's (or NULL); set
+// before hk_cabinet_start
+void hk_set_device_hook(void *(*hook)(const char *dll, const char *fn, void *next));
 uint32_t hk_keypad_now(void);   // HK_PC_KEY_* and digits: hiraku-pc's and the keys bound to them
 uint32_t hk_card_seq(void);     // moves on with each card: hiraku-pc's and the card key's
 uint32_t hk_keypad2_now(void);  // the same for a second reader (the C02 cabinet's player 2): hiraku-pc's only

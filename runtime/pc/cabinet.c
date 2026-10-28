@@ -979,7 +979,7 @@ void *hk_program(void) {
     return program;
 }
 
-static void *hook_for(const char *dll, const char *fn) {
+static void *cabinet_hook_for(const char *dll, const char *fn) {
     if (!_stricmp(dll, "ws2_32.dll") || !_stricmp(dll, "wsock32.dll")) return hk_net_hook(fn);   // net.c
     if (!_stricmp(dll, "iphlpapi.dll")) return hk_net_card_hook(fn);
     if (!_stricmp(dll, "libsocket.dll") || !_stricmp(dll, "libavs-win32.dll") || !_stricmp(dll, "libavs-win32-ea3.dll")) {
@@ -1019,6 +1019,20 @@ static void *hook_for(const char *dll, const char *fn) {
             return hooks[i].to;
         }
     return NULL;
+}
+
+// A device of HIRAKU's own under its driver (ezusb_dev.c): it sees each import first, and is handed
+// what the cabinet would put there (NULL: the call itself)
+static void *(*g_device_hook)(const char *dll, const char *fn, void *next);
+void hk_set_device_hook(void *(*hook)(const char *dll, const char *fn, void *next)) { g_device_hook = hook; }
+
+static void *hook_for(const char *dll, const char *fn) {
+    void *to = cabinet_hook_for(dll, fn);
+    if (g_device_hook) {
+        void *d = g_device_hook(dll, fn, to);
+        if (d) return d;
+    }
+    return to;
 }
 
 // The calls the hooks take that games import by number
@@ -1086,7 +1100,7 @@ static HMODULE WINAPI my_LoadLibraryA(LPCSTR p) {
 }
 
 // The game's own frame clock: pop'n 15 waits, before each Present, until 14 ms have passed since the
-// last one (timeGetTime, then Sleep: `call reg; sub eax, last; cmp eax, 14; jae go_on`). With HIRAKU's
+// last one (timeGetTime, then Sleep: `call reg; sub eax, last; cmp eax, 14; jae go_on`; IIDX RED 13 ms). With HIRAKU's
 // pacing starting each frame (link.h), that wait would hold the picture until the frame's end, so
 // the branch is made to always go on. Found by its shape and the game's own import slots (every
 // program date of pop'n 15 has two, at different places)
@@ -1127,7 +1141,8 @@ static void unlimit_frames(void) {
         const size_t size = sec->Misc.VirtualSize;
         for (size_t i = 16; i + 40 < size; i++) {
             uint8_t *p = code + i;
-            if (p[0] != 0x83 || p[1] != 0xf8 || p[2] != 0x0e || p[3] != 0x73) continue;
+            // cmp eax, 12-15 ms (pop'n 15: 14; IIDX RED: 13); jae
+            if (p[0] != 0x83 || p[1] != 0xf8 || p[2] < 0x0c || p[2] > 0x0f || p[3] != 0x73) continue;
             // before it: timeGetTime's slot loaded, a call through a register, a subtraction
             int call = 0, sub = 0;
             for (int b = 1; b <= 8; b++) call |= p[-b] == 0xff && (p[-b + 1] & 0xf8) == 0xd0, sub |= p[-b] == 0x2b;
@@ -1139,7 +1154,7 @@ static void unlimit_frames(void) {
             p[3] = 0xeb;   // jae -> jmp
             VirtualProtect(p + 3, 1, old, &old);
             FlushInstructionCache(GetCurrentProcess(), p, 4);
-            hk_log("hiraku-pc: the game's own 14 ms wait between pictures at %p: left to HIRAKU's pacing", (void *)p);
+            hk_log("hiraku-pc: the game's own %d ms wait between pictures at %p: left to HIRAKU's pacing", p[2], (void *)p);
             n++;
         }
     }

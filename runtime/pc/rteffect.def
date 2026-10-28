@@ -1,0 +1,19 @@
+; HIRAKU's RtEffect.dll for the C02 cabinet's later games (rteffect.c): the exports of Realtek's
+LIBRARY RtEffect.dll
+EXPORTS
+    EnableEqualizer
+    GetEqualizerGain
+    GetEqualizerStatus
+    GetGlobalEnvironment
+    GetMaximumChannels
+    GetRTSEVersion
+    GetSPDIFOut44KMode
+    GetSpdifOutCaps
+    GetSpdifOutStatus
+    GetSpeakerMode
+    Is_Realtek_Audio_Driver_Exist
+    SetEqualizerGain
+    SetGlobalEnvironment
+    SetSPDIFOut44KMode
+    SetSpdifOutStatus
+    SetSpeakerMode

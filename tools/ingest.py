@@ -36,6 +36,7 @@ import re
 import shutil
 import struct
 import subprocess
+import zlib
 import sys
 import tomllib
 import zipfile
@@ -1334,7 +1335,7 @@ def pc_folder(folder: str) -> tuple[dict, str, str] | None:
     """A PC game's folder (PLAN.md section 30): prog/<date>/<program> and data/, as the cabinet's
     drive holds them (pop'n music 15: popn15.exe), or the folder above it. The game is the one whose
     game.toml names the program; the newest date's program is run. (game, program folder, data)."""
-    by_exe = {g["pc"]["exe"].lower(): g for g in all_games() if "pc" in g and "exe" in g["pc"]}
+    by_exe = {g["pc"]["exe"].lower(): g for g in all_games() if "pc" in g and "exe" in g["pc"] and g["pc"].get("layout") != "revisions"}
     for top in [folder] + sorted(glob.glob(os.path.join(folder, "*"))):
         prog, data = os.path.join(top, "prog"), os.path.join(top, "data")
         if not (os.path.isdir(prog) and os.path.isdir(data)):
@@ -1346,22 +1347,36 @@ def pc_folder(folder: str) -> tuple[dict, str, str] | None:
             for f in os.listdir(d):
                 if f.lower() in by_exe:
                     return by_exe[f.lower()], os.path.abspath(d), os.path.abspath(data)
-    return revisions_folder(folder, by_exe)
+    return revisions_folder(folder)
 
 
-def revisions_folder(folder: str, by_exe: dict) -> tuple[dict, str, str] | None:
+def revision_game(path: str) -> dict | None:
+    """The game a revision's program is (IIDX 9th style, 10th style and RED are all bm2dx.exe): the
+    one whose game.toml's mark (a string in its program: its model's module names) is in it. A
+    program packed or changed by someone since (RED's JAB: rebuilt in 2006, PECompact) has none of
+    its strings in the clear and isn't taken."""
+    with open(path, "rb") as fh:
+        program = fh.read()
+    for g in all_games():
+        pc = g.get("pc", {})
+        if pc.get("layout") == "revisions" and pc.get("exe", "").lower() == os.path.basename(path).lower() and pc.get("mark", "").encode() in program:
+            return g
+    return None
+
+
+def revisions_folder(folder: str) -> tuple[dict, str, str] | None:
     """A PC game kept as program folders by revision beside its data (PLAN.md section 33: beatmania
     IIDX 9th style's C02/JAA ... C02/JAH/bm2dx.exe and C02/data/), found a few folders down (a dump
     can hold the newer revisions apart from the drive's copy). The newest revision is run: the last
     by name (JAH after JAG). (game, program folder, data)."""
+    exes = {g["pc"]["exe"].lower() for g in all_games() if g.get("pc", {}).get("layout") == "revisions"}
     programs, datas = [], []
     base = os.path.normpath(folder).count(os.sep)
     for d, dirs, files in os.walk(folder):
         if os.path.normpath(d).count(os.sep) - base >= 4:
             dirs[:] = []
         for f in files:
-            g = by_exe.get(f.lower())
-            if g and g["pc"].get("layout") == "revisions":
+            if f.lower() in exes and (g := revision_game(os.path.join(d, f))):
                 programs.append((os.path.basename(d).upper(), d, g))
         datas += [os.path.join(d, x) for x in dirs if x.lower() == "data"]
     if not programs or not datas:
@@ -1424,6 +1439,40 @@ def ingest_pc64(args, game: dict, contents: str, soft: dict) -> int:
     return 0
 
 
+def sound_lists(data: str) -> list[str]:
+    """beatmania IIDX (DistorteD on) checks each song's sounds at start-up against the folder's owl.bin:
+    "IIDX", the version (13), the count, the kind of sum (2: CRC-32), then per file its name (32
+    bytes) and the CRC-32 of its bytes 0x200-0x3ff. A folder without one stops the game at HDD DATA
+    ERROR (SOUND) (the owner's DistorteD dump lacks sd_data/0494's): one is written from the files,
+    as the others are. The song folders given one."""
+    sd = os.path.join(data, "sd_data")
+    if not os.path.isdir(sd):
+        return []
+    folders = sorted(d for d in os.listdir(sd) if os.path.isdir(os.path.join(sd, d)) and re.fullmatch(r"\d{4}", d))
+    have = [d for d in folders if os.path.isfile(os.path.join(sd, d, "owl.bin"))]
+    if len(have) * 2 < len(folders):   # a game that keeps no such lists
+        return []
+    with open(os.path.join(sd, have[0], "owl.bin"), "rb") as fh:
+        _, version, _, kind = struct.unpack("<4sIII", fh.read(16))
+    written = []
+    for d in folders:
+        if d in have:
+            continue
+        files = sorted(os.listdir(os.path.join(sd, d)), key=lambda f: (not f.lower().endswith(".2dx"), f))
+        out = struct.pack("<4sIII", b"IIDX", version, len(files), kind)
+        for f in files:
+            with open(os.path.join(sd, d, f), "rb") as fh:
+                fh.seek(0x200)
+                out += f.encode().ljust(32, b"\0")[:32] + struct.pack("<I", zlib.crc32(fh.read(0x200)))
+        try:
+            with open(os.path.join(sd, d, "owl.bin"), "wb") as fh:
+                fh.write(out)
+            written.append(d)
+        except OSError as e:
+            print(f"warning  sd_data/{d} has no owl.bin and none could be written ({e.strerror}): the game stops at HDD DATA ERROR (SOUND)")
+    return written
+
+
 def ingest_pc(args, game: dict, program: str, data: str) -> int:
     """A PC game: its folder is read where it is (several GB); hiraku-pc copies the program folder
     into the save folder to run it, with HIRAKU's DLLs (runtime/pc/host.cpp)."""
@@ -1432,12 +1481,16 @@ def ingest_pc(args, game: dict, program: str, data: str) -> int:
     os.makedirs(outdir, exist_ok=True)
     lines = ["core=pc", f"family={game.get('family', 'pcpopn')}", f"exe={pc['exe']}", f"program={program}",
              f"data={data}", f"drive={pc.get('drive', 'D:' + chr(92) + gid)}", f"save_drive={pc.get('save_drive', 'E:' + chr(92))}"]
-    lines += [f"{k}={pc[k]}" for k in ("save_drive2", "data_as", "board") if k in pc]
+    lines += [f"{k}={pc[k]}" for k in ("save_drive2", "data_as", "board", "security") if k in pc]
+    if "sidcode" in pc:   # the cabinet's software id: the model's, the revision's letter added (JAD: D)
+        lines.append(f"sidcode={pc['sidcode']}:{os.path.basename(program)[-1:].upper()}")
     with open(os.path.join(outdir, "machine.txt"), "w") as fh:
         fh.write("\n".join(lines) + "\n")
     print(f"game     {gid}: {game.get('title', gid)} (a PC game)")
     print(f"program  {program}")
     print(f"data     {data} (read where it is{'' if data.startswith(os.path.abspath(args.out)) else ': keep it there'})")
+    for d in sound_lists(data):
+        print(f"repaired sd_data/{d}/owl.bin (the song's sound list, missing from the dump: made from its files)")
     print(f"OK       dumps/{gid}/machine.txt")
     return 0
 

@@ -1,0 +1,17 @@
+# beatmania IIDX 13 DistorteD (FDD J:A:x), Konami 2006: a Windows PC, the C02 cabinet
+id = "iidx13"
+title = "beatmania IIDX 13 DistorteD"
+family = "iidx"         # IIDX cabinet: 7 keys and a turntable per player, VEFX, Effect, 5 effector sliders
+core = "pc"             # Konami's own program in HIRAKU's cabinet (runtime/pc/, PLAN.md section 36)
+
+[pc]
+exe = "bm2dx.exe"       # in FDD/JAx/, a folder by revision: the last (JAF) is run
+mark = "FDD.music"      # what tells this game's program from 9th style's to HAPPY SKY's (all bm2dx.exe)
+layout = "revisions"
+board = "c02-driver"    # the C02 cabinet's board under its driver (runtime/pc/ezusb_dev.c), from RtEffect.dll
+security = "GQFDDJAA 0:4:4"   # the security plug: the game's model code and the boot's seeds
+sidcode = "FDD:J:A"     # the cabinet's software id (..\sidcode.txt), the revision's letter added
+drive = 'D:\FDD'        # where the game is: its program in JAx, its data beside it
+data_as = '..\data'     # the game names its data from the program's folder
+save_drive = 'E:\'      # its two backup drives (bkeep.dat, settings, the AVS NVRAM)
+save_drive2 = 'F:\'

@@ -28,6 +28,10 @@
 //   save_drive2=F:\         a second backup drive (beatmania IIDX 9th style), another folder there
 //   data_as=..\data         the name the game gives its data folder (default <drive>\data)
 //   board=c02               the C02 cabinet's board (runtime/pc/ezusb_c02.c, IIDX: family=iidx), not pop'n's
+//   board=c02-driver        the same board under its driver (runtime/pc/ezusb_dev.c, IIDX RED: PLAN.md
+//                           section 36), started from HIRAKU's RtEffect.dll; Konami's ezusb.dll kept
+//   security=MODEL A:B:C    its security plug: the game's model code and the boot's seeds
+//   sidcode=E11:J:A:D       the cabinet's software id, written as ..\sidcode.txt from the program
 #include <algorithm>
 #include <atomic>
 #include <chrono>
@@ -307,7 +311,8 @@ public:
             return false;
         }
         if (m.count("family")) family_ = m["family"];
-        c02_ = m["board"] == "c02";
+        c02_ = m["board"] == "c02" || m["board"] == "c02-driver";
+        c02_driver_ = m["board"] == "c02-driver";
         data_as_ = m.count("data_as") ? m["data_as"] : drive + "\\data";
 
         // The save folder: the program's copy (HIRAKU's DLLs for Konami's), the backup drive (e/)
@@ -319,6 +324,7 @@ public:
         mkdirs(run_e_);
         if (m.count("save_drive2")) mkdirs(save_ + "/f");
         if (!copy_program(program_, run_prog_)) return false;
+        if (c02_driver_ && !set_up_driver_board(m)) return false;
         if (!link_data(data)) return false;
         if (!hand_mods(drive, data, prog_name)) return false;
         std::string error;
@@ -361,8 +367,23 @@ public:
             std::string lower = f;
             for (char &c : lower) c = (char)std::tolower((unsigned char)c);
             std::string from = from_dir + "/" + f;
-            if (lower == "ezusb.dll" || lower == "libacio.dll") from = bin_dir() + "/pc/" + (c02_ && lower == "ezusb.dll" ? "c02/" : "") + lower;
+            if (lower == "rteffect.dll" && c02_driver_) continue;   // HIRAKU's, below
+            if ((lower == "ezusb.dll" && !c02_driver_) || lower == "libacio.dll")
+                from = bin_dir() + "/pc/" + (c02_ && lower == "ezusb.dll" ? "c02/" : "") + lower;
             if (!copy_in(from, to_dir + "/" + f)) return false;
+        }
+        return true;
+    }
+    // The C02 board under its driver (IIDX RED): HIRAKU's RtEffect.dll in the program's copy (the
+    // game imports it: HIRAKU's way in, ezusb_dev.c and rteffect.c), the plug's code for it, and the
+    // cabinet's software id beside the program folders, which the cabinet's install writes (without it:
+    // HDD DATA ERROR (SID))
+    bool set_up_driver_board(std::map<std::string, std::string> &m) {
+        if (!copy_in(bin_dir() + "/pc/c02/RtEffect.dll", run_prog_ + "/RtEffect.dll")) return false;
+        set_env("HK_PC_SECURITY", m["security"]);
+        set_env("HK_PC_BOARD", "d01");
+        if (!m["sidcode"].empty()) {
+            std::ofstream(save_ + "/prog/sidcode.txt", std::ios::binary | std::ios::trunc) << m["sidcode"] << "\n";
         }
         return true;
     }
@@ -617,7 +638,9 @@ public:
     void set_on_fatal(std::function<void()> f) override { on_fatal_ = std::move(f); }
     double native_rate() const override { return ghz(); }
     int monitor_khz() const override { return 31; }   // a PC's VGA monitor
-    double display_aspect() const override { return pc64_ ? 0.0 : 4.0 / 3.0; }   // the 64-bit PC pop'n: 1920x1080, square pixels
+    // the 64-bit PC pop'n: 1920x1080, square pixels; IIDX's 640x480 shown on its cabinet's widescreen
+    // monitor (as Twinkle's IIDX)
+    double display_aspect() const override { return pc64_ ? 0.0 : family_ == "iidx" ? 16.0 / 9.0 : 4.0 / 3.0; }
     double seconds() const override { return (double)tick_ / ghz(); }
     const uint8_t *mem(uint32_t, uint32_t) const override { return nullptr; }
     uint64_t frame_count() const override { return frame_; }
@@ -1375,6 +1398,7 @@ private:
     bool pc32_ = false;               // the 32-bit AVS2 loader runs the game (init_pc32)
     bool dxvk32_ = false;             // ... with DXVK's Direct3D 9 beside it
     bool c02_ = false;                // the C02 cabinet's board (beatmania IIDX 9th style, PLAN.md section 33)
+    bool c02_driver_ = false;         // ... under its driver (IIDX RED, PLAN.md section 36)
     std::string data_as_;             // the name the game gives its data folder (HK_PC_MAP)
     int tt_frac_[2] = {};             // turntable_add's counts not yet a whole step
     bool crt_ = false;                // --single-screen: the 64-bit loader's single-screen mode

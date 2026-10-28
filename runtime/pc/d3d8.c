@@ -62,6 +62,21 @@ static HRESULT WINAPI my_Present(IDirect3DDevice8 *d, const RECT *src, const REC
     return D3D_OK;
 }
 
+// A light's alpha: Direct3D lights a vertex with the material's diffuse alpha and ignores the lights'
+// own, but Wine multiplies the light's in. DistorteD's light has diffuse alpha 0 and its MODE SELECT
+// blends by the lit alpha (source alpha, zero), so under Wine the whole screen came out black
+// (bemanitools' iidx13_fix_song_select_bg turns lighting off instead, losing the shading). Each light
+// is handed on with alpha 1: no change where Direct3D's rule holds, the cabinet's look where it doesn't.
+typedef HRESULT(WINAPI *SetLight8_t)(IDirect3DDevice8 *, DWORD, const D3DLIGHT8 *);
+static SetLight8_t g_SetLight;
+
+static HRESULT WINAPI my_SetLight(IDirect3DDevice8 *d, DWORD i, const D3DLIGHT8 *l) {
+    if (!l) return g_SetLight(d, i, l);
+    D3DLIGHT8 c = *l;
+    c.Diffuse.a = c.Ambient.a = c.Specular.a = 1.0f;
+    return g_SetLight(d, i, &c);
+}
+
 static HRESULT WINAPI my_Reset(IDirect3DDevice8 *d, D3DPRESENT_PARAMETERS *pp) {
     windowed(pp);
     return g_Reset(d, pp);
@@ -82,6 +97,8 @@ static HRESULT WINAPI my_CreateDevice(IDirect3D8 *self, UINT adapter, D3DDEVTYPE
         if (was) g_Reset = (Reset8_t)was;
         was = hk_patch_slot((void **)&vt->Present, (void *)my_Present);
         if (was) g_Present = (Present8_t)was;
+        was = hk_patch_slot((void **)&vt->SetLight, (void *)my_SetLight);
+        if (was) g_SetLight = (SetLight8_t)was;
     } else {
         hk_log("hiraku-pc: CreateDevice (Direct3D 8) failed (%#lx)", (unsigned long)r);
     }

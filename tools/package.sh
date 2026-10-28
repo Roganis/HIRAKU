@@ -139,8 +139,8 @@ for f in ${HK_PACKAGE_BIN:-}; do cp -L "$f" "$d/bin/"; done
 if [ -d "$build/pc" ]; then
   mkdir -p "$d/bin/pc"
   cp "$build"/pc/ezusb.dll "$build"/pc/libacio.dll "$d/bin/pc/"
-  # the C02 cabinet's board (beatmania IIDX 9th style), in a folder of its own
-  if [ -f "$build/pc/c02/ezusb.dll" ]; then mkdir -p "$d/bin/pc/c02" && cp "$build/pc/c02/ezusb.dll" "$d/bin/pc/c02/"; fi
+  # the C02 cabinet's board (beatmania IIDX 9th style) and its later games' (RED), in a folder of their own
+  for f in ezusb.dll RtEffect.dll; do if [ -f "$build/pc/c02/$f" ]; then mkdir -p "$d/bin/pc/c02" && cp "$build/pc/c02/$f" "$d/bin/pc/c02/"; fi; done
   cp "$build"/pc/hiraku-pc64.exe "$d/bin/pc/" 2>/dev/null || true
   cp "$build"/pc/hiraku-pc32.exe "$d/bin/pc/" 2>/dev/null || true
 fi

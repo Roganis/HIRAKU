@@ -1,0 +1,17 @@
+# beatmania IIDX 12 HAPPY SKY (ECO J:A:x), Konami 2005: a Windows PC, the C02 cabinet
+id = "iidx12"
+title = "beatmania IIDX 12 HAPPY SKY"
+family = "iidx"         # IIDX cabinet: 7 keys and a turntable per player, VEFX, Effect, 5 effector sliders
+core = "pc"             # Konami's own program in HIRAKU's cabinet (runtime/pc/, PLAN.md section 36)
+
+[pc]
+exe = "bm2dx.exe"       # in ECO/JAx/, a folder by revision: the last (JAD) is run
+mark = "ECO.music"      # what tells this game's program from 9th style's to RED's (all bm2dx.exe)
+layout = "revisions"
+board = "c02-driver"    # the C02 cabinet's board under its driver (runtime/pc/ezusb_dev.c), from RtEffect.dll
+security = "GQECOJAA 0:3:3"   # the security plug: the game's model code and the boot's seeds
+sidcode = "ECO:J:A"     # the cabinet's software id (..\sidcode.txt), the revision's letter added
+drive = 'D:\ECO'        # where the game is: its program in JAx, its data beside it
+data_as = '..\data'     # the game names its data from the program's folder
+save_drive = 'E:\'      # its two backup drives (bkeep.dat, settings, the AVS NVRAM)
+save_drive2 = 'F:\'

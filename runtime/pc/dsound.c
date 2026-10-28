@@ -541,10 +541,13 @@ long __stdcall hk_DirectSoundCreate(const void *device, void **out, void *outer)
 // played): Windows' mixer has no speakers line on a PC whose output is HDMI, digital or headphones
 // (pop'n 17 on Windows 10, GitHub issue 4). The game also sets the speakers' volume to its own
 // setting; here the values are kept, not applied (HIRAKU's sound output has its own), and the PC's
-// own volume and mute are left alone.
+// own volume and mute are left alone. The speakers have one source, the wave out (no controls of its
+// own), as a PC's always have some: IIDX RED counts its way through the speakers' sources up to their
+// number less one, unsigned, and with none went round some 4 billion times before starting.
 
 #define MIX_HANDLE ((HMIXER)(uintptr_t)0x4b4d4958)   // "XIMK"
 #define MIX_LINE 0xffff0000u
+#define MIX_SOURCE 0x00000000u   // the speakers' source 0 (its id as Windows makes them: source << 16)
 enum { MIX_VOLUME = 1, MIX_MUTE = 2 };
 static DWORD g_mix_value[3] = {0, 65535, 0};
 
@@ -564,9 +567,25 @@ static void mix_line(MIXERLINEA *l) {
     l->fdwLine = MIXERLINE_LINEF_ACTIVE;
     l->dwComponentType = MIXERLINE_COMPONENTTYPE_DST_SPEAKERS;
     l->cChannels = 1;
+    l->cConnections = 1;
     l->cControls = 2;
     strcpy(l->szShortName, "Speakers");
     strcpy(l->szName, "Speakers");
+    l->Target.dwType = MIXERLINE_TARGETTYPE_WAVEOUT;
+    strcpy(l->Target.szPname, "HIRAKU");
+}
+static void mix_source(MIXERLINEA *l) {
+    const DWORD cb = l->cbStruct;
+    memset(l, 0, cb < sizeof *l ? cb : sizeof *l);
+    l->cbStruct = cb;
+    l->dwDestination = 0;
+    l->dwSource = 0;
+    l->dwLineID = MIX_SOURCE;
+    l->fdwLine = MIXERLINE_LINEF_ACTIVE | MIXERLINE_LINEF_SOURCE;
+    l->dwComponentType = MIXERLINE_COMPONENTTYPE_SRC_WAVEOUT;
+    l->cChannels = 1;
+    strcpy(l->szShortName, "Wave");
+    strcpy(l->szName, "Wave");
     l->Target.dwType = MIXERLINE_TARGETTYPE_WAVEOUT;
     strcpy(l->Target.szPname, "HIRAKU");
 }
@@ -611,13 +630,25 @@ static MMRESULT WINAPI mix_GetLineInfoA(HMIXEROBJ h, LPMIXERLINEA l, DWORD flags
     case MIXER_GETLINEINFOF_DESTINATION:
         if (l->dwDestination != 0) return MIXERR_INVALLINE;
         break;
+    case MIXER_GETLINEINFOF_SOURCE:
+        if (l->dwDestination != 0 || l->dwSource != 0) return MIXERR_INVALLINE;
+        mix_source(l);
+        return MMSYSERR_NOERROR;
     case MIXER_GETLINEINFOF_LINEID:
+        if (l->dwLineID == MIX_SOURCE) {
+            mix_source(l);
+            return MMSYSERR_NOERROR;
+        }
         if (l->dwLineID != MIX_LINE) return MIXERR_INVALLINE;
         break;
     case MIXER_GETLINEINFOF_COMPONENTTYPE:
+        if (l->dwComponentType == MIXERLINE_COMPONENTTYPE_SRC_WAVEOUT) {
+            mix_source(l);
+            return MMSYSERR_NOERROR;
+        }
         if (l->dwComponentType != MIXERLINE_COMPONENTTYPE_DST_SPEAKERS) return MIXERR_INVALLINE;
         break;
-    default:   // its sources (none), by target
+    default:   // by target
         return MIXERR_INVALLINE;
     }
     mix_line(l);

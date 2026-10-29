@@ -406,6 +406,7 @@ public:
     // style), beside the program's copy: HIRAKU's path map (HK_PC_MAP) sees only the game's own
     // modules, and Windows' DirectShow opens the movies itself
     bool link_data(const std::string &data) {
+        data_dir_ = data;
         if (data_as_.rfind("..\\", 0) != 0) return true;
         return link_folder(save_ + "/prog/" + data_as_.substr(3), data, data_as_);
     }
@@ -1301,6 +1302,36 @@ private:
         printf("e-AMUSEMENT: card %s held to the reader\n", number.c_str());
     }
 
+    // The data files the game's list (pop'n 15's dat.bin: each file's MD5 and path) names that its
+    // data folder hasn't: a dump missing some, which the game faults on when it loads one. Said
+    // when the game ends other than by being stopped.
+    std::string data_dir_;   // the game's data folder (link_data)
+    std::string missing_data() {
+        std::ifstream in(program_ + "/dat.bin", std::ios::binary);
+        const std::string d((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+        std::string prefix = data_as_ + "\\";
+        for (char &c : prefix) c = (char)tolower((unsigned char)c);
+        size_t listed = 0, missing = 0;
+        std::string first;
+        for (size_t at = 4; at + 16 < d.size();) {
+            const size_t end = d.find('\0', at + 16);
+            if (end == std::string::npos) break;
+            std::string path = d.substr(at + 16, end - at - 16);
+            at = end + 1;
+            std::string low = path;
+            for (char &c : low) c = (char)tolower((unsigned char)c);
+            if (low.rfind(prefix, 0) != 0) continue;
+            listed++;
+            std::string rel = path.substr(prefix.size());
+            for (char &c : rel)
+                if (c == '\\') c = '/';
+            if (file_size(data_dir_ + "/" + rel) == UINT64_MAX && !missing++) first = rel;
+        }
+        if (!missing) return "";
+        return "; its data folder lacks " + std::to_string(missing) + " of the " + std::to_string(listed) +
+               " files its list names (dat.bin; the first: " + first + "): a dump missing files, which the game faults on";
+    }
+
 #ifdef _WIN32
     PROCESS_INFORMATION pi_{};
     bool started_ = false;
@@ -1323,7 +1354,7 @@ private:
         if (!started_ || !GetExitCodeProcess(pi_.hProcess, &code)) return "";
         snprintf(s, sizeof s, " (exit code %#lx)", (unsigned long)code);
         if (code == 0xc0000135) return s + missing_dlls();
-        return s;
+        return code ? s + missing_data() : s;
     }
     // A game Windows couldn't start for a DLL it can't find (0xc0000135): the ones its program and
     // the DLLs beside it import that are neither beside it nor in Windows' folder for its kind
@@ -1420,7 +1451,7 @@ private:
         fprintf(stderr, "hiraku-pc: can't start %s (is Wine installed? --wine PROGRAM)\n", wine_.c_str());
         return false;
     }
-    std::string exit_note() { return ""; }
+    std::string exit_note() { return missing_data(); }
     bool game_running() {
         int status;
         return pid_ > 0 && waitpid(pid_, &status, WNOHANG) == 0;

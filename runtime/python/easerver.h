@@ -95,6 +95,12 @@ private:
     std::string answer_lobby24(const Request &r);   // and its NET TAISEN lobby
     // beatmania IIDX 9th style (C02: runtime/pc/): its module "C02" (music, weekly, ranking, grade)
     std::string answer_c02(const Request &r);
+    // beatmania IIDX RED, HAPPY SKY and DistorteD (E11, ECO, FDD): their module named after the model
+    // (pc, music, ranking, weekly, grade, shop), 9th style's way with the player's record added
+    std::string answer_iidx_red(const std::string &game, const Request &r);
+    // ... and DistorteD (FDD): the same calls as modules of their own with attributes (pc, music,
+    // ranking, shop, grade), the player found by the card's refid (cardmng)
+    std::string answer_iidx_fdd(const std::string &game, const Request &r);
     // One card for all (docs/EAMUSE3.md): every chart's best clear mark over all the pop'n games
     // a card has played, by song (pop'n 12's word low byte: two bits a chart), and a game's own
     // player data with them put in

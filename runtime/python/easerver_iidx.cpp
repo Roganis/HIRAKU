@@ -287,4 +287,280 @@ std::string EamuseServer::answer_c02(const Request &r) {
     return ok(method, cmd);   // grade raised
 }
 
+// --- RED, HAPPY SKY and DistorteD (E11, ECO, FDD): the same kind of call, <E11 method="pc"
+// command="get CARD 0"/>, from libjnet, built into bm2dx.exe (RED JAD: its method tables at
+// 0x4ea288 shop, 0x4ea318 grade, 0x4ea368 weekly, 0x4ea3b8 ranking, 0x4ea528 music, 0x4ea698 pc:
+// per command its handlers by element depth, its name and its field count). An answer is matched
+// to its command by method, the method and the command's first word run together (musicgetrank).
+std::string EamuseServer::answer_iidx_red(const std::string &game, const Request &r) {
+    const std::string method = r.method;
+    const std::vector<std::string> w = words(attr(r.attrs, "command"));
+    const std::string cmd = w.empty() ? "" : w[0];
+    auto ok = [&](const std::string &attrs = "", const std::string &children = "") {
+        const std::string head = "<" + game + " status=\"SOK\" method=\"" + esc(method + cmd) + "\"" + attrs;
+        return children.empty() ? head + "/>" : head + ">" + children + "</" + game + ">";
+    };
+    auto arg = [&](size_t i) { return i < w.size() ? w[i] : std::string(); };
+
+    // The players (pc): a card's record, kept here (new in RED: 9th style kept it on the card).
+    // pc reg CARD NAME PIN x PREFECTURE y, after NAME ENTRY: the answer's id is the player's IIDX
+    // ID (8 digits, shown at once). pc get CARD n, as a card is read: <pc> with the record (id, idstr,
+    // name, pass the PIN, pid the prefecture, ...; RED JAD 0x47a120 reads it), then the player's
+    // grades, EX, skins, rivals and courses (not kept yet).
+    const std::string players_file = "iidx-" + game + "-players";
+    std::vector<Record> players = from_lines(read_file(players_file));
+    auto player = [&](const std::string &card) -> Record * {
+        for (Record &p : players)
+            if (get(p, "card") == card) return &p;
+        return nullptr;
+    };
+    auto save_players = [&] {
+        std::string text;
+        for (const Record &p : players) text += to_line(p);
+        write_file(players_file, text);
+    };
+    if (method == "pc" && cmd == "reg") {
+        const std::string card = arg(1);
+        if (!safe_name(card)) return "<" + game + " status=\"EPARAM\" method=\"pcreg\"/>";
+        Record *p = player(card);
+        if (!p) {
+            long id = 10000000;   // IIDX IDs in turn, from 1000-0001
+            for (const Record &x : players) id = std::max(id, field(x, "id"));
+            players.push_back({{"card", card}, {"id", std::to_string(id + 1)}});
+            p = &players.back();
+        }
+        (*p)["name"] = arg(2), (*p)["pass"] = arg(3), (*p)["r3"] = arg(4), (*p)["pid"] = arg(5), (*p)["r5"] = arg(6);
+        const std::string id = get(*p, "id");
+        save_players();
+        return ok(a("id", id));
+    }
+    if (method == "pc" && cmd == "get") {
+        const Record *p = player(arg(1));
+        if (!p) return "<" + game + " status=\"ENOTFOUND\" method=\"pcget\"/>";
+        const std::string id = get(*p, "id");
+        auto dj = [&](const char *k) { const std::string v = get(*p, k); return v.empty() ? std::string("0.000000") : v; };
+        return ok("", "<pc" + a("id", id) + a("idstr", id.substr(0, 4) + "-" + id.substr(4)) + a("name", get(*p, "name")) +
+                          a("pass", get(*p, "pass")) + a("cpass", "") + a("spnum", field(*p, "spnum")) +
+                          a("dpnum", field(*p, "dpnum")) + a("sach", dj("sach")) + a("dach", dj("dach")) +
+                          a("pid", field(*p, "pid")) + "/>");
+    }
+    // the rest are by IIDX ID (the 8 digits pc reg gave)
+    auto by_id = [&](const std::string &id) -> Record * {
+        for (Record &p : players)
+            if (get(p, "id") == id) return &p;
+        return nullptr;
+    };
+    if (method == "pc" && cmd == "save") {
+        // save ID x SP-DJ-POINTS DP-DJ-POINTS SP-PLAYS DP-PLAYS ... at the credit's end: kept for pc get
+        // (sach and dach the DJ points, as floats; spnum and dpnum the plays)
+        if (Record *p = by_id(arg(1))) {
+            (*p)["sach"] = arg(3), (*p)["dach"] = arg(4), (*p)["spnum"] = arg(5), (*p)["dpnum"] = arg(6);
+            (*p)["save"] = attr(r.attrs, "command");
+            save_players();
+        }
+        return ok();
+    }
+
+    // The scores (music): music reg ID chart song pgreat great djlevel cleared PREFECTURE SHOP
+    // after each stage (chart 0-2 SP normal/hyper/another, 3-5 DP; DJ level 0 AAA ... 7 F), kept
+    // by IIDX ID, song and chart (the best EX, the best DJ level, cleared ever, plays).
+    // music getrank ID n, as a card is read: per chart a child cl="chart" whose text is 5 letters
+    // a song from "0123456789:;", a-z, A-Z (6 bits each, the first highest): the song (bits 19-29),
+    // the DJ level (16-18), the clear (13-15: 0 NO PLAY, 2 EASY CLEAR, 5 FULL COMBO as music select
+    // shows them), the EX score (0-12); RED JAD 0x479720, 1200 at most
+    const std::string scores_file = "iidx-" + game + "-scores";
+    std::vector<Record> scores = from_lines(read_file(scores_file));
+    if (method == "music" && cmd == "reg") {
+        const std::string id = arg(1);
+        const long cl = std::strtol(arg(2).c_str(), nullptr, 10), mid = std::strtol(arg(3).c_str(), nullptr, 10);
+        const long pg = std::strtol(arg(4).c_str(), nullptr, 10), gr = std::strtol(arg(5).c_str(), nullptr, 10);
+        const long lv = std::strtol(arg(6).c_str(), nullptr, 10), clear = std::strtol(arg(7).c_str(), nullptr, 10);
+        if (!safe_name(id) || mid <= 0 || mid > 2047 || cl < 0 || cl > 5) return ok(a("mid", mid) + a("clid", cl));
+        bool found = false;
+        for (Record &x : scores) {
+            if (get(x, "id") != id || field(x, "mid") != mid || field(x, "cl") != cl) continue;
+            found = true;
+            if (2 * pg + gr > ex(x)) x["pg"] = std::to_string(pg), x["gr"] = std::to_string(gr);
+            x["lv"] = std::to_string(std::min(lv, field(x, "lv")));
+            x["clear"] = std::to_string(std::max(clear, field(x, "clear")));
+            x["plays"] = std::to_string(field(x, "plays") + 1);
+        }
+        if (!found)
+            scores.push_back({{"id", id}, {"mid", std::to_string(mid)}, {"cl", std::to_string(cl)}, {"pg", std::to_string(pg)},
+                              {"gr", std::to_string(gr)}, {"lv", std::to_string(lv)}, {"clear", std::to_string(clear)}, {"plays", "1"}});
+        std::string text;
+        for (const Record &x : scores) text += to_line(x);
+        write_file(scores_file, text);
+        return ok(a("mid", mid) + a("clid", cl));
+    }
+    if (method == "music" && cmd == "getrank") {
+        static const char letters[] = "0123456789:;abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+        std::string children;
+        int n = 0;
+        for (long cl = 0; cl < 6; cl++) {
+            std::string text;
+            for (const Record &x : scores) {
+                if (get(x, "id") != arg(1) || field(x, "cl") != cl || n >= 1200) continue;
+                const uint32_t v = (uint32_t)(field(x, "mid") & 0x7ff) << 19 | (uint32_t)(field(x, "lv") & 7) << 16 |
+                                   (uint32_t)(field(x, "clear") & 7) << 13 | (uint32_t)std::min(ex(x), 0x1fffL);
+                for (int k = 4; k >= 0; k--) text += letters[v >> (6 * k) & 63];
+                n++;
+            }
+            if (!text.empty()) children += "<rank" + a("cl", cl) + ">" + text + "</rank>";
+        }
+        return ok("", children);
+    }
+    if (method == "grade" && cmd == "raised") {   // raised ID ... SHOP PREFECTURE, after a dan course: kept
+        if (Record *p = by_id(arg(1))) {
+            (*p)["grade"] = attr(r.attrs, "command");
+            save_players();
+        }
+        return ok();
+    }
+    return ok();
+}
+
+// --- DistorteD (FDD): libjnet again (JAG: tables at 0x5e2a68 shop ... 0x5e2c34 pc), each kind of
+// call a module of its own with attributes, <pc method="get" ver="1" rid="REFID"/>; an answer is
+// <pc status="0" method="pcget">: status a number this time (0 fine), method as RED's (an answer
+// without it isn't read: the call fails). The pass is cardmng's (easerver_popn.cpp): a new one is
+// registered by the game (its PIN twice, getrefid), then its DJ name entered and sent with pc reg.
+//   pc reg rid name pid cid: the player made; the answer's id is the IIDX ID
+//   pc get rid: the player (JAG 0x4ce840: <pc id idstr name pid spnum dpnum sach dach sflg0-2 gno hdsd
+//     sp_opt dp_opt dp_opt2 mcomb ncomb mode/>, then grade, ex, skin, rlist, ocrs, weekly: not kept yet)
+//   pc save iidxid cltype ... after the credit: its fields kept and given back by pc get
+std::string EamuseServer::answer_iidx_fdd(const std::string &game, const Request &r) {
+    // DistorteD's calls (FDD) and GOLD's (GLD, over libavs): each answer's fields as the game's reply
+    // parsers read them (GOLD 0x495e70 pc.get, 0x497b80 pc.reg, ...: docs/EAMUSE3.md); a field or
+    // element they read and don't find fails the call (the network library's status -10), and the
+    // player is played as a guest ("e-AMUSEMENT PASS not used")
+    const std::string &mod = r.module, method = r.method;
+    auto ok = [&](const std::string &attrs = "", const std::string &children = "") {
+        const std::string head = "<" + mod + " status=\"0\" method=\"" + esc(mod + method) + "\"" + attrs;
+        return children.empty() ? head + "/>" : head + ">" + children + "</" + mod + ">";
+    };
+    std::vector<Record> players = from_lines(read_file("iidx-" + game + "-players"));
+    auto player = [&](const std::string &k, const std::string &v) -> Record * {
+        for (Record &p : players)
+            if (get(p, k.c_str()) == v) return &p;
+        return nullptr;
+    };
+    auto save_players = [&] {
+        std::string text;
+        for (const Record &p : players) text += to_line(p);
+        write_file("iidx-" + game + "-players", text);
+    };
+    auto idstr = [](const std::string &id) { return id.size() == 8 ? id.substr(0, 4) + "-" + id.substr(4) : id; };
+    if (mod == "pc" && method == "reg") {   // the IIDX ID, and as written on the screen
+        const std::string rid = attr(r.attrs, "rid");
+        if (!safe_name(rid)) return "<pc status=\"1\" method=\"pcreg\"/>";
+        Record *p = player("rid", rid);
+        if (!p) {
+            long id = 10000000;   // IIDX IDs in turn, from 1000-0001
+            for (const Record &x : players) id = std::max(id, field(x, "id"));
+            players.push_back({{"rid", rid}, {"id", std::to_string(id + 1)}});
+            p = &players.back();
+        }
+        (*p)["name"] = attr(r.attrs, "name"), (*p)["pid"] = attr(r.attrs, "pid");
+        const std::string id = get(*p, "id");
+        save_players();
+        return ok(a("id", id) + a("id_str", idstr(id)));
+    }
+    if (mod == "pc" && method == "get") {
+        // pcdata (the record: each of these), grade (the dan grades, -1 none), ex, skin and rlist
+        // (lists, 8 characters an entry; empty for none) and gold (GOLD's points) all needed; rivals,
+        // courses and the weekly song not
+        // DistorteD (JAG 0x4ce7c0): the answer itself names the player and gives the pass's PIN, its
+        // record is a child named pc (hdsd, not GOLD's sdhd; no pmode), and no gold
+        const Record *p = player("rid", attr(r.attrs, "rid"));
+        if (!p) return "<pc status=\"1\" method=\"pcget\"/>";
+        const bool fdd = game == "FDD";
+        const std::string id = get(*p, "id");
+        std::string attrs = a("id", id) + a("idstr", idstr(id)) + a("name", get(*p, "name")) + a("pid", field(*p, "pid"));
+        for (const char *k : {"spnum", "dpnum", "sach", "dach", "sflg0", "sflg1", "sflg2", "gno", fdd ? "hdsd" : "sdhd", "sp_opt",
+                              "dp_opt", "dp_opt2", "mcomb", "ncomb", "mode"})
+            attrs += a(k, field(*p, k));
+        const std::string sgid = get(*p, "sgid"), dgid = get(*p, "dgid");
+        const std::string rest = "<grade" + a("sgid", sgid.empty() ? "-1" : sgid) + a("dgid", dgid.empty() ? "-1" : dgid) +
+                                 "/><ex></ex><skin></skin><rlist></rlist>";
+        if (fdd) {
+            std::string pass;
+            for (const Record &c : from_lines(read_file("cards")))
+                if (attr(c, "refid") == attr(r.attrs, "rid")) pass = attr(c, "pass");
+            return ok(a("name", get(*p, "name")) + a("pass", pass) + a("pid", field(*p, "pid")), "<pc" + attrs + "/>" + rest);
+        }
+        return ok("", "<pcdata" + attrs + a("pmode", field(*p, "pmode")) + "/>" + rest + "<gold" + a("now_g", field(*p, "now_g")) +
+                          a("all_g", field(*p, "all_g")) + a("use_g", field(*p, "use_g")) + "/>");
+    }
+    if (mod == "pc" && method == "getname") {   // a pass's player, by its ref id (the takeover's)
+        const Record *p = player("rid", attr(r.attrs, "rid"));
+        if (!p) return "<pc status=\"1\" method=\"pcgetname\"/>";
+        return ok(a("name", get(*p, "name")) + a("idstr", idstr(get(*p, "id"))) + a("pid", field(*p, "pid")));
+    }
+    if (mod == "pc" && method == "save") {   // by IIDX ID: the record's fields as the game sends them
+        if (Record *p = player("id", attr(r.attrs, "iidxid"))) {
+            for (const auto &[k, v] : r.attrs)
+                if (k != "method" && k != "ver" && k != "iidxid") (*p)[k] = v;
+            save_players();
+        }
+        return ok();
+    }
+    // GOLD's scores: music reg after a stage (mid, the chart clid, pgnum and gnum, rid the DJ level
+    // 0 AAA ... 7 F, cflg the clear), the best kept by IIDX ID, song and chart; music getrank as a
+    // pass is read: an r element per version (v: mid / 100), 5 letters a chart from "0-9:;a-zA-Z"
+    // (6 bits each, the first highest): the song in the version << 23 | chart << 19 | EX << 6 |
+    // clear << 3 | DJ level (GOLD 0x4947a0)
+    if (game != "FDD" && mod == "music" && method == "reg") {
+        const std::string iidxid = attr(r.attrs, "iidxid"), mid = attr(r.attrs, "mid"), clid = attr(r.attrs, "clid");
+        if (safe_name(iidxid) && safe_name(mid) && safe_name(clid)) {
+            std::vector<Record> scores = from_lines(read_file("iidx-" + game + "-scores"));
+            const long ex = 2 * std::atol(attr(r.attrs, "pgnum").c_str()) + std::atol(attr(r.attrs, "gnum").c_str());
+            const long rid = std::atol(attr(r.attrs, "rid").c_str()), cflg = std::atol(attr(r.attrs, "cflg").c_str());
+            Record *best = nullptr;
+            for (Record &x : scores)
+                if (get(x, "id") == iidxid && get(x, "mid") == mid && get(x, "cl") == clid) best = &x;
+            if (!best) {
+                scores.push_back({{"id", iidxid}, {"mid", mid}, {"cl", clid}, {"ex", "0"}, {"rid", "7"}, {"clear", "0"}, {"plays", "0"}});
+                best = &scores.back();
+            }
+            (*best)["ex"] = std::to_string(std::max(field(*best, "ex"), ex));
+            (*best)["rid"] = std::to_string(std::min(field(*best, "rid"), rid));
+            (*best)["clear"] = std::to_string(std::max(field(*best, "clear"), cflg));
+            (*best)["plays"] = std::to_string(field(*best, "plays") + 1);
+            std::string text;
+            for (const Record &x : scores) text += to_line(x);
+            write_file("iidx-" + game + "-scores", text);
+        }
+        return ok(a("mid", mid) + a("clid", clid) + a("crate", "0"));
+    }
+    if (game != "FDD" && mod == "music" && method == "getrank") {
+        static const char letters[] = "0123456789:;abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+        std::map<long, std::string> by_version;
+        for (const Record &x : from_lines(read_file("iidx-" + game + "-scores"))) {
+            if (get(x, "id") != attr(r.attrs, "iidxid")) continue;
+            const long mid = field(x, "mid");
+            const uint32_t v = (uint32_t)(mid % 100 & 0x7f) << 23 | (uint32_t)(field(x, "cl") & 15) << 19 |
+                               (uint32_t)(field(x, "ex") & 0x1fff) << 6 | (uint32_t)(field(x, "clear") & 7) << 3 | (uint32_t)(field(x, "rid") & 7);
+            std::string &t = by_version[mid / 100];
+            for (int k = 4; k >= 0; k--) t += letters[v >> (6 * k) & 63];
+        }
+        std::string children;
+        for (const auto &[ver, t] : by_version) children += "<r" + a("v", std::to_string(ver)) + ">" + t + "</r>";
+        return ok("", children);
+    }
+    if (mod == "pc" && method == "common")   // the shop's VIP grade (gshop needed), nothing else
+        return ok("", "<gshop vipg=\"0\"/>");
+    if (mod == "pc" && method == "takeover") return ok(a("id", attr(r.attrs, "iidxid")));
+    if (mod == "pc" && method == "visit")   // DJ TROOPERS: the shop's visit counts and their bonuses, none
+        return ok(a("anum", "0") + a("snum", "0") + a("pnum", "0") + a("aflg", "0") + a("sflg", "0") + a("pflg", "0"));
+    if (mod == "pc" && method == "lcommon") return ok(a("ls", "0"));
+    if (mod == "music" && (method == "reg" || method == "play" || method == "lplay"))   // the chart's clear rate
+        return ok(a("mid", attr(r.attrs, "mid")) + a("clid", attr(r.attrs, "clid")) + a("crate", "0"));
+    if (mod == "grade" && method == "raised") return ok(a("pnum", "0"));
+    if (mod == "ranking" && method == "entry") return ok(a("anum", "0") + a("jun", "0"));
+    if (mod == "shop" && method == "getname")   // the shop's name (the location's), its prefecture, its closing time
+        return ok(a("opname", "HIRAKU") + a("pid", "13") + a("cls_opt", "0") + a("hr", "0") + a("mi", "0"));
+    return ok();
+}
+
 }  // namespace hk::py

@@ -50,7 +50,10 @@ std::string EamuseServer::answer_later(const std::string &game, const Request &r
         // reaches whatever the address: runtime/pc/vsock.c)
         if (pc_popn(game))   // each its own (pop'n 16-18: the same lobby and libraries, built into the program)
             items += "<item name=\"globby\" url=\"globby://" + esc(host.substr(0, host.find(':'))) + ":" + std::to_string(Lobby::pc_port(game)) + "/\"/>";
-        if (pc_popn(game))
+        if (pc_iidx(game))   // the PC IIDX games' own modules (GOLD's table at 0x548c64)
+            for (const char *mod : {"pc", "music", "grade", "ranking", "shop"})
+                items += std::string("<item name=\"") + mod + "\" url=\"http://" + esc(host) + "/\"/>";
+        if (pc_popn(game) || pc_iidx(game))
             items += "<item name=\"pcbevent\" url=\"http://" + esc(host) + "/\"/>"
                      "<item name=\"keepalive\" url=\"http://127.0.0.1/keepalive?pa=127.0.0.1&amp;ia=127.0.0.1&amp;"
                      "ga=192.168.0.1&amp;ma=127.0.0.1&amp;t1=2&amp;t2=10\"/>";
@@ -86,7 +89,7 @@ std::string EamuseServer::answer_later(const std::string &game, const Request &r
     }
     if ((m == "player" || m == "info") && game == "M39") return answer_hc(r);   // the 64-bit PC pop'n's (easerver_hc.cpp)
     if ((m == "player24" || m == "info24" || m == "lobby24") && game == "M39") return answer_p24(r);   // the last 32-bit PC pop'n's (easerver_p24.cpp)
-    if (m == "facility" && f == "get" && pc_popn(game)) {   // pop'n 15's library (libavs ea3_facility): every
+    if (m == "facility" && f == "get" && (pc_popn(game) || pc_iidx(game))) {   // pop'n 15's library (libavs ea3_facility): every
         // field it imports (location, line, portfw, public, share), or it fails the start-up (5-2009);
         // pop'n 18's (J39) also the location's name and type, the line's class and share/eacoin
         // (its map in libavs-win32-ea3.dll, from 0x35fe0)
@@ -138,6 +141,15 @@ std::string EamuseServer::answer_later(const std::string &game, const Request &r
             if (!safe_name(id)) return "<cardmng status=\"1\"/>";
             std::string ref = refid_of(id);
             const bool fresh = ref.empty();
+            // beatmania IIDX 13: a pass the server doesn't know is 112 (not registered): the game asks the
+            // new PIN twice and registers it (getrefid), then its DJ name (pc reg); binded, a DistorteD
+            // player for the pass (easerver_iidx.cpp)
+            if (game == "FDD" || pc_iidx(game)) {
+                if (fresh) return "<cardmng status=\"112\"/>";
+                bool binded = false;
+                for (const Record &pl : from_lines(read_file("iidx-" + game + "-players"))) binded = binded || attr(pl, "rid") == ref;
+                return "<cardmng status=\"0\" refid=\"" + ref + "\" binded=\"" + (binded ? "1" : "0") + "\" expired=\"0\" newflag=\"0\"/>";
+            }
             if (fresh) ref = add(id);
             // Only at the card's first reading: not when the game asks for an older game's player of the
             // card (model="I17"), nor at the credit's end (pop'n 15-18's update="1"; pop'n 14 reads a

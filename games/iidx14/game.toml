@@ -1,0 +1,17 @@
+# beatmania IIDX 14 GOLD (GLD J:A:A), Konami 2007: a Windows PC, the C02 cabinet
+id = "iidx14"
+title = "beatmania IIDX 14 GOLD"
+family = "iidx"         # IIDX cabinet: 7 keys and a turntable per player, VEFX, Effect, 5 effector sliders
+core = "pc"             # Konami's own program in HIRAKU's cabinet (runtime/pc/, PLAN.md section 36)
+
+[pc]
+exe = "bm2dx.exe"       # in GLD/<date>/, a folder by revision: the last (2007072301) is run
+mark = "GLD.game.s"     # what tells this game's program from the other IIDX's (all bm2dx.exe)
+layout = "revisions"
+board = "c02-driver"    # the C02 cabinet's board under its driver (runtime/pc/ezusb_dev.c), from libacio.dll
+security = "GQGLDJAA"     # the security plug: the game's model code (the later plugs: no seeds)
+sidcode = "GLD:J:A:A"   # the cabinet's software id (..\sidcode.txt), the revision's date added
+drive = 'D:\GLD'        # where the game is: its program in <date>, its data beside it
+data_as = '..\data'     # the game names its data from the program's folder
+save_drive = 'E:\'      # its two backup drives (bkeep.dat, settings, the AVS NVRAM)
+save_drive2 = 'F:\'

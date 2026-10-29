@@ -47,6 +47,7 @@ std::string unbase64_b(const std::string &x);
 std::string fmt(const char *f, unsigned a, unsigned b);
 // The PC pop'n games, libavs-win32's e-AMUSEMENT (runtime/pc/): pop'n 15, 16, 17, 18
 bool pc_popn(const std::string &game);
+bool pc_iidx(const std::string &game);
 
 // A player record's parts, as the later pop'n games read them (easerver_hc.cpp, easerver_p24.cpp):
 // a field: its name, AVS type, count (0: one value) and a new player's value

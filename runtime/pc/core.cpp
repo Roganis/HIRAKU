@@ -381,9 +381,17 @@ public:
     // cabinet's software id beside the program folders, which the cabinet's install writes (without it:
     // HDD DATA ERROR (SID))
     bool set_up_driver_board(std::map<std::string, std::string> &m) {
-        if (!copy_in(bin_dir() + "/pc/c02/RtEffect.dll", run_prog_ + "/RtEffect.dll")) return false;
+        // GOLD on imports no RtEffect.dll: the board starts from HIRAKU's libacio.dll instead
+        bool rteffect = false;
+        for (const std::string &f : list_files(program_)) {
+            std::string lower = f;
+            for (char &c : lower) c = (char)std::tolower((unsigned char)c);
+            rteffect = rteffect || lower == "rteffect.dll";
+        }
+        if (rteffect && !copy_in(bin_dir() + "/pc/c02/RtEffect.dll", run_prog_ + "/RtEffect.dll")) return false;
+        set_env("HK_PC_BOARD_IN_ACIO", rteffect ? "" : "1");
         set_env("HK_PC_SECURITY", m["security"]);
-        set_env("HK_PC_BOARD", "d01");
+        set_env("HK_PC_BOARD", m["io"] == "fx2" ? "fx2" : "d01");   // io=fx2: the later IO2 board (DJ TROOPERS on)
         if (!m["sidcode"].empty()) {
             std::ofstream(save_ + "/prog/sidcode.txt", std::ios::binary | std::ios::trunc) << m["sidcode"] << "\n";
         }
@@ -497,6 +505,8 @@ public:
         link_->host_shows = 1;
         if (ea_.card[0].size() == 16)   // player 1's card, for a card key the game's DLL sees itself
             for (int i = 0; i < 8; i++) link_->card_uid[i] = (uint8_t)std::stoul(ea_.card[0].substr(2 * i, 2), nullptr, 16);
+        if (ea_.card[1].size() == 16)   // and player 2's (-card1), for a second reader
+            for (int i = 0; i < 8; i++) link_->card_uid2[i] = (uint8_t)std::stoul(ea_.card[1].substr(2 * i, 2), nullptr, 16);
         // the words the mods' [[rate]]s watch: the DLL copies them in before each picture (mem())
         const std::vector<uint32_t> words = hk::mods::rate_words();
         if (words.size() > HK_PC_WATCHES) fprintf(stderr, "mods: %zu words for [[rate]]s; a PC game watches %u\n", words.size(), HK_PC_WATCHES);
@@ -1427,8 +1437,23 @@ private:
         // misplaces its pictures, PLAN.md section 32)
         std::vector<std::string> env_own;
         std::vector<char *> env;
+        // The IIDX games from GOLD on: Microsoft's d3dx9_24.dll in their folder, which Wine passes over for
+        // its own (without D3DXLoadMeshFromXof: GOLD aborted loading its models)
+        bool d3dx_own = false;
+        if (family_ == "iidx" && !(pc64_ || pc32_))
+            for (const std::string &f : list_files(run_prog_)) {
+                std::string lower = f;
+                for (char &c : lower) c = (char)std::tolower((unsigned char)c);
+                d3dx_own = d3dx_own || lower == "d3dx9_24.dll";
+            }
         for (char **e = environ; *e; e++)
-            if (!(pc64_ || pc32_) || (strncmp(*e, "LC_ALL=", 7) && strncmp(*e, "WINEDLLOVERRIDES=", 17))) env.push_back(*e);
+            if (!(pc64_ || pc32_ || d3dx_own) || (strncmp(*e, "LC_ALL=", 7) && strncmp(*e, "WINEDLLOVERRIDES=", 17))) env.push_back(*e);
+        if (d3dx_own) {   // and Japanese (its D3DX text is Shift-JIS: Wine's code page 932)
+            env_own.push_back("LC_ALL=ja_JP.UTF-8");
+            const char *more = getenv("WINEDLLOVERRIDES");
+            env_own.push_back(std::string("WINEDLLOVERRIDES=d3dx9_24=n,b") + (more && *more ? std::string(";") + more : ""));
+            for (std::string &e : env_own) env.push_back(e.data());
+        }
         if (pc32_) {
             env_own.push_back("LC_ALL=ja_JP.UTF-8");
             env_own.push_back(std::string("WINEDLLOVERRIDES=mscoree=;mshtml=") + (dxvk32_ ? ";d3d9=n,b" : ""));

@@ -16,7 +16,7 @@
 #include <stdint.h>
 
 #define HK_PC_LINK_MAGIC 0x4b50484bu   // "HKPK"
-#define HK_PC_LINK_VERSION 9u
+#define HK_PC_LINK_VERSION 10u
 #define HK_PC_WATCHES 8u                           // [[rate]]'s words of the game's memory
 
 // The pad's bits, as Konami's ezusb.dll gives them to pop'n music (usbPadRead)
@@ -121,6 +121,8 @@ struct hk_pc_link {
     // 60000 the cabinet's, more while a rate is on; the DLL counts the cabinet's ticks from it)
     volatile uint32_t watch_addr[HK_PC_WATCHES], watch_val[HK_PC_WATCHES];
     volatile uint32_t game_hz_milli;
+    // (v10) player 2's IC card for a second reader (beatmania IIDX 13: libacio's unit 1), as card_uid
+    uint8_t card_uid2[8];
 };
 
 #define HK_PC_PIXELS 4096u                         // where the pixels start in the file

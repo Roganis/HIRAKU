@@ -324,10 +324,16 @@ static const char *mapped(const char *p, char *buf) {
     return p;
 }
 
+// HK_PC_FILELOG (bring-up): each file the game can't open, as it named it and as HIRAKU mapped it
 static HANDLE WINAPI my_CreateFileA(LPCSTR p, DWORD acc, DWORD share, LPSECURITY_ATTRIBUTES sa, DWORD cd, DWORD fl,
                                     HANDLE t) {
     char b[MAX_PATH];
-    return CreateFileA(mapped(p, b), acc, share, sa, cd, fl, t);
+    const char *to = mapped(p, b);
+    const HANDLE h = CreateFileA(to, acc, share, sa, cd, fl, t);
+    static int log = -1;
+    if (log < 0) log = getenv("HK_PC_FILELOG") != NULL;
+    if (log && h == INVALID_HANDLE_VALUE) hk_log("hiraku-pc: can't open %s (%s): %lu", p ? p : "(null)", to ? to : "(null)", GetLastError());
+    return h;
 }
 static BOOL WINAPI my_CreateDirectoryA(LPCSTR p, LPSECURITY_ATTRIBUTES sa) {
     char b[MAX_PATH];
@@ -984,6 +990,32 @@ static HRESULT WINAPI my_CreateDevice(IDirect3D9 *self, UINT adapter, D3DDEVTYPE
     return r;
 }
 
+// The game's D3DX effect (IIDX GOLD's): its OnResetDevice, called once after it is made, fails under
+// Wine (Microsoft's d3dx9_24 says so for no reason it gives, Wine's own has it as a stub) and the
+// game stops at an "OnResetDevice" message box. The effect's resources are made already, so a
+// failure there is let pass (once in the log)
+typedef HRESULT(WINAPI *effect_call_t)(void *);
+static effect_call_t g_OnResetDevice;
+static HRESULT WINAPI my_OnResetDevice(void *effect) {
+    const HRESULT r = g_OnResetDevice(effect);
+    static int said;
+    if (FAILED(r) && !said++) hk_log("hiraku-pc: the game's D3DX effect's OnResetDevice said %#lx: let pass", (unsigned long)r);
+    return FAILED(r) ? D3D_OK : r;
+}
+typedef HRESULT(WINAPI *D3DXCreateEffect_t)(void *, const void *, UINT, const void *, void *, DWORD, void *, void **, void **);
+static HRESULT WINAPI my_D3DXCreateEffect(void *dev, const void *data, UINT n, const void *defines, void *include, DWORD flags,
+                                          void *pool, void **effect, void **errors) {
+    static D3DXCreateEffect_t real;
+    if (!real) real = (D3DXCreateEffect_t)(void *)GetProcAddress(LoadLibraryA("d3dx9_24.dll"), "D3DXCreateEffect");
+    const HRESULT r = real ? real(dev, data, n, defines, include, flags, pool, effect, errors) : E_FAIL;
+    if (SUCCEEDED(r) && effect && *effect) {
+        void **vt = *(void ***)*effect;   // ID3DXEffect: OnResetDevice is the 71st call
+        void *was = patch_slot(&vt[70], (void *)my_OnResetDevice);
+        if (was) g_OnResetDevice = (effect_call_t)was;
+    }
+    return r;
+}
+
 typedef IDirect3D9 *(WINAPI *Direct3DCreate9_t)(UINT);
 
 static IDirect3D9 *WINAPI my_Direct3DCreate9(UINT sdk) {
@@ -1110,6 +1142,27 @@ AVS_LOGGED(0) AVS_LOGGED(1) AVS_LOGGED(2) AVS_LOGGED(3) AVS_LOGGED(4) AVS_LOGGED
 AVS_LOGGED(8) AVS_LOGGED(9) AVS_LOGGED(10) AVS_LOGGED(11) AVS_LOGGED(12) AVS_LOGGED(13) AVS_LOGGED(14)
 AVS_LOGGED(15) AVS_LOGGED(16)
 
+// libavs's own log (HK_PC_AVS_LOG): the game boots it with a writer of its own, often nowhere; HIRAKU's
+// takes the lines into pc.log ("avs log:"), at the game's level or the one HK_PC_AVS_LOG names (a
+// number past 1: log_change_level's). The writer's arguments: (context, text, length) in the older libavs (IIDX
+// GOLD's), (text, length, context) in the later; the length is the small one
+static void __cdecl avs_writer(void *a, void *b, void *c) {
+    const char *t = (uintptr_t)b < 0x10000 ? (const char *)a : (const char *)b;
+    unsigned n = (unsigned)(uintptr_t)((uintptr_t)b < 0x10000 ? b : c);
+    while (n && (t[n - 1] == '\n' || t[n - 1] == '\r')) n--;
+    hk_log("avs log: %.*s", (int)n, t);
+}
+typedef void(__cdecl *avs_boot_t)(void *, void *, size_t, void *, size_t, void *, void *);
+static avs_boot_t g_avs_boot;
+static void __cdecl my_avs_boot(void *config, void *std_heap, size_t n_std, void *avs_heap, size_t n_avs, void *writer, void *ctx) {
+    (void)writer;
+    g_avs_boot(config, std_heap, n_std, avs_heap, n_avs, (void *)avs_writer, ctx);
+    typedef void(__cdecl * level_t)(int);
+    const level_t level = (level_t)(void *)GetProcAddress(GetModuleHandleA("libavs-win32.dll"), "log_change_level");
+    const int l = atoi(getenv("HK_PC_AVS_LOG"));
+    if (level && l > 1) level(l);
+}
+
 static void *avs_logged(const char *dll, const char *fn) {
     static const char *const names[] = {"avs_fs_mount", "avs_fs_open", "avs_fs_lstat", "avs_fs_opendir", "avs_fs_umount",
                                         "ea3_pkglist_open", "ea3_pkglist_get", "ea3_pkglist_next", "ea3_pkg_open_by_name",
@@ -1130,6 +1183,10 @@ static void *avs_logged(const char *dll, const char *fn) {
     static int on = -1;
     if (on < 0) on = getenv("HK_PC_AVS_LOG") != NULL;
     if (!on) return NULL;
+    if (!strcmp(fn, "avs_boot") && !_stricmp(dll, "libavs-win32.dll")) {
+        if (!g_avs_boot) g_avs_boot = (avs_boot_t)(void *)GetProcAddress(GetModuleHandleA(dll), fn);
+        return g_avs_boot ? (void *)my_avs_boot : NULL;
+    }
     for (int i = 0; i < (int)(sizeof names / sizeof *names); i++)
         if (!strcmp(fn, names[i])) {
             if (!*real[i]) *real[i] = (avs6_t)(void *)GetProcAddress(GetModuleHandleA(dll), fn), *name[i] = names[i];
@@ -1152,6 +1209,25 @@ void *hk_program(void) {
     return program;
 }
 
+// HK_PC_STDOUT (hk_cabinet_start): the game's printf, a line at a time to pc.log
+static HANDLE g_stdout;
+static BOOL WINAPI my_WriteFile(HANDLE h, LPCVOID buf, DWORD n, LPDWORD done, LPOVERLAPPED ov) {
+    if (h != g_stdout || !buf) return WriteFile(h, buf, n, done, ov);
+    static char line[512];
+    static size_t len;
+    for (DWORD i = 0; i < n; i++) {
+        const char c = ((const char *)buf)[i];
+        if (c == '\n' || len + 1 >= sizeof line) {
+            line[len] = 0;
+            if (len) hk_log("game: %s", line);
+            len = 0;
+        }
+        if (c != '\n' && c != '\r') line[len++] = c;
+    }
+    if (done) *done = n;
+    return TRUE;
+}
+
 static void *cabinet_hook_for(const char *dll, const char *fn) {
     if (!_stricmp(dll, "ws2_32.dll") || !_stricmp(dll, "wsock32.dll")) return hk_net_hook(fn);   // net.c
     if (!_stricmp(dll, "iphlpapi.dll")) return hk_net_card_hook(fn);
@@ -1167,6 +1243,7 @@ static void *cabinet_hook_for(const char *dll, const char *fn) {
     if (g_waitlog && !_stricmp(dll, "kernel32.dll") && !strcmp(fn, "WaitForSingleObject")) return (void *)my_WaitForSingleObject;
     if (g_waitlog && !_stricmp(dll, "user32.dll") && !strcmp(fn, "MsgWaitForMultipleObjects")) return (void *)my_MsgWaitForMultipleObjects;
     if (!_stricmp(dll, "kernel32.dll") && !strcmp(fn, "CreateThread") && getenv("HK_PC_THREADLOG")) return (void *)my_CreateThread;
+    if (!_stricmp(dll, "kernel32.dll") && !strcmp(fn, "WriteFile") && g_stdout) return (void *)my_WriteFile;
     static const struct { const char *dll, *fn; void *to; } hooks[] = {
         {"kernel32.dll", "CreateFileA", (void *)my_CreateFileA},
         {"kernel32.dll", "CreateDirectoryA", (void *)my_CreateDirectoryA},
@@ -1178,6 +1255,7 @@ static void *cabinet_hook_for(const char *dll, const char *fn) {
         {"kernel32.dll", "GetFullPathNameA", (void *)my_GetFullPathNameA},
         {"d3d9.dll", "Direct3DCreate9", (void *)my_Direct3DCreate9},
         {"d3d8.dll", "Direct3DCreate8", (void *)hk_Direct3DCreate8},   // d3d8.c
+        {"d3dx9_24.dll", "D3DXCreateEffect", (void *)my_D3DXCreateEffect},
         {"user32.dll", "ShowWindow", (void *)my_ShowWindow},
         {"dsound.dll", "DirectSoundCreate8", (void *)hk_DirectSoundCreate8},
         {"dsound.dll", "DirectSoundCreate", (void *)hk_DirectSoundCreate},
@@ -1374,6 +1452,14 @@ void hk_cabinet_start(void) {
     // a fault: the first few in pc.log (on Windows a game that stops leaves nothing else; one the
     // game handles itself is told too)
     AddVectoredExceptionHandler(1, crash_log);
+    // HK_PC_STDOUT=1 (bring-up): the game's own printf (its network library's messages, beatmania
+    // IIDX's), which a window program has nowhere to write: the NUL device as its output, made before
+    // its C library starts (a character device: written at each printf), each write put in pc.log
+    // (my_WriteFile)
+    if (getenv("HK_PC_STDOUT")) {
+        g_stdout = CreateFileA("NUL", GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, NULL);
+        if (g_stdout != INVALID_HANDLE_VALUE) SetStdHandle(STD_OUTPUT_HANDLE, g_stdout), SetStdHandle(STD_ERROR_HANDLE, g_stdout);
+    }
     read_map();
     read_files();
     read_patches();

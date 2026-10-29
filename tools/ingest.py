@@ -1518,9 +1518,10 @@ def ingest_pc(args, game: dict, program: str, data: str) -> int:
     os.makedirs(outdir, exist_ok=True)
     lines = ["core=pc", f"family={game.get('family', 'pcpopn')}", f"exe={pc['exe']}", f"program={program}",
              f"data={data}", f"drive={pc.get('drive', 'D:' + chr(92) + gid)}", f"save_drive={pc.get('save_drive', 'E:' + chr(92))}"]
-    lines += [f"{k}={pc[k]}" for k in ("save_drive2", "data_as", "board", "security") if k in pc]
-    if "sidcode" in pc:   # the cabinet's software id: the model's, the revision's letter added (JAD: D)
-        lines.append(f"sidcode={pc['sidcode']}:{os.path.basename(program)[-1:].upper()}")
+    lines += [f"{k}={pc[k]}" for k in ("save_drive2", "data_as", "board", "io", "security") if k in pc]
+    if "sidcode" in pc:   # the cabinet's software id: the model's, the revision's letter added (JAD: D),
+        rev = os.path.basename(program)   # or from GOLD on the revision's folder, a date (2007072301)
+        lines.append(f"sidcode={pc['sidcode']}:{rev if rev.isdigit() else rev[-1:].upper()}")
     with open(os.path.join(outdir, "machine.txt"), "w") as fh:
         fh.write("\n".join(lines) + "\n")
     print(f"game     {gid}: {game.get('title', gid)} (a PC game)")

@@ -1263,7 +1263,83 @@ The calls, what the game does with the answers (bm2dx JAH), and HIRAKU's answers
     (HIRAKU: the date, YYYYMMDD).
 - **grade raised**: SOK.
 
+## beatmania IIDX RED, HAPPY SKY and DistorteD (PC games)
+
+RED (`E11`), HAPPY SKY (`ECO`) and DistorteD (`FDD`) carry their network library (libjnet) in
+`bm2dx.exe`; services, posevent, pcbtracker and numbering are pop'n 9's. RED and HAPPY SKY speak 9th
+style's dialect, the module named after the model: `<E11 method="pc" command="get CARD 0"/>`, the
+answer `<E11 status="SOK" method="pcget" .../>` (method the method and the command's first word).
+libjnet's method tables (RED JAD 0x4ea288 shop, 0x4ea318 grade, 0x4ea368 weekly, 0x4ea3b8 ranking,
+0x4ea528 music, 0x4ea698 pc): per command its name, its field count and its answer's handlers by
+element depth. Attribute readers: 0x476230 a number, 0x476370 the status, 0x4765c0 a string
+(EUC-JP to Shift-JIS), 0x476590 a float.
+
+- **pc reg** `CARD NAME PIN x PREFECTURE y` (HAPPY SKY one field fewer) after NAME ENTRY: answer `id`,
+  the IIDX ID (8 digits, shown as 1000-0001 at once).
+- **pc get** `CARD 0` when a card is read: children `<pc id idstr name pass cpass spnum dpnum sach dach
+  sflg gno pid/>`, `<grade>`, `<ex>`, `<skin>`, `<rlist>` (`<rival>`), `<ocrs>` (`<my>`, `<ord>`,
+  `<rnd>`), `<weekly wid mid/>` (RED JAD 0x47a120, 0x47a4a0). sach and dach (the DJ points) are floats.
+  A magnetic card asks no PIN on a returning player.
+- **pc save** `ID x SP-POINTS DP-POINTS SP-PLAYS DP-PLAYS ...` at the credit's end.
+- **pc common**, **pc getinfomsg**, **music crate**, **ranking getranker**, **shop sentinfo PREFECTURE
+  NAME -1**: at start-up and in attract (HIRAKU: answered empty). `pc common`'s children: `<wschudule wid
+  since till mid0...>`, `<ir beat>`, `<crs coid ...>`, `<mr>`/`<wr>` ranking lists.
+- **music reg** `ID chart song pgreat great djlevel clear PREFECTURE SHOP` after a stage (by IIDX ID;
+  BEGINNER sends none). **music getrank** `ID 0`: a child per chart, `cl="chart"`, its text 5 letters a
+  song from "0123456789:;", a-z, A-Z (six bits each, the first highest): song << 19 | DJ level << 16 |
+  clear << 13 | EX score (RED JAD 0x479720, 1200 at most). The clear as music select shows it: 0 NO
+  PLAY, 2 EASY CLEAR, 5 FULL COMBO.
+- **grade raised** `ID ... SHOP PREFECTURE` after a dan course.
+
+DistorteD's libjnet sends each kind of call as a module of its own with attributes: `<pc method="get"
+ver="1" rid="REFID"/>`, `<music method="crate" ver="1" cltype="0"/>`, `<shop method="sentinfo" lid
+pid opname bnum bflg/>`; answers `<pc status="0" method="pcget" ...>` (status a number; an answer
+without method isn't read). Its tables at JAG 0x5e2a68 (shop) ... 0x5e2c34 (pc); its tasks (JAG
+0x4d24e0, a request builder each): 9 pc get (rid), 10 getname, 11 common, 12 lcommon, 13 pc reg (cid
+rid name pid), 14 save (iidxid cltype achi pnum opt opt2 gno sflg0-2 sdhd ncomb mcomb mode), 15
+takeover (from HAPPY SKY: name pid oiidxid_str cid rid), 16 ifinish, 17 locaend, 18 playstart (side),
+19 playend (mode), 20 test. Its IC cards are cardmng's, as pop'n 13's: inquire (112 for a pass the
+server doesn't know: the game asks its new PIN twice, then getrefid), authpass, bindmodel; facility at
+start-up. `pc get`'s answer carries `name`, `pass` and `pid` itself (JAG 0x4ce7c0) and the record as a
+`<pc>` child (0x4ce840), read element by element (none required), then grade, ex, skin, rlist, ocrs,
+weekly.
+
+## beatmania IIDX GOLD and DJ TROOPERS (PC games, libavs)
+
+GOLD (`GLD`) and DJ TROOPERS (`HDD`) keep DistorteD's modules (pc, music, grade, ranking, shop) and
+its cards (cardmng), but send them through libavs's e-AMUSE3 as pop'n 15 does (`<pc method="get"
+lid="HIRAKU" rid="REFID"/>`; services must list them and `pcbevent`, keepalive and facility as pop'n
+15's). Each method's reply has a parser of the game's own (GOLD's method definitions at 0x5495f4:
+builder, parser, name, the service `local`, the model; DJ TROOPERS' at 0x55c7xx: name, then three
+routines, the parser last). A field or element a parser reads and doesn't find fails the call: the
+network library's status -10 (`HK_PC_JNET_LOG`), retried three times, the pass then played as a guest.
+The answer's own attributes are text, read with `strtol`. What each needs (GOLD; DJ TROOPERS the same
+unless said):
+
+- **pc get** (GOLD 0x495e70): `<pcdata id idstr name pid spnum dpnum sach dach sflg0 sflg1 sflg2 gno
+  sdhd sp_opt dp_opt dp_opt2 mcomb ncomb mode pmode/>`, `<grade sgid dgid/>` (-1 none), `<ex/>`,
+  `<skin/>`, `<rlist/>` (text lists, 8 characters an entry, empty for none), and in GOLD `<gold now_g
+  all_g use_g/>`; optional: rival, rcourse, ocrs, my, ord, rnd, weekly (DJ TROOPERS also visitor,
+  attack, team, tranker, mdata).
+- **pc reg** (0x497b80): `id`, `id_str`. **pc getname**: `name idstr pid`. **pc takeover**: `id`.
+  **pc lcommon**: `ls`. **pc common**: GOLD `<gshop vipg/>` (needed), optional ir, wschedule, ajr,
+  wajr, cm, item. **pc visit** (DJ TROOPERS, after pc get): `anum snum pnum aflg sflg pflg`.
+- **music reg/play/lplay**: `mid clid crate`. **grade raised**: `pnum`. **ranking entry**: `anum jun`.
+  **shop getname**: `opname pid cls_opt hr mi`. save, playstart, playend, sentinfo, keepalive, breg:
+  nothing read.
+- **music reg** sends `iidxid mid clid pgnum gnum rid` (the DJ level, 0 AAA ... 7 F) `cflg` (the clear)
+  and more; **music breg** (BEGINNER) `iidxid mid pgnum gnum rid cflg`. **music getrank** `iidxid
+  cltype`: `<r v="VERSION">` elements (GOLD 0x4947a0; v the song's mid / 100), their text 5 letters a
+  chart from "0123456789:;", a-z, A-Z (six bits each, the first highest): the song within the version
+  << 23 | chart << 19 | EX << 6 | clear << 3 | DJ level (3 letters a song when v is -1). Kept, not
+  checked on screen yet.
+- **pc save** at the credit's end: `iidxid cltype achi pnum opt opt2 gno sflg0-2 sdhd ncomb mcomb mode
+  pmode lid` and GOLD's `now_g all_g use_g`.
+
 ## Not known yet
+
+- Why DistorteD plays a returning pass as a guest after its `pc get` (PLAN.md section 36): its
+  parser takes what it is given (above), and the answer now has GOLD's elements too.
 
 - What `alter` and `aflag` are for; what the pop'n friends statuses 600 and 601
   mean to a player.

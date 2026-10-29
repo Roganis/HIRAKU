@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// HIRAKU's libacio.dll for the PC pop'n music games (PLAN.md section 30): Konami's library for the
-// e-AMUSEMENT card reader on the cabinet's serial port, answered from hiraku-pc's card and 10-key
-// (runtime/pc/link.h) instead. The reader's states and status block are spice2x's (acio/icca,
+// HIRAKU's libacio.dll for the PC pop'n music games (PLAN.md section 30) and beatmania IIDX 13:
+// Konami's library for the e-AMUSEMENT card readers on the cabinet's serial port, answered from
+// hiraku-pc's cards and 10-keys (runtime/pc/link.h) instead. The reader's states and status block are spice2x's (acio/icca,
 // acio/core). With a real reader on a serial port, hiraku-pc keeps Konami's DLL instead of this one.
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
@@ -11,6 +11,8 @@
 #include <string.h>
 
 #include "cabinet.h"
+#include "c02_setup.h"
+#include "ezusb_dev.h"
 
 #define API __declspec(dllexport) __cdecl
 
@@ -24,7 +26,11 @@ struct icca_status {   // 24 bytes, as ac_io_icca_get_status fills it
 enum { STEP = 0, SLEEP = 1, START = 2, INIT = 3, READY = 4, GET_USERID = 5, ACTIVE = 6, EJECT = 7,
        EJECT_CHECK = 8, END = 9, CLOSE_EJECT = 10, CLOSE_E_CHK = 11, CLOSE_END = 12, ERR_GETUID = -2 };
 
-static struct {
+// A reader each player: beatmania IIDX 13 (bm2dx.exe) has two, units 0 and 1 (its poll at JAG
+// 0x407920), player 2's from the link's card_seq2, card_uid2 and keypad2; pop'n has one, whatever
+// unit it names (pop'n 16 asks for unit 1), player 1's
+static int two_readers(void);
+struct reader {
     struct icca_status st;
     int state;
     uint32_t seen_seq;   // the link's card_seq last taken
@@ -32,7 +38,10 @@ static struct {
     DWORD ejected_at;    // the slot reader: when the game pushed it out (EJECT), 0: not
     uint8_t key_serial;
     uint32_t keys_last;
-} g;
+    int ended;           // IIDX: the game ended the card's reading (workflow END): END, not ACTIVE, until its next step
+};
+static struct reader g_readers[2];
+static struct reader *reader(int unit) { return &g_readers[unit == 1 && two_readers() ? 1 : 0]; }
 
 // pop'n 15's reader is read with a card held to it: it stays there 2 s (HK_PC_CARD_MS another
 // time). From pop'n 16 on the cabinet's reader is a slot: the card stays in until the game pushes
@@ -49,6 +58,16 @@ static int slot_reader(void) {
         slot = _stricmp(base, "popn15.exe") != 0 && _stricmp(base, "popn22.dll") != 0;
     }
     return slot;
+}
+static int two_readers(void) {
+    static int two = -1;
+    if (two < 0) {
+        char path[MAX_PATH];
+        GetModuleFileNameA((HMODULE)hk_program(), path, MAX_PATH);
+        const char *base = strrchr(path, '\\');
+        two = _stricmp(base ? base + 1 : path, "bm2dx.exe") == 0;
+    }
+    return two;
 }
 static DWORD card_held_ms(void) {
     static DWORD ms;
@@ -68,63 +87,69 @@ static void trace(const char *what, int a, int b) {
     if (strcmp(now, last)) hk_log("acio: %s", now), strcpy(last, now);
 }
 
-static void update(void) {
+static void update(int unit) {
     struct hk_pc_link *l = hk_link();
+    struct reader *r = reader(unit);
+    const int two = r == &g_readers[1];
     // the 10-key: the reader's key codes in its order (0-9, decimal, 00), level and edge; the edge
     // names a key by its number on the reader's grid, not its digit (spice2x's KEYPAD_KEY_CODE_NUMS)
     static const uint32_t code[12] = {0x100, 0x200, 0x2000, 2, 0x400, 0x4000, 4, 0x800, 0x8000, 8, 1, 0x1000};
     static const uint32_t num[12] = {0, 1, 5, 9, 2, 6, 10, 3, 7, 11, 8, 4};
-    const uint32_t held = hk_keypad_now();
-    g.st.key_level = 0;
+    const uint32_t held = two ? hk_keypad2_now() : hk_keypad_now();
+    r->st.key_level = 0;
     for (int i = 0; i < 12; i++) {
         const uint32_t bit = i < 10 ? 1u << i : i == 10 ? HK_PC_KEY_DECIMAL : HK_PC_KEY_00;
         if (held & bit) {
-            g.st.key_level |= code[i];
-            if (!(g.keys_last & bit)) {
-                g.st.key_edge = code[i] << 16 | 0x80 | (uint32_t)g.key_serial << 4 | num[i];
-                g.key_serial = (g.key_serial + 1) & 7;
+            r->st.key_level |= code[i];
+            if (!(r->keys_last & bit)) {
+                r->st.key_edge = code[i] << 16 | 0x80 | (uint32_t)r->key_serial << 4 | num[i];
+                r->key_serial = (r->key_serial + 1) & 7;
+                trace("key", (int)r->st.key_edge, two);
             }
+        } else if (r->st.key_edge >> 16 == code[i] && two_readers()) {
+            r->st.key_edge = 0;   // IIDX 13: an event left after its key comes up keeps the next page from reading keys
         } else {
-            g.st.key_edge &= ~(code[i] << 16);
+            r->st.key_edge &= ~(code[i] << 16);
         }
     }
-    g.keys_last = held;
+    r->keys_last = held;
     // a card held to the reader: there (active, its number read) for as long as it is held, as
     // spice2x's while its key is down, whatever the game's steps say meanwhile
-    const uint32_t seq = hk_card_seq();
-    if (seq != g.seen_seq) {
-        g.seen_seq = seq;
-        memcpy(g.st.uid, (const void *)l->card_uid, 8);
-        g.card_at = GetTickCount();
-        g.ejected_at = 0;
-        hk_log("hiraku-pc: a card at the reader");
+    const uint32_t seq = two ? hk_card_seq2() : hk_card_seq();
+    if (seq != r->seen_seq) {
+        r->seen_seq = seq;
+        memcpy(r->st.uid, two ? (const void *)l->card_uid2 : (const void *)l->card_uid, 8);
+        r->card_at = GetTickCount();
+        r->ejected_at = 0;
+        r->ended = 0;
+        hk_log("hiraku-pc: a card at player %d's reader", two ? 2 : 1);
     }
-    const DWORD in_for = g.card_at ? GetTickCount() - g.card_at : 0;
-    if (g.card_at && g.ejected_at && GetTickCount() - g.ejected_at <= MOUTH_MS) {   // out, at the mouth
-        g.state = EJECT_CHECK;
-        g.st.front_sensor = 1, g.st.rear_sensor = 0;
-    } else if (g.card_at && g.ejected_at && GetTickCount() - g.ejected_at <= MOUTH_MS + 1000) {
+    const DWORD in_for = r->card_at ? GetTickCount() - r->card_at : 0;
+    if (r->card_at && r->ejected_at && GetTickCount() - r->ejected_at <= MOUTH_MS) {   // out, at the mouth
+        r->state = EJECT_CHECK;
+        r->st.front_sensor = 1, r->st.rear_sensor = 0;
+    } else if (r->card_at && r->ejected_at && GetTickCount() - r->ejected_at <= MOUTH_MS + 1000) {
         // taken: the reader starts again, empty (pop'n 18's "take your card" waits for START or
         // INIT with the front sensor clear: 0x49aa06, 0x49a6e0, 0x450ec0)
-        g.state = START;
-        g.st.front_sensor = g.st.rear_sensor = 0;
-        memset(g.st.uid, 0, 8);
-    } else if (g.card_at && g.ejected_at && GetTickCount() - g.ejected_at <= MOUTH_MS + 2000) {
+        r->state = START;
+        r->st.front_sensor = r->st.rear_sensor = 0;
+        memset(r->st.uid, 0, 8);
+    } else if (r->card_at && r->ejected_at && GetTickCount() - r->ejected_at <= MOUTH_MS + 2000) {
         // then asleep: pop'n 18's ENTRY, its card pushed out before a credit (the player backed
         // out), waits for SLEEP or READY instead (0x46885d, 0x468967)
-        g.state = SLEEP;
-        g.st.front_sensor = g.st.rear_sensor = 0;
-    } else if (g.card_at && !g.ejected_at && in_for <= card_held_ms()) {
-        g.state = ACTIVE;
-        g.st.front_sensor = g.st.rear_sensor = 1;
+        r->state = SLEEP;
+        r->st.front_sensor = r->st.rear_sensor = 0;
+    } else if (r->card_at && !r->ejected_at && in_for <= card_held_ms()) {
+        r->state = r->ended ? END : ACTIVE;
+        r->st.front_sensor = r->st.rear_sensor = 1;
     } else {   // no card (or taken away): the reader closed and empty, as spice2x reports it; a
         // stepping reader (0) holds the game's card screen until its time runs out
-        if (g.card_at) {
-            g.card_at = 0;
-            memset(g.st.uid, 0, 8);
-            g.st.front_sensor = g.st.rear_sensor = 0;
+        if (r->card_at) {
+            r->card_at = 0;
+            memset(r->st.uid, 0, 8);
+            r->st.front_sensor = r->st.rear_sensor = 0;
         }
-        if (g.state == STEP || g.state == ACTIVE) g.state = CLOSE_EJECT;
+        if (r->state == STEP || r->state == ACTIVE) r->state = CLOSE_EJECT;
     }
 }
 
@@ -190,65 +215,79 @@ API char ac_io_icca_get_keep_alive_error(int unit, DWORD *a) {
 }
 API int ac_io_icca_send_keep_alive_packet(int a, int b, int c) { (void)a, (void)b, (void)c; return 0; }
 API char ac_io_icca_get_status(void *out, int unit) {
-    trace("get_status", unit, g.state);
-    (void)unit;
-    update();
-    g.st.state = (uint8_t)g.state;
-    memcpy(out, &g.st, sizeof g.st);
+    struct reader *r = reader(unit);
+    trace("get_status", unit, r->state);
+    update(unit);
+    r->st.state = (uint8_t)r->state;
+    memcpy(out, &r->st, sizeof r->st);
     return 1;
 }
 API char ac_io_icca_get_uid(int unit, char *card) {
-    trace("get_uid", unit, g.state);
-    (void)unit;
-    memcpy(card, g.st.uid, 8);
-    return g.state != ERR_GETUID;
+    struct reader *r = reader(unit);
+    trace("get_uid", unit, r->state);
+    memcpy(card, r->st.uid, 8);
+    return r->state != ERR_GETUID;
 }
 API char ac_io_icca_req_uid(int unit) {
-    trace("req_uid", unit, g.state);
-    (void)unit;
-    g.state = GET_USERID;
-    update();
+    struct reader *r = reader(unit);
+    trace("req_uid", unit, r->state);
+    r->state = GET_USERID;
+    update(unit);
     return 1;
 }
 API int ac_io_icca_req_uid_isfinished(int unit, DWORD *st) {
-    trace("req_uid_isfinished", unit, g.state);
-    (void)unit;
-    update();
-    if (g.state == ACTIVE) g.state = END;
-    *st = (DWORD)g.state;
+    struct reader *r = reader(unit);
+    trace("req_uid_isfinished", unit, r->state);
+    update(unit);
+    if (r->state == ACTIVE) r->state = END;
+    *st = (DWORD)r->state;
     return 1;
 }
 API int ac_io_icca_workflow(int w, int unit) {
-    trace("workflow", w, g.state);
-    (void)unit;
+    struct reader *r = reader(unit);
+    trace(unit == 1 && two_readers() ? "workflow (reader 2)" : "workflow", w, r->state);
+    if (w != STEP) r->ended = 0;
     switch (w) {
-    case STEP: g.state = STEP; break;
-    case SLEEP: g.state = SLEEP; break;
-    case INIT: g.state = READY; break;
-    case START: g.state = g.card_at ? ACTIVE : READY; break;
+    // IIDX GOLD reads a pass, then ends the reading and waits for the reader to say END (with the pass
+    // still in: ACTIVE for ever held it at "please wait")
+    case END:
+        if (two_readers()) r->state = END, r->ended = 1;
+        break;
+    // IIDX 13 steps its empty readers all the time: an empty one stays as it is (ready while the entry
+    // is open, asleep once closed). Taken for a card on its way out instead, the entry page said CARD
+    // OUT on a side with no card; set back to ready after a close, the game closed it again for ever
+    case STEP:
+        if (!(two_readers() && !r->card_at)) r->state = STEP;
+        break;
+    case SLEEP: r->state = SLEEP; break;
+    case INIT: r->state = READY; break;
+    case START: r->state = r->card_at ? ACTIVE : READY; break;
     case EJECT:
-        if (slot_reader() && g.card_at) {   // pushed out: the player takes it in a moment
-            if (!g.ejected_at) g.ejected_at = GetTickCount();
+        if (slot_reader() && r->card_at) {   // pushed out: the player takes it in a moment
+            if (!r->ejected_at) r->ejected_at = GetTickCount();
         } else {
-            g.card_at = 0;
+            r->card_at = 0;
         }
         break;
-    case CLOSE_EJECT: g.state = g.card_at ? EJECT_CHECK : SLEEP; break;
-    case CLOSE_END: g.state = SLEEP; break;
-    case GET_USERID: g.state = GET_USERID; break;
+    case CLOSE_EJECT:   // IIDX GOLD: the pass pushed out as by EJECT (it waited with the pass held in)
+        if (two_readers() && r->card_at && !r->ejected_at) r->ejected_at = GetTickCount();
+        r->state = r->card_at ? EJECT_CHECK : SLEEP;
+        break;
+    case CLOSE_END: r->state = SLEEP; break;
+    case GET_USERID: r->state = GET_USERID; break;
     default: break;
     }
-    update();
-    return g.state;
+    update(unit);
+    return r->state;
 }
 
 // The status buffer's C++ pair, and the other boards' calls the library also has (pjec, pjei:
 // other cabinets'): there, answering yes
 void __cdecl icca_get_status_buffer(void *buf, int unit) {
-    (void)unit;
-    update();
-    g.st.state = (uint8_t)g.state;
-    memcpy(buf, &g.st, sizeof g.st);
+    struct reader *r = reader(unit);
+    update(unit);
+    r->st.state = (uint8_t)r->state;
+    memcpy(buf, &r->st, sizeof r->st);
 }
 int __cdecl icca_update_status_buffer(int a) { (void)a; return 1; }
 
@@ -296,14 +335,14 @@ YES(ac_io_pjei_update_control_status_buffer)
 
 // popn22.dll's (PLAN.md section 35): a FeliCa card is any but an ISO 15693 one (E0 04 ...); its number
 // as the plain one's, then a byte saying it's FeliCa (spice2x)
-static int felica(void) { return !(g.st.uid[0] == 0xe0 && g.st.uid[1] == 0x04); }
-API char ac_io_icca_is_felica(void) { return (char)felica(); }
+static int felica(int unit) { return !(reader(unit)->st.uid[0] == 0xe0 && reader(unit)->st.uid[1] == 0x04); }
+API char ac_io_icca_is_felica(void) { return (char)felica(0); }
 API char ac_io_icca_get_uid_felica(int unit, char *card) {
-    trace("get_uid_felica", unit, g.state);
-    (void)unit;
-    memcpy(card, g.st.uid, 8);
-    card[8] = (char)felica();
-    return g.state != ERR_GETUID;
+    struct reader *r = reader(unit);
+    trace("get_uid_felica", unit, r->state);
+    memcpy(card, r->st.uid, 8);
+    card[8] = (char)felica(unit);
+    return r->state != ERR_GETUID;
 }
 API char ac_io_icca_crypt_init(int unit) { (void)unit; return 1; }
 // ... and the card dispenser (none: every request done at once) and the LED strip (lit by nothing)
@@ -329,6 +368,12 @@ API int ac_io_hdxs_led_set_rgb_mask(int a, char b, char c, long d) { (void)a, (v
 // Whichever of HIRAKU's DLLs loads first sets the game up (runtime/pc/cabinet.c: once)
 BOOL WINAPI DllMain(HINSTANCE h, DWORD why, LPVOID r) {
     (void)h, (void)r;
-    if (why == DLL_PROCESS_ATTACH) hk_cabinet_start();
+    if (why == DLL_PROCESS_ATTACH) {
+        // IIDX GOLD on: no RtEffect.dll to start the C02 board and set up the cabinet from (rteffect.c), so here
+        const char *board = getenv("HK_PC_BOARD_IN_ACIO");
+        if (board && *board) hk_ezusb_dev_start();
+        hk_cabinet_start();
+        if (board && *board) hk_c02_set_up_cabinet(), hk_c02_movies(), hk_c02_debug_lines();
+    }
     return TRUE;
 }

@@ -111,6 +111,8 @@ bool EamuseServer::parse(const std::string &x, Call &c) { return ea::parse(x, c)
 
 // The PC pop'n games, libavs-win32's e-AMUSEMENT (runtime/pc/): pop'n 15, 16, 17, 18
 bool pc_popn(const std::string &game) { return game == "G15" || game == "H16" || game == "I17" || game == "J39"; }
+// The PC beatmania IIDX games on libavs's e-AMUSE3 (runtime/pc/, PLAN.md section 36): GOLD, DJ TROOPERS, EMPRESS
+bool pc_iidx(const std::string &game) { return game == "GLD" || game == "HDD" || game == "I00"; }
 std::string EamuseServer::read_file(const std::string &name) const {
     if (dir_.empty()) return "";
     std::ifstream f(dir_ + "/" + name, std::ios::binary);
@@ -137,18 +139,30 @@ std::string EamuseServer::answer(const Call &c, const Request &r, const std::str
     const std::string game = c.model.substr(0, 3);
     // beatmania IIDX 9th style (model C02, the PC's e-AMUSE3, PLAN.md section 33): pop'n 9's calls
     // (numbering, userid, ntp, posevent, package: below) and two of its own
-    if (game == "C02") {
+    // RED, HAPPY SKY and DistorteD (E11, ECO, FDD) the same way, their module named after the model
+    const bool iidx_red = game == "E11" || game == "ECO" || game == "FDD";
+    // GOLD on: DistorteD's modules and cards over libavs (pop'n 15's transport)
+    if (pc_iidx(game) && (m == "pc" || m == "music" || m == "ranking" || m == "shop" || m == "grade"))
+        return answer_iidx_fdd(game, r);
+    if (game == "C02" || iidx_red) {
         // its module: method music / weekly / ranking / grade with a command line (easerver_iidx.cpp)
         if (m == "C02") return answer_c02(r);
+        if (iidx_red && m == game) return answer_iidx_red(game, r);
+        // DistorteD: its own modules, and its IC cards through the later games' services, cardmng and
+        // facility (as pop'n 13's)
+        if (game == "FDD" && (m == "pc" || m == "music" || m == "ranking" || m == "shop" || m == "grade"))
+            return answer_iidx_fdd(game, r);
+        if (game == "FDD")
+            if (std::string a = answer_later(game, r, host); !a.empty()) return a;
         // the player: the card's record as the game wrote it (its DJ name, PIN, ...), its own file
         const std::string card = attr(r.attrs, "card");
         if (m == "userdata" && f == "read") {
-            const std::string data = safe_name(card) ? read_file("userdata-C02-" + card) : "";
+            const std::string data = safe_name(card) ? read_file("userdata-" + game + "-" + card) : "";
             return data.empty() ? "<userdata status=\"109\"/>" : data;   // 109: none
         }
         if (m == "userdata" && f == "write") {
             if (!safe_name(card)) return "<userdata status=\"1\"/>";
-            write_file("userdata-C02-" + card, "<userdata status=\"0\" time=\"" + esc(attr(r.attrs, "time")) + "\">" + r.inner + "</userdata>");
+            write_file("userdata-" + game + "-" + card, "<userdata status=\"0\" time=\"" + esc(attr(r.attrs, "time")) + "\">" + r.inner + "</userdata>");
             return "<userdata status=\"0\"/>";
         }
     } else if (!game.empty() && game != "C00") {

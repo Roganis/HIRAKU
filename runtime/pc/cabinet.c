@@ -907,8 +907,11 @@ void hk_present_begin(void) {
 
 // A picture the game has drawn, in HIRAKU's window (its pixels in the link if `captured`): counted
 // with its frame's sound, then the game waits for hiraku-pc's next frame
+static void profile_frame(void);
+
 void hk_picture_drawn(int captured) {
     struct hk_pc_link *l = hk_link();
+    profile_frame();
     if (captured) {
         hk_dsound_picture();   // the frame's sound, with its picture
         l->drawn_us = l->go_count ? us_since_go(l) : 0;
@@ -1114,11 +1117,93 @@ static BOOL WINAPI my_ShowWindow(HWND w, int how) {
 
 void hk_place_window(void *w) { place_window((HWND)w); }
 
+// --- HK_PC_PROFILE: where the game's drawing thread (the one that counts the pictures) spends its
+// time: sampled a thousand times a second, its instruction and its caller (the return address at
+// [ebp+4]), the busiest places each 600 pictures (finding a frame clock that isn't a wait)
+
+static volatile DWORD g_prof_thread;
+static struct { uintptr_t eip, caller; DWORD n; } g_prof[512];
+static volatile LONG g_prof_total;
+static CRITICAL_SECTION g_prof_lock;
+
+static int readable(uintptr_t p) {
+    MEMORY_BASIC_INFORMATION mi;
+    return p >= 0x10000 && VirtualQuery((void *)p, &mi, sizeof mi) && mi.State == MEM_COMMIT &&
+           !(mi.Protect & (PAGE_NOACCESS | PAGE_GUARD));
+}
+static DWORD WINAPI profiler(LPVOID unused) {
+    (void)unused;
+    typedef UINT(WINAPI * period_t)(UINT);
+    period_t begin = (period_t)(void *)GetProcAddress(LoadLibraryA("winmm.dll"), "timeBeginPeriod");
+    if (begin) begin(1);
+    HANDLE th = NULL;
+    for (;;) {
+        Sleep(1);
+        if (!g_prof_thread) continue;
+        if (!th && !(th = OpenThread(THREAD_SUSPEND_RESUME | THREAD_GET_CONTEXT, FALSE, g_prof_thread))) continue;
+        if (SuspendThread(th) == (DWORD)-1) continue;
+        CONTEXT c;
+        c.ContextFlags = CONTEXT_CONTROL;
+        uintptr_t eip = 0, caller = 0;
+        if (GetThreadContext(th, &c)) {
+            eip = c.Eip;
+            if (readable(c.Ebp + 4)) caller = *(const uintptr_t *)(c.Ebp + 4);
+        }
+        ResumeThread(th);
+        if (!eip) continue;
+        EnterCriticalSection(&g_prof_lock);
+        for (int i = 0; i < 512; i++)
+            if (!g_prof[i].n || (g_prof[i].eip == eip && g_prof[i].caller == caller)) {
+                g_prof[i].eip = eip, g_prof[i].caller = caller, g_prof[i].n++;
+                break;
+            }
+        g_prof_total++;
+        LeaveCriticalSection(&g_prof_lock);
+    }
+}
+static void profile_frame(void) {
+    static int on = -1;
+    static DWORD frames;
+    if (on < 0) {
+        on = getenv("HK_PC_PROFILE") != NULL;
+        if (on) {
+            InitializeCriticalSection(&g_prof_lock);
+            CloseHandle(CreateThread(NULL, 0, profiler, NULL, 0, NULL));
+        }
+    }
+    if (!on) return;
+    g_prof_thread = GetCurrentThreadId();
+    if (++frames % 600) return;
+    EnterCriticalSection(&g_prof_lock);
+    const LONG total = g_prof_total;
+    for (int k = 0; k < 15; k++) {   // the busiest, taken out one by one
+        int best = -1;
+        for (int i = 0; i < 512 && g_prof[i].n; i++)
+            if (g_prof[i].n != (DWORD)-1 && (best < 0 || g_prof[i].n > g_prof[best].n)) best = i;
+        if (best < 0) break;
+        uintptr_t o1, o2;
+        const char *m1 = module_of((void *)g_prof[best].eip, &o1);
+        char m1c[64];
+        snprintf(m1c, sizeof m1c, "%s", m1);
+        const char *m2 = g_prof[best].caller ? module_of((void *)g_prof[best].caller, &o2) : "-";
+        if (!g_prof[best].caller) o2 = 0;
+        hk_log("profile: %4.1f %% at %s+%lx (from %s+%lx)", total ? 100.0 * g_prof[best].n / total : 0.0, m1c,
+               (unsigned long)o1, m2, (unsigned long)o2);
+        g_prof[best].n = (DWORD)-1;
+    }
+    memset(g_prof, 0, sizeof g_prof);
+    g_prof_total = 0;
+    LeaveCriticalSection(&g_prof_lock);
+}
+
 // --- HK_PC_WAITLOG: where the game waits between frame_go and its Present (finding its frame clock)
 
 static struct { void *site; DWORD calls; double ms; } g_waits[16];
 
+static DWORD g_draw_thread;   // the thread that counts the pictures (the game's drawing): its waits only
+
 static void waited(void *site, LARGE_INTEGER t0) {
+    if (g_draw_thread && GetCurrentThreadId() != g_draw_thread) return;
     LARGE_INTEGER t1, f;
     QueryPerformanceCounter(&t1);
     QueryPerformanceFrequency(&f);
@@ -1132,6 +1217,7 @@ static void waited(void *site, LARGE_INTEGER t0) {
 
 static void waits_report(void) {
     static DWORD frames;
+    g_draw_thread = GetCurrentThreadId();
     if (++frames % 600) return;
     for (int i = 0; i < 16 && g_waits[i].site; i++)
         hk_log("waitlog: site %p: %lu calls, %.1f ms a frame", g_waits[i].site, g_waits[i].calls, g_waits[i].ms / 600);
@@ -1485,7 +1571,9 @@ static HMODULE WINAPI my_LoadLibraryA(LPCSTR p) {
 // last one (timeGetTime, then Sleep: `call reg; sub eax, last; cmp eax, 14; jae go_on`; IIDX RED 13 ms). With HIRAKU's
 // pacing starting each frame (link.h), that wait would hold the picture until the frame's end, so
 // the branch is made to always go on. Found by its shape and the game's own import slots (every
-// program date of pop'n 15 has two, at different places)
+// program date of pop'n 15 has two, at different places). IIDX EMPRESS's is the same 14 ms with
+// SleepEx, 2 ms at least: on Windows its sleep rounded up to the timer's 15.6 ms, every picture a
+// refresh late (a cabinet's EMPRESS ran slow and hitched every few seconds)
 static void *import_slot(HMODULE m, const char *dll, const char *fn) {
     char *base = (char *)m;
     IMAGE_NT_HEADERS *nt = (IMAGE_NT_HEADERS *)(base + ((IMAGE_DOS_HEADER *)base)->e_lfanew);
@@ -1512,7 +1600,8 @@ static int mentions(const uint8_t *p, size_t n, const void *slot) {
 static void unlimit_frames(void) {
     HMODULE exe = (HMODULE)hk_program();
     void *tgt = import_slot(exe, "winmm.dll", "timeGetTime"), *sleep = import_slot(exe, "kernel32.dll", "Sleep");
-    if (!tgt || !sleep) return;
+    void *sleep_ex = import_slot(exe, "kernel32.dll", "SleepEx");
+    if (!tgt || (!sleep && !sleep_ex)) return;
     char *base = (char *)exe;
     IMAGE_NT_HEADERS *nt = (IMAGE_NT_HEADERS *)(base + ((IMAGE_DOS_HEADER *)base)->e_lfanew);
     IMAGE_SECTION_HEADER *sec = IMAGE_FIRST_SECTION(nt);
@@ -1529,8 +1618,9 @@ static void unlimit_frames(void) {
             int call = 0, sub = 0;
             for (int b = 1; b <= 8; b++) call |= p[-b] == 0xff && (p[-b + 1] & 0xf8) == 0xd0, sub |= p[-b] == 0x2b;
             if (!call || !sub || !mentions(p - 16, 16, tgt)) continue;
-            // what it skips: a Sleep
-            if (!mentions(p + 5, p[4] < 32 ? p[4] : 32, sleep)) continue;
+            // what it skips: a Sleep (or SleepEx)
+            const size_t skipped = p[4] < 32 ? p[4] : 32;
+            if (!(sleep && mentions(p + 5, skipped, sleep)) && !(sleep_ex && mentions(p + 5, skipped, sleep_ex))) continue;
             DWORD old;
             VirtualProtect(p + 3, 1, PAGE_EXECUTE_READWRITE, &old);
             p[3] = 0xeb;   // jae -> jmp

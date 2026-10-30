@@ -865,6 +865,10 @@ public:
     void report() override {
         printf("hiraku-pc: %llu frames shown, %llu of them again while the game drew none\n", (unsigned long long)frame_,
                (unsigned long long)repeats_);
+        if (made_up_ || not_made_up_)
+            printf("hiraku-pc: the game late for %llu frames and drew them at once after (its notes kept with its music)%s\n",
+                   (unsigned long long)made_up_,
+                   not_made_up_ ? (", " + std::to_string(not_made_up_) + " more in pauses (as they came)").c_str() : "");
         if (between_drawn_ || between_late_)   // --smooth-motion (render_between)
             printf("hiraku-pc: smooth motion: %llu in-between pictures drawn by the game, %llu asked for and not answered\n",
                    (unsigned long long)between_drawn_, (unsigned long long)between_late_);
@@ -922,6 +926,7 @@ public:
                     sound_on_ = false;
                     seen = 0;
                     pics_ = 0;
+                    owed_ = 0;
                     if (!start_game()) fatal();
                 }
             }
@@ -931,6 +936,17 @@ public:
                 std::atomic_thread_fence(std::memory_order_acquire);
                 seen = seq;
                 shown_seq_ = seq;
+                // a picture for a frame already gone by, shown again without it (the game was late):
+                // not shown, and the game's next frame started at once. It times its notes by its
+                // frames, its music by its sound (the shell's, a frame's for every frame shown): a
+                // frame never made up leaves the notes a frame behind the music, for the song
+                if (owed_ > 0) {
+                    owed_--;
+                    made_up_++;
+                    go(seq);
+                    last = std::chrono::steady_clock::now();
+                    continue;
+                }
                 if (++pics_ < per_frame_) {   // a picture between two shown (a 120 Hz game, a slower display): the next at once
                     go(seq);
                     last = std::chrono::steady_clock::now();
@@ -962,6 +978,9 @@ public:
                 show(last_rgb_ ? last_rgb_ : black_.data(), last_w_, last_h_);
                 repeating_ = false;
                 repeats_++;
+                // once the game's sound has started: owed (above), as long as it's a moment's
+                // hold-up; a longer pause (loading) is the game's own, its frames as they come
+                if (sound_on_ && (owed_ += per_frame_) > MAX_OWED) not_made_up_ += owed_, owed_ = 0;
                 last = now;
             } else if (sound_on_ && !ahead_ && now - go_at_ > std::chrono::microseconds((long long)(5e5 * per_frame_ / ghz())) &&
                        (int32_t)(sound_for(tick_ + per_frame_) - link_->audio_made) > 0) {
@@ -1721,6 +1740,11 @@ private:
     std::vector<float> key_to_sound_;   // ms, per press (report)
     std::function<void()> on_fatal_;
     uint64_t frame_ = 0, repeats_ = 0;
+    // frames shown again while the game's sound plays, its pictures for them still to come (run());
+    // at most MAX_OWED (half a second at 60 Hz)
+    static constexpr int MAX_OWED = 30;
+    int owed_ = 0;
+    uint64_t made_up_ = 0, not_made_up_ = 0;
     uint64_t tick_ = 0;    // the game's time in its frames (ghz())
     // ghz() and where it last changed (a [[rate]]): the tick, the time and the sound samples then
     double hz_ = HZ, want_hz_ = 0, sec0_ = 0;

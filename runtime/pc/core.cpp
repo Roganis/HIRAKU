@@ -48,6 +48,9 @@
 #include <thread>
 #include <vector>
 
+// (before windows.h: its near and far macros)
+#include "hiraku/scroll_guess.h"
+
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
 #ifndef NOMINMAX
@@ -67,7 +70,6 @@
 extern char **environ;
 #endif
 
-#include "hiraku/scroll_guess.h"
 #include "host/input.h"
 #include "host/macro.h"
 #include "host/mods.h"

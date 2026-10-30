@@ -45,7 +45,8 @@ private:
     QTreeWidgetItem *itemFor(const QString &id) const;
     void selectGame(QTreeWidgetItem *it);         // ... with its series opened to show it
     const Game *find(const QString &id) const;
-    void nvidiaNotice(const Game &g);   // the PC games on Windows: NVIDIA's present method, told (nvidia.h)
+    void nvidiaNotice(const Game &g);
+    bool wineMissing(const Game &g);    // a PC game on Linux without Wine: told how to get it   // the PC games on Windows: NVIDIA's present method, told (nvidia.h)
     QStringList arguments(const Game &g) const;
     void stop();
     void contextMenu(const QPoint &pos);

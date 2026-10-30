@@ -34,6 +34,7 @@
 #include <QMenu>
 #include <QMenuBar>
 #include <QMessageBox>
+#include <QStandardPaths>
 #include <QPlainTextEdit>
 #include <QPushButton>
 #include <QInputDialog>
@@ -980,6 +981,32 @@ void MainWindow::nvidiaNotice(const Game &g) {
     if (nv::notice(this, QFileInfo(g.exe).absoluteFilePath(), m)) cfg::settings().setValue("notice/nvidiaPresent", false);
 }
 
+// The PC games on Linux run under Wine, which HIRAKU doesn't bring: not found (and no --wine among the
+// game's arguments), the player is told how to get it, and the game isn't started (it closed at once,
+// "exited (code 0)", its log saying wineboot said 127)
+bool MainWindow::wineMissing(const Game &g) {
+#ifdef Q_OS_WIN
+    (void)g;
+    return false;
+#else
+    if (g.core != "pc" || arguments(g).contains("--wine") || !QStandardPaths::findExecutable("wine").isEmpty()) return false;
+    QMessageBox box(this);
+    box.setWindowTitle(g.title);
+    box.setIcon(QMessageBox::Warning);
+    box.setText(g.title + " needs Wine, which isn't installed.");
+    box.setInformativeText("On Linux the PC games (pop'n music 15 on, beatmania IIDX 9th style on) are Konami's Windows "
+                           "programs, run under Wine. Install it with your distribution's packages, then start the game "
+                           "again:\n\n"
+                           "Arch, CachyOS, Manjaro: sudo pacman -S wine (the multilib repository on)\n"
+                           "Debian, Ubuntu, Mint: sudo apt install wine\n"
+                           "Fedora: sudo dnf install wine\n\n"
+                           "The first start then prepares Wine's folder for the PC games, which takes a minute.");
+    box.setTextInteractionFlags(Qt::TextSelectableByMouse);
+    box.exec();
+    return true;
+#endif
+}
+
 void MainWindow::play(const QString &id) {
     const Game *g = find(id);
     if (!g) {
@@ -996,6 +1023,7 @@ void MainWindow::play(const QString &id) {
         box.exec();
         return;
     }
+    if (wineMissing(*g)) return;
     m_log->clear();
     m_runOutput.clear();
     openRunLog(g->id);

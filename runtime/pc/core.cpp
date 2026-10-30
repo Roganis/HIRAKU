@@ -1597,6 +1597,12 @@ private:
             setenv("WINEDLLOVERRIDES", "mscoree=;mshtml=", 1);
             const int r = hk::sys::run_quiet({"/bin/sh", "-c", "exec \"$0\" wineboot -i", wine_});
             unsetenv("WINEDLLOVERRIDES");
+            if (r == 127) {   // the shell's "not found"
+                fprintf(stderr, "hiraku-pc: Wine isn't installed (\"%s\" not found): on Linux the PC games run under it. Install "
+                                "it with your distribution's packages (Arch: sudo pacman -S wine; Debian, Ubuntu: sudo apt install "
+                                "wine; Fedora: sudo dnf install wine), or name it with --wine PROGRAM\n", wine_.c_str());
+                exit(2);
+            }
             if (r != 0) fprintf(stderr, "hiraku-pc: wineboot said %d\n", r);
         }
         const std::string exe_path = pc64_ ? loader_ : run_prog_ + "/" + exe_, game_dir = pc32_ ? "." : win_path(contents_);

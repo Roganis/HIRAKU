@@ -301,6 +301,9 @@ void init(SDL_Window *win, bool enabled) {
     wayland_init();   // with display sync off too: the content type, and whether frames go out directly
 #endif
 #ifdef _WIN32
+    // the display's own vblanks (the window's monitor's, from the graphics kernel; DWM's estimate
+    // until they come in)
+    if (enabled) dwm::start(win ? SDL_GetPointerProperty(SDL_GetWindowProperties(win), SDL_PROP_WINDOW_WIN32_HWND_POINTER, nullptr) : nullptr);
     int64_t v, p;
     if (enabled && dwm::vblank(v, p)) g_dwm = true, g_T = dwm_period(p), g_T_exact = true;
 #endif
@@ -315,6 +318,9 @@ void shutdown() {
 }
 
 void display_changed() {
+#ifdef _WIN32
+    if (g_enabled && g_win) dwm::start(SDL_GetPointerProperty(SDL_GetWindowProperties(g_win), SDL_PROP_WINDOW_WIN32_HWND_POINTER, nullptr));
+#endif
     g_T_exact = false;
     refresh_from_mode();
     g_fresh = true;
@@ -597,7 +603,7 @@ std::string describe() {
 #ifdef HK_WITH_WAYLAND
              g_fifo ? " (fifo)" : "",
 #elif defined(_WIN32)
-             g_dwm ? " (DWM's vblank)" : "",
+             g_dwm ? dwm::kernel() ? " (the display's vblank)" : " (DWM's vblank)" : "",
 #else
              "",
 #endif
@@ -617,9 +623,12 @@ std::string describe() {
 #ifdef _WIN32
     if (g_dwm && g_dwm_lo > 0) {   // DWM's own estimates (dwm_period), against the mode's
         const int64_t m = mode_period();
-        snprintf(b, sizeof b, "\nvideo: DWM's refresh period read %.2f to %.2f Hz over the run; the display mode's %.2f Hz",
+        snprintf(b, sizeof b, "\nvideo: the refresh period read %.3f to %.3f Hz over the run; the display mode's %.2f Hz",
                  1e9 / (double)g_dwm_hi, 1e9 / (double)g_dwm_lo, m > 0 ? 1e9 / (double)m : 0.0);
         out += b;
+        // the graphics kernel's vblanks (dwm.h), else DWM's estimate throughout
+        out += "\nvideo: " + (dwm::report().empty() ? std::string("DWM's estimate of the vblank (the graphics kernel's wasn't there)")
+                                                   : dwm::report());
     }
 #endif
     return out;

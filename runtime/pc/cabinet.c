@@ -556,7 +556,11 @@ static D3DFORMAT g_rb_fmt;
 // numbers in Direct3D 8 and 9)
 void hk_put_pixels(const void *bits, int pitch, unsigned w, unsigned h, int format) {
     struct hk_pc_link *l = hk_link();
-    uint32_t *out = (uint32_t *)((char *)l + HK_PC_PIXELS);
+    hk_convert_pixels((uint32_t *)((char *)l + HK_PC_PIXELS), bits, pitch, w, h, format);
+    l->frame_w = w, l->frame_h = h;
+}
+
+void hk_convert_pixels(uint32_t *out, const void *bits, int pitch, unsigned w, unsigned h, int format) {
     for (UINT y = 0; y < h; y++) {
         const uint8_t *row = (const uint8_t *)bits + (size_t)y * pitch;
         uint32_t *o = out + (size_t)y * w;
@@ -577,7 +581,6 @@ void hk_put_pixels(const void *bits, int pitch, unsigned w, unsigned h, int form
             }
         }
     }
-    l->frame_w = w, l->frame_h = h;
 }
 
 static int capture(IDirect3DDevice9 *d) {
@@ -646,14 +649,22 @@ static void nap(void) {
 
 // Until hiraku-pc has shown the picture and its pacing lets the next frame start (or a quarter of
 // a second, if it has stopped answering)
+void (*hk_between)(void);
+
 static void wait_for_go(void) {
     struct hk_pc_link *l = hk_link();
     const uint32_t seq = l->frame_seq;
     const DWORD t0 = GetTickCount();
     for (int spins = 0; l->frame_go != seq; spins++) {
         if (GetTickCount() - t0 > 250) break;
+        // an in-between picture asked for (smooth motion): drawn at once, and the next soon after
+        if (hk_between && l->between_req != l->between_done) {
+            hk_between();
+            spins = 0;
+            continue;
+        }
         if (spins < 200) YieldProcessor();
-        else if (spins < 400) SwitchToThread();
+        else if (spins < 400 || l->smooth) SwitchToThread();
         else nap();
     }
     LARGE_INTEGER t;
@@ -914,7 +925,10 @@ static HRESULT WINAPI my_Present(IDirect3DDevice9 *d, const RECT *src, const REC
     if (!said++) hk_log("hiraku-pc: the game's first Present");
     hk_present_begin();
     if (host_shows()) {   // HIRAKU's window shows it, at the time its pacing chooses
-        hk_picture_drawn(capture(d));
+        const int captured = capture(d);
+        hk_d3d9_frame_end(d, captured);   // (smooth motion: the frame's quads, d3d9_smooth.c)
+        hk_picture_drawn(captured);       // (its in-between pictures drawn while the game waits)
+        hk_d3d9_frame_start(d);
         return D3D_OK;
     }
     RECT fit;
@@ -959,6 +973,7 @@ static HRESULT WINAPI my_Present(IDirect3DDevice9 *d, const RECT *src, const REC
 
 static HRESULT WINAPI my_Reset(IDirect3DDevice9 *d, D3DPRESENT_PARAMETERS *pp) {
     windowed(pp);
+    hk_d3d9_reset();
     return g_Reset(d, pp);
 }
 
@@ -1024,6 +1039,7 @@ static HRESULT WINAPI my_CreateDevice(IDirect3D9 *self, UINT adapter, D3DDEVTYPE
         if (was) g_Reset = (Reset_t)was;
         was = patch_slot(&vt[17], (void *)my_Present);
         if (was) g_Present = (Present_t)was;
+        hk_d3d9_hooks(*dev);
         if (!g_dev && host_shows()) {
             g_dev = *dev;
             IDirect3DDevice9_AddRef(g_dev);   // (the watcher's)

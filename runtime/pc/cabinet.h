@@ -79,6 +79,17 @@ int hk_host_shows(void);                     // hiraku-pc's window shows the gam
 void *hk_patch_slot(void **slot, void *to);  // a pointer (a vtable's, an import's) set; what it was, or NULL
 void hk_place_window(void *hwnd);            // the game's window, hidden while HIRAKU's shows it
 void hk_put_pixels(const void *bits, int pitch, unsigned w, unsigned h, int format);   // D3DFORMAT's numbers
+void hk_convert_pixels(uint32_t *out, const void *bits, int pitch, unsigned w, unsigned h, int format);   // to 0x00RRGGBB
+// In-between pictures (link v11, smooth motion): drawn when hiraku-pc asks, while the game waits for
+// its next frame (the Direct3D 8 hooks set it)
+extern void (*hk_between)(void);
+// ... the Direct3D 9 games' (d3d9_smooth.c): their device's hooks; at each Present, the frame's end
+// (its picture read back or not) and, once the game may draw the next, its start; before a Reset
+struct IDirect3DDevice9;
+void hk_d3d9_hooks(struct IDirect3DDevice9 *dev);
+void hk_d3d9_frame_end(struct IDirect3DDevice9 *d, int captured);
+void hk_d3d9_frame_start(struct IDirect3DDevice9 *d);
+void hk_d3d9_reset(void);
 void hk_present_begin(void);                 // each Present: the mods' patches, the debug watch
 void hk_watch_thread(void);                   // a thread starting: the debug watch on it too (HK_PC_WATCH)
 void hk_picture_drawn(int captured);         // a picture (in the link if captured): counted, then wait for the next frame

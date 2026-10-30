@@ -67,6 +67,7 @@
 extern char **environ;
 #endif
 
+#include "hiraku/scroll_guess.h"
 #include "host/input.h"
 #include "host/macro.h"
 #include "host/mods.h"
@@ -694,6 +695,156 @@ public:
         return true;
     }
     uint64_t frame_count() const override { return frame_; }
+
+    // In-between pictures for a display faster than the game (--smooth-motion, docs/SMOOTH.md). The
+    // PC IIDX games count everything in frames, so their notes can't be drawn more often by the game
+    // itself: the game's own Direct3D draws its last frame again (runtime/pc/d3d8.c), with what goes
+    // with the scroll (the notes, the bar lines) moved on along the scroll's steady line, and nothing
+    // else (the movie, the gauge, the effects as the game drew them). The quads of the frame are paired
+    // with the frame before's (the same texture and size, hiraku/scroll_guess.h votes the scroll).
+    // Only while the game waits for its next frame (not with --game-ahead).
+    const uint32_t *render_between(double t, int &w, int &h) override {
+        if (!link_ || ahead_ || pc64_ || pc32_) return nullptr;
+        if (!link_->smooth) {   // the DLL records from the next frame on
+            link_->smooth = 1;
+            return nullptr;
+        }
+        // the frame shown: the last picture counted (once its batch is drawn the game has gone on,
+        // and may count the next while this one's refreshes are shown)
+        const uint32_t seq = shown_seq_;
+        if (seq != batch_seq_ && (link_->quads_seq != seq || link_->frame_go == seq)) return nullptr;
+        if (seq != between_seq_) {   // a new frame: its quads paired with the frame before's
+            const bool follows = seq == between_seq_ + 1;
+            between_seq_ = seq;
+            prev_quads_.swap(quads_);
+            if (!follows) prev_quads_.clear();
+            const auto *q = (const hk_pc_quad *)((const char *)link_ + HK_PC_QUAD_LIST);
+            quads_.assign(q, q + std::min<uint32_t>((uint32_t)link_->quads_n, HK_PC_QUADS));
+            // Only what can be a note: the IIDX games' fall straight down, so a quad is paired with a
+            // look-alike at the same x above it (a menu's hundreds of letters and tiles of one texture,
+            // each paired with all the others, made a million candidates: 20 ms a frame), or with
+            // itself where it was: what stands still doesn't vote (a screen of text paired each letter
+            // with the same letter a line up, all of it "falling" 24 pixels a frame)
+            std::vector<hk::ScrollGuess::Candidate> cands;
+            for (int i = 0; i < (int)quads_.size() && cands.size() < 20000; i++)
+                for (int j = 0; j < (int)prev_quads_.size(); j++) {
+                    const hk_pc_quad &c = quads_[(size_t)i], &p = prev_quads_[(size_t)j];
+                    const int dy = c.y - p.y;
+                    if (c.tex != p.tex || c.x != p.x || c.w != p.w || c.h != p.h || dy < 0 || dy > hk::ScrollGuess::REACH) continue;
+                    cands.push_back({i, j, 0, dy, 0, true});
+                }
+            const std::vector<int> paired = scroll_.pair(seq, (int)quads_.size(), cands, true);
+            std::vector<int> from(quads_.size(), -1);
+            prev_falls_.swap(falls_);
+            prev_moves_.swap(moves_);
+            moves_.assign(quads_.size(), {0, 0});
+            falls_.assign(quads_.size(), 0);
+            for (size_t i = 0; i < quads_.size(); i++)
+                if (paired[i] >= 0) {
+                    const auto &c = cands[(size_t)paired[i]];
+                    moves_[i] = {c.dx, c.dy}, from[i] = c.from;
+                    // falling as it fell the frame before (a step 2 or 3 pixels: within one): a note. A
+                    // blinking line of text paired with the same letters a line above moved once only
+                    const size_t f = (size_t)c.from;
+                    const bool same = f < prev_falls_.size() && std::abs(prev_moves_[f].second - c.dy) <= 1;
+                    falls_[i] = same ? prev_falls_[f] + 1 : 1;
+                }
+            scroll_.frame(seq, moves_, from);
+            // play under way: something has fallen steadily for half a second without a break (the
+            // notes, at least the bar lines). A result screen's digits counting up fell a few frames
+            bool falling = false;
+            for (const int f : falls_) falling |= f >= 3;
+            falling_for_ = falling && follows ? falling_for_ + 1 : 0;
+            // The lanes: where a bar line (wide, a pixel or two tall) has fallen in the last 5
+            // seconds; only what falls inside them is moved (a panel's rolling text below them fell at
+            // the notes' speed too)
+            for (size_t i = 0; i < quads_.size(); i++) {
+                const hk_pc_quad &q = quads_[i];
+                if (falls_[i] < 3 || q.h > 3 || q.w < 60) continue;
+                bool known = false;
+                for (Lane &l : lanes_)
+                    if (std::abs(l.x0 - q.x) <= 2 && std::abs(l.x1 - (q.x + q.w)) <= 2) l.seen = seq, known = true;
+                if (!known) lanes_.push_back({q.x, q.x + q.w, seq});
+            }
+            std::erase_if(lanes_, [&](const Lane &l) { return seq - l.seen > 300; });
+        }
+        // All the frame's refreshes' pictures at once, while the game waits for its next frame (its
+        // go stays where display sync puts it, just in time: given early, its controls were read a
+        // frame sooner); the window then asks for each by its moment (pacing::phase).
+        if (batch_seq_ != seq) {
+            batch_seq_ = seq;
+            batch_.clear();
+            const int k = std::max(1, hk::host::pacing::refreshes_per_frame());
+            std::vector<double> ts;
+            for (int i = 0; i < k; i++) ts.push_back(hk::host::pacing::phase(i));
+            if (std::none_of(ts.begin(), ts.end(), [&](double x) { return std::fabs(x - t) < 1e-9; })) ts.push_back(t);
+            for (const double bt : ts) {
+                Between b{bt, {}};
+                draw_between(bt, b.pixels);
+                batch_.push_back(std::move(b));
+            }
+        }
+        const Between *best = nullptr;
+        for (const Between &b : batch_)
+            if (!best || std::fabs(b.t - t) < std::fabs(best->t - t)) best = &b;
+        if (!best || best->pixels.empty()) return nullptr;
+        w = (int)link_->frame_w, h = (int)link_->frame_h;
+        return best->pixels.data();
+    }
+    // One in-between picture, `t` of a frame on, drawn by the game (empty: nothing moved a whole
+    // pixel, or it couldn't)
+    void draw_between(double t, std::vector<uint32_t> &out) {
+        out.clear();
+        auto *move = (int16_t(*)[2])((char *)link_ + HK_PC_QUAD_MOVE);
+        bool any = false;
+        for (size_t i = 0; i < quads_.size(); i++) {
+            int ox = 0, oy = 0;
+            if (falling_for_ >= 30 && falls_[i] >= 3 && in_lanes(quads_[i]) && scroll_.scrolls(moves_[i].first, moves_[i].second))
+                scroll_.offset(moves_[i].first, moves_[i].second, t, ox, oy, (int)i);
+            move[i][0] = (int16_t)ox, move[i][1] = (int16_t)oy;
+            any |= ox || oy;
+        }
+        if (!any) return;
+        std::atomic_thread_fence(std::memory_order_release);
+        const uint32_t req = link_->between_req + 1;
+        link_->between_req = req;
+        const auto until = std::chrono::steady_clock::now() + std::chrono::milliseconds(20);
+        while (link_->between_done != req) {
+            if (std::chrono::steady_clock::now() > until) {
+                between_late_++;
+                return;
+            }
+            std::this_thread::yield();
+        }
+        std::atomic_thread_fence(std::memory_order_acquire);
+        if (!link_->between_ok) return;
+        const auto *px = (const uint32_t *)((const char *)link_ + HK_PC_BETWEEN);
+        out.assign(px, px + (size_t)link_->frame_w * link_->frame_h);
+        between_drawn_++;
+    }
+    struct Between {
+        double t;
+        std::vector<uint32_t> pixels;
+    };
+    std::vector<Between> batch_;
+    uint32_t batch_seq_ = ~0u, shown_seq_ = ~0u;   // shown_seq_: the picture being shown
+    hk::ScrollGuess scroll_;
+    uint32_t between_seq_ = ~0u;
+    std::vector<hk_pc_quad> quads_, prev_quads_;
+    std::vector<std::pair<int, int>> moves_, prev_moves_;
+    std::vector<int> falls_, prev_falls_;   // the frames each quad has fallen steadily
+    int falling_for_ = 0;                    // the frames something has
+    struct Lane { int x0, x1; uint32_t seen; };
+    std::vector<Lane> lanes_;
+    // a quad a note could be: no wider than the lanes, no taller than a few notes, no narrower than a
+    // key's (a result screen's falling sparks, 6 pixels, came after a stage), inside them
+    bool in_lanes(const hk_pc_quad &q) const {
+        if (q.w < 12 || q.w > 160 || q.h > 64) return false;
+        for (const Lane &l : lanes_)
+            if (q.x >= l.x0 - 2 && q.x + q.w <= l.x1 + 2) return true;
+        return false;
+    }
+    uint64_t between_drawn_ = 0, between_late_ = 0;
     // The C02 cabinet's turntables: the host's counts (1024 a turn) to the board's 0-255
     void turntable_add(int player, int delta) override {
         if (!c02_ || !link_ || player < 0 || player > 1) return;
@@ -712,6 +863,9 @@ public:
     void report() override {
         printf("hiraku-pc: %llu frames shown, %llu of them again while the game drew none\n", (unsigned long long)frame_,
                (unsigned long long)repeats_);
+        if (between_drawn_ || between_late_)   // --smooth-motion (render_between)
+            printf("hiraku-pc: smooth motion: %llu in-between pictures drawn by the game, %llu asked for and not answered\n",
+                   (unsigned long long)between_drawn_, (unsigned long long)between_late_);
         // Where a frame's time goes, from the game's start (frame_go) to its picture in the shell's
         // hands; the shell's "video:" line goes on from its frame start (here: the same moment,
         // unless --game-ahead) to the display
@@ -774,6 +928,7 @@ public:
             if (seq != seen) {
                 std::atomic_thread_fence(std::memory_order_acquire);
                 seen = seq;
+                shown_seq_ = seq;
                 if (++pics_ < per_frame_) {   // a picture between two shown (a 120 Hz game, a slower display): the next at once
                     go(seq);
                     last = std::chrono::steady_clock::now();

@@ -9,6 +9,7 @@ third, the CRT beam, for a CRT's sharpness in motion rather than more pictures):
 |---|---|---|---|
 | a clock (a hardware timer read each frame) | more vsyncs: the game draws more pictures (`[[rate]]` mods) | per game: docs/MODS.md | pop'n music 9-14 (Python) |
 | frames (each frame moves the notes a fixed step) | in-between pictures: HIRAKU draws them (`--smooth-motion`) | per core: every game on it | DJ Main, Firebeat, Twinkle, System 573 |
+| frames, on a Windows PC | in-between pictures: the game's own Direct3D draws them again, the notes moved (`--smooth-motion`) | the PC core (runtime/pc/) | beatmania IIDX RED to GOLD (9th style to EMPRESS) |
 
 To tell which one a game is: run its attract demo (or a play script) with the vsync at twice the
 rate. If the demo song takes the same number of frames (it plays twice as fast, out of step with
@@ -248,6 +249,37 @@ display start and drawing area at each VBLANK.
 
 Python (the PS2's GS) could have in-between pictures the same way, not done. For its
 clock-following games the `[[rate]]` way is better: the pictures are the game's own.
+
+## The PC beatmania IIDX games
+
+The PC IIDX games (9th style to EMPRESS) count everything in frames, the song's position too
+(PLAN.md section 36), so a faster vsync would play them faster: they get in-between pictures, but
+the game draws them itself. While smooth motion is on, HIRAKU's DLL in the game records each
+frame's drawing (the states set, the textures, and each draw's vertices: these games draw everything
+as quads in screen space, with no shaders) and lists its quads with the picture (link v11,
+runtime/pc/link.h). hiraku-pc pairs them with the frame before's (the same texture, size and x, the
+same place or lower), and for each of the frame's refreshes asks the game, still waiting for its next
+frame, to draw the frame again with the notes moved along the scroll's steady line
+(hiraku/scroll_guess.h); runtime/pc/d3d8.c and d3d9_smooth.c replay the recording between the frame's
+starting and ending states (state blocks) into a picture of their own, about 0.7 ms each. A frame's
+in-between pictures are all drawn when the window asks for the first; the game's next frame starts
+when it would have (given earlier, its controls were read a frame sooner).
+
+Only the notes move, and of the picture drawn again only the places a note was moved from and to are
+taken: the movie (its texture is the decoder's, written meanwhile), the gauge, the judgements and
+the effects stay as the game drew them. A quad is a note when it has fallen by the same step (within
+a pixel) for three frames, with the scroll, after half a second of play (something falling steadily
+all along), inside the lanes (where a bar line, wide and a pixel or two tall, has fallen in the last
+5 seconds), and note-sized (12 to 160 pixels wide, up to 64 tall). Each rule came from something
+else that moved: letters and score digits paired with the same ones a line up, a result screen's
+count-up and its sparks, attract mode's sliding pictures, a panel's rolling text. A frame drawn some
+other way (shaders, other render targets, indexed draws) isn't drawn again (pc.log says what, once).
+
+Checked under Wine in a virtual KWin, with the in-between pictures as snapshots (`--snap-between`):
+RED, HAPPY SKY, DistorteD and GOLD move the notes and bar lines in the lanes, nothing else, the
+notes never stepping back; with the game at 30 Hz on the 60 Hz display, each frame's second refresh
+showed one and the frames' timing was as without. Not yet: 9th style, 10th style, DJ TROOPERS and
+EMPRESS; a real 120/144/240 Hz display; real Windows (DWM's pacing).
 
 ## A CRT's motion clarity (`--crt-beam`)
 

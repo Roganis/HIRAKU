@@ -209,6 +209,12 @@ public:
         if ((int)m_pos.size() > N + 1) m_pos.erase(m_pos.begin());
     }
 
+    // Whether an object whose last move was (dx, dy) goes with the scroll (offset() then carries it
+    // along the scroll's steady line): the PC games move only those (runtime/pc/core.cpp)
+    bool scrolls(int dx, int dy) const {
+        return (dx || dy) && m_pos.size() >= 3 && std::fabs(dx - m_cx) <= 1.5 && std::fabs(dy - m_cy) <= 1.5 && dx * m_cx + dy * m_cy > 0;
+    }
+
     // Where an object whose last move was (dx, dy) goes, `t` of a frame on (t from 0; a frame shown
     // for two vblanks: the fraction of its move): (ox, oy) from its place in the frame. `obj`: its
     // index in frame()'s moves, for its own track

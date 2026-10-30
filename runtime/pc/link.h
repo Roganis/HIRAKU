@@ -16,7 +16,7 @@
 #include <stdint.h>
 
 #define HK_PC_LINK_MAGIC 0x4b50484bu   // "HKPK"
-#define HK_PC_LINK_VERSION 10u
+#define HK_PC_LINK_VERSION 11u
 #define HK_PC_WATCHES 8u                           // [[rate]]'s words of the game's memory
 
 // The pad's bits, as Konami's ezusb.dll gives them to pop'n music (usbPadRead)
@@ -123,6 +123,23 @@ struct hk_pc_link {
     volatile uint32_t game_hz_milli;
     // (v10) player 2's IC card for a second reader (beatmania IIDX 13: libacio's unit 1), as card_uid
     uint8_t card_uid2[8];
+    // (v11) In-between pictures for a display faster than the game (--smooth-motion, docs/SMOOTH.md),
+    // drawn again by the game's own device (runtime/pc/d3d8.c). hiraku-pc sets smooth; then with each
+    // picture it counts, the DLL lists the quads it drew at HK_PC_QUAD_LIST (quads_n of them, for the
+    // picture frame_seq becomes: quads_seq; none for a picture it can't draw again). While the game
+    // waits for frame_go, hiraku-pc asks for the picture again with each quad moved (HK_PC_QUAD_MOVE)
+    // by moving between_req on; the DLL draws it into the pixels at HK_PC_BETWEEN and sets
+    // between_done to it (between_ok: drawn, else none)
+    volatile uint32_t smooth;
+    volatile uint32_t quads_n, quads_seq;
+    volatile uint32_t between_req, between_done, between_ok;
+};
+
+// A quad the game drew (two triangles in screen space, one texture): the texture (its address, the
+// same from picture to picture), and the place it covers in whole pixels
+struct hk_pc_quad {
+    uint32_t tex;
+    int16_t x, y, w, h;
 };
 
 #define HK_PC_PIXELS 4096u                         // where the pixels start in the file
@@ -131,4 +148,8 @@ struct hk_pc_link {
 #define HK_PC_AUDIO (HK_PC_PIXELS + HK_PC_MAX_W * HK_PC_MAX_H * 4u)
 #define HK_PC_AUDIO_RATE 44100u
 #define HK_PC_AUDIO_FRAMES 16384u                  // a power of two
-#define HK_PC_LINK_SIZE (HK_PC_AUDIO + HK_PC_AUDIO_FRAMES * 8u)
+#define HK_PC_QUADS 1024u                          // in-between pictures: the quads listed at most
+#define HK_PC_QUAD_LIST (HK_PC_AUDIO + HK_PC_AUDIO_FRAMES * 8u)   // struct hk_pc_quad[HK_PC_QUADS]
+#define HK_PC_QUAD_MOVE (HK_PC_QUAD_LIST + HK_PC_QUADS * 12u)    // int16_t [HK_PC_QUADS][2]: x, y
+#define HK_PC_BETWEEN (HK_PC_QUAD_MOVE + HK_PC_QUADS * 4u)       // the in-between picture, as the pixels
+#define HK_PC_LINK_SIZE (HK_PC_BETWEEN + HK_PC_MAX_W * HK_PC_MAX_H * 4u)

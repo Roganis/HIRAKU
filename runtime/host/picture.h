@@ -87,6 +87,9 @@ bool prepare(Mode m);
 // beam's pass over the last two. -1: no beam for this draw.
 Mode draw(const uint32_t *rgb, int w, int h, int x, int y, int vw, int vh, int win_w, int win_h, Mode m, int view = 0,
           uint64_t frame = UINT64_MAX, double beam_phase = -1, double frames_per_hz = 0);
+// Where the window's picture is drawn: 0, the window's own framebuffer, or (Windows: dxgi.h) one
+// presented through a DXGI swap chain
+void set_window_fbo(unsigned fbo);
 // After draw: an ARGB picture (w x h, with its own alpha, times `alpha`) blended over the window,
 // drawn at (x, y, dw, dh) from the top left, its pixels sharp (host/notice.h's banner)
 void overlay(const uint32_t *argb, int w, int h, int x, int y, int dw, int dh, float alpha, int win_w, int win_h);

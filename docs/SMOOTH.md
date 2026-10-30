@@ -35,12 +35,14 @@ refresh):
   (runtime/host/pacing.cpp: `frame_exact` gives the frame's refreshes, `phase(i)` each one's
   moment, `commit_extra` commits it). The rest is display sync's (the commit's lead, the burst
   budget, the grid kept on the compositor's vblanks; the sound steered to its queue at speed 1).
-  On Windows there's no fifo: DWM's composition timing (runtime/host/dwm.cpp) gives the last
-  vblank and the refresh period, and each refresh's picture is committed at its own commit time
-  (half a refresh before its vblank; Windows says nothing of when a frame reached the screen, so
-  the lead isn't tuned as on Wayland). Checked under Wine only (pop'n music 4, beatmania: exact
-  speed, the in-between pictures counted as expected); on real Windows, not yet. Elsewhere (X11,
-  or Wayland without fifo-v1), or with display sync off, nothing changes;
+  On Windows there's no fifo: the display's vblanks (runtime/host/dwm.cpp: the graphics kernel's,
+  else DWM's estimate) give the last vblank and the refresh period, and each refresh's picture is
+  committed at its own commit time. The pictures go through a DXGI flip-model swap chain
+  (runtime/host/dxgi.cpp: OpenGL draws into a Direct3D texture, WGL_NV_DX_interop2), which keeps
+  each picture's turn as fifo does and says when it reached the screen: the lead is tuned from that
+  as on Wayland. Where the driver can't share OpenGL's pictures (Wine), OpenGL's own swap through
+  DWM, the lead half a refresh. Elsewhere (X11, or Wayland without fifo-v1), or with display sync
+  off, nothing changes;
 - the exit report says how many it showed (`video: smooth motion: N in-between pictures shown`).
 
 Use it: `--smooth-motion` (display sync on, the default), or the launcher's Settings > Display > "Smooth

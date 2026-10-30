@@ -250,6 +250,7 @@ std::string g_shaders_dir;
 std::vector<std::string> g_config_dirs;
 int g_monitor_khz = 0;   // set_monitor: the cabinet's monitor, for shaders/<name>/hiraku-<k>khz.params
 bool g_ok = false;
+GLuint g_window_fbo = 0;   // the window's picture goes here (set_window_fbo: DXGI's, on Windows)
 uint32_t g_draws = 0;
 uint32_t g_snap_frame = UINT32_MAX, g_snap_last = UINT32_MAX;   // HK_PICTURE_SNAP=FRAME[-LAST],FILE
 std::string g_snap_path;
@@ -1110,7 +1111,7 @@ Mode draw(const uint32_t *rgb, int w, int h, int x, int y, int vw, int vh, int w
     }
 
     // where the picture goes: the window, or (the beam) the kept picture it turns over to
-    GLuint fbo = 0;
+    GLuint fbo = g_window_fbo;
     int px = x, py = y, pw = win_w, ph = win_h;
     BeamKept &kept = g_kept[g_view];
     if (beam) {
@@ -1136,7 +1137,7 @@ Mode draw(const uint32_t *rgb, int w, int h, int x, int y, int vw, int vh, int w
         g_chain[g_view][k]->draw(w, h, px, py, vw, vh, pw, ph, next, frame_count, fbo);
     }
     if (beam) {   // this refresh: the beam's pass over the two latest pictures, into the window
-        gl.glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        gl.glBindFramebuffer(GL_FRAMEBUFFER, g_window_fbo);
         gl.glDisable(GL_FRAMEBUFFER_SRGB);
         gl.glViewport(0, 0, win_w, win_h);
         gl.glClearColor(0, 0, 0, 1);
@@ -1175,6 +1176,8 @@ Mode draw(const uint32_t *rgb, int w, int h, int x, int y, int vw, int vh, int w
     return m;
 }
 
+void set_window_fbo(unsigned fbo) { g_window_fbo = fbo; }
+
 void overlay(const uint32_t *argb, int w, int h, int x, int y, int dw, int dh, float alpha, int win_w, int win_h) {
     if (!g_ok || w <= 0 || h <= 0) return;
     if (!g_over) {
@@ -1190,7 +1193,7 @@ void overlay(const uint32_t *argb, int w, int h, int x, int y, int dw, int dh, f
     gl.glBindTexture(GL_TEXTURE_2D, g_over_tex);
     gl.glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
     gl.glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, w, h, 0, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, argb);
-    gl.glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    gl.glBindFramebuffer(GL_FRAMEBUFFER, g_window_fbo);
     gl.glDisable(GL_FRAMEBUFFER_SRGB);
     gl.glViewport(x, win_h - y - dh, dw, dh);
     gl.glUseProgram(g_over);

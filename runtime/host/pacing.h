@@ -23,9 +23,12 @@
 //   the frame's commit and k-1 empty ones, each waiting for the one before. Without it, KWin
 //   showed 1-10 % of frames a refresh early or late (its deadline wanders with its render-time
 //   estimate); with it, 0.03 % at 144 Hz (2 refreshes per frame) and 0.17 % at 240 Hz (4).
-// On Windows, DWM's composition timing (dwm.h) gives the refresh period and the last vblank: the
-// grid's phase each frame. There's no feedback on when a frame reached the screen, so the lead stays
-// half a refresh; smooth motion commits each refresh's picture at its own commit time.
+// On Windows, the display's vblanks (dwm.h: the graphics kernel's, else DWM's estimate) give the
+// refresh period and the grid's phase each frame; smooth motion commits each refresh's picture at
+// its own commit time. Presented through a DXGI flip-model swap chain (dxgi.h), each picture keeps
+// its turn (none replaced by the next) and its frame statistics say when it reached the screen: the
+// lead is found from that, as on Wayland. Through OpenGL's own swap there's no such feedback, and
+// the lead stays half a refresh.
 // Elsewhere (X11) the grid runs on the display mode's refresh rate, with an unknown phase.
 //
 // Off when the display doesn't fit (144 Hz for 58.49 Hz games), with fast-forward, or with

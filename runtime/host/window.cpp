@@ -41,6 +41,9 @@
 #include "picture.h"
 #include "input.h"
 #include "../core/prof.h"
+#ifdef _WIN32
+#include "dxgi.h"
+#endif
 
 namespace hk::host {
 
@@ -501,6 +504,34 @@ std::string raise_priority() {
 #endif
 }
 
+#ifdef _WIN32
+// The window's pictures through a DXGI flip-model swap chain (dxgi.h), where the driver lets
+// OpenGL draw into it; else OpenGL's own swap, as before
+static void start_dxgi() {
+    void *hwnd = SDL_GetPointerProperty(SDL_GetWindowProperties(g_win), SDL_PROP_WINDOW_WIN32_HWND_POINTER, nullptr);
+    int w = 0, h = 0;
+    SDL_GetWindowSizeInPixels(g_win, &w, &h);
+    std::string why;
+    if (hwnd && dxgi::start(hwnd, w, h, why)) fprintf(stderr, "video: presented through a DXGI flip-model swap chain\n");
+    else fprintf(stderr, "video: OpenGL's own swap (no DXGI flip-model swap chain: %s)\n", hwnd ? why.c_str() : "no window handle");
+    picture::set_window_fbo(dxgi::fbo());
+}
+#endif
+
+// The window's picture to the screen: through the DXGI swap chain on Windows, else OpenGL's swap.
+// sync: display pacing's (each picture in turn); extra: one of a frame's other refreshes' pictures
+// (dxgi::present may leave it out)
+static void swap_window(bool sync, bool extra = false) {
+#ifdef _WIN32
+    if (dxgi::on()) {
+        dxgi::present(sync, extra);
+        return;
+    }
+#endif
+    (void)sync, (void)extra;
+    SDL_GL_SwapWindow(g_win);
+}
+
 static bool open_window(const char *title, int scale, const std::string &bindings, int target_ms, bool fullscreen, int rate) {
     g_rate = rate;
     // the device's buffer: the sound server's quantum (PipeWire: node.latency)
@@ -593,6 +624,9 @@ static bool open_window(const char *title, int scale, const std::string &binding
         }
         if (fullscreen) SDL_SetWindowFullscreen(g_win, true);
         g_glFlush = (void (*)())SDL_GL_GetProcAddress("glFlush");
+#ifdef _WIN32
+        start_dxgi();
+#endif
         pacing::init(g_win, g_display_sync);
         return true;
     }
@@ -779,9 +813,13 @@ static void present_second(const uint32_t *rgb, int w, int h, double aspect, uin
         SDL_GetWindowSizeInPixels(g_win2, &ww, &wh);
         int vw = ww, vh = (int)std::lround(ww / aspect);
         if (vh > wh) vh = wh, vw = (int)std::lround(wh * aspect);
+        picture::set_window_fbo(0);   // (this window's own: the DXGI swap chain is the first's)
         picture::draw(rgb, w, h, (ww - vw) / 2, (wh - vh) / 2, std::max(1, vw), std::max(1, vh), ww, wh, g_mode, 1, frame);
         SDL_GL_SwapWindow(g_win2);
         SDL_GL_MakeCurrent(g_win, g_gl);
+#ifdef _WIN32
+        picture::set_window_fbo(dxgi::fbo());
+#endif
         return;
     }
     static int tw = 0, th = 0;
@@ -832,6 +870,10 @@ void window_present(const uint32_t *rgb, int w, int h, double vsec) {
         prof::Scope ps(prof::PRESENT);
         int ww = 0, wh = 0;
         SDL_GetWindowSizeInPixels(g_win, &ww, &wh);
+#ifdef _WIN32
+        dxgi::resize(ww, wh);   // the swap chain's buffers at the window's size (fullscreen, a resize)
+        picture::set_window_fbo(dxgi::fbo());
+#endif
         // letterboxed at the monitor's shape (Core::display_aspect), as SDL_LOGICAL_PRESENTATION_LETTERBOX
         // does: a 512x480 menu fills the same 4:3 as a 320x240 game
         const double aspect = frame_aspect;
@@ -880,7 +922,7 @@ void window_present(const uint32_t *rgb, int w, int h, double vsec) {
             g_frame_budget.hold(g_frame_start_ns);
         }
         if (!sync) pacing::observe();
-        SDL_GL_SwapWindow(g_win);
+        swap_window(sync);
         g_start_to_picture.add(g_frame_start_ns);
         // --smooth-motion: the frame's other refreshes each with a picture of its own, the core's
         // in-between one (what moves further along its move), instead of the frame held
@@ -903,7 +945,7 @@ void window_present(const uint32_t *rgb, int w, int h, double vsec) {
                 picture::draw(rgb, w, h, (ww - vw) / 2, (wh - vh) / 2, vw, vh, ww, wh, g_mode, 0, number, pacing::phase(i), beam_fph);
                 draw_overlays(ww, wh);
                 pacing::commit_extra(i);
-                SDL_GL_SwapWindow(g_win);
+                swap_window(true, true);
                 continue;
             }
             if (i > 1) bw = w, bh = h, between = core().render_between(pacing::phase(i), bw, bh);
@@ -912,7 +954,7 @@ void window_present(const uint32_t *rgb, int w, int h, double vsec) {
             picture::draw(between, bw, bh, (ww - vw) / 2, (wh - vh) / 2, vw, vh, ww, wh, g_mode, 0, number);
             draw_overlays(ww, wh);
             pacing::commit_extra(i);
-            SDL_GL_SwapWindow(g_win);
+            swap_window(true, true);
         }
         if (g_split) present_second(g_half[1].data(), w, h, frame_aspect, number);
         if (shown != g_shown) {
@@ -1289,6 +1331,9 @@ std::string audio_describe() {
         out += "\nvideo: CRT beam: " + std::to_string(g_beam_frames) + " frames through it" +
                (g_beam_without ? ", " + std::to_string(g_beam_without) + " without (" + g_beam_why + ")" : std::string());
     if (std::string sc = pacing::scanout_describe(); !sc.empty()) out += "\n" + sc;
+#ifdef _WIN32
+    if (std::string d = dxgi::describe(); !d.empty()) out += "\n" + d;
+#endif
     if (const StartToPicture &l = g_start_to_picture; l.n) {
         snprintf(b, sizeof b,
                  "\nvideo: from a frame starting (the controls read) to its picture handed to the display: mean %.1f ms, "
@@ -1329,6 +1374,9 @@ void window_close() {
     if (g_ren2) SDL_DestroyRenderer(g_ren2);
     if (g_win2) SDL_DestroyWindow(g_win2);
     if (g_gl) {
+#ifdef _WIN32
+        dxgi::stop();
+#endif
         picture::shutdown();
         SDL_GL_DestroyContext(g_gl);
     }

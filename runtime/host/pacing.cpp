@@ -14,6 +14,7 @@
 #include "../core/prof.h"
 #ifdef _WIN32
 #include "dwm.h"
+#include "dxgi.h"
 #endif
 
 #ifdef HK_WITH_WAYLAND
@@ -289,6 +290,56 @@ void wayland_shutdown() {
 }
 #endif
 
+#ifdef _WIN32
+// The DXGI swap chain's frame statistics (dxgi.h): the latest picture that reached the screen, and
+// when. Each picture is noted with its present number as it goes; the statistics, read before each
+// present (the last picture's refresh has come by then) and each frame, name the latest shown, whose
+// time goes to presented() as Wayland's feedback does. Those shown between two readings are counted
+// without a time (the cadence check then starts again)
+bool g_dxgi = false;
+struct Sent {
+    uint32_t id;
+    int64_t target, committed;
+    bool overrun;
+    int k;   // the frame's refreshes; -1: one of its other refreshes' pictures (commit_extra)
+};
+std::vector<Sent> g_sent;
+uint32_t g_seen_id = 0;
+
+void dxgi_feedback() {
+    dxgi::Shown s;
+    if (!dxgi::shown(s) || s.id == g_seen_id) return;
+    g_seen_id = s.id;
+    n_shown++;
+    if (s.direct) n_zero_copy++;
+    size_t used = 0;
+    for (; used < g_sent.size() && g_sent[used].id <= s.id; used++) {
+        const Sent &p = g_sent[used];
+        if (p.id < s.id) {   // shown, when not read
+            if (p.k < 0) n_extra_shown++;
+            else n_presented++, g_prev_t = 0;
+            continue;
+        }
+        const int64_t t = s.vblank_ns - (int64_t)s.since * g_T;
+        if (p.k >= 0) {
+            presented(t, p.committed, p.target, p.overrun, 0, p.k);
+        } else {
+            n_extra_shown++;
+            if (t - p.target > g_T / 2) n_extra_late++;
+        }
+    }
+    g_sent.erase(g_sent.begin(), g_sent.begin() + (long)used);
+}
+
+// A picture about to be presented (k as Sent's): its present number the next one
+void dxgi_sent(int64_t target, int k) {
+    const Sent e{dxgi::last_present() + 1, target, (int64_t)prof::now_ns(), k >= 0 && g_overrun, k};
+    if (!g_sent.empty() && g_sent.back().id == e.id) g_sent.back() = e;   // the one before was left out (dxgi::present)
+    else g_sent.push_back(e);
+    if (g_sent.size() > 64) g_sent.erase(g_sent.begin());
+}
+#endif
+
 }  // namespace
 
 void init(SDL_Window *win, bool enabled) {
@@ -306,6 +357,7 @@ void init(SDL_Window *win, bool enabled) {
     if (enabled) dwm::start(win ? SDL_GetPointerProperty(SDL_GetWindowProperties(win), SDL_PROP_WINDOW_WIN32_HWND_POINTER, nullptr) : nullptr);
     int64_t v, p;
     if (enabled && dwm::vblank(v, p)) g_dwm = true, g_T = dwm_period(p), g_T_exact = true;
+    g_dxgi = dxgi::on();
 #endif
     if (!enabled) announce("disabled", "off (--display-sync off): frames are shown as they come");
 }
@@ -331,6 +383,9 @@ void display_changed() {
 }
 
 void pump() {
+#ifdef _WIN32
+    if (g_dxgi) dxgi_feedback();
+#endif
 #ifdef HK_WITH_WAYLAND
     if (!g_wd || !g_pres) return;
     while (wl_display_prepare_read_queue(g_wd, g_q) != 0) wl_display_dispatch_queue_pending(g_wd, g_q);
@@ -492,6 +547,9 @@ void wait_commit() {
 }
 
 void commit() {
+#ifdef _WIN32
+    if (g_dxgi) dxgi_feedback(), dxgi_sent(g_target, g_k);
+#endif
 #ifdef HK_WITH_WAYLAND
     if (g_pres) {
         struct wp_presentation_feedback *fb = wp_presentation_feedback(g_pres, g_surface);
@@ -559,6 +617,9 @@ void commit_extra(int i) {
     }
 #endif
     if (g_dwm) sleep_until(g_target + (int64_t)i * g_T - g_lead);
+#ifdef _WIN32
+    if (g_dxgi) dxgi_feedback(), dxgi_sent(g_target + (int64_t)i * g_T, -1);
+#endif
 }
 
 void wait_next() {
@@ -568,6 +629,9 @@ void wait_next() {
 }
 
 void observe() {
+#ifdef _WIN32
+    if (g_dxgi) dxgi_feedback();   // (the frames that went out directly: scanout_describe)
+#endif
 #ifdef HK_WITH_WAYLAND
     if (!g_pres) return;
     pump();
@@ -603,7 +667,9 @@ std::string describe() {
 #ifdef HK_WITH_WAYLAND
              g_fifo ? " (fifo)" : "",
 #elif defined(_WIN32)
-             g_dwm ? dwm::kernel() ? " (the display's vblank)" : " (DWM's vblank)" : "",
+             !g_dwm ? ""
+             : g_dxgi ? dwm::kernel() ? " (the display's vblank, DXGI flip model)" : " (DWM's vblank, DXGI flip model)"
+             : dwm::kernel() ? " (the display's vblank)" : " (DWM's vblank)",
 #else
              "",
 #endif

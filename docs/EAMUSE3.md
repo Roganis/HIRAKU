@@ -1263,10 +1263,10 @@ The calls, what the game does with the answers (bm2dx JAH), and HIRAKU's answers
     (HIRAKU: the date, YYYYMMDD).
 - **grade raised**: SOK.
 
-## beatmania IIDX RED, HAPPY SKY and DistorteD (PC games)
+## beatmania IIDX 10th style, RED, HAPPY SKY and DistorteD (PC games)
 
-RED (`E11`), HAPPY SKY (`ECO`) and DistorteD (`FDD`) carry their network library (libjnet) in
-`bm2dx.exe`; services, posevent, pcbtracker and numbering are pop'n 9's. RED and HAPPY SKY speak 9th
+10th style (`D01`), RED (`E11`), HAPPY SKY (`ECO`) and DistorteD (`FDD`) carry their network library (libjnet) in
+`bm2dx.exe`; services, posevent, pcbtracker and numbering are pop'n 9's. 10th style, RED and HAPPY SKY speak 9th
 style's dialect, the module named after the model: `<E11 method="pc" command="get CARD 0"/>`, the
 answer `<E11 status="SOK" method="pcget" .../>` (method the method and the command's first word).
 libjnet's method tables (RED JAD 0x4ea288 shop, 0x4ea318 grade, 0x4ea368 weekly, 0x4ea3b8 ranking,
@@ -1291,10 +1291,21 @@ element depth. Attribute readers: 0x476230 a number, 0x476370 the status, 0x4765
   PLAY, 2 EASY CLEAR, 5 FULL COMBO.
 - **grade raised** `ID ... SHOP PREFECTURE` after a dan course.
 
+10th style the same, with these differences (JAE's tables from 0x4cc374): its calls are by card
+number, not IIDX ID (`music reg CARD chart song pgreat great djlevel clear`, `music getrank CARD 120`);
+`pc reg CARD NAME PIN x y z SP-POINTS DP-POINTS`; no `pc save` (pc has get, reg, takeover, inquiry,
+ifinish, locaend; music getrank, reg, getranking, play). Its getrank letters pack the clear in two bits
+and the EX score in 14: song << 19 | DJ level << 16 | clear << 14 | EX (JAE 0x46ac50); the clear is 0
+none, 1 EASY CLEAR, 2 CLEAR, 3 FULL COMBO, which music reg sends as it is (JAE 0x434940: 3 when the
+max combo is the notes' count, 1 when an easier option was on). userid ctou (KONAMI ID) is asked of a
+returning card (112: none).
+
 DistorteD's libjnet sends each kind of call as a module of its own with attributes: `<pc method="get"
 ver="1" rid="REFID"/>`, `<music method="crate" ver="1" cltype="0"/>`, `<shop method="sentinfo" lid
-pid opname bnum bflg/>`; answers `<pc status="0" method="pcget" ...>` (status a number; an answer
-without method isn't read). Its tables at JAG 0x5e2a68 (shop) ... 0x5e2c34 (pc); its tasks (JAG
+pid opname bnum bflg/>`; answers are named after the model, `<FDD status="0" method="pcget" ...>`
+(status a number; method the module's and the call's names). The game adds its modules to its
+library (`eam3lib.dll`'s xrpc) as one, `FDD`, which takes an answer by that name only: an answer
+named `pc` is dropped and the call fails (a returning pass then plays as a guest). Its tables at JAG 0x5e2a68 (shop) ... 0x5e2c34 (pc); its tasks (JAG
 0x4d24e0, a request builder each): 9 pc get (rid), 10 getname, 11 common, 12 lcommon, 13 pc reg (cid
 rid name pid), 14 save (iidxid cltype achi pnum opt opt2 gno sflg0-2 sdhd ncomb mcomb mode), 15
 takeover (from HAPPY SKY: name pid oiidxid_str cid rid), 16 ifinish, 17 locaend, 18 playstart (side),
@@ -1302,7 +1313,10 @@ takeover (from HAPPY SKY: name pid oiidxid_str cid rid), 16 ifinish, 17 locaend,
 server doesn't know: the game asks its new PIN twice, then getrefid), authpass, bindmodel; facility at
 start-up. `pc get`'s answer carries `name`, `pass` and `pid` itself (JAG 0x4ce7c0) and the record as a
 `<pc>` child (0x4ce840), read element by element (none required), then grade, ex, skin, rlist, ocrs,
-weekly.
+weekly. Scores as GOLD's (below): `music reg` after a STANDARD stage (iidxid clid mid pgnum gnum rid
+cflg pid wid oppid opname opt opt2 pside sh: JAG 0x4d0c30), `music breg` after a BEGINNER one (mid
+pgnum gnum rid cflg, no chart), `music getrank iidxid cltype` answered with GOLD's `<r v>` letters (JAG
+0x4cd600); `pc save` at the credit's end (iidxid cltype achi pnum gno sflg0-2 sdhd ncomb mcomb mode opt).
 
 ## beatmania IIDX GOLD, DJ TROOPERS and EMPRESS (PC games, libavs)
 
@@ -1331,23 +1345,28 @@ unless said):
   and more; **music breg** (BEGINNER) `iidxid mid pgnum gnum rid cflg`. **music getrank** `iidxid
   cltype`: `<r v="VERSION">` elements (GOLD 0x4947a0; v the song's mid / 100), their text 5 letters a
   chart from "0123456789:;", a-z, A-Z (six bits each, the first highest): the song within the version
-  << 23 | chart << 19 | EX << 6 | clear << 3 | DJ level (3 letters a song when v is -1). Kept, not
-  checked on screen yet.
+  << 23 | chart << 19 | EX << 6 | DJ level << 3 | clear (3 letters a song when v is -1). An r's text
+  is read into 1024 bytes: 200 entries an element at most (a version in several). The clear is
+  music reg's cflg as the game sends it: GOLD and DJ TROOPERS 0 NO PLAY, 1 FAILED, 2 ASSIST CLEAR
+  ... 6 FULL COMBO; DistorteD 1 FAILED, 2 EASY CLEAR, 3 CLEAR, 4 HARD CLEAR, 5 FULL COMBO (checked
+  on each game's music select; GOLD's and DJ TROOPERS' 3-5 not seen). DistorteD and GOLD show the DJ
+  level sent; DJ TROOPERS works it out from the EX score.
 - **pc save** at the credit's end: `iidxid cltype achi pnum opt opt2 gno sflg0-2 sdhd ncomb mcomb mode
   pmode lid` and GOLD's `now_g all_g use_g`.
 
 EMPRESS (`I00`, its e-AMUSE3 in `libavs-win32-ea3.dll`; method definitions at 0x57decc...: three
 routines a method, the parser last) the same, and: `pc reg` sends `did`; `pc get`'s pcdata adds
 `lift_len`, and `jnum` (s64) and `bjnum` (18 s32) are needed; `skin` is optional but, if given, 12
-u16 (an empty one fails the call); `ex` holds `e` children; music reg/play add `frate`; getrank's
-answer is another form (`<m>`, `<best rno>`, `<b>`, `<t>`), not answered yet. libavs logs a parser's
+u16 (an empty one fails the call); `ex` holds `e` children; music reg/play add `frate` and send no `rid`; getrank
+(0x4b1a40) is another form: an `<m __type="s16" __count="8">` a song, `ROW MID C0 C1 C2 E0 E1 E2`
+(ROW -1 the player's own, 0-4 a rival's; the NORMAL, HYPER and ANOTHER charts' clears, then their
+EX scores; cltype 1 asks the DP charts), and `<best rno>` (20 u16), `<b>`, `<t>` (2 u16 each), not
+needed. Its clears: 1 FAILED, 3 EASY CLEAR, 4 CLEAR (checked on music select); it works the DJ level
+out itself. libavs logs a parser's
 failure as "res: receiver returns failure" (`HK_PC_AVS_LOG`). A new pass is asked to accept terms
 (a page of its own) before NAME ENTRY.
 
 ## Not known yet
-
-- Why DistorteD plays a returning pass as a guest after its `pc get` (PLAN.md section 36): its
-  parser takes what it is given (above), and the answer now has GOLD's elements too.
 
 - What `alter` and `aflag` are for; what the pop'n friends statuses 600 and 601
   mean to a player.

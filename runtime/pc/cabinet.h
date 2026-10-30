@@ -80,6 +80,7 @@ void *hk_patch_slot(void **slot, void *to);  // a pointer (a vtable's, an import
 void hk_place_window(void *hwnd);            // the game's window, hidden while HIRAKU's shows it
 void hk_put_pixels(const void *bits, int pitch, unsigned w, unsigned h, int format);   // D3DFORMAT's numbers
 void hk_present_begin(void);                 // each Present: the mods' patches, the debug watch
+void hk_watch_thread(void);                   // a thread starting: the debug watch on it too (HK_PC_WATCH)
 void hk_picture_drawn(int captured);         // a picture (in the link if captured): counted, then wait for the next frame
 void *__stdcall hk_Direct3DCreate8(unsigned sdk);   // d3d8.c: the game's Direct3D 8 (beatmania IIDX 9th style)
 // HIRAKU's DirectSound (dsound.c): the game's, when HIRAKU's window shows it

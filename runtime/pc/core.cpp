@@ -389,6 +389,18 @@ public:
             rteffect = rteffect || lower == "rteffect.dll";
         }
         if (rteffect && !copy_in(bin_dir() + "/pc/c02/RtEffect.dll", run_prog_ + "/RtEffect.dll")) return false;
+        // 10th style checks its folder's files against bm2dx.sdx (else HDD DATA ERROR (PROG CHKSUM)):
+        // Konami's RtEffect.dll is kept beside HIRAKU's, and what the game reads as a file (cabinet.c)
+        if (rteffect) {
+            std::string konami;
+            for (const std::string &f : list_files(program_)) {
+                std::string lower = f;
+                for (char &c : lower) c = (char)std::tolower((unsigned char)c);
+                if (lower == "rteffect.dll") konami = program_ + "/" + f;
+            }
+            if (!copy_in(konami, run_prog_ + "/RtEffect.konami")) return false;
+            set_env("HK_PC_RTEFFECT_FILE", win_path(run_prog_ + "/RtEffect.konami"));
+        }
         set_env("HK_PC_BOARD_IN_ACIO", rteffect ? "" : "1");
         set_env("HK_PC_SECURITY", m["security"]);
         set_env("HK_PC_BOARD", m["io"] == "fx2" ? "fx2" : "d01");   // io=fx2: the later IO2 board (DJ TROOPERS on)
@@ -1447,14 +1459,19 @@ private:
                 for (char &c : lower) c = (char)std::tolower((unsigned char)c);
                 d3dx_own = d3dx_own || lower == "d3dx9_24.dll";
             }
+        // Every IIDX in Japanese: its text is Shift-JIS (Wine's code page 932), the operator menu's
+        // messages too (10th style's were garbled without)
+        const bool iidx_ja = family_ == "iidx" && !(pc64_ || pc32_);
+        const bool own_lc = pc64_ || pc32_ || iidx_ja, own_dlls = pc64_ || pc32_ || d3dx_own;
         for (char **e = environ; *e; e++)
-            if (!(pc64_ || pc32_ || d3dx_own) || (strncmp(*e, "LC_ALL=", 7) && strncmp(*e, "WINEDLLOVERRIDES=", 17))) env.push_back(*e);
-        if (d3dx_own) {   // and Japanese (its D3DX text is Shift-JIS: Wine's code page 932)
-            env_own.push_back("LC_ALL=ja_JP.UTF-8");
+            if (!(own_lc && !strncmp(*e, "LC_ALL=", 7)) && !(own_dlls && !strncmp(*e, "WINEDLLOVERRIDES=", 17))) env.push_back(*e);
+        if (iidx_ja) env_own.push_back("LC_ALL=ja_JP.UTF-8");
+        if (d3dx_own) {
             const char *more = getenv("WINEDLLOVERRIDES");
             env_own.push_back(std::string("WINEDLLOVERRIDES=d3dx9_24=n,b") + (more && *more ? std::string(";") + more : ""));
-            for (std::string &e : env_own) env.push_back(e.data());
         }
+        if (iidx_ja)
+            for (std::string &e : env_own) env.push_back(e.data());
         if (pc32_) {
             env_own.push_back("LC_ALL=ja_JP.UTF-8");
             env_own.push_back(std::string("WINEDLLOVERRIDES=mscoree=;mshtml=") + (dxvk32_ ? ";d3d9=n,b" : ""));

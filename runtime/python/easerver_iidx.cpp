@@ -30,6 +30,7 @@
 #include "python/easerver_parts.h"
 
 #include <algorithm>
+#include <array>
 #include <cstdio>
 #include <cstdlib>
 #include <ctime>
@@ -367,7 +368,8 @@ std::string EamuseServer::answer_iidx_red(const std::string &game, const Request
     // music getrank ID n, as a card is read: per chart a child cl="chart" whose text is 5 letters
     // a song from "0123456789:;", a-z, A-Z (6 bits each, the first highest): the song (bits 19-29),
     // the DJ level (16-18), the clear (13-15: 0 NO PLAY, 2 EASY CLEAR, 5 FULL COMBO as music select
-    // shows them), the EX score (0-12); RED JAD 0x479720, 1200 at most
+    // shows them), the EX score (0-12); RED JAD 0x479720, 1200 at most. 10th style (JAE 0x46ac50) the
+    // same, but its clear is 2 bits (14-15) and its EX score 14 (0-13)
     const std::string scores_file = "iidx-" + game + "-scores";
     std::vector<Record> scores = from_lines(read_file(scores_file));
     if (method == "music" && cmd == "reg") {
@@ -401,8 +403,10 @@ std::string EamuseServer::answer_iidx_red(const std::string &game, const Request
             std::string text;
             for (const Record &x : scores) {
                 if (get(x, "id") != arg(1) || field(x, "cl") != cl || n >= 1200) continue;
+                const bool tenth = game == "D01";
                 const uint32_t v = (uint32_t)(field(x, "mid") & 0x7ff) << 19 | (uint32_t)(field(x, "lv") & 7) << 16 |
-                                   (uint32_t)(field(x, "clear") & 7) << 13 | (uint32_t)std::min(ex(x), 0x1fffL);
+                                   (tenth ? (uint32_t)(field(x, "clear") & 3) << 14 | (uint32_t)std::min(ex(x), 0x3fffL)
+                                          : (uint32_t)(field(x, "clear") & 7) << 13 | (uint32_t)std::min(ex(x), 0x1fffL));
                 for (int k = 4; k >= 0; k--) text += letters[v >> (6 * k) & 63];
                 n++;
             }
@@ -422,23 +426,31 @@ std::string EamuseServer::answer_iidx_red(const std::string &game, const Request
 
 // --- DistorteD (FDD): libjnet again (JAG: tables at 0x5e2a68 shop ... 0x5e2c34 pc), each kind of
 // call a module of its own with attributes, <pc method="get" ver="1" rid="REFID"/>; an answer is
-// <pc status="0" method="pcget">: status a number this time (0 fine), method as RED's (an answer
-// without it isn't read: the call fails). The pass is cardmng's (easerver_popn.cpp): a new one is
+// <FDD status="0" method="pcget">: named after the model, as RED's (the game adds its modules as one,
+// FDD, and its library, eam3lib, takes an answer by that name: one named pc was dropped and the call
+// failed, a returning pass then played as a guest); status a number this time (0 fine), method the
+// module's and the call's names (else the call fails). The pass is cardmng's (easerver_popn.cpp): a new one is
 // registered by the game (its PIN twice, getrefid), then its DJ name entered and sent with pc reg.
 //   pc reg rid name pid cid: the player made; the answer's id is the IIDX ID
 //   pc get rid: the player (JAG 0x4ce840: <pc id idstr name pid spnum dpnum sach dach sflg0-2 gno hdsd
 //     sp_opt dp_opt dp_opt2 mcomb ncomb mode/>, then grade, ex, skin, rlist, ocrs, weekly: not kept yet)
 //   pc save iidxid cltype ... after the credit: its fields kept and given back by pc get
+//   music reg, getrank: GOLD's (below); music breg (BEGINNER's stages, no chart): not kept
 std::string EamuseServer::answer_iidx_fdd(const std::string &game, const Request &r) {
     // DistorteD's calls (FDD) and GOLD's (GLD, over libavs): each answer's fields as the game's reply
     // parsers read them (GOLD 0x495e70 pc.get, 0x497b80 pc.reg, ...: docs/EAMUSE3.md); a field or
     // element they read and don't find fails the call (the network library's status -10), and the
     // player is played as a guest ("e-AMUSEMENT PASS not used")
     const std::string &mod = r.module, method = r.method;
+    // DistorteD's library (eam3lib) takes the answer by the name its modules were added under, the
+    // model's (as RED's: <FDD method="pcget">), though it names the call by the module (<pc method="get">);
+    // libavs (GOLD on) by the module's
+    const std::string el = game == "FDD" ? game : mod;
     auto ok = [&](const std::string &attrs = "", const std::string &children = "") {
-        const std::string head = "<" + mod + " status=\"0\" method=\"" + esc(mod + method) + "\"" + attrs;
-        return children.empty() ? head + "/>" : head + ">" + children + "</" + mod + ">";
+        const std::string head = "<" + el + " status=\"0\" method=\"" + esc(mod + method) + "\"" + attrs;
+        return children.empty() ? head + "/>" : head + ">" + children + "</" + el + ">";
     };
+    auto failed = [&](const std::string &m) { return "<" + el + " status=\"1\" method=\"" + esc(mod + m) + "\"/>"; };
     std::vector<Record> players = from_lines(read_file("iidx-" + game + "-players"));
     auto player = [&](const std::string &k, const std::string &v) -> Record * {
         for (Record &p : players)
@@ -453,7 +465,7 @@ std::string EamuseServer::answer_iidx_fdd(const std::string &game, const Request
     auto idstr = [](const std::string &id) { return id.size() == 8 ? id.substr(0, 4) + "-" + id.substr(4) : id; };
     if (mod == "pc" && method == "reg") {   // the IIDX ID, and as written on the screen
         const std::string rid = attr(r.attrs, "rid");
-        if (!safe_name(rid)) return "<pc status=\"1\" method=\"pcreg\"/>";
+        if (!safe_name(rid)) return failed("reg");
         Record *p = player("rid", rid);
         if (!p) {
             long id = 10000000;   // IIDX IDs in turn, from 1000-0001
@@ -473,13 +485,13 @@ std::string EamuseServer::answer_iidx_fdd(const std::string &game, const Request
         // DistorteD (JAG 0x4ce7c0): the answer itself names the player and gives the pass's PIN, its
         // record is a child named pc (hdsd, not GOLD's sdhd; no pmode), and no gold
         const Record *p = player("rid", attr(r.attrs, "rid"));
-        if (!p) return "<pc status=\"1\" method=\"pcget\"/>";
+        if (!p) return failed("get");
         const bool fdd = game == "FDD";
         const std::string id = get(*p, "id");
         std::string attrs = a("id", id) + a("idstr", idstr(id)) + a("name", get(*p, "name")) + a("pid", field(*p, "pid"));
-        for (const char *k : {"spnum", "dpnum", "sach", "dach", "sflg0", "sflg1", "sflg2", "gno", fdd ? "hdsd" : "sdhd", "sp_opt",
+        for (const char *k : {"spnum", "dpnum", "sach", "dach", "sflg0", "sflg1", "sflg2", "gno", "sdhd", "sp_opt",
                               "dp_opt", "dp_opt2", "mcomb", "ncomb", "mode"})
-            attrs += a(k, field(*p, k));
+            attrs += a(fdd && std::string(k) == "sdhd" ? "hdsd" : k, field(*p, k));   // (pc save sends it as sdhd)
         const std::string sgid = get(*p, "sgid"), dgid = get(*p, "dgid");
         const std::string rest = "<grade" + a("sgid", sgid.empty() ? "-1" : sgid) + a("dgid", dgid.empty() ? "-1" : dgid) +
                                  "/><ex></ex>" + (game == "I00" ? "" : "<skin></skin>") + "<rlist></rlist>";   // (EMPRESS: skin, if given, 12 u16)
@@ -498,7 +510,7 @@ std::string EamuseServer::answer_iidx_fdd(const std::string &game, const Request
     }
     if (mod == "pc" && method == "getname") {   // a pass's player, by its ref id (the takeover's)
         const Record *p = player("rid", attr(r.attrs, "rid"));
-        if (!p) return "<pc status=\"1\" method=\"pcgetname\"/>";
+        if (!p) return failed("getname");
         return ok(a("name", get(*p, "name")) + a("idstr", idstr(get(*p, "id"))) + a("pid", field(*p, "pid")));
     }
     if (mod == "pc" && method == "save") {   // by IIDX ID: the record's fields as the game sends them
@@ -509,12 +521,13 @@ std::string EamuseServer::answer_iidx_fdd(const std::string &game, const Request
         }
         return ok();
     }
-    // GOLD's scores: music reg after a stage (mid, the chart clid, pgnum and gnum, rid the DJ level
+    // GOLD's scores (DistorteD's the same, JAG 0x4d0c30 and 0x4cd600): music reg after a stage (mid, the chart clid, pgnum and gnum, rid the DJ level
     // 0 AAA ... 7 F, cflg the clear), the best kept by IIDX ID, song and chart; music getrank as a
     // pass is read: an r element per version (v: mid / 100), 5 letters a chart from "0-9:;a-zA-Z"
     // (6 bits each, the first highest): the song in the version << 23 | chart << 19 | EX << 6 |
-    // clear << 3 | DJ level (GOLD 0x4947a0)
-    if (game != "FDD" && mod == "music" && method == "reg") {
+    // DJ level << 3 | clear (GOLD 0x4947a0; checked on DistorteD's music select: clear 1 FAILED,
+    // 2 EASY CLEAR, 3 CLEAR, 4 HARD CLEAR, 5 FULL COMBO, as music reg's cflg; DJ level 0 AAA ... 7 F)
+    if (mod == "music" && method == "reg") {
         const std::string iidxid = attr(r.attrs, "iidxid"), mid = attr(r.attrs, "mid"), clid = attr(r.attrs, "clid");
         if (safe_name(iidxid) && safe_name(mid) && safe_name(clid)) {
             std::vector<Record> scores = from_lines(read_file("iidx-" + game + "-scores"));
@@ -528,7 +541,7 @@ std::string EamuseServer::answer_iidx_fdd(const std::string &game, const Request
                 best = &scores.back();
             }
             (*best)["ex"] = std::to_string(std::max(field(*best, "ex"), ex));
-            (*best)["rid"] = std::to_string(std::min(field(*best, "rid"), rid));
+            if (!attr(r.attrs, "rid").empty()) (*best)["rid"] = std::to_string(std::min(field(*best, "rid"), rid));   // (EMPRESS sends none)
             (*best)["clear"] = std::to_string(std::max(field(*best, "clear"), cflg));
             (*best)["plays"] = std::to_string(field(*best, "plays") + 1);
             std::string text;
@@ -537,19 +550,41 @@ std::string EamuseServer::answer_iidx_fdd(const std::string &game, const Request
         }
         return ok(a("mid", mid) + a("clid", clid) + a("crate", "0") + a("frate", "0"));
     }
-    if (game != "FDD" && mod == "music" && method == "getrank") {
+    // EMPRESS's music getrank iidxid cltype (0 SP, 1 DP): an m element per song, 8 s16: the row (-1
+    // the player's own, 0-4 a rival's), the song, its three charts' clears (NORMAL, HYPER, ANOTHER)
+    // and their EX scores (I00 0x4b1a40; best, b and t, not needed, left out)
+    if (game == "I00" && mod == "music" && method == "getrank") {
+        const long side = std::atol(attr(r.attrs, "cltype").c_str()) == 1 ? 1 : 0;
+        std::map<long, std::array<long, 6>> songs;   // mid: clears, EX scores
+        for (const Record &x : from_lines(read_file("iidx-" + game + "-scores"))) {
+            const long cl = field(x, "cl") - 3 * side;
+            if (get(x, "id") != attr(r.attrs, "iidxid") || cl < 0 || cl > 2) continue;
+            auto &e = songs.try_emplace(field(x, "mid"), std::array<long, 6>{}).first->second;
+            e[cl] = field(x, "clear"), e[3 + cl] = std::min(field(x, "ex"), 32767L);
+        }
+        std::string children;
+        for (const auto &[mid, e] : songs) {
+            children += "<m __type=\"s16\" __count=\"8\">-1 " + std::to_string(mid);
+            for (long v : e) children += " " + std::to_string(v);
+            children += "</m>";
+        }
+        return ok("", children);
+    }
+    if (mod == "music" && method == "getrank") {
         static const char letters[] = "0123456789:;abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
         std::map<long, std::string> by_version;
         for (const Record &x : from_lines(read_file("iidx-" + game + "-scores"))) {
             if (get(x, "id") != attr(r.attrs, "iidxid")) continue;
             const long mid = field(x, "mid");
             const uint32_t v = (uint32_t)(mid % 100 & 0x7f) << 23 | (uint32_t)(field(x, "cl") & 15) << 19 |
-                               (uint32_t)(field(x, "ex") & 0x1fff) << 6 | (uint32_t)(field(x, "clear") & 7) << 3 | (uint32_t)(field(x, "rid") & 7);
+                               (uint32_t)(field(x, "ex") & 0x1fff) << 6 | (uint32_t)(field(x, "rid") & 7) << 3 | (uint32_t)(field(x, "clear") & 7);
             std::string &t = by_version[mid / 100];
             for (int k = 4; k >= 0; k--) t += letters[v >> (6 * k) & 63];
         }
+        // (GOLD reads an r's text into 1024 bytes: 200 entries an element, a version in as many as it takes)
         std::string children;
-        for (const auto &[ver, t] : by_version) children += "<r" + a("v", std::to_string(ver)) + ">" + t + "</r>";
+        for (const auto &[ver, t] : by_version)
+            for (size_t at = 0; at < t.size(); at += 5 * 200) children += "<r" + a("v", std::to_string(ver)) + ">" + t.substr(at, 5 * 200) + "</r>";
         return ok("", children);
     }
     if (mod == "pc" && method == "common")   // the shop's VIP grade (gshop needed), nothing else

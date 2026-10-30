@@ -16,13 +16,13 @@
 #include "cabinet.h"
 #include "c02_setup.h"
 
-// --- a new cabinet (as 9th style's, ezusb_c02.c): the operator settings (RED 0xc18 bytes, HAPPY SKY
-// 0x202c, DistorteD 0x2270; a checksum at +0x6c) are loaded at start-up over the game's defaults, from settings.bin on
+// --- a new cabinet (as 9th style's, ezusb_c02.c): the operator settings (10th style 0xbb0 bytes, RED 0xc18, HAPPY SKY
+// 0x202c, DistorteD 0x2270; a checksum just after the clock word) are loaded at start-up over the game's defaults, from settings.bin on
 // each backup drive. With none saved yet the start-up says BACKUP DATA ERROR, and the settings' check
-// (RED JAD 0x44a650, HAPPY SKY JAD 0x43de30) CLOCK ERROR: the "clock set" word (+0x68) is 0 until the
+// (RED JAD 0x44a650, HAPPY SKY JAD 0x43de30) CLOCK ERROR: the "clock set" word (RED +0x68, 10th +0x64) is 0 until the
 // operator's CLOCK SETUP saves it as 1. HIRAKU's cabinet comes set up: when nothing loads, the
 // defaults are saved, the clock set, by the game's own routine, and the start-up goes on as if they
-// had loaded. Found by shape: RED's (one each in JAA and JAD), and HAPPY SKY's, which DistorteD keeps
+// had loaded. Found by shape: RED's (one each in RED's JAA and JAD, and in 10th style's JAE), and HAPPY SKY's, which DistorteD keeps
 // with a bigger block (one each in HAPPY SKY's JAA, JAB, JAD and DistorteD's JAA...JAF).
 #define SETTINGS_MAX 0x4000
 static size_t g_clock_set = 0x68;   // GOLD's and DJ TROOPERS' 0x6c (clock_word)
@@ -119,13 +119,13 @@ struct settings_shape {
 };
 
 static const struct settings_shape shapes[] = {
-    // RED: sub esp,0xc18; push ebx; push esi; push edi; push SETTINGS; call defaults
-    //      sub esp,0xc18; mov ecx,0x306; push ebx; mov ebx,[esp+0xc20]
-    {"RED", 0xc18,
-     {0x81, 0xec, 0x18, 0x0c, 0x00, 0x00, 0x53, 0x56, 0x57, 0x68, 0, 0, 0, 0, 0xe8},
-     {0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0, 0, 0, 0, 0xff}, 15, 10, 0,
-     {0x81, 0xec, 0x18, 0x0c, 0x00, 0x00, 0xb9, 0x06, 0x03, 0x00, 0x00, 0x53, 0x8b, 0x9c, 0x24, 0x20, 0x0c, 0x00, 0x00},
-     {0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff}, 19, 0},
+    // RED (0xc18) and 10th style (0xbb0): sub esp,SIZE; push ebx; push esi; push edi; push SETTINGS; call defaults
+    //      sub esp,SIZE; mov ecx,SIZE/4; push ebx; mov ebx,[esp+SIZE+8]
+    {"RED's kind", 0,
+     {0x81, 0xec, 0, 0, 0x00, 0x00, 0x53, 0x56, 0x57, 0x68, 0, 0, 0, 0, 0xe8},
+     {0xff, 0xff, 0, 0, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0, 0, 0, 0, 0xff}, 15, 10, 2,
+     {0x81, 0xec, 0, 0, 0x00, 0x00, 0xb9, 0, 0, 0x00, 0x00, 0x53, 0x8b, 0x9c, 0x24, 0, 0, 0x00, 0x00},
+     {0xff, 0xff, 0, 0, 0xff, 0xff, 0xff, 0, 0, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0, 0, 0xff, 0xff}, 19, 7},
     // HAPPY SKY (0x202c) and DistorteD (0x2270):
     //   mov eax,SIZE; call stack; push ebx; push esi; push edi; push SETTINGS; call defaults
     //   push ebp; mov ebp,esp; and esp,-8; mov eax,FRAME; call stack; push ebx; mov ebx,[ebp+8];
@@ -153,7 +153,7 @@ static int loader_calls(const uint8_t *load, uint8_t **calls, int most) {
 // The clock word: the first field the settings' check tests (CLOCK ERROR when 0), on a copy of the
 // block on its stack: `mov esi,SETTINGS; lea edi,[esp+K]; (push ...;) rep movsd; (call ...;) mov
 // eax,[esp+X]; test eax,eax` (GOLD, DJ TROOPERS); else just before the checksum the saver stores
-// (mov [ebx+X],eax: RED, HAPPY SKY, DistorteD, GOLD; DJ TROOPERS has a field between)
+// (mov [ebx+X],eax: 10th style, RED, HAPPY SKY, DistorteD, GOLD; DJ TROOPERS has a field between)
 static size_t clock_word(uint32_t settings, const uint8_t *save) {
     uint8_t pat[9] = {0xbe, 0, 0, 0, 0, 0x8d, 0x7c, 0x24, 0};
     static const uint8_t mask[9] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0};
@@ -181,7 +181,7 @@ static size_t clock_word(uint32_t settings, const uint8_t *save) {
         return off;
     }
     for (int k = 0; k < 96; k++)
-        if (save[k] == 0x89 && save[k + 1] == 0x43 && save[k + 2] >= 0x6c && save[k + 2] < 0x80) return (size_t)save[k + 2] - 4;
+        if (save[k] == 0x89 && save[k + 1] == 0x43 && save[k + 2] >= 0x68 && save[k + 2] < 0x80) return (size_t)save[k + 2] - 4;
     return 0x68;
 }
 

@@ -631,7 +631,7 @@ static void status_read(struct status_in *s) {
         test_from = 0;
     }
     if (g_coin_mode2) pad |= 1u << 31;
-    if (!g_d01) pad |= 1u << 4;   // a C02 cabinet's FPGA (active low: the bit read as 0)
+    if (g_d01) pad |= 1u << 4;   // a D01 board's pin (active low: read as 0; 10th style takes the D01 plug's path by it)
     s->pad = ~pad;
     s->status = g_status, g_status = 0;
     const uint32_t coins = hk_coins_now();

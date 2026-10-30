@@ -375,5 +375,6 @@ BOOL WINAPI DllMain(HINSTANCE h, DWORD why, LPVOID r) {
         hk_cabinet_start();
         if (board && *board) hk_c02_set_up_cabinet(), hk_c02_movies(), hk_c02_debug_lines();
     }
+    if (why == DLL_THREAD_ATTACH) hk_watch_thread();   // (debug: HK_PC_WATCH)
     return TRUE;
 }

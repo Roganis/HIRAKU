@@ -324,11 +324,22 @@ static const char *mapped(const char *p, char *buf) {
     return p;
 }
 
+// HIRAKU's RtEffect.dll is the game's way in (rteffect.c); read as a file (10th style checks its
+// folder's files), it is Konami's (HK_PC_RTEFFECT_FILE)
+static const char *konami_file(const char *p) {
+    static const char *konami;
+    if (!konami) konami = getenv("HK_PC_RTEFFECT_FILE") ? getenv("HK_PC_RTEFFECT_FILE") : "";
+    if (!p || !*konami) return NULL;
+    const char *base = p + strlen(p);
+    while (base > p && base[-1] != '\\' && base[-1] != '/' && base[-1] != ':') base--;
+    return _stricmp(base, "RtEffect.dll") ? NULL : konami;
+}
+
 // HK_PC_FILELOG (bring-up): each file the game can't open, as it named it and as HIRAKU mapped it
 static HANDLE WINAPI my_CreateFileA(LPCSTR p, DWORD acc, DWORD share, LPSECURITY_ATTRIBUTES sa, DWORD cd, DWORD fl,
                                     HANDLE t) {
     char b[MAX_PATH];
-    const char *to = mapped(p, b);
+    const char *to = konami_file(p) ? konami_file(p) : mapped(p, b);
     const HANDLE h = CreateFileA(to, acc, share, sa, cd, fl, t);
     static int log = -1;
     if (log < 0) log = getenv("HK_PC_FILELOG") != NULL;
@@ -762,14 +773,32 @@ static void dbg_dumps(void) {
     }
 }
 
-// debug HK_PC_WATCH=ADDRESS[:PICTURE]: a data watchpoint (the CPU's debug registers, every thread of
-// the game's) on the word at ADDRESS from that picture on: each place that writes it (the
+// debug HK_PC_WATCH=ADDRESS[,ADDRESS...][:PICTURE]: data watchpoints (the CPU's debug registers, every thread of
+// the game's) on the words at ADDRESS from that picture on: each place that writes one (the
 // instruction after the write) to the log once, the first 32. For mods: what counts a counter
-// found by HK_PC_DUMP that's reached through a pointer
+// found by HK_PC_DUMP that's reached through a pointer. An address written xADDRESS is code: each
+// time it runs (the first 40), the registers and the stack's top eight words to the log
+static uint32_t g_watch_exec;   // which of the four are code
 static LONG CALLBACK watch_hit(EXCEPTION_POINTERS *e) {
     if (e->ExceptionRecord->ExceptionCode != EXCEPTION_SINGLE_STEP || !(e->ContextRecord->Dr6 & 15)) return EXCEPTION_CONTINUE_SEARCH;
     const int which = e->ContextRecord->Dr6 & 1 ? 0 : e->ContextRecord->Dr6 & 2 ? 1 : e->ContextRecord->Dr6 & 4 ? 2 : 3;
     const DWORD dr[4] = {e->ContextRecord->Dr0, e->ContextRecord->Dr1, e->ContextRecord->Dr2, e->ContextRecord->Dr3};
+    if (g_watch_exec >> which & 1) {
+        static int hits[4];
+        const CONTEXT *c = e->ContextRecord;
+        if (hits[which]++ < 40) {
+            const DWORD *sp = (const DWORD *)(uintptr_t)c->Esp;
+            hk_log("hiraku-pc: debug: %08lx run: eax %08lx ebx %08lx ecx %08lx edx %08lx esi %08lx edi %08lx ebp %08lx esp %08lx;"
+                   " stack %08lx %08lx %08lx %08lx %08lx %08lx %08lx %08lx",
+                   (unsigned long)dr[which], (unsigned long)c->Eax, (unsigned long)c->Ebx, (unsigned long)c->Ecx, (unsigned long)c->Edx,
+                   (unsigned long)c->Esi, (unsigned long)c->Edi, (unsigned long)c->Ebp, (unsigned long)c->Esp, (unsigned long)sp[0],
+                   (unsigned long)sp[1], (unsigned long)sp[2], (unsigned long)sp[3], (unsigned long)sp[4], (unsigned long)sp[5],
+                   (unsigned long)sp[6], (unsigned long)sp[7]);
+        }
+        e->ContextRecord->Dr6 = 0;
+        e->ContextRecord->EFlags |= 0x10000;   // RF: the instruction runs this time
+        return EXCEPTION_CONTINUE_EXECUTION;
+    }
     static uintptr_t seen[32];
     static int n;
     const uintptr_t at = e->ContextRecord->Eip;
@@ -784,6 +813,26 @@ static LONG CALLBACK watch_hit(EXCEPTION_POINTERS *e) {
     return EXCEPTION_CONTINUE_EXECUTION;
 }
 
+static void watch_regs(CONTEXT *c, const uint32_t *addr, int naddr) {
+    DWORD *dr[4] = {&c->Dr0, &c->Dr1, &c->Dr2, &c->Dr3};
+    for (int i = 0; i < naddr; i++) {   // Li, write, 4 bytes (code: run, 1 byte)
+        *dr[i] = addr[i];
+        c->Dr7 = (c->Dr7 & ~(3u << (2 * i)) & ~(0xfu << (16 + 4 * i))) | (1u << (2 * i)) |
+                 ((g_watch_exec >> i & 1 ? 0u : 0xdu) << (16 + 4 * i));
+    }
+}
+static uint32_t g_watch_addr[4];
+static int g_watch_n;   // set once the watch is on: threads started later get it too (hk_watch_thread)
+
+void hk_watch_thread(void) {
+    if (!g_watch_n) return;
+    CONTEXT c = {.ContextFlags = CONTEXT_DEBUG_REGISTERS};
+    if (GetThreadContext(GetCurrentThread(), &c)) {
+        watch_regs(&c, g_watch_addr, g_watch_n);
+        SetThreadContext(GetCurrentThread(), &c);
+    }
+}
+
 static void dbg_watch(void) {
     static int state = -1, naddr;
     static uint32_t addr[4], from;
@@ -792,6 +841,7 @@ static void dbg_watch(void) {
         state = 2;
         for (const char *p = e; p && *p && naddr < 4;) {
             char *end;
+            if (*p == 'x') g_watch_exec |= 1u << naddr, p++;
             addr[naddr++] = (uint32_t)strtoul(p, &end, 16);
             if (*end == ',') p = end + 1;
             else {
@@ -817,18 +867,15 @@ static void dbg_watch(void) {
         if (!self) SuspendThread(t);
         CONTEXT c = {.ContextFlags = CONTEXT_DEBUG_REGISTERS};
         if (GetThreadContext(t, &c)) {
-            DWORD *dr[4] = {&c.Dr0, &c.Dr1, &c.Dr2, &c.Dr3};
-            for (int i = 0; i < naddr; i++) {   // Li, write, 4 bytes
-                *dr[i] = addr[i];
-                c.Dr7 = (c.Dr7 & ~(3u << (2 * i)) & ~(0xfu << (16 + 4 * i))) | (1u << (2 * i)) | (0xdu << (16 + 4 * i));
-            }
+            watch_regs(&c, addr, naddr);
             if (SetThreadContext(t, &c)) threads++;
         }
         if (!self) ResumeThread(t);
         CloseHandle(t);
     }
     CloseHandle(snap);
-    hk_log("hiraku-pc: debug: watching writes to %d words from %08x (%d threads)", naddr, addr[0], threads);
+    memcpy(g_watch_addr, addr, sizeof addr), g_watch_n = naddr;
+    hk_log("hiraku-pc: debug: watching %d addresses from %08x (%d threads, and those started later)", naddr, addr[0], threads);
 }
 
 // Each Present, Direct3D 9's or 8's (d3d8.c): the mods' patches and the debug watch first, before
@@ -1176,6 +1223,18 @@ static void __cdecl my_avs_boot(void *config, void *std_heap, size_t n_std, void
     if (level && l > 1) level(l);
 }
 
+// DistorteD's libavs (older) starts its log alone: log_boot(writer, context)
+typedef void(__cdecl *log_boot_t)(void *, void *);
+static log_boot_t g_log_boot;
+static void __cdecl my_log_boot(void *writer, void *ctx) {
+    (void)writer;
+    g_log_boot((void *)avs_writer, ctx);
+    typedef void(__cdecl * level_t)(int);
+    const level_t level = (level_t)(void *)GetProcAddress(GetModuleHandleA("libavs-win32.dll"), "log_change_level");
+    const int l = atoi(getenv("HK_PC_AVS_LOG"));
+    if (level && l > 1) level(l);
+}
+
 static void *avs_logged(const char *dll, const char *fn) {
     static const char *const names[] = {"avs_fs_mount", "avs_fs_open", "avs_fs_lstat", "avs_fs_opendir", "avs_fs_umount",
                                         "ea3_pkglist_open", "ea3_pkglist_get", "ea3_pkglist_next", "ea3_pkg_open_by_name",
@@ -1199,6 +1258,10 @@ static void *avs_logged(const char *dll, const char *fn) {
     if (!strcmp(fn, "avs_boot") && !_stricmp(dll, "libavs-win32.dll")) {
         if (!g_avs_boot) g_avs_boot = (avs_boot_t)(void *)GetProcAddress(GetModuleHandleA(dll), fn);
         return g_avs_boot ? (void *)my_avs_boot : NULL;
+    }
+    if (!strcmp(fn, "log_boot") && !_stricmp(dll, "libavs-win32.dll")) {
+        if (!g_log_boot) g_log_boot = (log_boot_t)(void *)GetProcAddress(GetModuleHandleA(dll), fn);
+        return g_log_boot ? (void *)my_log_boot : NULL;
     }
     for (int i = 0; i < (int)(sizeof names / sizeof *names); i++)
         if (!strcmp(fn, names[i])) {
@@ -1241,7 +1304,45 @@ static BOOL WINAPI my_WriteFile(HANDLE h, LPCVOID buf, DWORD n, LPDWORD done, LP
     return TRUE;
 }
 
+// HK_PC_XRPC_LOG (bring-up, IIDX DistorteD's eam3lib): what the game's answer handlers read of an
+// answer (each attribute asked for and what it was), their element depths and the statuses they set
+typedef const char *(__cdecl *attr_get_t)(void *, const char *);
+typedef int(__cdecl *stack_t)(void *);
+typedef int(__cdecl *status_set_t)(void *, int);
+static attr_get_t g_attr_get;
+static stack_t g_stack_peek;
+static status_set_t g_status_set;
+static int xrpc_said(void) {
+    static volatile LONG n;
+    return InterlockedIncrement(&n) <= 600;
+}
+static const char *__cdecl dbg_attr_get(void *node, const char *name) {
+    const char *v = g_attr_get(node, name);
+    if (xrpc_said()) hk_log("xrpc: %p attr %s = %s (from %p)", node, name ? name : "?", v ? v : "(none)", __builtin_return_address(0));
+    return v;
+}
+static int __cdecl dbg_stack_peek(void *st) {
+    const int v = g_stack_peek(st);
+    if (xrpc_said()) hk_log("xrpc: depth %d (from %p)", v, __builtin_return_address(0));
+    return v;
+}
+static int __cdecl dbg_status_set(void *packet, int code) {
+    if (xrpc_said()) hk_log("xrpc: status set %d (from %p)", code, __builtin_return_address(0));
+    return g_status_set(packet, code);
+}
+static void *xrpc_logged(const char *dll, const char *fn) {
+    static int on = -1;
+    if (on < 0) on = getenv("HK_PC_XRPC_LOG") != NULL;
+    if (!on || _stricmp(dll, "eam3lib.dll")) return NULL;
+    HMODULE m = GetModuleHandleA(dll);
+    if (!strcmp(fn, "xml_attr_getvalue_byname")) return (g_attr_get = (attr_get_t)(void *)GetProcAddress(m, fn)) ? (void *)dbg_attr_get : NULL;
+    if (!strcmp(fn, "minstack_peek")) return (g_stack_peek = (stack_t)(void *)GetProcAddress(m, fn)) ? (void *)dbg_stack_peek : NULL;
+    if (!strcmp(fn, "xrpc_status_set")) return (g_status_set = (status_set_t)(void *)GetProcAddress(m, fn)) ? (void *)dbg_status_set : NULL;
+    return NULL;
+}
+
 static void *cabinet_hook_for(const char *dll, const char *fn) {
+    if (!_stricmp(dll, "eam3lib.dll")) return xrpc_logged(dll, fn);
     if (!_stricmp(dll, "ws2_32.dll") || !_stricmp(dll, "wsock32.dll")) return hk_net_hook(fn);   // net.c
     if (!_stricmp(dll, "iphlpapi.dll")) return hk_net_card_hook(fn);
     if (!_stricmp(dll, "libsocket.dll") || !_stricmp(dll, "libavs-win32.dll") || !_stricmp(dll, "libavs-win32-ea3.dll")) {

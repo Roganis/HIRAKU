@@ -139,8 +139,9 @@ std::string EamuseServer::answer(const Call &c, const Request &r, const std::str
     const std::string game = c.model.substr(0, 3);
     // beatmania IIDX 9th style (model C02, the PC's e-AMUSE3, PLAN.md section 33): pop'n 9's calls
     // (numbering, userid, ntp, posevent, package: below) and two of its own
-    // RED, HAPPY SKY and DistorteD (E11, ECO, FDD) the same way, their module named after the model
-    const bool iidx_red = game == "E11" || game == "ECO" || game == "FDD";
+    // 10th style, RED, HAPPY SKY and DistorteD (D01, E11, ECO, FDD) the same way, their module named
+    // after the model
+    const bool iidx_red = game == "D01" || game == "E11" || game == "ECO" || game == "FDD";
     // GOLD on: DistorteD's modules and cards over libavs (pop'n 15's transport)
     if (pc_iidx(game) && (m == "pc" || m == "music" || m == "ranking" || m == "shop" || m == "grade"))
         return answer_iidx_fdd(game, r);

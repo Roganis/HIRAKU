@@ -53,6 +53,8 @@ int hk_pad_samples(uint16_t last[10]);
 // pop'n 15-18: presses judged by when they happened (HK_PC_PRESS_TIME=1), moved by
 // HK_PC_JUDGE_OFFSET milliseconds (later presses: a display that shows late); press.c
 void hk_press_patch_program(void);
+// A turntable's position as the game reads it (press.c: when it last moved, for IIDX's judging)
+void hk_turntable_seen(int player, uint8_t position);
 uint32_t hk_coins_now(void);
 void hk_set_coin_mode(int mode);   // usbCoinMode: 1, coins as the coin switch's pulses on the pad
 // A device under its driver (ezusb_dev.c): its hook for an import, given the cabinet's (or NULL); set

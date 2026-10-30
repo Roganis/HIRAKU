@@ -134,6 +134,7 @@ CALL4(usbPadRead) {
 CALL4(usbGetTurnTable) {
     static int n_;
     const int v = hk_link()->turntable[a & 1];
+    hk_turntable_seen(a & 1, (uint8_t)v);
     return usb_log() ? SAID(v) : v;
 }
 // An effect slider's position, 0-15 (0-4)

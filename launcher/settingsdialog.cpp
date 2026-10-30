@@ -498,19 +498,22 @@ void SettingsDialog::audioPage(QVBoxLayout *v) {
                             "sound no longer matches MAME's. On by default; off is MAME's timing (--mame-sound; "
                             "docs/PLAY.md, Latency).");
     fq->addRow("", m_fineSound);
-    m_pressTime = new QCheckBox("Presses judged when they happened (pop'n music 15-18)");
+    m_pressTime = new QCheckBox("Presses judged when they happened (pop'n music 15-18, IIDX EMPRESS)");
     m_pressTime->setChecked(s.value("game/pressTime", false).toBool());
     m_pressTime->setToolTip("The game judges a press at the frame it reads the buttons in, up to a frame (17 ms) after "
                             "it happened, as on its cabinet. On: each press is judged at the moment the controller "
-                            "gave it (--press-time; docs/PLAY.md, PC).");
+                            "gave it. IIDX judges in whole frames: there, each press counts in the frame it happened "
+                            "in, however late the game read it (--press-time; docs/PLAY.md, PC).");
     fq->addRow("", m_pressTime);
     m_judgeOffset = new QSpinBox;
     m_judgeOffset->setRange(-200, 200);
     m_judgeOffset->setSuffix(" ms");
     m_judgeOffset->setValue(s.value("game/judgeOffset", 0).toInt());
-    m_judgeOffset->setToolTip("pop'n music 15-18: each press judged this much earlier than it came (--judge-offset), for a "
-                              "TV or a sound system that shows or plays late, so presses made in time with it count as "
-                              "in time. Positive when the notes look late; in 4 ms steps, as the game judges.");
+    m_judgeOffset->setToolTip("pop'n music 15-18, IIDX EMPRESS: each press judged this much earlier than it came "
+                              "(--judge-offset), for a TV or a sound system that shows or plays late, so presses made in "
+                              "time with it count as in time. Positive when the notes look late; pop'n judges in 4 ms "
+                              "steps, IIDX in frames (each press moved by whole frames from its own time: part of a "
+                              "frame on average, with presses judged when they happened).");
     fq->addRow("Judgement offset:", m_judgeOffset);
     v->addWidget(audio);
     v->addWidget(latency);

@@ -20,6 +20,7 @@ typedef const WAVEFORMATEX *LPCWAVEFORMATEX;
 #include <mmsystem.h>
 #include <math.h>
 #include <stddef.h>
+#include <stdio.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -50,6 +51,7 @@ struct buf {
     int bytes_per_sample, channels;
     double pos;         // the play position, in sample frames (fractional: the frequency)
     int playing, looping;
+    int played;         // (HK_PC_DSOUND_LOG: written again after it played)
     LONG volume, pan;   // hundredths of a dB; -10000 (left) .. 10000 (right)
     DWORD freq;         // 0: the format's
     struct notify_pos *notes;
@@ -65,6 +67,19 @@ static void lock(void) { EnterCriticalSection(&g_lock); }
 static void unlock(void) { LeaveCriticalSection(&g_lock); }
 
 static int same_iid(REFIID a, const GUID *b) { return !memcmp(a, b, sizeof(GUID)); }
+
+// HK_PC_DSOUND_LOG: the buffers made, and what the game asks of them that HIRAKU's DirectSound
+// doesn't do (effects, other interfaces)
+static int dlog(void) {
+    static int on = -1;
+    if (on < 0) on = getenv("HK_PC_DSOUND_LOG") != NULL;
+    return on;
+}
+static const char *guid_text(const GUID *g, char *b) {
+    sprintf(b, "%08lx-%04x-%04x-%02x%02x-%02x%02x%02x%02x%02x%02x", g->Data1, g->Data2, g->Data3, g->Data4[0], g->Data4[1],
+            g->Data4[2], g->Data4[3], g->Data4[4], g->Data4[5], g->Data4[6], g->Data4[7]);
+    return b;
+}
 
 // ---------------------------------------------------------------- the mixer
 
@@ -232,7 +247,8 @@ static HRESULT WINAPI buf_QueryInterface(struct buf *b, REFIID iid, void **out) 
         *out = &b->notify_vt;
     } else {
         static int said;
-        if (!said++) hk_log("hiraku-pc: the game asked a sound buffer for an interface HIRAKU's DirectSound doesn't have (3D?)");
+        char g[40];
+        if (!said++ || dlog()) hk_log("hiraku-pc: the game asked a sound buffer for an interface HIRAKU's DirectSound doesn't have (%s)", guid_text(iid, g));
         *out = NULL;
         return E_NOINTERFACE;
     }
@@ -313,6 +329,8 @@ static HRESULT WINAPI buf_Lock(struct buf *b, DWORD offset, DWORD bytes, void **
     if (flags & DSBLOCK_ENTIREBUFFER) bytes = size;
     if (offset >= size || bytes > size) return DSERR_INVALIDPARAM;
     const DWORD first = offset + bytes > size ? size - offset : bytes;
+    static int said;
+    if (b->played && dlog() && said++ < 300) hk_log("dsound: buffer %p written again after it played: %lu bytes at %lu", (void *)b, bytes, offset);
     *p1 = b->data->bytes + offset;
     *n1 = first;
     if (p2) *p2 = first < bytes ? b->data->bytes : NULL;
@@ -335,6 +353,7 @@ static HRESULT WINAPI buf_Play(struct buf *b, DWORD r1, DWORD prio, DWORD flags)
         l->key_sound_seq = l->key_sound_seq + 1;
     }
     b->playing = 1;
+    b->played = 1;
     b->looping = (flags & DSBPLAY_LOOPING) != 0;
     unlock();
     return DS_OK;
@@ -364,6 +383,7 @@ static HRESULT WINAPI buf_SetPan(struct buf *b, LONG v) {
     return DS_OK;
 }
 static HRESULT WINAPI buf_SetFrequency(struct buf *b, DWORD v) {
+    if (dlog() && (v == DSBFREQUENCY_ORIGINAL ? 0 : v) != b->freq) hk_log("dsound: buffer %p at %lu Hz", (void *)b, v);
     b->freq = v == DSBFREQUENCY_ORIGINAL ? 0 : v;
     return DS_OK;
 }
@@ -379,10 +399,17 @@ static HRESULT WINAPI buf_Stop(struct buf *b) {
 
 static HRESULT WINAPI buf_Unlock(struct buf *b, void *p1, DWORD n1, void *p2, DWORD n2) { (void)b, (void)p1, (void)n1, (void)p2, (void)n2; return DS_OK; }
 static HRESULT WINAPI buf_Restore(struct buf *b) { (void)b; return DS_OK; }
-static HRESULT WINAPI buf_SetFX(struct buf *b, DWORD n, void *d, DWORD *r) { (void)b, (void)n, (void)d, (void)r; return DSERR_CONTROLUNAVAIL; }
+static HRESULT WINAPI buf_SetFX(struct buf *b, DWORD n, void *d, DWORD *r) {
+    (void)b, (void)r;
+    char g[40];
+    for (DWORD k = 0; dlog() && k < n; k++) hk_log("dsound: SetFX %lu: %s", k, guid_text(&((const DSEFFECTDESC *)d)[k].guidDSFXClass, g));
+    return DSERR_CONTROLUNAVAIL;
+}
 static HRESULT WINAPI buf_AcquireResources(struct buf *b, DWORD f, DWORD n, DWORD *r) { (void)b, (void)f, (void)n, (void)r; return DS_OK; }
 static HRESULT WINAPI buf_GetObjectInPath(struct buf *b, REFGUID o, DWORD i, REFGUID iid, void **out) {
-    (void)b, (void)o, (void)i, (void)iid;
+    (void)b;
+    char g[40], h[40];
+    if (dlog()) hk_log("dsound: GetObjectInPath %s %lu %s", guid_text(o, g), i, guid_text(iid, h));
     if (out) *out = NULL;
     return DSERR_OBJECTNOTFOUND;
 }
@@ -449,8 +476,8 @@ static HRESULT WINAPI ds_CreateSoundBuffer(struct ds *d, const DSBUFFERDESC *des
             return DSERR_INVALIDPARAM;
         }
         set_format(b, desc->lpwfxFormat);
-        if (getenv("HK_PC_DSOUND_LOG"))
-            hk_log("dsound: buffer %lu bytes, format %u, %lu Hz, %u bits, %u channels, flags %#lx", desc->dwBufferBytes,
+        if (dlog())
+            hk_log("dsound: buffer %p, %lu bytes, format %u, %lu Hz, %u bits, %u channels, flags %#lx", (void *)b, desc->dwBufferBytes,
                    desc->lpwfxFormat->wFormatTag, desc->lpwfxFormat->nSamplesPerSec, desc->lpwfxFormat->wBitsPerSample,
                    desc->lpwfxFormat->nChannels, desc->dwFlags);
         b->data = (struct data *)calloc(1, sizeof *b->data);

@@ -161,6 +161,16 @@ int hk_host_us(uint32_t *us) {
     return 1;
 }
 
+// The pad's keys (link.h): pop'n's 9 buttons (bits 8-16), or IIDX's 14 keys (8-21, HK_PC_KEYS=iidx)
+static uint32_t key_bits(void) {
+    static uint32_t bits;
+    if (!bits) {
+        const char *k = getenv("HK_PC_KEYS");
+        bits = k && !strcmp(k, "iidx") ? 0x3fff00u : 0x1ff00u;
+    }
+    return bits;
+}
+
 // The buttons that went down since the last read and are up again (a press shorter than the time
 // between two reads, or two changes handed on at once): down for this read, so the game sees them
 static uint32_t taps(struct hk_pc_link *l) {
@@ -174,7 +184,7 @@ static uint32_t taps(struct hk_pc_link *l) {
         downs |= pad & ~state;
         state = pad;
     }
-    return downs & ~l->pad & 0x1ff00;
+    return downs & ~l->pad & key_bits();
 }
 
 uint32_t hk_pad_now(void) {
@@ -205,7 +215,7 @@ uint32_t hk_pad_now(void) {
     l->game_alive++;
     b |= (scripted() & ~(1u << 22)) | coin_switch();
     static uint32_t was;
-    if (b & ~was & 0x1ff00) l->key_edges = l->key_edges + 1;   // a button down: its sound is the next started
+    if (b & ~was & key_bits()) l->key_edges = l->key_edges + 1;   // a button down: its sound is the next started
     was = b;
     return b;
 }
@@ -760,7 +770,8 @@ static void dbg_dumps(void) {
         IMAGE_NT_HEADERS *nt = (IMAGE_NT_HEADERS *)(base + ((IMAGE_DOS_HEADER *)base)->e_lfanew);
         IMAGE_SECTION_HEADER *sec = IMAGE_FIRST_SECTION(nt);
         for (WORD k = 0; k < nt->FileHeader.NumberOfSections; k++, sec++) {
-            if (!(sec->Characteristics & IMAGE_SCN_MEM_WRITE) || (sec->Characteristics & IMAGE_SCN_MEM_EXECUTE)) continue;
+            // (written to: a section of code too, where the program is one (IIDX EMPRESS unpacked))
+            if (!(sec->Characteristics & IMAGE_SCN_MEM_WRITE)) continue;
             char f[MAX_PATH + 48];
             snprintf(f, sizeof f, "%s\\dump_f%u_%08x.bin", dir, (unsigned)frame, (unsigned)(uintptr_t)(base + sec->VirtualAddress));
             FILE *o = fopen(f, "wb");

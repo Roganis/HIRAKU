@@ -637,6 +637,7 @@ static void status_read(struct status_in *s) {
     const uint32_t coins = hk_coins_now();
     s->coins_hi = (uint8_t)(coins >> 8), s->coins_lo = (uint8_t)coins;
     s->turntable1 = l->turntable[0], s->turntable2 = l->turntable[1];
+    hk_turntable_seen(0, l->turntable[0]), hk_turntable_seen(1, l->turntable[1]);
     s->sliders[0] = (uint8_t)((l->slider[0] & 15) | (l->slider[1] & 15) << 4);
     s->sliders[1] = (uint8_t)((l->slider[2] & 15) | (l->slider[3] & 15) << 4);
     s->sliders[2] = (uint8_t)(l->slider[4] & 15);
@@ -753,6 +754,7 @@ static void fx2_status(uint8_t *p) {   // the interrupt pipe in, 64 bytes
     p[5] = (uint8_t)(coins >> 8), p[6] = (uint8_t)coins;   // (DJ TROOPERS counts these, not the coin switch's bit 30)
     memcpy(p + 8, &inverted, 4);
     p[13] = l->turntable[1], p[14] = l->turntable[0];
+    hk_turntable_seen(0, l->turntable[0]), hk_turntable_seen(1, l->turntable[1]);
     p[15] = (uint8_t)((l->slider[0] & 15) | (l->slider[1] & 15) << 4);
     p[16] = (uint8_t)((l->slider[2] & 15) | (l->slider[3] & 15) << 4);
     p[17] = (uint8_t)(l->slider[4] & 15);
@@ -767,6 +769,21 @@ static void fx2_command(const uint8_t *p) {   // the interrupt pipe out, 64 byte
     memcpy((void *)l->ticker, p + 16, 9);
     g_node = p[2];
     g_status = command(p[2], p[3], p[4]);
+    // (debug HK_PC_FX2_LOG: the packet's other bytes, each change)
+    static int fx2_log = -1;
+    static uint8_t was[64];
+    if (fx2_log < 0) fx2_log = getenv("HK_PC_FX2_LOG") != NULL;
+    if (fx2_log) {
+        char b[256];
+        int k = 0;
+        for (int i = 0; i < 64; i++) {
+            if ((i >= 16 && i < 25) || p[i] == was[i]) continue;   // (all but the ticker's text)
+            k += snprintf(b + k, sizeof b - k, " %d:%02x", i, p[i]);
+            if (k > 200) break;
+        }
+        if (k) hk_log("fx2 out:%s", b);
+        memcpy(was, p, 64);
+    }
     static int n;
     if (usb_log() || (p[2] != 0 && n++ < 40)) hk_log("usb: node %02x command %02x (%02x %02x) -> %02x", p[2], p[3], p[4], p[5], g_status);
 }

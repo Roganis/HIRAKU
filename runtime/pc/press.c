@@ -20,6 +20,20 @@
 // -44, -28, -12, 12, 28, 44 (in 4 ms steps; a chart can change them), and the distance table is
 // the one it reads just before. Its one call is made a call to judge_press here, which moves the
 // lane's distance and calls it.
+//
+// beatmania IIDX (EMPRESS's shape, PLAN.md section 36) judges in whole frames: each frame, for a
+// lane pressed, its distance to the lane's nearest note (the frame it's read in less the note's,
+// late positive), from a table of 16 lanes, 8 bytes each (a note, then the 16-bit distance; player
+// 1's keys 1-7 and turntable, then player 2's), against windows of frames (keys: PGREAT 0 or 1,
+// GREAT 2 either way, GOOD 7, BAD 15). A press is read in the frame after it happened, so the
+// game's judging is right when frames are read on a steady grid, as on its cabinet. With
+// HK_PC_PRESS_TIME the distance is taken back by the frames between the press and its frame's
+// start (hiraku-pc's go, link.h): a press counts in the frame it happened in whenever the game
+// read it (a frame held up, or the frames caught up after one: core.cpp). HK_PC_JUDGE_OFFSET moves
+// every press by that many milliseconds, by whole frames from each press's own time: part of a
+// frame on average. The turntable is a position, not presses: the offset only. The one load of a
+// lane's distance before the judging (mov dx, [ebp*8 + table]; mov eax, [esp + 0x24]; sub dx, di)
+// is made a call to iidx_load here.
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <stdint.h>
@@ -89,11 +103,11 @@ static int32_t g_offset_us;
 // How long ago the press of `button` (1-9) the game has just seen happened, in microseconds: its
 // newest going down among the changes the game had read (link.h: pad_ev_seen), as long ago as that
 // from hiraku-pc's time now. 0 if there's none in the last 50 ms (a key the DLL read itself)
-static uint32_t press_age(int button) {
+static uint32_t press_age_of(uint32_t bit) {
     struct hk_pc_link *l = hk_link();
     uint32_t now;
     if (!hk_host_us(&now)) return 0;
-    const uint32_t bit = HK_PC_PAD_BUTTON(button), end = l->pad_ev_seen;
+    const uint32_t end = l->pad_ev_seen;
     const uint32_t kept = end < HK_PC_PAD_EVENTS - 8 ? end : HK_PC_PAD_EVENTS - 8;   // still in the ring
     for (uint32_t k = 0; k < kept; k++) {
         const uint32_t s = end - 1 - k;
@@ -104,6 +118,7 @@ static uint32_t press_age(int button) {
     }
     return 0;
 }
+static uint32_t press_age(int button) { return press_age_of(HK_PC_PAD_BUTTON(button)); }
 
 static uint32_t __cdecl judge_press(uint32_t lane) {
     const uint32_t k = lane & 0xffff;
@@ -128,6 +143,96 @@ static uint8_t *routine_start(uint8_t *code, uint8_t *p) {
     for (uint8_t *s = p; s > p - 128 && s - 2 > code; s--)
         if (!((uintptr_t)s & 15) && s[-1] == 0xcc && (s[-2] == 0xcc || s[-2] == 0xc3)) return s;
     return NULL;
+}
+
+// --- IIDX
+
+static const uint8_t *g_iidx_table;   // the lanes' distances (8 bytes a lane, the distance at 4)
+static uint8_t g_tt[2];
+static uint32_t g_tt_moved[2];        // hiraku-pc's time a turntable last moved, 0: not yet
+static int g_tt_read[2];
+
+void hk_turntable_seen(int player, uint8_t position) {
+    uint32_t now;
+    player &= 1;
+    if (g_tt_read[player] && position != g_tt[player] && hk_host_us(&now)) g_tt_moved[player] = now ? now : 1;
+    g_tt[player] = position, g_tt_read[player] = 1;
+}
+
+int16_t __cdecl hk_iidx_distance(uint32_t lane) {
+    const int16_t d = *(const int16_t *)(g_iidx_table + (lane & 15) * 8 + 4);
+    if (d >= 1024 || d <= -1024) return d;   // no note in the lane (1024)
+    struct hk_pc_link *l = hk_link();
+    const uint32_t key = lane & 7, player = lane >> 3 & 1;
+    // a player's press, not the game's own (its demo's, auto scratch): a key's press just read
+    // (link.h: pad_ev), a turntable moved in the last 50 ms; else as the game judges it
+    int32_t us = g_offset_us;
+    uint32_t now;
+    if (!hk_host_us(&now)) return d;
+    if (key < 7) {
+        const uint32_t age = press_age_of(HK_PC_C02_KEY(player + 1, key + 1));
+        if (!age) return d;
+        // how long before its frame began (hiraku-pc's go) the press happened (after it: negative)
+        if (g_press_time) us += (int32_t)age - (int32_t)(now - l->go_seen_host_us);
+    } else if (!g_tt_moved[player] || now - g_tt_moved[player] > 50000) {
+        return d;
+    }
+    const int32_t frame_us = l->game_hz_milli ? (int32_t)(1000000000u / l->game_hz_milli) : 16667;
+    int32_t frames = us >= 0 ? us / frame_us : -((-us + frame_us - 1) / frame_us);   // floor
+    if (frames > 15) frames = 15;
+    if (frames < -15) frames = -15;
+    static int log = -1;
+    if (log < 0) log = getenv("HK_PC_JUDGE_LOG") != NULL;
+    if (log && frames) hk_log("judge: lane %u, %d frames from its note, %d frames earlier (%d us)", lane, d, frames, us);
+    return (int16_t)(d - frames);
+}
+
+// in place of the load: the distance in dx (the rest of edx and every other register kept)
+__attribute__((naked)) static void iidx_load(void) {
+    __asm__ volatile(
+        "pushl %eax\n\t"
+        "pushl %ecx\n\t"
+        "pushl %edx\n\t"
+        "pushl %ebp\n\t"
+        "call _hk_iidx_distance\n\t"
+        "addl $4, %esp\n\t"
+        "popl %edx\n\t"
+        "movw %ax, %dx\n\t"
+        "popl %ecx\n\t"
+        "popl %eax\n\t"
+        "ret\n\t");
+}
+
+// The load, by its shape in the program's sections: 66 8b 14 ed TABLE  8b 44 24 xx  66 2b d7. 1 if
+// it was found and made the call
+static int iidx_patch(char *base, IMAGE_NT_HEADERS *nt) {
+    IMAGE_SECTION_HEADER *sec = IMAGE_FIRST_SECTION(nt);
+    uint8_t *at = NULL;
+    int found = 0;
+    for (WORD s = 0; s < nt->FileHeader.NumberOfSections; s++, sec++) {
+        uint8_t *code = (uint8_t *)base + sec->VirtualAddress;
+        const size_t size = sec->Misc.VirtualSize;
+        for (size_t i = 0; i + 15 <= size; i++)
+            if (code[i] == 0x66 && code[i + 1] == 0x8b && code[i + 2] == 0x14 && code[i + 3] == 0xed && code[i + 8] == 0x8b &&
+                code[i + 9] == 0x44 && code[i + 10] == 0x24 && code[i + 12] == 0x66 && code[i + 13] == 0x2b && code[i + 14] == 0xd7)
+                at = code + i, found++;
+    }
+    if (found != 1) return 0;
+    uint32_t table;
+    memcpy(&table, at + 4, 4);
+    g_iidx_table = (const uint8_t *)(uintptr_t)(table - 4);
+    uint8_t patch[8] = {0xe8, 0, 0, 0, 0, 0x90, 0x90, 0x90};
+    const int32_t rel = (int32_t)((uint8_t *)(void *)iidx_load - (at + 5));
+    memcpy(patch + 1, &rel, 4);
+    DWORD old;
+    VirtualProtect(at, 8, PAGE_EXECUTE_READWRITE, &old);
+    memcpy(at, patch, 8);
+    VirtualProtect(at, 8, old, &old);
+    FlushInstructionCache(GetCurrentProcess(), at, 8);
+    hk_log("hiraku-pc: IIDX presses judged %s, then %.1f ms earlier (by whole frames; the lanes' distances at %08x, their load at %p)",
+           g_press_time ? "by when they happened" : "at the frame they're read in", g_offset_us / 1000.0, (unsigned)(table - 4),
+           (void *)at);
+    return 1;
 }
 
 void hk_press_patch_program(void) {
@@ -201,5 +306,6 @@ void hk_press_patch_program(void) {
                g_press_time ? "by when they happened" : "at the frame they're read in", g_offset_us / 1000.0, (void *)start, table);
         return;
     }
-    hk_log("hiraku-pc: no judging routine of pop'n music's found: presses judged as the game does");
+    if (iidx_patch(base, nt)) return;
+    hk_log("hiraku-pc: no judging routine of pop'n music's or IIDX's found: presses judged as the game does");
 }

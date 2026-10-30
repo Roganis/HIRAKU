@@ -286,9 +286,10 @@ public:
                            "  --market J|A|K|U     the 64-bit PC games: the cabinet's market (Japan, Asia, Korea, the\n"
                            "                       USA) in place of the game's prop/ea3-config.xml's\n"
                            "  --press-time         pop'n 15-18: each press judged by when it happened, not by the frame\n"
-                           "                       the game read it in (as the game does: up to a frame later)\n"
-                           "  --judge-offset MS    pop'n 15-18: each press judged MS milliseconds earlier (positive:\n"
-                           "                       for a display or sound that comes late), -200 to 200\n"
+                           "                       the game read it in (as the game does: up to a frame later); IIDX\n"
+                           "                       EMPRESS: in the frame it happened in, however late the game read it\n"
+                           "  --judge-offset MS    pop'n 15-18, IIDX EMPRESS: each press judged MS milliseconds earlier\n"
+                           "                       (positive: for a display or sound that comes late), -200 to 200\n"
                            "  --skip-tutorial      the 32-bit PC pop'n on AVS2 2.15: its guidance and long-note\n"
                            "                       tutorials skipped, a guest's and a new player's\n") +
                hk::EaOptions::help();
@@ -355,6 +356,7 @@ public:
         set_env("HK_PC_HZ", "0");   // the shell paces
         set_env("HK_PC_PRESS_TIME", press_time_ ? "1" : "");
         set_env("HK_PC_JUDGE_OFFSET", judge_offset_ ? std::to_string(judge_offset_) : "");
+        set_env("HK_PC_KEYS", c02_ ? "iidx" : "");   // the pad's keys: IIDX's 14, else pop'n's 9 (cabinet.c)
         set_env("HK_PC_LOG", win_path(save_ + "/pc.log"));
         { std::ofstream(save_ + "/pc.log", std::ios::trunc); }
         printf("hiraku-pc: %s, %s from %s; saves in %s\n", game_.c_str(), exe_.c_str(), program_.c_str(), save_.c_str());
@@ -1021,13 +1023,7 @@ public:
             if (value && !(link_->pad & HK_PC_PAD_BUTTON(k))) pressed_at_ = std::chrono::steady_clock::now();
             const uint32_t was = link_->pad;
             bit(link_->pad, HK_PC_PAD_BUTTON(k));
-            if (link_->pad != was) {   // the change, with when it happened (link.h: pad_ev)
-                const uint32_t n = link_->pad_ev_seq;
-                link_->pad_ev[n % HK_PC_PAD_EVENTS].us = host_us(hk::host::input_time());
-                link_->pad_ev[n % HK_PC_PAD_EVENTS].pad = link_->pad;
-                std::atomic_thread_fence(std::memory_order_release);
-                link_->pad_ev_seq = n + 1;
-            }
+            pad_changed(was);
         } else if (name == "P1 Big Red") {
             bit(link_->pad, HK_PC_PAD_RED);
         } else if (name == "P1 Big Blue") {
@@ -1116,10 +1112,23 @@ private:
     static constexpr double HZ = 60.0;   // the cabinet's VGA monitor
 
     // The C02 cabinet's controls (the family iidx's names, shell/cabinet.cpp) to its pad (link.h)
+    // A key's change, with when it happened (link.h: pad_ev): presses judged by their time (press.c)
+    void pad_changed(uint32_t was) {
+        if (link_->pad == was) return;
+        const uint32_t n = link_->pad_ev_seq;
+        link_->pad_ev[n % HK_PC_PAD_EVENTS].us = host_us(hk::host::input_time());
+        link_->pad_ev[n % HK_PC_PAD_EVENTS].pad = link_->pad;
+        std::atomic_thread_fence(std::memory_order_release);
+        link_->pad_ev_seq = n + 1;
+    }
+
     template <class Bit> bool c02_input(const std::string &name, int value, Bit &bit) {
         int k = 0;
-        if ((name.rfind("P1 Button ", 0) == 0 || name.rfind("P2 Button ", 0) == 0) && (k = std::atoi(name.c_str() + 10)) >= 1 && k <= 7)
+        if ((name.rfind("P1 Button ", 0) == 0 || name.rfind("P2 Button ", 0) == 0) && (k = std::atoi(name.c_str() + 10)) >= 1 && k <= 7) {
+            const uint32_t was = link_->pad;
             bit(link_->pad, HK_PC_C02_KEY(name[1] - '0', k));
+            pad_changed(was);
+        }
         else if (name == "1 Player Start") bit(link_->pad, HK_PC_C02_START(1));
         else if (name == "2 Players Start") bit(link_->pad, HK_PC_C02_START(2));
         else if (name == "VEFX") bit(link_->pad, HK_PC_C02_VEFX);

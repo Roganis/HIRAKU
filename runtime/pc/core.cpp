@@ -1034,9 +1034,17 @@ public:
     }
 
     // A real reader's card: held to the game's reader
+    // A real reader's card: player 1's, or player 2's (a second reader: the IIDX games with two,
+    // the link's card_uid2 and card_seq2)
     bool card_read(int player, const std::string &number) override {
-        if (player != 0) return false;
-        present_card(number);
+        if (player == 0) {
+            present_card(number);
+            return true;
+        }
+        if (player != 1 || number.size() != 16) return false;
+        for (int i = 0; i < 8; i++) link_->card_uid2[i] = (uint8_t)std::stoul(number.substr(2 * i, 2), nullptr, 16);
+        link_->card_seq2 = link_->card_seq2 + 1;
+        printf("e-AMUSEMENT: card %s held to player 2's reader\n", number.c_str());
         return true;
     }
 

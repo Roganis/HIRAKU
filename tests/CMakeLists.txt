@@ -34,6 +34,7 @@ if(NOT WIN32)
   add_executable(test_readers acio/test_readers.cpp)
   target_link_libraries(test_readers PRIVATE hiraku_shell)
   add_test(NAME card_readers COMMAND test_readers)
+  add_test(NAME card_readers_one_bus COMMAND test_readers 2)   # a cabinet's two readers on one port
   # beatmania IIDX's BIO2 I/O board against a pretend BI2A and a pretend machine
   add_executable(test_bio2 acio/test_bio2.cpp)
   target_link_libraries(test_bio2 PRIVATE hiraku_shell)

@@ -3,10 +3,13 @@
 // on a pseudo-terminal, which answers as spice2x's own reader emulation describes it: it numbers
 // itself, says it is an ICCA, exchanges keys, and then gives its status encrypted. A card held there
 // a while is read once; the 10-key's keys go to the game, the 00 key as Enter where it has no 00.
+// `test_readers 2`: two readers on one port (a beatmania IIDX cabinet's, nodes 1 and 2 of one bus),
+// each its own keys and card: the second's card is player 2's.
 #include <fcntl.h>
 #include <poll.h>
 #include <unistd.h>
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <cstdio>
@@ -30,12 +33,12 @@ static int failures = 0;
     } while (0)
 
 // The pretend reader: the far end of the pseudo-terminal
-static void pretend_reader(int fd, std::atomic<bool> &stop) {
-    ReaderCrypt crypt;
+static void pretend_reader(int fd, std::atomic<bool> &stop, int nodes) {
+    ReaderCrypt crypts[3];
+    int polls_of[3] = {0, 0, 0};
     std::vector<uint8_t> frame;
     size_t want = 0;
     bool escape = false, framed = false;
-    int polls = 0;
     auto reply = [&](const std::vector<uint8_t> &head, const std::vector<uint8_t> &payload) {
         std::vector<uint8_t> body = head;
         body.push_back((uint8_t)payload.size());
@@ -78,7 +81,7 @@ static void pretend_reader(int fd, std::atomic<bool> &stop) {
             const std::vector<uint8_t> req(frame.begin() + 5, frame.end() - 1);
             const std::vector<uint8_t> head = {uint8_t(node ? node | 0x80 : 0), hi, lo, id};
             switch (lo) {
-            case 0x01: reply(head, {1}); break;   // one node
+            case 0x01: reply(head, {(uint8_t)nodes}); break;   // how many nodes
             case 0x02: {
                 std::vector<uint8_t> v(44, 0);
                 v[0] = 3;
@@ -91,22 +94,24 @@ static void pretend_reader(int fd, std::atomic<bool> &stop) {
             }
             case 0x60: {
                 const uint32_t mine = 0x12345678;
-                crypt.set_keys(mine, (uint32_t)req[0] << 24 | req[1] << 16 | req[2] << 8 | req[3]);
+                crypts[node < 3 ? node : 0].set_keys(mine, (uint32_t)req[0] << 24 | req[1] << 16 | req[2] << 8 | req[3]);
                 reply(head, {0x12, 0x34, 0x56, 0x78});
                 break;
             }
             case 0x64: {
-                // polls 3-8: a card; 10-11: the 1 key; 13: the 00 key
-                polls++;
+                // polls 3-8: a card; 10-11: the 1 key; 13: the 00 key (node 2: its own card, no keys)
+                const int polls = ++polls_of[node < 3 ? node : 0];
+                ReaderCrypt &crypt = crypts[node < 3 ? node : 0];
                 uint8_t s[18] = {};
                 s[0] = 4;
                 if (polls >= 3 && polls <= 8) {
                     static const uint8_t uid[8] = {0xe0, 0x04, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06};
+                    static const uint8_t uid2[8] = {0xe0, 0x04, 0x01, 0x02, 0x03, 0x04, 0x05, 0x07};
                     s[0] = 2;
-                    memcpy(s + 2, uid, 8);
+                    memcpy(s + 2, node == 2 ? uid2 : uid, 8);
                 }
                 s[11] = 1;
-                uint16_t keys = polls == 10 || polls == 11 ? 0x0002 : polls == 13 ? 0x0010 : 0;   // a real reader's bits for 1 and 00
+                uint16_t keys = node == 2 ? 0 : polls == 10 || polls == 11 ? 0x0002 : polls == 13 ? 0x0010 : 0;   // a real reader's bits for 1 and 00
                 s[14] = keys >> 8, s[15] = keys & 0xff;
                 const uint16_t crc = ReaderCrypt::crc(s, 16);
                 s[16] = crc >> 8, s[17] = crc & 0xff;
@@ -124,7 +129,8 @@ static void pretend_reader(int fd, std::atomic<bool> &stop) {
     }
 }
 
-int main() {
+int main(int argc, char **argv) {
+    const int nodes = argc > 1 ? atoi(argv[1]) : 1;
     // CRC-16 (0x1021, from 0) as spice2x's table has it: one byte's CRC is its entry
     const uint8_t one = 0x01, ten = 0x10, ff = 0xff;
     CHECK(ReaderCrypt::crc(&one, 1) == 0x1021);
@@ -148,7 +154,7 @@ int main() {
     }
     const std::string slave = ptsname(master);
     std::atomic<bool> stop{false};
-    std::thread fake(pretend_reader, master, std::ref(stop));
+    std::thread fake(pretend_reader, master, std::ref(stop), nodes);
 
     std::string error;
     CHECK(hk::host::readers_option("--reader", [&] { return slave; }, &error) && error.empty());
@@ -173,8 +179,14 @@ int main() {
     fake.join();
     close(master);
 
-    CHECK(cards.size() == 1);
-    CHECK(!cards.empty() && cards[0] == "0 E004010203040506");
+    if (nodes == 2) {   // both readers' cards, each its player's (in either order)
+        CHECK(cards.size() == 2);
+        CHECK(std::count(cards.begin(), cards.end(), "0 E004010203040506") == 1);
+        CHECK(std::count(cards.begin(), cards.end(), "1 E004010203040507") == 1);
+    } else {
+        CHECK(cards.size() == 1);
+        CHECK(!cards.empty() && cards[0] == "0 E004010203040506");
+    }
     const std::vector<std::string> want = {"Keypad 1=1", "Keypad 1=0", "Keypad Enter=1", "Keypad Enter=0"};
     CHECK(inputs == want);
     for (auto &s : cards) printf("card %s\n", s.c_str());

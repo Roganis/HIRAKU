@@ -89,9 +89,13 @@ void sleep_ms(int ms) {
 
 // ---- the serial reader (ICCA/ICCB/ICCC), after spice2x's reader/ ----
 
+// Readers share a port as nodes of one ACIO bus: a beatmania IIDX cabinet's two (players 1 and 2) are
+// nodes 1 and 2 of one serial line. The bus numbers its nodes (command 0001's answer: how many);
+// each reader gets its own session (keys) and is polled in turn. The second is player 2's unless a
+// --reader of its own is given for player 2.
 class SerialReader {
 public:
-    SerialReader(std::string path, int player) : port_(std::move(path)), player_(player) {}
+    SerialReader(std::string path, int player, bool second_on_bus) : port_(std::move(path)), player_(player), second_on_bus_(second_on_bus) {}
     void run() {
         bool told = false;
         while (g_running) {
@@ -109,55 +113,81 @@ public:
     }
 
 private:
+    struct Node {
+        uint8_t addr;
+        int player;
+        ReaderCrypt crypt;
+    };
+
     bool connect() {
+        nodes_.clear();
         if (!port_.handshake({57600, 38400, 19200, 9600}, [] { return g_running.load(); })) {
             fprintf(stderr, "reader %s: no answer at 57600, 38400, 19200 or 9600 baud\n", port_.path().c_str());
             return false;
         }
         AcioPort::Message m;
-        if (!port_.ask(0, 0x0001, {0x00}, m)) return false;   // number the nodes: the reader is node 1
-        if (!port_.ask(1, 0x0002, {}, m)) return false;       // its version
+        if (!port_.ask(0, 0x0001, {0x00}, m)) return false;   // number the nodes: how many there are
+        const int count = m.payload.empty() || !m.payload[0] ? 1 : m.payload[0];
+        for (int addr = 1; addr <= count && addr <= 2; addr++) {
+            const int player = addr == 1 ? player_ : player_ == 0 && second_on_bus_ ? 1 : -1;
+            if (player < 0) {
+                fprintf(stderr, "reader %s: a reader at node %d too, left alone (player 2 has a --reader of its own)\n", port_.path().c_str(), addr);
+                continue;
+            }
+            Node n{(uint8_t)addr, player, {}};
+            if (!start(n)) return false;
+            nodes_.push_back(n);
+        }
+        return !nodes_.empty();
+    }
+    bool start(Node &n) {
+        AcioPort::Message m;
+        if (!port_.ask(n.addr, 0x0002, {}, m)) return false;   // its version
         if (m.payload.size() >= 44)
-            fprintf(stderr, "reader %s: %.4s, %.16s %.16s, player %d's\n", port_.path().c_str(), (const char *)&m.payload[8],
-                    (const char *)&m.payload[12], (const char *)&m.payload[28], player_ + 1);
-        if (!port_.ask(1, 0x0003, {}, m)) return false;       // start
-        if (!port_.ask(1, 0x0130, {0x00}, m)) return false;   // reinitialise
+            fprintf(stderr, "reader %s: %.4s, %.16s %.16s, player %d's%s\n", port_.path().c_str(), (const char *)&m.payload[8],
+                    (const char *)&m.payload[12], (const char *)&m.payload[28], n.player + 1, n.addr > 1 ? " (the bus's second reader)" : "");
+        if (!port_.ask(n.addr, 0x0003, {}, m)) return false;       // start
+        if (!port_.ask(n.addr, 0x0130, {0x00}, m)) return false;   // reinitialise
         // the session's keys: ours, and the reader's answer
         std::random_device rd;
         uint8_t mine[4];
         for (uint8_t &b : mine) b = (uint8_t)rd();
-        if (!port_.ask(1, 0x0160, {mine[0], mine[1], mine[2], mine[3]}, m) || m.payload.size() != 4) return false;
-        crypt_.set_keys((uint32_t)m.payload[0] << 24 | m.payload[1] << 16 | m.payload[2] << 8 | m.payload[3],
-                        (uint32_t)mine[0] << 24 | mine[1] << 16 | mine[2] << 8 | mine[3]);
+        if (!port_.ask(n.addr, 0x0160, {mine[0], mine[1], mine[2], mine[3]}, m) || m.payload.size() != 4) return false;
+        n.crypt.set_keys((uint32_t)m.payload[0] << 24 | m.payload[1] << 16 | m.payload[2] << 8 | m.payload[3],
+                         (uint32_t)mine[0] << 24 | mine[1] << 16 | mine[2] << 8 | mine[3]);
         return true;
     }
 
     // Read whatever card is there, then the status: 0 2 when there is a card, 2-9 its id, 11 the
     // 10-key's, 14-15 the keys held. spice2x waits 200 ms after the read for one status, so a key
     // is seen every ~220 ms (the 10-key's lag a tester found); here the status is asked every
-    // 20 ms through those 200 ms, the keys with it
+    // 20 ms through those 200 ms, the keys with it (each reader on the bus in turn)
     bool poll_card() {
         AcioPort::Message m;
-        if (!port_.ask(1, 0x0161, {0x00, 0x03, 0xff, 0xff}, m)) return false;
+        for (Node &n : nodes_)
+            if (!port_.ask(n.addr, 0x0161, {0x00, 0x03, 0xff, 0xff}, m)) return false;
         for (int i = 0; i < 10 && g_running; i++) {
             sleep_ms(20);
-            if (!port_.ask(1, 0x0164, {0x10}, m)) return false;
-            if (m.payload.size() != 18) continue;
-            crypt_.crypt(m.payload.data(), 18);
-            if (ReaderCrypt::crc(m.payload.data(), 16) != (m.payload[16] << 8 | m.payload[17])) return false;   // out of step
-            const uint8_t *s = m.payload.data();
-            if (s[11]) {
-                std::lock_guard<std::mutex> l(g_mutex);
-                g_keys[player_] = (uint16_t)(s[14] << 8 | s[15]);
+            for (Node &n : nodes_) {
+                if (!port_.ask(n.addr, 0x0164, {0x10}, m)) return false;
+                if (m.payload.size() != 18) continue;
+                n.crypt.crypt(m.payload.data(), 18);
+                if (ReaderCrypt::crc(m.payload.data(), 16) != (m.payload[16] << 8 | m.payload[17])) return false;   // out of step
+                const uint8_t *s = m.payload.data();
+                if (s[11]) {
+                    std::lock_guard<std::mutex> l(g_mutex);
+                    g_keys[n.player] = (uint16_t)(s[14] << 8 | s[15]);
+                }
+                if (s[0] == 2) card_read(n.player, s + 2);
             }
-            if (s[0] == 2) card_read(player_, s + 2);
         }
         return true;
     }
 
     AcioPort port_;
     int player_;
-    ReaderCrypt crypt_;
+    bool second_on_bus_;   // the bus's second reader is player 2's (no --reader of its own)
+    std::vector<Node> nodes_;
 };
 
 #ifdef HK_WITH_PCSC
@@ -466,6 +496,7 @@ bool readers_option(const std::string &name0, const std::function<std::string()>
 
 std::string readers_help() {
     return "  --reader PATH        a Konami e-AMUSEMENT card reader on a serial port (/dev/ttyUSB0); twice: player 2's\n"
+           "                       (a second reader on the same port, as a cabinet's two: player 2's)\n"
            "  --scard              NFC card readers through PC/SC (pcscd)\n"
            "  --cardio             cardio card readers (USB HID)\n";
 }
@@ -474,8 +505,11 @@ void readers_start() {
     if (std::all_of(g_serial.begin(), g_serial.end(), [](const std::string &p) { return p.empty(); }) && !g_scard && !g_cardio) return;
     g_running = true;
     atexit(readers_stop);   // before the threads' state goes (the game leaves through exit())
+    // the same port twice: one bus, its second reader player 2's (a cabinet's two readers on one line)
+    if (g_serial.size() == 2 && g_serial[0] == g_serial[1]) g_serial[1].clear();
+    const bool second_on_bus = g_serial.size() < 2 || g_serial[1].empty();
     for (size_t i = 0; i < g_serial.size(); i++)
-        if (!g_serial[i].empty()) g_threads.emplace_back([path = g_serial[i], i] { SerialReader(path, (int)i).run(); });
+        if (!g_serial[i].empty()) g_threads.emplace_back([path = g_serial[i], i, second_on_bus] { SerialReader(path, (int)i, second_on_bus).run(); });
 #ifdef HK_WITH_PCSC
     if (g_scard) g_threads.emplace_back(scard_run);
 #else

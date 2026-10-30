@@ -1030,6 +1030,19 @@ static IDirect3D9 *WINAPI my_Direct3DCreate9(UINT sdk) {
 }
 
 // The game showing its window again, once HIRAKU's shows the pictures: it stays hidden
+// The cabinet's graphics card (HK_PC_GPU_ID, VVVV:DDDD; hiraku-pc gives the IIDX games ATI's Radeon
+// X1300, 1002:7146): IIDX EMPRESS reads the first display's device id and makes no Direct3D device
+// unless it names one of the cabinets' cards (DEV_7146, or DEV_95C5 the HD 3450): "failed to get the
+// device"
+static BOOL WINAPI my_EnumDisplayDevicesA(LPCSTR name, DWORD i, PDISPLAY_DEVICEA dev, DWORD flags) {
+    const BOOL r = EnumDisplayDevicesA(name, i, dev, flags);
+    const char *id = getenv("HK_PC_GPU_ID");
+    unsigned v, d;
+    if (r && !name && dev && dev->cb >= sizeof *dev && id && sscanf(id, "%x:%x", &v, &d) == 2)
+        snprintf(dev->DeviceID, sizeof dev->DeviceID, "PCI\\VEN_%04X&DEV_%04X&SUBSYS_00000000&REV_00", v, d);
+    return r;
+}
+
 static BOOL WINAPI my_ShowWindow(HWND w, int how) {
     if (g_shown_off && w == g_hwnd) return TRUE;   // kept as it is, off the screen
     if (host_shows() && (w == g_hwnd || !g_hwnd)) how = SW_HIDE;
@@ -1257,6 +1270,7 @@ static void *cabinet_hook_for(const char *dll, const char *fn) {
         {"d3d8.dll", "Direct3DCreate8", (void *)hk_Direct3DCreate8},   // d3d8.c
         {"d3dx9_24.dll", "D3DXCreateEffect", (void *)my_D3DXCreateEffect},
         {"user32.dll", "ShowWindow", (void *)my_ShowWindow},
+        {"user32.dll", "EnumDisplayDevicesA", (void *)my_EnumDisplayDevicesA},
         {"dsound.dll", "DirectSoundCreate8", (void *)hk_DirectSoundCreate8},
         {"dsound.dll", "DirectSoundCreate", (void *)hk_DirectSoundCreate},
     };

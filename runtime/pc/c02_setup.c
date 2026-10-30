@@ -278,7 +278,8 @@ static int patch_pointers(uint8_t *fn, void *to) {
     IMAGE_SECTION_HEADER *sec = IMAGE_FIRST_SECTION(nt);
     int n = 0;
     for (WORD s = 0; s < nt->FileHeader.NumberOfSections; s++, sec++) {
-        if (sec->Characteristics & IMAGE_SCN_MEM_EXECUTE) continue;
+        // the data (EMPRESS's program, as dumped from memory, marks its .data executable too)
+        if ((sec->Characteristics & IMAGE_SCN_MEM_EXECUTE) && memcmp(sec->Name, ".data", 6)) continue;
         uint32_t *p = (uint32_t *)(base + sec->VirtualAddress);
         for (size_t i = 0; i < sec->Misc.VirtualSize / 4; i++)
             if (p[i] == (uint32_t)(uintptr_t)fn && hk_patch_slot((void **)&p[i], to)) n++;
@@ -327,19 +328,24 @@ static void __cdecl jnet_print(const char *fmt, ...) {
 
 void hk_c02_debug_lines(void) {
     if (!getenv("HK_PC_JNET_LOG")) return;
-    static const char fmt[] = "jnet2_common_cb data[";
+    // (EMPRESS has no common_cb line: its coin settings' message is handed to the same routine)
+    static const char *const fmts[] = {"jnet2_common_cb data[", "jnet2_set_coin : failed to property_write."};
     char *base = (char *)hk_program();
     IMAGE_NT_HEADERS *nt = (IMAGE_NT_HEADERS *)(base + ((IMAGE_DOS_HEADER *)base)->e_lfanew);
     IMAGE_SECTION_HEADER *sec = IMAGE_FIRST_SECTION(nt);
     const uint8_t *text = NULL;
-    for (WORD w = 0; w < nt->FileHeader.NumberOfSections && !text; w++, sec++) {
-        if (sec->Characteristics & IMAGE_SCN_MEM_EXECUTE) continue;
-        const uint8_t *p = (const uint8_t *)base + sec->VirtualAddress;
-        for (size_t i = 0; i + sizeof fmt <= sec->Misc.VirtualSize; i++)
-            if (!memcmp(p + i, fmt, sizeof fmt - 1)) {
-                text = p + i;
-                break;
-            }
+    const IMAGE_SECTION_HEADER *first = sec;
+    for (int f = 0; f < 2 && !text; f++) {
+        const size_t n = strlen(fmts[f]);
+        sec = (IMAGE_SECTION_HEADER *)first;
+        for (WORD w = 0; w < nt->FileHeader.NumberOfSections && !text; w++, sec++) {   // (every section: a dumped program's are all executable)
+            const uint8_t *p = (const uint8_t *)base + sec->VirtualAddress;
+            for (size_t i = 0; i + n <= sec->Misc.VirtualSize; i++)
+                if (!memcmp(p + i, fmts[f], n)) {
+                    text = p + i;
+                    break;
+                }
+        }
     }
     if (!text) {
         hk_log("hiraku-pc: HK_PC_JNET_LOG: the network library's lines not found");

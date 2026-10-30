@@ -5,7 +5,9 @@ family = "iidx"         # IIDX cabinet: 7 keys and a turntable per player, VEFX,
 core = "pc"             # Konami's own program in HIRAKU's cabinet (runtime/pc/, PLAN.md section 36)
 
 [pc]
-exe = "bm2dx.exe"       # in I00/<date>/, a folder by revision: the last (2009072200) is run
+exe = "bm2dx.exe"       # in I00/<date>/, a folder by revision: the last (2009072200) is run. Konami's own
+                        # program is packed and stops at once under Wine; a copy unpacked from memory (its
+                        # strings in the clear, so ingest picks it over the packed one) runs
 mark = "I00.game.s"     # what tells this game's program from the other IIDX's (all bm2dx.exe)
 layout = "revisions"
 board = "c02-driver"    # the cabinet's board under its driver (runtime/pc/ezusb_dev.c), from libacio.dll

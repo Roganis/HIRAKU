@@ -1304,7 +1304,7 @@ start-up. `pc get`'s answer carries `name`, `pass` and `pid` itself (JAG 0x4ce7c
 `<pc>` child (0x4ce840), read element by element (none required), then grade, ex, skin, rlist, ocrs,
 weekly.
 
-## beatmania IIDX GOLD and DJ TROOPERS (PC games, libavs)
+## beatmania IIDX GOLD, DJ TROOPERS and EMPRESS (PC games, libavs)
 
 GOLD (`GLD`) and DJ TROOPERS (`HDD`) keep DistorteD's modules (pc, music, grade, ranking, shop) and
 its cards (cardmng), but send them through libavs's e-AMUSE3 as pop'n 15 does (`<pc method="get"
@@ -1335,6 +1335,14 @@ unless said):
   checked on screen yet.
 - **pc save** at the credit's end: `iidxid cltype achi pnum opt opt2 gno sflg0-2 sdhd ncomb mcomb mode
   pmode lid` and GOLD's `now_g all_g use_g`.
+
+EMPRESS (`I00`, its e-AMUSE3 in `libavs-win32-ea3.dll`; method definitions at 0x57decc...: three
+routines a method, the parser last) the same, and: `pc reg` sends `did`; `pc get`'s pcdata adds
+`lift_len`, and `jnum` (s64) and `bjnum` (18 s32) are needed; `skin` is optional but, if given, 12
+u16 (an empty one fails the call); `ex` holds `e` children; music reg/play add `frate`; getrank's
+answer is another form (`<m>`, `<best rno>`, `<b>`, `<t>`), not answered yet. libavs logs a parser's
+failure as "res: receiver returns failure" (`HK_PC_AVS_LOG`). A new pass is asked to accept terms
+(a page of its own) before NAME ENTRY.
 
 ## Not known yet
 

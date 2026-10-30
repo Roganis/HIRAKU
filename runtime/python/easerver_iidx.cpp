@@ -468,8 +468,8 @@ std::string EamuseServer::answer_iidx_fdd(const std::string &game, const Request
     }
     if (mod == "pc" && method == "get") {
         // pcdata (the record: each of these), grade (the dan grades, -1 none), ex, skin and rlist
-        // (lists, 8 characters an entry; empty for none) and gold (GOLD's points) all needed; rivals,
-        // courses and the weekly song not
+        // (lists, 8 characters an entry; empty for none), gold (GOLD's points) and jnum and bjnum
+        // (EMPRESS's jewels) all needed; rivals, courses and the weekly song not
         // DistorteD (JAG 0x4ce7c0): the answer itself names the player and gives the pass's PIN, its
         // record is a child named pc (hdsd, not GOLD's sdhd; no pmode), and no gold
         const Record *p = player("rid", attr(r.attrs, "rid"));
@@ -482,15 +482,19 @@ std::string EamuseServer::answer_iidx_fdd(const std::string &game, const Request
             attrs += a(k, field(*p, k));
         const std::string sgid = get(*p, "sgid"), dgid = get(*p, "dgid");
         const std::string rest = "<grade" + a("sgid", sgid.empty() ? "-1" : sgid) + a("dgid", dgid.empty() ? "-1" : dgid) +
-                                 "/><ex></ex><skin></skin><rlist></rlist>";
+                                 "/><ex></ex>" + (game == "I00" ? "" : "<skin></skin>") + "<rlist></rlist>";   // (EMPRESS: skin, if given, 12 u16)
         if (fdd) {
             std::string pass;
             for (const Record &c : from_lines(read_file("cards")))
                 if (attr(c, "refid") == attr(r.attrs, "rid")) pass = attr(c, "pass");
             return ok(a("name", get(*p, "name")) + a("pass", pass) + a("pid", field(*p, "pid")), "<pc" + attrs + "/>" + rest);
         }
-        return ok("", "<pcdata" + attrs + a("pmode", field(*p, "pmode")) + "/>" + rest + "<gold" + a("now_g", field(*p, "now_g")) +
-                          a("all_g", field(*p, "all_g")) + a("use_g", field(*p, "use_g")) + "/>");
+        // (EMPRESS also the lift's length, LIFT's option)
+        return ok("", "<pcdata" + attrs + a("pmode", field(*p, "pmode")) + a("lift_len", field(*p, "lift_len")) + "/>" + rest + "<gold" + a("now_g", field(*p, "now_g")) +
+                          a("all_g", field(*p, "all_g")) + a("use_g", field(*p, "use_g")) + "/>" +
+                          // EMPRESS's jewels (needed): the count, and 18 more by kind
+                          "<jnum __type=\"s64\">" + std::to_string(field(*p, "jnum")) + "</jnum>"
+                          "<bjnum __type=\"s32\" __count=\"18\">0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0</bjnum>");
     }
     if (mod == "pc" && method == "getname") {   // a pass's player, by its ref id (the takeover's)
         const Record *p = player("rid", attr(r.attrs, "rid"));
@@ -531,7 +535,7 @@ std::string EamuseServer::answer_iidx_fdd(const std::string &game, const Request
             for (const Record &x : scores) text += to_line(x);
             write_file("iidx-" + game + "-scores", text);
         }
-        return ok(a("mid", mid) + a("clid", clid) + a("crate", "0"));
+        return ok(a("mid", mid) + a("clid", clid) + a("crate", "0") + a("frate", "0"));
     }
     if (game != "FDD" && mod == "music" && method == "getrank") {
         static const char letters[] = "0123456789:;abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
@@ -555,7 +559,7 @@ std::string EamuseServer::answer_iidx_fdd(const std::string &game, const Request
         return ok(a("anum", "0") + a("snum", "0") + a("pnum", "0") + a("aflg", "0") + a("sflg", "0") + a("pflg", "0"));
     if (mod == "pc" && method == "lcommon") return ok(a("ls", "0"));
     if (mod == "music" && (method == "reg" || method == "play" || method == "lplay"))   // the chart's clear rate
-        return ok(a("mid", attr(r.attrs, "mid")) + a("clid", attr(r.attrs, "clid")) + a("crate", "0"));
+        return ok(a("mid", attr(r.attrs, "mid")) + a("clid", attr(r.attrs, "clid")) + a("crate", "0") + a("frate", "0"));   // (frate: EMPRESS's)
     if (mod == "grade" && method == "raised") return ok(a("pnum", "0"));
     if (mod == "ranking" && method == "entry") return ok(a("anum", "0") + a("jun", "0"));
     if (mod == "shop" && method == "getname")   // the shop's name (the location's), its prefecture, its closing time

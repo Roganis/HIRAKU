@@ -392,6 +392,7 @@ public:
         set_env("HK_PC_BOARD_IN_ACIO", rteffect ? "" : "1");
         set_env("HK_PC_SECURITY", m["security"]);
         set_env("HK_PC_BOARD", m["io"] == "fx2" ? "fx2" : "d01");   // io=fx2: the later IO2 board (DJ TROOPERS on)
+        set_env("HK_PC_GPU_ID", "1002:7146");   // the cabinets' graphics card (EMPRESS checks it: cabinet.c)
         if (!m["sidcode"].empty()) {
             std::ofstream(save_ + "/prog/sidcode.txt", std::ios::binary | std::ios::trunc) << m["sidcode"] << "\n";
         }

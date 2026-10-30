@@ -238,8 +238,7 @@ static int find_keys2(void) {
     char *base = (char *)hk_program();
     IMAGE_NT_HEADERS *nt = (IMAGE_NT_HEADERS *)(base + ((IMAGE_DOS_HEADER *)base)->e_lfanew);
     IMAGE_SECTION_HEADER *sec = IMAGE_FIRST_SECTION(nt);
-    for (WORD w = 0; w < nt->FileHeader.NumberOfSections; w++, sec++) {
-        if (sec->Characteristics & IMAGE_SCN_MEM_EXECUTE) continue;
+    for (WORD w = 0; w < nt->FileHeader.NumberOfSections; w++, sec++) {   // (every section: some programs mark all executable)
         const uint8_t *p = (const uint8_t *)base + sec->VirtualAddress;
         const size_t n = sec->Misc.VirtualSize;
         for (size_t i = 0; i + 9 <= n; i++) {

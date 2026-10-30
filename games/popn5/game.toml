@@ -3,6 +3,7 @@ id = "popn5"
 title = "pop'n music 5"
 family = "popn"
 mame = "popn5"
+boot_seconds = 60       # fast start-up's ready point: the machine's seconds to the end of its start-up (host/warp.h)
 
 [program]
 exe = "FIREBEAT.EXE"

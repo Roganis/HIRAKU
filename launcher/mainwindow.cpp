@@ -910,6 +910,7 @@ QStringList MainWindow::arguments(const Game &g) const {
     if (lightsFileUsed(lights)) a << "--lights" << lights;
     if (s.value("lights/socket", true).toBool()) a << "--lights-socket" << cfg::lightsSocket();
     if (s.value("lights/overlay", false).toBool()) a << "--lights-overlay";   // runtime/host/lampview.h
+    if (s.value("game/fastBoot", true).toBool() && g.core != "pc") a << "--fast-boot";   // runtime/host/warp.h
     QString sf = s.value("audio/soundfont").toString();
     if (g.family == "kbm" && !sf.isEmpty()) a << "--soundfont" << sf;
     // the Konami Python games' GS (Settings > Display): Vulkan by default, less CPU than the

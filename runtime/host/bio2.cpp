@@ -16,6 +16,7 @@
 #include "../shell/cabinet.h"
 #include "../shell/core.h"
 #include "acio.h"
+#include "warp.h"
 
 namespace hk::host {
 
@@ -186,7 +187,10 @@ void bio2_frame(hk::Core &core) {
     }
     static const std::vector<Button> all = buttons();
     for (auto &b : all)
-        if (bit(in, b.bit) != bit(last, b.bit)) core.set_input(b.name, bit(in, b.bit));
+        if (bit(in, b.bit) != bit(last, b.bit)) {
+            core.set_input(b.name, bit(in, b.bit));
+            if (bit(in, b.bit)) warp::pressed();   // the fast start-up ends (host/warp.h)
+        }
     for (int p = 0; p < 2; p++)
         if (int8_t d = (int8_t)(in[16 + p] - last[16 + p])) core.turntable_add(p, d * 4);   // 256 a turn, to 1024
     const int sliders[5] = {0, 2, 4, 6, 7};
@@ -200,6 +204,7 @@ void bio2_frame(hk::Core &core) {
     } else if (coins) {
         coins--;
         core.set_input("Coin 1", 1);
+        warp::pressed();
         coin_frames = 4;   // 2 down, 2 up
     }
     memcpy(last, in, IN);

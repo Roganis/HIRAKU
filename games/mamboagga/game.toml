@@ -4,6 +4,7 @@ title = "Mambo A Go-Go (Rental)"
 family = "mambo"        # Mambo a GoGo cabinet: three congas (left, centre, right), three zones each
 mame = "mamboagga"      # MAME set name, used by the oracle
 core = "sys573"         # System 573 (runtime/sys573/, PLAN.md section 19); digital I/O board
+boot_seconds = 69       # fast start-up's ready point: the machine's seconds to the end of its start-up (host/warp.h)
 
 [roms]
 bios = "700b01.22g"             # 573 BIOS

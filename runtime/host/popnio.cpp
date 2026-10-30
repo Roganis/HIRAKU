@@ -17,6 +17,7 @@
 
 #include "../shell/cabinet.h"
 #include "../shell/core.h"
+#include "warp.h"
 
 #ifdef _WIN32
 #ifndef NOMINMAX
@@ -616,7 +617,10 @@ void popnio_frame(hk::Core &core) {
     static bool first = true;
     if (first) last_count = count, first = false;
     for (auto &b : inputs())
-        if ((now >> b.bit & 1) != (last >> b.bit & 1)) core.set_input(b.name, now >> b.bit & 1);
+        if ((now >> b.bit & 1) != (last >> b.bit & 1)) {
+            core.set_input(b.name, now >> b.bit & 1);
+            if (now >> b.bit & 1) warp::pressed();   // the fast start-up ends (host/warp.h)
+        }
     // coins: the board's count (Konami's board counts them); a board whose count never moves
     // (UltimatePopnController's ezusb.dll) by its coin switch, bit 22, unless the count moves
     // within 15 frames of the switch
@@ -632,6 +636,7 @@ void popnio_frame(hk::Core &core) {
     } else if (pending) {
         pending--;
         core.set_input("Coin 1", 1);
+        warp::pressed();
         coin_frames = 4;   // 2 down, 2 up
     }
 }

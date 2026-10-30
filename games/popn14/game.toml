@@ -4,6 +4,7 @@ id = "popn14"
 title = "pop'n music 14 FEVER!"
 family = "pypopn"       # pop'n on Konami Python: 9 buttons, the interface board's lamps
 core = "python"         # PCSX2 Reliquary hosted by HIRAKU (runtime/python/, PLAN.md section 23); not in MAME
+boot_seconds = 23       # fast start-up's ready point: the machine's seconds to the end of its start-up (host/warp.h)
 
 [python]
 io_mode = "POPN"        # the interface board's input profile (Reliquary's IoMode)

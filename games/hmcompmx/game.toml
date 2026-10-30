@@ -4,6 +4,7 @@ title = "hiphopmania complete MIX (UA-B)"
 family = "djbm"         # DJ Main beatmania cabinet: 5 keys + turntable per player, effect
 mame = "hmcompmx"       # MAME set name, used by the oracle
 core = "djmain"         # interpreted 68EC020 on the DJ Main board (runtime/djmain/)
+boot_seconds = 77       # fast start-up's ready point: the machine's seconds to the end of its start-up (host/warp.h)
 map = "u"               # MAME djmainu: main_map_u (the IDE ports and tile RAM elsewhere)
 
 [roms]

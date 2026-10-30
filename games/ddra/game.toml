@@ -4,6 +4,7 @@ title = "Dance Dance Revolution (Asia, AAA)"
 family = "ddr"          # DDR cabinet: 4 panels per player, menu buttons
 mame = "ddra"           # MAME set name, used by the oracle
 core = "sys573"         # System 573 (runtime/sys573/, PLAN.md section 19); analog I/O board
+boot_seconds = 85       # fast start-up's ready point: the machine's seconds to the end of its start-up (host/warp.h)
 
 [roms]
 bios = "700a01.22g"             # 573 BIOS

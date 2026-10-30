@@ -4,6 +4,7 @@ title = "beatmania IIDX 7th style (JAB)"
 family = "iidx"         # IIDX cabinet: 7 keys and a turntable per player, VEFX, Effect, 5 effector sliders
 mame = "bmiidx7"       # MAME set name, used by the oracle
 core = "twinkle"        # Twinkle (runtime/twinkle/, PLAN.md section 21)
+boot_seconds = 51       # fast start-up's ready point: the machine's seconds to the end of its start-up (host/warp.h)
 
 [roms]
 bios = "863a03.7b"      # Twinkle BIOS (27C040), the same chip in every set

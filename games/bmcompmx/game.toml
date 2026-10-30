@@ -4,6 +4,7 @@ title = "beatmania complete MIX"
 family = "djbm"         # DJ Main beatmania cabinet: 5 keys + turntable per player, effect
 mame = "bmcompmx"       # MAME set name, used by the oracle
 core = "djmain"         # interpreted 68EC020 on the DJ Main board (runtime/djmain/)
+boot_seconds = 77       # fast start-up's ready point: the machine's seconds to the end of its start-up (host/warp.h)
 
 [roms]
 program = ["858jac01.6a", "858jac02.8a"]

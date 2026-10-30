@@ -3,6 +3,7 @@ id = "popn10"
 title = "pop'n music 10"
 family = "pypopn"       # pop'n on Konami Python: 9 buttons, the interface board's lamps
 core = "python"         # PCSX2 Reliquary hosted by HIRAKU (runtime/python/, PLAN.md section 23); not in MAME
+boot_seconds = 19       # fast start-up's ready point: the machine's seconds to the end of its start-up (host/warp.h)
 
 [python]
 io_mode = "POPN"        # the interface board's input profile (Reliquary's IoMode)

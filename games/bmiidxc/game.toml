@@ -4,6 +4,7 @@ title = "beatmania IIDX with DDR 2nd Club Version"
 family = "iidx"         # IIDX cabinet: 7 keys and a turntable per player, VEFX, Effect, 5 effector sliders
 mame = "bmiidxc"        # MAME set name, used by the oracle
 core = "twinkle"        # Twinkle (runtime/twinkle/, PLAN.md section 21)
+boot_seconds = 35       # fast start-up's ready point: the machine's seconds to the end of its start-up (host/warp.h)
 # The club kit's other program CD (896 JA A01) is the DDR cabinet's: MAME's ddr2mc installs it on a
 # System 573. The two cabinets link over serial (docs/CATALOGUE.md, Phase 6); this one is the 1st
 # style's board, with the session port on the super I/O's second 16550.

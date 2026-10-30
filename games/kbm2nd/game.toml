@@ -3,6 +3,7 @@ id = "kbm2nd"
 title = "Keyboardmania 2nd Mix"
 family = "kbm"
 mame = "kbm2nd"
+boot_seconds = 42       # fast start-up's ready point: the machine's seconds to the end of its start-up (host/warp.h)
 first_boot = "press F2 for test mode: SOUND CHECK > INITIALIZE SOUND FLASH, then ALL FACTORY SETTINGS. Answer YES? and ARE YOU SURE? with 1 then 1 + 2, and PRESS 1P&2P with 1 + 2."   # shown by the launcher
 
 [program]

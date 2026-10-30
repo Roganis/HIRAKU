@@ -4,6 +4,7 @@ title = "DrumMania 10th Mix"
 family = "drmn"         # DrumMania cabinet: five pads, the bass pedal, select buttons
 mame = "drmn10m"        # MAME set name, used by the oracle
 core = "sys573"         # System 573 (runtime/sys573/, PLAN.md section 19); digital I/O board
+boot_seconds = 149      # fast start-up's ready point: the machine's seconds to the end of its start-up (host/warp.h)
 first_boot = "the game installs itself from CD to flash, no input needed; at INFO 508 (install done, power off) stop it and play again. Then NOTE 605 (RTC-RAM cleared): press Test. The boot checks wait for the multi-session unit, which boots from its own CD (about two minutes in all)."
 
 [roms]

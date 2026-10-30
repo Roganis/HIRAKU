@@ -4,6 +4,7 @@ title = "DrumMania 3rd Mix"
 family = "drmn"         # DrumMania cabinet: five pads, the bass pedal, select buttons
 mame = "drmn3m"         # MAME set name, used by the oracle
 core = "sys573"         # System 573 (runtime/sys573/, PLAN.md section 19); digital I/O board
+boot_seconds = 55       # fast start-up's ready point: the machine's seconds to the end of its start-up (host/warp.h)
 install_cassette = "yes"   # the launcher's first boot uses the install cassette (--cassette install)
 
 [roms]

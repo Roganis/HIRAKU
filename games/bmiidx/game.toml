@@ -4,6 +4,7 @@ title = "beatmania IIDX"
 family = "iidx"         # IIDX cabinet: 7 keys and a turntable per player, VEFX, Effect, 5 effector sliders
 mame = "bmiidx"         # MAME set name, used by the oracle
 core = "twinkle"        # Twinkle (runtime/twinkle/, PLAN.md section 21)
+boot_seconds = 33       # fast start-up's ready point: the machine's seconds to the end of its start-up (host/warp.h)
 # MAME flags this set NOT_WORKING: its DVD player check needs CTS on the PS1's SIO1, which MAME's
 # SIO doesn't have (E600 DVD INIT ERROR). HIRAKU's SIO1 has it here (TW-5).
 

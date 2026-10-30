@@ -699,6 +699,16 @@ void SettingsDialog::generalPage(QVBoxLayout *v) {
                         "(gone from where they were), or read where they are (keep them there). Its ROMs are copied in "
                         "either way.");
     fp->addRow("Games' files when added:", m_place);
+    auto *start = new QGroupBox("Starting a game");
+    auto *fs = new QFormLayout(start);
+    m_fastBoot = new QCheckBox("Fast start-up: through the game's start-up checks at full speed, to its title");
+    m_fastBoot->setChecked(s.value("game/fastBoot", true).toBool());
+    m_fastBoot->setToolTip("The game still boots as the cabinet does (its checks, its loading), only as fast as this "
+                           "PC can run it, without sound, with a box over its picture saying so; from its title or "
+                           "attract on, at its own speed. A button of the game (a coin, Test) goes back to its own "
+                           "speed at once. The arcade games (not the PC ones); Tab, held, fast-forwards any time.");
+    fs->addRow("", m_fastBoot);
+    v->addWidget(start);
     auto *adv = new QGroupBox("Launcher");
     auto *fx = new QFormLayout(adv);
     m_hideLauncher = new QCheckBox("Hide the launcher while a game runs");
@@ -756,6 +766,7 @@ void SettingsDialog::accept() {
     s.setValue("paths/bin", m_bin->text().trimmed());
     s.setValue("paths/nvram", m_nvram->text().trimmed());
     s.setValue("ui/hideWhileRunning", m_hideLauncher->isChecked());
+    s.setValue("game/fastBoot", m_fastBoot->isChecked());
     s.setValue("ingest/place", m_place->currentData().toString());
     s.setValue("updates/check", m_checkUpdates->isChecked());
     s.setValue("game/extraArgs", m_extra->text().trimmed());

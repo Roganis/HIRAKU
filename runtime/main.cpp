@@ -82,6 +82,11 @@
 //                       --fullscreen (F11 toggles the window with the keyboard)
 //     --mod FOLDER      a mod (docs/MODS.md: the folder's mod.toml), several in order: patches
 //                       to the game's memory, replaced bytes or files on its media
+//     --fast-boot       with --window, the game's start-up as fast as the machine can go (no sound,
+//                       its pictures with a box over them) until its ready point (games/<id>/game.toml
+//                       boot_seconds: the machine's seconds to its title or attract), or until a
+//                       player presses one of its buttons. host/warp.h
+//     --fast-boot-seconds S  ... up to S seconds of the machine's time instead (implies --fast-boot)
 //     --volume DB       the sound out of the window, louder or quieter (e.g. 6 or -3; 0 by default):
 //                       what the speakers get, not what --wav and --digest record
 //     --audio-exclusive Windows: the output (--audio-device's, else the default one) in WASAPI exclusive
@@ -127,6 +132,7 @@
 #include "host/popnio.h"
 #include "host/readers.h"
 #include "host/notice.h"
+#include "host/warp.h"
 #include "host/window.h"
 #include "host/pacing.h"
 #endif
@@ -252,6 +258,19 @@ std::string find_root() {
     return HK_ROOT;
 }
 
+// A game.toml's `boot_seconds = N` (its top, before any [section]): the fast start-up's ready
+// point; 0 if none
+double boot_seconds(const std::string &toml) {
+    FILE *f = fopen(toml.c_str(), "r");
+    if (!f) return 0;
+    char line[512];
+    double s = 0;
+    while (fgets(line, sizeof line, f) && line[0] != '[')
+        if (sscanf(line, " boot_seconds = %lf", &s) == 1) break;
+    fclose(f);
+    return s;
+}
+
 }  // namespace
 
 int main(int argc, char **argv) {
@@ -290,6 +309,8 @@ int main(int argc, char **argv) {
     bool split_screens = false;
     std::vector<std::string> mod_dirs;   // --mod: docs/MODS.md
     std::string audio_asio;
+    bool fast_boot = false;
+    double fast_boot_seconds = 0;
     for (int k = 1; k < argc; k++) {
         std::string a = argv[k];
         // one dash is two, as spice2x writes its options (-url, -p, -card0: shell/eaoptions.h)
@@ -334,6 +355,8 @@ int main(int argc, char **argv) {
         else if (a == "--audio-exclusive") audio_exclusive = true;
         else if (a == "--volume") volume_db = std::stod(val());
         else if (a == "--split-screens") split_screens = true;
+        else if (a == "--fast-boot") fast_boot = true;
+        else if (a == "--fast-boot-seconds") fast_boot = true, fast_boot_seconds = std::stod(val());
         else if (a == "--mod") mod_dirs.push_back(val());
         else if (a == "--audio-asio") audio_asio = val();
         else if (a == "--audio-buffer") audio_buffer = std::stoi(val());
@@ -487,6 +510,12 @@ int main(int argc, char **argv) {
     host::window_set_volume(volume_db);
     host::window_set_audio_fixed(audio_fixed);
     host::window_set_split(split_screens);
+    if (fast_boot && window_scale) {   // the ready point: --fast-boot-seconds, else the game's
+        double s = fast_boot_seconds;
+        if (s <= 0) s = boot_seconds(opt.root + "/games/" + game + "/game.toml");
+        if (s > 0) host::warp::set(s);
+        else fprintf(stderr, "fast start-up: games/%s/game.toml has no boot_seconds: the start-up at its own speed\n", game.c_str());
+    }
     if (window_scale && !host::window_open(("HIRAKU - " + game).c_str(), window_scale, bindings, audio_ms, fullscreen, machine.audio_rate())) {
         fprintf(stderr, "cannot open a window\n");
         return 1;

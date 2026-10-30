@@ -104,6 +104,8 @@ build/cmake/hiraku-bm3final --window
 
 The machine boots like a cabinet. The skipped BIOS time passes instantly. Then the game runs its own STARTUP checks for about 20 s; hold **Tab** to fast-forward through them.
 
+**Fast start-up** (`--fast-boot`; from the launcher, Settings > General, on by default): the game's own start-up (its checks, its loading, the screens before its title or attract) runs as fast as the PC can take it, without sound, with a box over the picture saying so and how far it is, then the game goes on at its own speed. The game still boots as a cabinet does; only the wait goes (a DJ Main game's 77 s in about 4 s). Where the start-up ends is each game's `boot_seconds` in its `games/<id>/game.toml`; `--fast-boot-seconds S` sets another. A button of the game (a coin, Start, Test) brings back its own speed at once, so a start-up that asks for something (a first boot's test mode) isn't run past. The arcade cores; not the PC games.
+
 | Key | Action |
 |---|---|
 | Z S X D C | P1 keys 1–5 |

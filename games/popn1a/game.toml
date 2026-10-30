@@ -4,6 +4,7 @@ title = "pop'n music (AA-A, HDD 1.00)"
 family = "djpopn"       # DJ Main pop'n music cabinet: 9 buttons
 mame = "popn1a"         # MAME set name, used by the oracle
 core = "djmain"         # interpreted 68EC020 on the DJ Main board (runtime/djmain/)
+boot_seconds = 77       # fast start-up's ready point: the machine's seconds to the end of its start-up (host/warp.h)
 map = "a"               # MAME djmaina: main_map_a (the IDE ports and tile RAM elsewhere)
 
 [roms]

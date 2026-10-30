@@ -4,6 +4,7 @@ title = "Percussion Freaks 6th Mix"
 family = "drmn"         # DrumMania cabinet: five pads, the bass pedal, select buttons
 mame = "pcnfrk6m"       # MAME set name, used by the oracle
 core = "sys573"         # System 573 (runtime/sys573/, PLAN.md section 19); digital I/O board
+boot_seconds = 149      # fast start-up's ready point: the machine's seconds to the end of its start-up (host/warp.h)
 first_boot = "this set needs its multi-session unit's CD, which is not dumped (MAME lists none for it): it can't be installed yet."   # shown by the launcher
 
 [roms]

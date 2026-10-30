@@ -25,7 +25,7 @@ private:
     void cabinetPage(QVBoxLayout *v);
     void generalPage(QVBoxLayout *v);
     QSpinBox *m_scale, *m_audioMs, *m_volume;
-    QCheckBox *m_fullscreen, *m_splitScreens, *m_displaySync, *m_fineSound, *m_audioFixed, *m_priority, *m_audioExclusive = nullptr, *m_socket, *m_lightsOverlay, *m_hideLauncher, *m_checkUpdates;
+    QCheckBox *m_fullscreen, *m_splitScreens, *m_displaySync, *m_fineSound, *m_audioFixed, *m_priority, *m_audioExclusive = nullptr, *m_socket, *m_lightsOverlay, *m_fastBoot, *m_hideLauncher, *m_checkUpdates;
     QComboBox *m_picture, *m_audioDevice, *m_audioBuffer;
     QMap<QString, QString> m_shaderKeys;    // the in-game shader settings' controls, by action
     QComboBox *m_pyRenderer;                // the Konami Python games' GS: Vulkan, OpenGL, software

@@ -4,6 +4,7 @@ title = "beatmania"
 family = "djbm"         # DJ Main beatmania cabinet: 5 keys + turntable per player, effect
 mame = "bm1stmix"       # MAME set name, used by the oracle
 core = "djmain"         # interpreted 68EC020 on the DJ Main board (runtime/djmain/)
+boot_seconds = 77       # fast start-up's ready point: the machine's seconds to the end of its start-up (host/warp.h)
 
 # The ROM layout of MAME's set. Each pair is loaded 16-bit interleaved (even
 # byte, odd byte), as MAME's ROM_LOAD16_BYTE does.

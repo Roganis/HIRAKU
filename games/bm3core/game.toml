@@ -3,6 +3,7 @@ id = "bm3core"
 title = "beatmania III APPEND CORE REMIX"
 family = "bm3"          # bm3 | popn | ppp | kbm  - selects the board variant
 mame = "bm3core"        # MAME set name, used by the oracle
+boot_seconds = 41       # fast start-up's ready point: the machine's seconds to the end of its start-up (host/warp.h)
 
 [program]
 exe = "HIKARU.EXE"

@@ -39,6 +39,7 @@ add_library(hk_python_shell STATIC
 	${HK}/runtime/host/window.cpp
 	${HK}/runtime/host/alsa.cpp
 	${HK}/runtime/host/notice.cpp
+	${HK}/runtime/host/warp.cpp
 	${HK}/runtime/host/lampview.cpp
 	${HK}/runtime/host/shaderview.cpp
 	${HK}/runtime/host/picture.cpp

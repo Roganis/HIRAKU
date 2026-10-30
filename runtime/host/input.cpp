@@ -14,6 +14,7 @@
 
 #include "../shell/core.h"
 #include "../shell/cabinet.h"
+#include "warp.h"
 
 namespace hk::host {
 
@@ -102,6 +103,7 @@ void press(const std::string &name, bool down) {
     int before = n;
     n = std::max(0, n + (down ? 1 : -1));
     if ((before > 0) == (n > 0)) return;
+    if (n > 0) warp::pressed();   // a player's: the fast start-up ends (host/warp.h)
     if (name.find("Turntable") != std::string::npos) return;   // handled in input_update
     if (name.find(" Wheel Up") != std::string::npos || name.find(" Wheel Down") != std::string::npos) return;   // likewise
     core().set_input(name, n > 0 ? 1 : 0);

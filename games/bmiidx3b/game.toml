@@ -4,6 +4,7 @@ title = "beatmania IIDX 3rd style (JAB)"
 family = "iidx"         # IIDX cabinet: 7 keys and a turntable per player, VEFX, Effect, 5 effector sliders
 mame = "bmiidx3b"        # MAME set name, used by the oracle
 core = "twinkle"        # Twinkle (runtime/twinkle/, PLAN.md section 21); no core yet (TW-1)
+boot_seconds = 39       # fast start-up's ready point: the machine's seconds to the end of its start-up (host/warp.h)
 first_boot = "the device check passes, then E150 (backup RAM cleared): press 1P Start to clear it."
 
 [roms]

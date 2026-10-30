@@ -37,6 +37,7 @@
 #include "lampview.h"
 #include "shaderview.h"
 #include "notice.h"
+#include "warp.h"
 #include "picture.h"
 #include "input.h"
 #include "../core/prof.h"
@@ -88,7 +89,8 @@ std::string g_audio_output;       // what it got, for the report
 int g_target_frames = 0;          // audio queued ahead, when audio paces
 int g_target_min = 0;             // ... the starting setting: self-tuning keeps it at least this
 bool g_audio_fixed = false;       // window_set_audio_fixed: no self-tuning
-bool g_fast = false;              // Tab held: run as fast as possible (audio is dropped)
+bool g_fast = false;              // Tab held, or the fast start-up (host/warp.h): run as fast as possible (audio is dropped)
+bool g_tab = false;               // Tab held
 int g_device_frames = 0;
 bool g_quit = false;
 bool g_display_sync = true;       // display pacing (pacing.h)
@@ -215,8 +217,10 @@ void poll() {
             SDL_SetWindowFullscreen(w, !fs);
         }
         if ((e.type == SDL_EVENT_KEY_DOWN || e.type == SDL_EVENT_KEY_UP) && e.key.key == SDLK_TAB) {
-            g_fast = e.type == SDL_EVENT_KEY_DOWN;
-            if (g_fast && g_audio) SDL_ClearAudioStream(g_audio);
+            g_tab = e.type == SDL_EVENT_KEY_DOWN;
+            const bool was = g_fast;
+            g_fast = g_tab || warp::on();
+            if (g_fast && !was && g_audio) SDL_ClearAudioStream(g_audio);
         }
         if (e.type == SDL_EVENT_KEY_DOWN && !e.key.repeat && (e.key.mod & SDL_KMOD_CTRL) &&
             e.key.key >= SDLK_1 && e.key.key <= SDLK_9) {   // Ctrl+1..9: the game's code macros
@@ -606,6 +610,7 @@ static bool open_window(const char *title, int scale, const std::string &binding
 
 bool window_open(const char *title, int scale, const std::string &bindings, int target_ms, bool fullscreen, int rate) {
     const bool ok = open_window(title, scale, bindings, target_ms, fullscreen, rate);
+    g_fast = g_tab || warp::on();   // the fast start-up's from the first sound on
 #ifdef __linux__
     if (ok && g_prio_rtkit) raise_threads_rtkit(getpriority(PRIO_PROCESS, (id_t)gettid()));   // the threads it has by now
 #endif
@@ -729,8 +734,23 @@ static void place_lights(const lampview::Panel &p, int win_w, int win_h, int &x,
     x = y = 8 * k;
 }
 
+// host/warp.h's box: whole times its size (as the banner's), in the middle of the window
+static void place_warp(const warp::Panel &p, int win_w, int win_h, int &x, int &y, int &dw, int &dh) {
+    int k = std::max(1, win_h / 360);
+    while (k > 1 && p.w * k > win_w - 16) k--;
+    dw = p.w * k;
+    dh = p.h * k;
+    x = (win_w - dw) / 2;
+    y = (win_h - dh) / 2;
+}
+
 // The overlays over a picture in the GL window: the banner (host/notice.h) and the lights
 static void draw_overlays(int ww, int wh) {
+    if (warp::Panel p; warp::panel(p)) {   // the fast start-up's box (host/warp.h): in the middle
+        int px, py, pw, ph;
+        place_warp(p, ww, wh, px, py, pw, ph);
+        picture::overlay(p.pixels->data(), p.w, p.h, px, py, pw, ph, p.alpha, ww, wh);
+    }
     if (notice::Banner b; notice::banner(b)) {
         int bx, by, bw, bh;
         place_banner(b, ww, wh, bx, by, bw, bh);
@@ -798,6 +818,13 @@ void window_present(const uint32_t *rgb, int w, int h, double vsec) {
     g_last_vsec = vsec;
     const bool sync = pacing::frame(period) && !g_fast;
     g_sync = sync;
+    // the fast start-up (host/warp.h): its pictures at most 60 a second, the rest not shown
+    if (warp::on()) {
+        static uint64_t last_ns = 0;
+        const uint64_t t = prof::now_ns();
+        if (t - last_ns < 16000000) return;
+        last_ns = t;
+    }
     // --smooth-motion at the game's own speed (pacing::exact_speed): a frame that falls between two
     // refreshes, the game faster than the display, isn't shown
     if (sync && pacing::refreshes_per_frame() == 0) return;
@@ -958,6 +985,29 @@ void window_present(const uint32_t *rgb, int w, int h, double vsec) {
                 SDL_SetRenderLogicalPresentation(g_ren, lw, lh, lm);
             }
         }
+        if (warp::Panel p; warp::panel(p)) {   // the fast start-up's box, likewise
+            static SDL_Texture *wt = nullptr;
+            static unsigned wt_id = 0;
+            if (wt && wt_id != p.id) SDL_DestroyTexture(wt), wt = nullptr;
+            if (!wt && (wt = SDL_CreateTexture(g_ren, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STATIC, p.w, p.h))) {
+                wt_id = p.id;
+                SDL_UpdateTexture(wt, nullptr, p.pixels->data(), p.w * 4);
+                SDL_SetTextureBlendMode(wt, SDL_BLENDMODE_BLEND);
+                SDL_SetTextureScaleMode(wt, SDL_SCALEMODE_NEAREST);
+            }
+            int lw, lh, ow, oh;
+            SDL_RendererLogicalPresentation lm;
+            if (wt && SDL_GetRenderLogicalPresentation(g_ren, &lw, &lh, &lm)) {
+                SDL_SetRenderLogicalPresentation(g_ren, 0, 0, SDL_LOGICAL_PRESENTATION_DISABLED);
+                SDL_GetCurrentRenderOutputSize(g_ren, &ow, &oh);
+                int px, py, pw, ph;
+                place_warp(p, ow, oh, px, py, pw, ph);
+                const SDL_FRect r{(float)px, (float)py, (float)pw, (float)ph};
+                SDL_SetTextureAlphaModFloat(wt, p.alpha);
+                SDL_RenderTexture(g_ren, wt, nullptr, &r);
+                SDL_SetRenderLogicalPresentation(g_ren, lw, lh, lm);
+            }
+        }
         if (sync) {
             SDL_FlushRenderer(g_ren);
             pacing::wait_commit();
@@ -1001,6 +1051,7 @@ static void sound_lag(double vsec) {
 
 bool window_next(double vsec) {
     const bool sync = g_sync;
+    if (warp::on() && !warp::frame(vsec)) g_fast = g_tab;   // the fast start-up's end
     poll();
     g_frame_start_ns = 0;
     g_frame_paced = false;

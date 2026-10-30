@@ -3,6 +3,7 @@ id = "popn6"
 title = "pop'n music 6"
 family = "popn"
 mame = "popn6"
+boot_seconds = 50       # fast start-up's ready point: the machine's seconds to the end of its start-up (host/warp.h)
 first_boot = "the game installs its SPU data to flash, about 14 minutes of game time. Hold Tab to fast-forward."   # shown by the launcher
 
 [program]

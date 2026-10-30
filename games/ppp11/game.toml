@@ -3,6 +3,7 @@ id = "ppp11"
 title = "ParaParaParadise v1.1"
 family = "ppp"
 mame = "ppp11"
+boot_seconds = 38       # fast start-up's ready point: the machine's seconds to the end of its start-up (host/warp.h)
 first_boot = "the backup RAM (E160) and sound flash (E124) are blank. Press F2 for test mode, run SOUND FLASH INIT, then ALL FACTORY SETTINGS."   # shown by the launcher
 
 [program]

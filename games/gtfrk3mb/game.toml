@@ -4,6 +4,7 @@ title = "Guitar Freaks 3rd Mix - security cassette versionup (949JAZ02)"
 family = "gtrf"         # GuitarFreaks cabinet: two guitars (neck R/G/B, pick, wailing, effect knob)
 mame = "gtfrk3mb"       # MAME set name, used by the oracle
 core = "sys573"         # System 573 (runtime/sys573/, PLAN.md section 19); digital I/O board
+boot_seconds = 61       # fast start-up's ready point: the machine's seconds to the end of its start-up (host/warp.h)
 
 [roms]
 bios = "700a01.22g"             # 573 BIOS

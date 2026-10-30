@@ -207,15 +207,5 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          cat > notes.md <<'EOF'
-          **Download** `hiraku-windows-x86_64.zip` (Windows 10 or later) or `hiraku-linux-x86_64.tar.xz` (glibc 2.35 or later: Ubuntu 22.04, Debian 12, Fedora 36 and newer), unpack it anywhere, and start the launcher (`bin\hiraku.exe`, `bin/hiraku`). Drop your own game data on its window: the MAME ROM set (.zip, .7z or a folder) and its CHDs, all at once. Nothing else to install.
-
-          **Games that run from this release:** DJ Main (beatmania 1st MIX to THE FINAL, beatmania CORE REMIX, pop'n music 1-3, pop'n stage, hiphopmania), System 573 (Dance Dance Revolution 1st MIX to EXTREME and Dancing Stage, GuitarFreaks and DrumMania 1st to 10th/11th Mix, Percussion Freaks) and Twinkle (beatmania IIDX 1st to 8th style and Substream, with the background video). Some versions still need a dump nobody has made; each game's page in the launcher says what it needs.
-
-          **Firebeat** (beatmania III, pop'n music 4-8, ParaParaParadise, Keyboardmania) too: HIRAKU finds its way around each game's program by itself.
-
-          **Konami Python** (pop'n music 9-14, DrumMania V/V2) in both packages: add the game's folder together with the folders `bios` (the arcade BIOS) and `keys` (the MagicGate key files), which HIRAKU can't ship. They need Vulkan or OpenGL drivers.
-
-          The packages are portable: settings and saves stay in their `user` folder. The FFmpeg and SDL3 source archives are here for their LGPL/zlib licences; the Python core is built from PCSX2 Reliquary 1.9.4 (GPL-3.0), whose source is the reliquary-1.9.4 release's zip, with HIRAKU's oracle/pcsx2/reliquary-oracle.patch.
-          EOF
-          gh release create "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --draft --title "HIRAKU $GITHUB_REF_NAME" --notes-file notes.md
+          # the notes are the release's own news, written when it's published
+          gh release create "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --draft --title "HIRAKU $GITHUB_REF_NAME" --notes ""

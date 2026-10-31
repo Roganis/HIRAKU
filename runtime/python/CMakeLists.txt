@@ -51,9 +51,10 @@ target_compile_definitions(hk_python_shell PUBLIC HK_WITH_SDL=1)
 target_link_libraries(hk_python_shell PUBLIC SDL3::SDL3)
 find_package(ZLIB REQUIRED)   # mods' PNG pictures (runtime/host/png.h)
 target_link_libraries(hk_python_shell PUBLIC ZLIB::ZLIB)
-if(WIN32)   # as HIRAKU's own build: Winsock (shell/net.h); WASAPI exclusive mode and ASIO (host/wasapi.h, asio.h)
-	target_sources(hk_python_shell PRIVATE ${HK}/runtime/host/wasapi.cpp ${HK}/runtime/host/asio.cpp ${HK}/runtime/host/dwm.cpp)
-	target_link_libraries(hk_python_shell PUBLIC ws2_32 PRIVATE ole32 avrt uuid)
+if(WIN32)   # as HIRAKU's own build: Winsock (shell/net.h); WASAPI exclusive mode and ASIO (host/wasapi.h,
+            # asio.h); the DXGI swap chain (host/dxgi.h)
+	target_sources(hk_python_shell PRIVATE ${HK}/runtime/host/wasapi.cpp ${HK}/runtime/host/asio.cpp ${HK}/runtime/host/dwm.cpp ${HK}/runtime/host/dxgi.cpp)
+	target_link_libraries(hk_python_shell PUBLIC ws2_32 PRIVATE ole32 avrt uuid d3d11 dxgi)
 	# MSVC's <windows.h> has min and max macros in C++ too (mingw's only in C): asio.cpp and
 	# wasapi.cpp call std::max
 	target_compile_definitions(hk_python_shell PRIVATE NOMINMAX)

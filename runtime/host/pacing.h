@@ -25,7 +25,7 @@
 //   estimate); with it, 0.03 % at 144 Hz (2 refreshes per frame) and 0.17 % at 240 Hz (4).
 // On Windows, the display's vblanks (dwm.h: the graphics kernel's, else DWM's estimate) give the
 // refresh period and the grid's phase each frame; smooth motion commits each refresh's picture at
-// its own commit time. Presented through a DXGI flip-model swap chain (dxgi.h), each picture keeps
+// its own commit time. Presented through a DXGI flip-model swap chain (swapchain.h), each picture keeps
 // its turn (none replaced by the next) and its frame statistics say when it reached the screen: the
 // lead is found from that, as on Wayland. Through OpenGL's own swap there's no such feedback, and
 // the lead stays half a refresh.

@@ -14,7 +14,7 @@
 #include "../core/prof.h"
 #ifdef _WIN32
 #include "dwm.h"
-#include "dxgi.h"
+#include "swapchain.h"
 #endif
 
 #ifdef HK_WITH_WAYLAND
@@ -291,7 +291,7 @@ void wayland_shutdown() {
 #endif
 
 #ifdef _WIN32
-// The DXGI swap chain's frame statistics (dxgi.h): the latest picture that reached the screen, and
+// The DXGI swap chain's frame statistics (swapchain.h): the latest picture that reached the screen, and
 // when. Each picture is noted with its present number as it goes; the statistics, read before each
 // present (the last picture's refresh has come by then) and each frame, name the latest shown, whose
 // time goes to presented() as Wayland's feedback does. Those shown between two readings are counted

@@ -38,7 +38,7 @@ refresh):
   On Windows there's no fifo: the display's vblanks (runtime/host/dwm.cpp: the graphics kernel's,
   else DWM's estimate) give the last vblank and the refresh period, and each refresh's picture is
   committed at its own commit time. The pictures go through a DXGI flip-model swap chain
-  (runtime/host/dxgi.cpp: OpenGL draws into a Direct3D texture, WGL_NV_DX_interop2), which keeps
+  (runtime/host/swapchain.cpp: OpenGL draws into a Direct3D texture, WGL_NV_DX_interop2), which keeps
   each picture's turn as fifo does and says when it reached the screen: the lead is tuned from that
   as on Wayland. Where the driver can't share OpenGL's pictures (Wine), OpenGL's own swap through
   DWM, the lead half a refresh. Elsewhere (X11, or Wayland without fifo-v1), or with display sync

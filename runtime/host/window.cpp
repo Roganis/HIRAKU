@@ -42,7 +42,7 @@
 #include "input.h"
 #include "../core/prof.h"
 #ifdef _WIN32
-#include "dxgi.h"
+#include "swapchain.h"
 #endif
 
 namespace hk::host {
@@ -505,7 +505,7 @@ std::string raise_priority() {
 }
 
 #ifdef _WIN32
-// The window's pictures through a DXGI flip-model swap chain (dxgi.h), where the driver lets
+// The window's pictures through a DXGI flip-model swap chain (swapchain.h), where the driver lets
 // OpenGL draw into it; else OpenGL's own swap, as before
 static void start_dxgi() {
     void *hwnd = SDL_GetPointerProperty(SDL_GetWindowProperties(g_win), SDL_PROP_WINDOW_WIN32_HWND_POINTER, nullptr);

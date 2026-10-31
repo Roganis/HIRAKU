@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-#include "dxgi.h"
+#include "swapchain.h"
 
 #ifndef NOMINMAX
 #define NOMINMAX

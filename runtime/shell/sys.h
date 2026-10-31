@@ -36,6 +36,10 @@ const void *map_file(int fd, uint64_t size);   // read-only; nullptr if it can't
 void unmap_file(const void *p, uint64_t size);
 ssize_t pread(int fd, void *buf, size_t n, uint64_t off);
 void will_need(int fd, uint64_t off, uint64_t n);   // a hint: read that ahead
+// The files read through once on a thread of their own, at a low priority (a .cue with its .bin), up
+// to max_bytes in all: a machine's disk images then come from the system's cache, not the drive,
+// when the emulation reads them (a cold read waited for on the emulation thread is a frozen frame)
+void warm_files(const std::vector<std::string> &paths, uint64_t max_bytes);
 
 bool make_dir(const std::string &path);   // true if it is there now
 bool make_dirs(const std::string &path);  // and the folders it is in; true if it is there now

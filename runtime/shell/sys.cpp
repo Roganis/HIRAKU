@@ -6,7 +6,9 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <chrono>
 #include <fstream>
+#include <thread>
 
 #ifdef _WIN32
 #ifndef WIN32_LEAN_AND_MEAN
@@ -337,6 +339,39 @@ bool make_dirs(const std::string &path) {
     for (size_t k = 1; k <= path.size(); k++)
         if (k == path.size() || path[k] == '/' || path[k] == '\\') ok = make_dir(path.substr(0, k));
     return ok;
+}
+
+void warm_files(const std::vector<std::string> &paths, uint64_t max_bytes) {
+    std::vector<std::string> list;
+    for (const std::string &p : paths) {
+        if (p.empty()) continue;
+        list.push_back(p);
+        // a .cue's track file beside it, named the same (as ingest writes them)
+        if (p.size() > 4 && (p.compare(p.size() - 4, 4, ".cue") == 0 || p.compare(p.size() - 4, 4, ".CUE") == 0))
+            list.push_back(p.substr(0, p.size() - 4) + ".bin");
+    }
+    std::thread([list, max_bytes] {
+#ifdef _WIN32
+        // (not THREAD_MODE_BACKGROUND_BEGIN: it lowers the memory priority of the pages read too, the
+        // first the system's cache lets go of)
+        SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_BELOW_NORMAL);
+#else
+        setpriority(PRIO_PROCESS, 0, 19);   // (this thread: Linux's nice is per thread)
+#endif
+        std::vector<char> buf(4 << 20);
+        uint64_t total = 0;
+        const auto t0 = std::chrono::steady_clock::now();
+        for (const std::string &p : list) {
+            FILE *f = fopen(p.c_str(), "rb");
+            if (!f) continue;
+            size_t n;
+            while (total < max_bytes && (n = fread(buf.data(), 1, buf.size(), f)) > 0) total += n;
+            fclose(f);
+        }
+        if (total)
+            fprintf(stderr, "disk images: %.0f MB read into the system's cache in %.1f s (no waiting on the drive when the game reads them)\n",
+                    (double)total / (1 << 20), std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count());
+    }).detach();
 }
 
 bool copy_file(const std::string &from, const std::string &to) {

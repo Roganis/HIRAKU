@@ -10,6 +10,7 @@
 #include <string>
 
 #include "shell/kvfile.h"
+#include "shell/sys.h"
 #include "shell/core.h"
 #include "sys573/mips.h"
 #include "twinkle/board.h"
@@ -93,6 +94,9 @@ public:
         cfg.session_quantum_us = session_quantum_;
         if (!twinkle::init(cfg)) return false;
         printf("hiraku %s: Twinkle, MAME's PS1 (its recompiled blocks) and 68000\n", o.game.c_str());
+        // its disks into the system's cache now (a song's load read cold from the drive, or a CHD's
+        // compressed pieces, froze a cabinet's frames 50-80 ms): up to 6 GB, the raw disk images
+        hk::sys::warm_files({cfg.hdd, cfg.cd, cfg.video_cd, cfg.video_dvd}, 6ull << 30);
         return true;
     }
 

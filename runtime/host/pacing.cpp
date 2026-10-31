@@ -52,6 +52,7 @@ int64_t g_lead = 0;            // commit this long before it (negative: after it
 bool g_lead_set = false;
 bool g_settled = false;        // a frame came late while the lead was coming down: keep it
 int g_streak = 0;              // frames on time since the lead last changed
+int g_quiet = 0;               // (DXGI) frames since the lead last went up
 int64_t g_budget = 4 * MS;     // the burst starts this long before its commit
 std::vector<int64_t> g_samples;   // recent burst + draw times
 size_t g_sample_at = 0;
@@ -148,7 +149,13 @@ bool g_dxgi = false;           // presented through the DXGI swap chain (Windows
         g_skip--;
         return;
     }
-    if (overrun) return;   // committed late: says nothing about the deadline
+    if (overrun) {   // committed late: says nothing about the deadline
+        // (DXGI: and the pictures after it may still be queued behind it, shown late with their
+        // own commits on time: not a deadline missed either; counted as such, each of a game's
+        // stalls raised the lead for good, past a refresh, and the swap chain's queue backed up)
+        if (g_dxgi) g_skip = std::max(g_skip, 4), g_window.clear(), g_late.clear();
+        return;
+    }
     // A miss: on Wayland, the commit to the screen took half a refresh longer than its best (the
     // frame waited a refresh more). DXGI's swap chain queues pictures, so a picture presented at
     // any point of a refresh shows at the next and its commit to the screen says nothing (judged so,
@@ -174,8 +181,12 @@ bool g_dxgi = false;           // presented through the DXGI swap chain (Windows
         if (missed && !g_sweep) {   // a miss: catch up, then commit earlier
             g_target += g_T;
             g_lead += g_settled ? MARGIN / 2 : g_T / 32 + MARGIN;
+            // DXGI: under a refresh. Earlier, each picture would wait in the swap chain's queue
+            // behind the last, two deep, and a present that found it full waited a refresh
+            if (g_dxgi) g_lead = std::min(g_lead, g_T - MS);
             g_settled = true;
             g_skip = 6;
+            g_quiet = 0;
             n_moved++;
             return;
         }
@@ -183,6 +194,12 @@ bool g_dxgi = false;           // presented through the DXGI swap chain (Windows
     if ((!g_settled || g_sweep) && ++g_streak >= 20) {
         g_lead -= g_T / 32, g_streak = 0;
         if (g_lead < -g_T * 2) g_settled = true;   // no deadline found in two refreshes: stay
+    }
+    // DXGI, settled: a minute of frames without a miss lets the lead down a little, so a miss the
+    // lead was raised for that wasn't the deadline's (a stall's) doesn't keep it up for good
+    if (g_dxgi && g_settled && !g_sweep && ++g_quiet >= 3600) {
+        g_lead = std::max(g_lead - g_T / 32, (int64_t)0);
+        g_quiet = 0;
     }
 }
 
@@ -538,6 +555,7 @@ bool frame(double period) {
             int64_t first = now + MS + g_lead;
             g_target += ((first - g_target + g_T - 1) / g_T) * g_T;
             n_resync++;
+            if (g_dxgi) g_skip = std::max(g_skip, 4), g_window.clear(), g_late.clear();   // (as after a late commit)
         }
     }
     n_frames++;

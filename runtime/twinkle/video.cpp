@@ -221,6 +221,10 @@ bool PlayerVideo::open_decoder(uint32_t sector) {
     m_io = avio_alloc_context(iobuf, IO_SIZE, 0, this, &PlayerVideo::read, nullptr, nullptr);
     m_fmt = avformat_alloc_context();
     m_fmt->pb = m_io;
+    // the stream's size and rate are in its first frames: FFmpeg's probe would read and decode up to
+    // 5 MB (with the disc's CHD decompressed on the way) while the emulation waited for the
+    // chapter's first picture, 40-90 ms a chapter on a fast PC (a cabinet's game froze at each)
+    m_fmt->probesize = 128 * 1024;
     if (avformat_open_input(&m_fmt, nullptr, av_find_input_format("mpeg"), nullptr) < 0) {
         m_fmt = nullptr;   // freed by avformat_open_input
         return false;

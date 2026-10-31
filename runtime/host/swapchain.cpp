@@ -68,7 +68,8 @@ IDXGISwapChainMedia *g_media = nullptr;   // its statistics with how the picture
 ID3D11Texture2D *g_back = nullptr;        // the swap chain's back buffer (buffer 0: always the next to show)
 ID3D11Texture2D *g_shared = nullptr;      // OpenGL's picture, the right way up
 HANDLE g_interop = nullptr, g_object = nullptr;
-GLuint g_rb = 0, g_out_fbo = 0;           // the shared texture as OpenGL's renderbuffer, and its framebuffer
+GLuint g_rb = 0, g_out_tex = 0, g_out_fbo = 0;   // the shared texture as OpenGL's (renderbuffer or texture), its framebuffer
+const char *g_shared_as = "";                    // how OpenGL took it (make_buffers' way that worked)
 GLuint g_tex = 0, g_fbo = 0;              // OpenGL's own picture of the window (fbo())
 int g_w = 0, g_h = 0;
 const char *g_effect = "";
@@ -88,33 +89,64 @@ void release_buffers() {
     release(g_back);
 }
 
-bool make_buffers(int w, int h, std::string &why) {
-    if (FAILED(g_swap->GetBuffer(0, __uuidof(ID3D11Texture2D), (void **)&g_back))) {
-        why = "no back buffer";
-        return false;
-    }
+// The shared texture, made and given to OpenGL one of the ways WGL_NV_DX_interop2 allows: as a
+// texture or a renderbuffer, the texture made with Direct3D's sharing flag or not. Drivers differ in
+// which they take (a GTX 1650's said its framebuffer was incomplete with the renderbuffer, flag
+// off), so each is tried until OpenGL can draw into it; why says how each went
+bool share(int w, int h, bool texture, bool shared_flag, std::string &tried) {
     D3D11_TEXTURE2D_DESC d{};
     d.Width = (UINT)w, d.Height = (UINT)h, d.MipLevels = 1, d.ArraySize = 1;
     d.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
     d.SampleDesc.Count = 1;
     d.Usage = D3D11_USAGE_DEFAULT;
     d.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
-    if (FAILED(g_dev->CreateTexture2D(&d, nullptr, &g_shared))) {
-        why = "no texture to share";
+    d.MiscFlags = shared_flag ? D3D11_RESOURCE_MISC_SHARED : 0;
+    char b[160];
+    const char *way = texture ? (shared_flag ? "texture, shared" : "texture") : (shared_flag ? "renderbuffer, shared" : "renderbuffer");
+    const HRESULT hr = g_dev->CreateTexture2D(&d, nullptr, &g_shared);
+    if (FAILED(hr)) {
+        snprintf(b, sizeof b, "%s%s: no texture (0x%08lx)", tried.empty() ? "" : "; ", way, (unsigned long)hr);
+        tried += b;
         return false;
     }
-    g_object = gl.DXRegisterObject(g_interop, g_shared, g_rb, GL_RENDERBUFFER, ACCESS_WRITE_DISCARD);
+    g_object = gl.DXRegisterObject(g_interop, g_shared, texture ? g_out_tex : g_rb, texture ? GL_TEXTURE_2D : GL_RENDERBUFFER,
+                                   ACCESS_WRITE_DISCARD);
     if (!g_object) {
-        why = "OpenGL can't take Direct3D's texture (wglDXRegisterObjectNV)";
+        snprintf(b, sizeof b, "%s%s: not registered (error 0x%08lx)", tried.empty() ? "" : "; ", way, (unsigned long)GetLastError());
+        tried += b;
+        release(g_shared);
         return false;
     }
+    const BOOL locked = gl.DXLockObjects(g_interop, 1, &g_object);
     gl.BindFramebuffer(GL_FRAMEBUFFER, g_out_fbo);
-    gl.FramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, g_rb);
-    gl.DXLockObjects(g_interop, 1, &g_object);
+    if (texture) gl.FramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, g_out_tex, 0);
+    else gl.FramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, g_rb);
     const GLenum status = gl.CheckFramebufferStatus(GL_FRAMEBUFFER);
-    gl.DXUnlockObjects(g_interop, 1, &g_object);
-    if (status != GL_FRAMEBUFFER_COMPLETE) {
-        why = "OpenGL can't draw into the shared texture";
+    if (locked) gl.DXUnlockObjects(g_interop, 1, &g_object);
+    if (locked && status == GL_FRAMEBUFFER_COMPLETE) {
+        g_shared_as = way;
+        return true;
+    }
+    snprintf(b, sizeof b, "%s%s: %s, framebuffer status 0x%04x", tried.empty() ? "" : "; ", way, locked ? "locked" : "not locked",
+             (unsigned)status);
+    tried += b;
+    if (texture) gl.FramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, 0, 0);
+    else gl.FramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, 0);
+    gl.DXUnregisterObject(g_interop, g_object);
+    g_object = nullptr;
+    release(g_shared);
+    return false;
+}
+
+bool make_buffers(int w, int h, std::string &why) {
+    if (FAILED(g_swap->GetBuffer(0, __uuidof(ID3D11Texture2D), (void **)&g_back))) {
+        why = "no back buffer";
+        return false;
+    }
+    std::string tried;
+    if (!share(w, h, true, false, tried) && !share(w, h, false, false, tried) && !share(w, h, true, true, tried) &&
+        !share(w, h, false, true, tried)) {
+        why = "OpenGL can't draw into the shared texture (" + tried + ")";
         return false;
     }
     gl.BindTexture(GL_TEXTURE_2D, g_tex);
@@ -249,6 +281,7 @@ bool start(void *hwnd, int w, int h, std::string &why) {
     if (SUCCEEDED(g_dev->QueryInterface(__uuidof(IDXGIDevice1), (void **)&dd))) dd->SetMaximumFrameLatency(2), release(dd);
     if (FAILED(g_swap->QueryInterface(__uuidof(IDXGISwapChainMedia), (void **)&g_media))) g_media = nullptr;
     gl.GenRenderbuffers(1, &g_rb);
+    gl.GenTextures(1, &g_out_tex);
     gl.GenFramebuffers(1, &g_out_fbo);
     gl.GenFramebuffers(1, &g_fbo);
     gl.GenTextures(1, &g_tex);
@@ -341,7 +374,8 @@ void stop() {
     if (g_fbo) gl.DeleteFramebuffers(1, &g_fbo);
     if (g_out_fbo) gl.DeleteFramebuffers(1, &g_out_fbo);
     if (g_rb) gl.DeleteRenderbuffers(1, &g_rb);
-    g_tex = g_fbo = g_out_fbo = g_rb = 0;
+    if (g_out_tex) gl.DeleteTextures(1, &g_out_tex);
+    g_tex = g_fbo = g_out_fbo = g_rb = g_out_tex = 0;
     if (g_interop) gl.DXCloseDevice(g_interop);
     g_interop = nullptr;
     release(g_media);
@@ -353,10 +387,10 @@ void stop() {
 
 std::string describe() {
     if (!g_swap && !n_presents) return {};
-    char b[320];
-    snprintf(b, sizeof b, "video: pictures presented through a DXGI flip-model swap chain (%s%s%s): %llu presented, %llu in-between "
-             "pictures left out (two already waiting)%s",
-             g_effect, g_adapter.empty() ? "" : ", on ", g_adapter.c_str(), (unsigned long long)n_presents,
+    char b[400];
+    snprintf(b, sizeof b, "video: pictures presented through a DXGI flip-model swap chain (%s%s%s; OpenGL's picture shared as a %s): "
+             "%llu presented, %llu in-between pictures left out (two already waiting)%s",
+             g_effect, g_adapter.empty() ? "" : ", on ", g_adapter.c_str(), g_shared_as, (unsigned long long)n_presents,
              (unsigned long long)n_left_out, n_failed ? (", " + std::to_string(n_failed) + " presents failed").c_str() : "");
     return b;
 }

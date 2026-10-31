@@ -127,7 +127,9 @@ int64_t g_prev_t = 0;          // the previous presented frame, 0 after a gap
 int g_prev_k = 0;              // ... and its refreshes
 int64_t g_best = 0;            // the shortest commit-to-screen median (0: none yet)
 std::vector<int64_t> g_window; // commit-to-screen times for the next median
+std::vector<int64_t> g_late;   // (DXGI) how late each picture reached the screen after its refresh
 constexpr int64_t MARGIN = 3 * MS / 2;
+bool g_dxgi = false;           // presented through the DXGI swap chain (Windows: dxgi_feedback())
 [[maybe_unused]] void presented(int64_t t, int64_t committed, int64_t target, bool overrun, int64_t refresh, int k) {
     n_presented++;
     if (refresh > 0) g_T = refresh, g_T_exact = true;
@@ -147,13 +149,29 @@ constexpr int64_t MARGIN = 3 * MS / 2;
         return;
     }
     if (overrun) return;   // committed late: says nothing about the deadline
+    // A miss: on Wayland, the commit to the screen took half a refresh longer than its best (the
+    // frame waited a refresh more). DXGI's swap chain queues pictures, so a picture presented at
+    // any point of a refresh shows at the next and its commit to the screen says nothing (judged so,
+    // the lead only grew: 219 ms on a cabinet); there a miss is a picture shown after the refresh
+    // it was meant for
     g_window.push_back(d);
+    if (g_dxgi) g_late.push_back(t - target);
     if (g_window.size() >= 10) {
         std::nth_element(g_window.begin(), g_window.begin() + 5, g_window.end());
         const int64_t median = g_window[5];
         g_window.clear();
-        if (!g_best || median < g_best) g_best = median;
-        else if (median > g_best + g_T / 2 && !g_sweep) {   // a miss: catch up, then commit earlier
+        bool missed = false;
+        if (g_dxgi) {
+            std::nth_element(g_late.begin(), g_late.begin() + (long)g_late.size() / 2, g_late.end());
+            missed = g_late[g_late.size() / 2] > g_T / 2;
+            g_late.clear();
+            if (!g_best || median < g_best) g_best = median;
+        } else if (!g_best || median < g_best) {
+            g_best = median;
+        } else {
+            missed = median > g_best + g_T / 2;
+        }
+        if (missed && !g_sweep) {   // a miss: catch up, then commit earlier
             g_target += g_T;
             g_lead += g_settled ? MARGIN / 2 : g_T / 32 + MARGIN;
             g_settled = true;
@@ -296,7 +314,6 @@ void wayland_shutdown() {
 // present (the last picture's refresh has come by then) and each frame, name the latest shown, whose
 // time goes to presented() as Wayland's feedback does. Those shown between two readings are counted
 // without a time (the cadence check then starts again)
-bool g_dxgi = false;
 struct Sent {
     uint32_t id;
     int64_t target, committed;
@@ -380,6 +397,7 @@ void display_changed() {
     g_settled = false;
     g_skip = 5, g_prev_t = 0, g_best = 0;
     g_window.clear();
+    g_late.clear();
 }
 
 void pump() {

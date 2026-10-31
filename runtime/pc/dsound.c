@@ -56,7 +56,7 @@ struct buf {
     DWORD freq;         // 0: the format's
     struct notify_pos *notes;
     DWORD n_notes;
-    struct buf *next;   // the mixer's list
+    struct buf *next, *prev;   // the mixer's list (both ways: a buffer leaves it at once)
 };
 
 static CRITICAL_SECTION g_lock;
@@ -226,6 +226,7 @@ static struct buf *new_buf(void) {
     b->refs = 1;
     lock();
     b->next = g_bufs;
+    if (g_bufs) g_bufs->prev = b;
     g_bufs = b;
     unlock();
     return b;
@@ -261,12 +262,13 @@ static ULONG WINAPI buf_AddRef(struct buf *b) { return (ULONG)InterlockedIncreme
 static ULONG WINAPI buf_Release(struct buf *b) {
     const LONG r = InterlockedDecrement(&b->refs);
     if (r) return (ULONG)r;
+    // out of the list where it is: IIDX EMPRESS lets a song's 5,700 buffers go oldest first, and
+    // looked for from the list's start each, under the mixer's lock, they took 0.3 s and more (the
+    // mixer waiting: the sound broke, the game held up)
     lock();
-    for (struct buf **p = &g_bufs; *p; p = &(*p)->next)
-        if (*p == b) {
-            *p = b->next;
-            break;
-        }
+    if (b->prev) b->prev->next = b->next;
+    else if (g_bufs == b) g_bufs = b->next;
+    if (b->next) b->next->prev = b->prev;
     unlock();
     if (b->data && !InterlockedDecrement(&b->data->refs)) {
         free(b->data->bytes);

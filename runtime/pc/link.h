@@ -16,7 +16,7 @@
 #include <stdint.h>
 
 #define HK_PC_LINK_MAGIC 0x4b50484bu   // "HKPK"
-#define HK_PC_LINK_VERSION 11u
+#define HK_PC_LINK_VERSION 12u
 #define HK_PC_WATCHES 8u                           // [[rate]]'s words of the game's memory
 
 // The pad's bits, as Konami's ezusb.dll gives them to pop'n music (usbPadRead)
@@ -133,6 +133,16 @@ struct hk_pc_link {
     volatile uint32_t smooth;
     volatile uint32_t quads_n, quads_seq;
     volatile uint32_t between_req, between_done, between_ok;
+    // (v12) The cabinet's sound effects (beatmania IIDX's effector), as the game sets them in its
+    // sound driver (runtime/pc/effector.c) and hiraku-pc applies them to the sound it takes
+    // (runtime/host/effector.h): the effect (the effector's program, 0 none: the game's environment
+    // as the DLL makes it out), the key shift (semitones), the equaliser on and its 10 bands' gains
+    // (dB), and the game's volume, the effector's play volume (thousandths of its usual; 0: as usual).
+    // fx_seq moves on with each change
+    volatile int32_t fx_program, fx_key, fx_eq_on;
+    volatile int8_t fx_eq_db[10];
+    volatile uint32_t fx_volume_milli;
+    volatile uint32_t fx_seq;
 };
 
 // A quad the game drew (two triangles in screen space, one texture): the texture (its address, the

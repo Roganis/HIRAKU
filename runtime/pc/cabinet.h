@@ -100,6 +100,15 @@ void *__stdcall hk_Direct3DCreate8(unsigned sdk);   // d3d8.c: the game's Direct
 long __stdcall hk_DirectSoundCreate8(const void *device, void **out, void *outer);
 long __stdcall hk_DirectSoundCreate(const void *device, void **out, void *outer);
 void *hk_mixer_hook(const char *fn);   // winmm's mixer: a pretend one, with HIRAKU's sound (dsound.c)
+void *hk_effector_hook(const char *fn);   // ole32's CoCreateInstance: the sound driver's effects, HIRAKU's (effector.c)
+// What a game sets in its sound driver's effects, to hiraku-pc (effector.c): a program (and the
+// game's environment number, for the log), an equaliser band's gain (0-9, dB), the equaliser on;
+// RtEffect.dll's environments as programs
+void hk_fx_program(int program, int env);
+void hk_fx_band(int band, int db);
+void hk_fx_equaliser(int on);
+int hk_fx_program_rt(int env);
+void hk_fx_volume(unsigned value);   // the speakers' volume the game set (0-65535: dsound.c's mixer)
 // A picture's sound mixed into the link's ring at once, as the picture is counted (link.h:
 // audio_frame_end); nothing before the game makes its DirectSound
 void hk_dsound_picture(void);

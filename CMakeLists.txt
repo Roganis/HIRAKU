@@ -253,13 +253,13 @@ if(HK_PC_DLL_CC)
       COMMAND ${HK_PC_DLL_CC} --target=i686-w64-mingw32 ${HK_PC_DLL_SYS} -O2 -Wall -Wextra -fuse-ld=lld -static -shared
               -o ${CMAKE_BINARY_DIR}/pc/${dll}.dll ${CMAKE_SOURCE_DIR}/runtime/pc/${dll}.c
               ${CMAKE_SOURCE_DIR}/runtime/pc/ezusb_dev.c ${CMAKE_SOURCE_DIR}/runtime/pc/c02_setup.c
-              ${CMAKE_SOURCE_DIR}/runtime/pc/cabinet.c ${CMAKE_SOURCE_DIR}/runtime/pc/dsound.c
+              ${CMAKE_SOURCE_DIR}/runtime/pc/cabinet.c ${CMAKE_SOURCE_DIR}/runtime/pc/dsound.c ${CMAKE_SOURCE_DIR}/runtime/pc/effector.c
               ${CMAKE_SOURCE_DIR}/runtime/pc/net.c ${CMAKE_SOURCE_DIR}/runtime/pc/vsock.c ${CMAKE_SOURCE_DIR}/runtime/pc/press.c
               ${CMAKE_SOURCE_DIR}/runtime/pc/d3d8.c ${CMAKE_SOURCE_DIR}/runtime/pc/d3d9_smooth.c
               ${CMAKE_SOURCE_DIR}/runtime/pc/${dll}.def
               -lpsapi -lgdi32 -ldxguid -lws2_32 -liphlpapi -lsetupapi
       DEPENDS runtime/pc/${dll}.c runtime/pc/${dll}.def runtime/pc/ezusb_dev.c runtime/pc/ezusb_dev.h runtime/pc/c02_setup.c runtime/pc/c02_setup.h runtime/pc/cabinet.c runtime/pc/cabinet.h runtime/pc/link.h
-              runtime/pc/dsound.c runtime/pc/net.c runtime/pc/vsock.c runtime/pc/press.c runtime/pc/d3d8.c runtime/pc/d3d9_smooth.c
+              runtime/pc/dsound.c runtime/pc/effector.c runtime/pc/net.c runtime/pc/vsock.c runtime/pc/press.c runtime/pc/d3d8.c runtime/pc/d3d9_smooth.c
       COMMENT "pc/${dll}.dll (32-bit)")
     list(APPEND HK_PC_DLLS ${CMAKE_BINARY_DIR}/pc/${dll}.dll)
   endforeach()
@@ -268,12 +268,12 @@ if(HK_PC_DLL_CC)
     COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/pc/c02
     COMMAND ${HK_PC_DLL_CC} --target=i686-w64-mingw32 ${HK_PC_DLL_SYS} -O2 -Wall -Wextra -fuse-ld=lld -static -shared
             -o ${CMAKE_BINARY_DIR}/pc/c02/ezusb.dll ${CMAKE_SOURCE_DIR}/runtime/pc/ezusb_c02.c
-            ${CMAKE_SOURCE_DIR}/runtime/pc/cabinet.c ${CMAKE_SOURCE_DIR}/runtime/pc/dsound.c
+            ${CMAKE_SOURCE_DIR}/runtime/pc/cabinet.c ${CMAKE_SOURCE_DIR}/runtime/pc/dsound.c ${CMAKE_SOURCE_DIR}/runtime/pc/effector.c
             ${CMAKE_SOURCE_DIR}/runtime/pc/net.c ${CMAKE_SOURCE_DIR}/runtime/pc/vsock.c ${CMAKE_SOURCE_DIR}/runtime/pc/press.c
             ${CMAKE_SOURCE_DIR}/runtime/pc/d3d8.c ${CMAKE_SOURCE_DIR}/runtime/pc/d3d9_smooth.c ${CMAKE_SOURCE_DIR}/runtime/pc/ezusb_c02.def
             -lpsapi -lgdi32 -ldxguid -lws2_32 -liphlpapi
     DEPENDS runtime/pc/ezusb_c02.c runtime/pc/ezusb_c02.def runtime/pc/cabinet.c runtime/pc/cabinet.h runtime/pc/link.h
-            runtime/pc/dsound.c runtime/pc/net.c runtime/pc/vsock.c runtime/pc/press.c runtime/pc/d3d8.c runtime/pc/d3d9_smooth.c
+            runtime/pc/dsound.c runtime/pc/effector.c runtime/pc/net.c runtime/pc/vsock.c runtime/pc/press.c runtime/pc/d3d8.c runtime/pc/d3d9_smooth.c
     COMMENT "pc/c02/ezusb.dll (32-bit)")
   list(APPEND HK_PC_DLLS ${CMAKE_BINARY_DIR}/pc/c02/ezusb.dll)
   # ... and its later games' (IIDX RED, PLAN.md section 36): the board under its driver, started from
@@ -283,13 +283,13 @@ if(HK_PC_DLL_CC)
     COMMAND ${HK_PC_DLL_CC} --target=i686-w64-mingw32 ${HK_PC_DLL_SYS} -O2 -Wall -Wextra -fuse-ld=lld -static -shared
             -o ${CMAKE_BINARY_DIR}/pc/c02/RtEffect.dll ${CMAKE_SOURCE_DIR}/runtime/pc/rteffect.c
             ${CMAKE_SOURCE_DIR}/runtime/pc/ezusb_dev.c ${CMAKE_SOURCE_DIR}/runtime/pc/c02_setup.c
-            ${CMAKE_SOURCE_DIR}/runtime/pc/cabinet.c ${CMAKE_SOURCE_DIR}/runtime/pc/dsound.c
+            ${CMAKE_SOURCE_DIR}/runtime/pc/cabinet.c ${CMAKE_SOURCE_DIR}/runtime/pc/dsound.c ${CMAKE_SOURCE_DIR}/runtime/pc/effector.c
             ${CMAKE_SOURCE_DIR}/runtime/pc/net.c ${CMAKE_SOURCE_DIR}/runtime/pc/vsock.c ${CMAKE_SOURCE_DIR}/runtime/pc/press.c
             ${CMAKE_SOURCE_DIR}/runtime/pc/d3d8.c ${CMAKE_SOURCE_DIR}/runtime/pc/d3d9_smooth.c ${CMAKE_SOURCE_DIR}/runtime/pc/rteffect.def
             -lpsapi -lgdi32 -ldxguid -lws2_32 -liphlpapi -lsetupapi
     DEPENDS runtime/pc/rteffect.c runtime/pc/rteffect.def runtime/pc/ezusb_dev.c runtime/pc/ezusb_dev.h runtime/pc/c02_setup.c runtime/pc/c02_setup.h
             runtime/pc/cabinet.c runtime/pc/cabinet.h runtime/pc/link.h
-            runtime/pc/dsound.c runtime/pc/net.c runtime/pc/vsock.c runtime/pc/press.c runtime/pc/d3d8.c runtime/pc/d3d9_smooth.c
+            runtime/pc/dsound.c runtime/pc/effector.c runtime/pc/net.c runtime/pc/vsock.c runtime/pc/press.c runtime/pc/d3d8.c runtime/pc/d3d9_smooth.c
     COMMENT "pc/c02/RtEffect.dll (32-bit)")
   list(APPEND HK_PC_DLLS ${CMAKE_BINARY_DIR}/pc/c02/RtEffect.dll)
   add_custom_target(hiraku-pc-dlls ALL DEPENDS ${HK_PC_DLLS})
@@ -469,7 +469,7 @@ if(SDL3_FOUND)
   # HID outputs (controller LEDs), shared with the launcher
   add_library(hiraku_hidout STATIC runtime/host/hidout.cpp)
   target_link_libraries(hiraku_hidout PUBLIC SDL3::SDL3 hiraku_cabinet)
-  add_library(hiraku_host STATIC runtime/host/window.cpp runtime/host/alsa.cpp runtime/host/notice.cpp runtime/host/warp.cpp runtime/host/lampview.cpp runtime/host/shaderview.cpp runtime/host/picture.cpp runtime/host/input.cpp runtime/host/lights.cpp
+  add_library(hiraku_host STATIC runtime/host/window.cpp runtime/host/alsa.cpp runtime/host/effector.cpp runtime/host/notice.cpp runtime/host/warp.cpp runtime/host/lampview.cpp runtime/host/shaderview.cpp runtime/host/picture.cpp runtime/host/input.cpp runtime/host/lights.cpp
               runtime/host/pacing.cpp)
   target_include_directories(hiraku_host PUBLIC runtime)
   target_link_libraries(hiraku_host PUBLIC SDL3::SDL3 hiraku_shell hiraku_hidout)

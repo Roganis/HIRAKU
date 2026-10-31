@@ -70,6 +70,7 @@
 extern char **environ;
 #endif
 
+#include "host/effector.h"
 #include "host/input.h"
 #include "host/macro.h"
 #include "host/mods.h"
@@ -530,6 +531,12 @@ public:
         if (words.size() > HK_PC_WATCHES) fprintf(stderr, "mods: %zu words for [[rate]]s; a PC game watches %u\n", words.size(), HK_PC_WATCHES);
         for (size_t i = 0; i < words.size() && i < HK_PC_WATCHES; i++) link_->watch_addr[i] = words[i];
         link_->game_hz_milli = (uint32_t)std::lround(ghz() * 1000);
+        // IIDX's effector sliders start where the effector changes nothing (a controller without
+        // them): the EQs flat (8), the filter open (15), the play volume as usual (7); VEFX at the bottom
+        link_->slider[1] = 8;
+        link_->slider[2] = 8;
+        link_->slider[3] = 15;
+        link_->slider[4] = 7;
         link_->version = HK_PC_LINK_VERSION;
         link_->magic = HK_PC_LINK_MAGIC;
         black_.assign(640 * 480, 0);
@@ -1443,6 +1450,28 @@ private:
         drawn_.push_back(link_->drawn_us / 1000.0f);
     }
 
+    // The cabinet's sound effects as the game last set them (runtime/pc/effector.c), to the effector
+    void effector_settings() {
+        const uint32_t seq = link_->fx_seq;
+        if (seq == fx_seq_) return;
+        fx_seq_ = seq;
+        std::atomic_thread_fence(std::memory_order_acquire);
+        hk::host::Effector::Settings s;
+        s.program = link_->fx_program;
+        s.key = link_->fx_key;
+        s.eq_on = link_->fx_eq_on != 0;
+        for (int b = 0; b < 10; b++) s.eq_db[b] = link_->fx_eq_db[b];
+        if (const uint32_t v = link_->fx_volume_milli) s.volume = v / 1000.0f;
+        if (!fx_said_) fx_said_ = true, fprintf(stderr, "effector: the game's sound effects applied (its effector)\n");
+        if (getenv("HK_PC_EFFECTOR_LOG")) {
+            std::string eq;
+            for (int b = 0; b < 10; b++) eq += (b ? " " : "") + std::to_string(s.eq_db[b]);
+            fprintf(stderr, "effector: frame %llu: %s, key %d, equaliser %s (%s dB), volume %.2f\n", (unsigned long long)frame_,
+                    hk::host::Effector::program_name(s.program), s.key, s.eq_on ? "on" : "off", eq.c_str(), (double)s.volume);
+        }
+        effector_.set(s);
+    }
+
     // The sound mixed so far, to the shell's output (HIRAKU's: device, latency, pacing). true if any
     bool take_sound() {
         const uint32_t made = link_->audio_made, taken = link_->audio_taken;
@@ -1450,9 +1479,12 @@ private:
         std::atomic_thread_fence(std::memory_order_acquire);
         const float *ring = (const float *)((const char *)link_ + HK_PC_AUDIO);
         uint32_t at = taken;
+        effector_settings();
         while (at != made) {
             const uint32_t i = at & (HK_PC_AUDIO_FRAMES - 1), n = std::min(made - at, HK_PC_AUDIO_FRAMES - i);
-            audio_sink_(ring + 2 * i, (int)n);
+            fx_buf_.assign(ring + 2 * i, ring + 2 * (i + n));   // the cabinet's sound effects (the ring's the DLL's)
+            effector_.process(fx_buf_.data(), (int)n);
+            audio_sink_(fx_buf_.data(), (int)n);
             at += n;
             link_->audio_taken = at;
         }
@@ -1729,6 +1761,10 @@ private:
     hk_pc_link *link_ = nullptr;
     FrameHook frame_hook_;
     AudioSink audio_sink_;
+    hk::host::Effector effector_{HK_PC_AUDIO_RATE};
+    std::vector<float> fx_buf_;
+    uint32_t fx_seq_ = 0;
+    bool fx_said_ = false;
     std::vector<hk::mods::MemoryPatch> patches_;   // the mods' (hand_mods)
     bool patch_said_[256] = {};
     bool ahead_ = false;   // --game-ahead

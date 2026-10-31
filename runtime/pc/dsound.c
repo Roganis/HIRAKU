@@ -567,10 +567,11 @@ long __stdcall hk_DirectSoundCreate(const void *device, void **out, void *outer)
 // unmute it before starting DirectSound, and without it start none (and fault at the first sound
 // played): Windows' mixer has no speakers line on a PC whose output is HDMI, digital or headphones
 // (pop'n 17 on Windows 10, GitHub issue 4). The game also sets the speakers' volume to its own
-// setting; here the values are kept, not applied (HIRAKU's sound output has its own), and the PC's
-// own volume and mute are left alone. The speakers have one source, the wave out (no controls of its
-// own), as a PC's always have some: IIDX RED counts its way through the speakers' sources up to their
-// number less one, unsigned, and with none went round some 4 billion times before starting.
+// setting; here the values are kept, not applied (HIRAKU's sound output has its own; IIDX GOLD to
+// EMPRESS's volume is their effector's play volume, which is: effector.c), and the PC's own volume
+// and mute are left alone. The speakers have one source, the wave out (no controls of its own), as
+// a PC's always have some: IIDX RED counts its way through the speakers' sources up to their number
+// less one, unsigned, and with none went round some 4 billion times before starting.
 
 #define MIX_HANDLE ((HMIXER)(uintptr_t)0x4b4d4958)   // "XIMK"
 #define MIX_LINE 0xffff0000u
@@ -716,6 +717,7 @@ static MMRESULT mix_details(HMIXEROBJ h, LPMIXERCONTROLDETAILS d, DWORD flags, i
         DWORD *v = (DWORD *)((char *)d->paDetails + i * d->cbDetails);
         if (set) {
             if (!i) g_mix_value[d->dwControlID] = *v;
+            if (!i && d->dwControlID == MIX_VOLUME) hk_fx_volume(*v);   // (IIDX's play volume: effector.c)
         } else {
             *v = g_mix_value[d->dwControlID];
         }

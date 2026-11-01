@@ -1653,7 +1653,118 @@ private:
     }
 #else
     pid_t pid_ = 0;
+    // The IIDX games' movies (MPEG-1, MPEG-2 from GOLD on) go through DirectShow, which Wine hands to
+    // the system's GStreamer: without its MPEG demuxer and decoder for Wine's side (32-bit for a Wine
+    // with a 32-bit half, 64-bit for a 64-bit-only one) each movie fails, the stages stay black and the
+    // game shows a DirectX error, with only GStreamer's own assertions in the log. Said once, before
+    // the game starts
+    void movie_plugins_note() {
+        // Wine's halves, from where its program is
+        std::string wine = wine_;
+        if (wine.find('/') == std::string::npos)
+            if (const char *path = getenv("PATH"))
+                for (const char *p = path; *p;) {
+                    const char *e = strchr(p, ':');
+                    const std::string at = std::string(p, e ? e - p : strlen(p)) + "/" + wine_;
+                    if (!access(at.c_str(), X_OK)) {
+                        wine = at;
+                        break;
+                    }
+                    if (!e) break;
+                    p = e + 1;
+                }
+        std::error_code ec;
+        const std::string bin = std::filesystem::canonical(wine, ec).parent_path().string();
+        bool w32 = false, w64 = false;
+        if (!ec)
+            for (const char *lib : {"/../lib/wine", "/../lib32/wine", "/../lib64/wine", "/../lib/i386-linux-gnu/wine",
+                                    "/../lib/x86_64-linux-gnu/wine"}) {
+                w32 |= file_size(bin + lib + "/i386-unix/ntdll.so") != UINT64_MAX;
+                w64 |= file_size(bin + lib + "/x86_64-unix/ntdll.so") != UINT64_MAX;
+            }
+        // ELF class each plugin was found in (1: 32-bit, 2: 64-bit), where GStreamer looks
+        std::vector<std::string> dirs;
+        auto add = [&](const char *var) {
+            if (const char *v = getenv(var))
+                for (const char *p = v; *p;) {
+                    const char *e = strchr(p, ':');
+                    dirs.emplace_back(p, e ? e - p : strlen(p));
+                    if (!e) break;
+                    p = e + 1;
+                }
+        };
+        add("GST_PLUGIN_PATH_1_0"), add("GST_PLUGIN_PATH");
+        const size_t own = dirs.size();
+        add("GST_PLUGIN_SYSTEM_PATH_1_0"), add("GST_PLUGIN_SYSTEM_PATH");
+        if (dirs.size() == own) {
+            for (const char *d : {"/usr/lib/gstreamer-1.0", "/usr/lib32/gstreamer-1.0", "/usr/lib64/gstreamer-1.0",
+                                  "/usr/lib/i386-linux-gnu/gstreamer-1.0", "/usr/lib/x86_64-linux-gnu/gstreamer-1.0",
+                                  "/usr/local/lib/gstreamer-1.0", "/usr/local/lib64/gstreamer-1.0"})
+                dirs.push_back(d);
+            if (const char *home = getenv("HOME")) dirs.push_back(std::string(home) + "/.local/share/gstreamer-1.0/plugins");
+        }
+        auto classes = [&](std::initializer_list<const char *> names) {
+            int found = 0;
+            for (const std::string &d : dirs)
+                for (const char *n : names) {
+                    unsigned char h[5] = {};
+                    FILE *f = fopen((d + "/" + n).c_str(), "rb");
+                    if (!f) continue;
+                    if (fread(h, 1, 5, f) == 5 && !memcmp(h, "\x7f" "ELF", 4) && (h[4] == 1 || h[4] == 2)) found |= h[4];
+                    fclose(f);
+                }
+            return found;
+        };
+        struct Need {
+            std::initializer_list<const char *> files;
+            const char *what, *debian;
+        };
+        const Need needs[] = {
+            {{"libgstplayback.so"}, "decodebin (plugins-base)", "gstreamer1.0-plugins-base"},
+            {{"libgsttypefindfunctions.so"}, "typefind (plugins-base)", "gstreamer1.0-plugins-base"},
+            {{"libgstvideoconvertscale.so", "libgstvideoconvert.so"}, "videoconvert (plugins-base)", "gstreamer1.0-plugins-base"},
+            {{"libgstmpegpsdemux.so"}, "the MPEG demuxer mpegpsdemux (plugins-bad)", "gstreamer1.0-plugins-bad"},
+            {{"libgstlibav.so", "libgstmpeg2dec.so"}, "an MPEG-2 decoder (libav, or mpeg2dec of plugins-ugly)", "gstreamer1.0-libav"},
+        };
+        // Wine's side: 32-bit where it has a 32-bit half; either when its folders weren't found
+        const int want = w32 ? 1 : w64 ? 2 : 3;
+        std::string missing, debian;
+        for (const Need &n : needs)
+            if (!(classes(n.files) & want)) {
+                missing += std::string(missing.empty() ? "" : ", ") + n.what;
+                if (debian.find(n.debian) == std::string::npos) debian += std::string(" ") + n.debian + (w32 ? ":i386" : "");
+            }
+        if (missing.empty()) return;
+        const char *bits = w32 ? "32-bit " : w64 ? "64-bit " : "";
+        std::string os;
+        if (FILE *f = fopen("/etc/os-release", "r")) {
+            char line[256];
+            while (fgets(line, sizeof line, f))
+                if (!strncmp(line, "ID=", 3) || !strncmp(line, "ID_LIKE=", 8)) os += line;
+            fclose(f);
+        }
+        std::string how;
+        if (os.find("debian") != std::string::npos || os.find("ubuntu") != std::string::npos)
+            how = "Debian, Ubuntu, Mint: sudo apt install" + debian;
+        else if (os.find("arch") != std::string::npos)
+            how = w32 ? "Arch: lib32-gst-plugins-base, and lib32-gst-plugins-bad and lib32-gst-libav from the AUR"
+                      : "Arch: sudo pacman -S gst-plugins-base gst-plugins-bad gst-libav";
+        else if (os.find("fedora") != std::string::npos)
+            how = w32 ? "Fedora: sudo dnf install gstreamer1-plugins-base.i686 gstreamer1-plugins-bad-free.i686 gstreamer1-plugin-libav.i686"
+                      : "Fedora: sudo dnf install gstreamer1-plugins-base gstreamer1-plugins-bad-free gstreamer1-plugin-libav";
+        else
+            how = std::string("your distribution's ") + bits + "GStreamer plugins: base, bad and libav";
+        printf("movies: Wine plays the game's movies through GStreamer, and its %splugins lack %s: the movies will stay "
+               "black (the game may show a DirectX error at each). Install them (%s) and start the game again\n",
+               bits, missing.c_str(), how.c_str());
+        fflush(stdout);
+    }
     bool start_game() {
+        static bool movies_checked;
+        if (family_ == "iidx" && !(pc64_ || pc32_) && !movies_checked) {
+            movies_checked = true;
+            movie_plugins_note();
+        }
         // Wine's own folder for HIRAKU's PC games, made the first time without asking to install
         // Mono or Gecko (the games need neither)
         const std::string prefix = save_.substr(0, save_.rfind('/')) + "/pc-wine";

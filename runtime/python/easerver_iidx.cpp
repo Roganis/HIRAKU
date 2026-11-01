@@ -493,8 +493,20 @@ std::string EamuseServer::answer_iidx_fdd(const std::string &game, const Request
                               "dp_opt", "dp_opt2", "mcomb", "ncomb", "mode"})
             attrs += a(fdd && std::string(k) == "sdhd" ? "hdsd" : k, field(*p, k));   // (pc save sends it as sdhd)
         const std::string sgid = get(*p, "sgid"), dgid = get(*p, "dgid");
+        // EMPRESS's grade also lists each dan course played (I00 0x4b2da7: a g element, 4 u8: SP 0 or
+        // DP 1, the grade, the stages cleared, the percentage), the best of each
+        std::string gs;
+        if (game == "I00")
+            for (const auto &[k, v] : *p)
+                if (k.size() > 2 && k[0] == 'g' && k[1] == 'r') {   // grT_G = STAGES,ACHI
+                    long t = 0, g = 0, st = 0, ach = 0;
+                    if (sscanf(k.c_str(), "gr%ld_%ld", &t, &g) == 2 && sscanf(v.c_str(), "%ld,%ld", &st, &ach) == 2)
+                        gs += "<g __type=\"u8\" __count=\"4\">" + std::to_string(t) + " " + std::to_string(g) + " " +
+                              std::to_string(st) + " " + std::to_string(ach) + "</g>";
+                }
         const std::string rest = "<grade" + a("sgid", sgid.empty() ? "-1" : sgid) + a("dgid", dgid.empty() ? "-1" : dgid) +
-                                 "/><ex></ex>" + (game == "I00" ? "" : "<skin></skin>") + "<rlist></rlist>";   // (EMPRESS: skin, if given, 12 u16)
+                                 (gs.empty() ? "/>" : ">" + gs + "</grade>") + "<ex></ex>" + (game == "I00" ? "" : "<skin></skin>") +
+                                 "<rlist></rlist>";   // (EMPRESS: skin, if given, 12 u16)
         if (fdd) {
             std::string pass;
             for (const Record &c : from_lines(read_file("cards")))
@@ -514,12 +526,83 @@ std::string EamuseServer::answer_iidx_fdd(const std::string &game, const Request
         return ok(a("name", get(*p, "name")) + a("idstr", idstr(get(*p, "id"))) + a("pid", field(*p, "pid")));
     }
     if (mod == "pc" && method == "save") {   // by IIDX ID: the record's fields as the game sends them
+        // achi (the DJ points) and pnum (the plays) are the side's the credit was played on (cltype 0
+        // SP, 1 DP): pc get gives them back as sach / dach and spnum / dpnum
         if (Record *p = player("id", attr(r.attrs, "iidxid"))) {
+            const bool dp = std::atol(attr(r.attrs, "cltype").c_str()) == 1;
             for (const auto &[k, v] : r.attrs)
-                if (k != "method" && k != "ver" && k != "iidxid") (*p)[k] = v;
+                if (k == "achi") (*p)[dp ? "dach" : "sach"] = v;
+                else if (k == "pnum") (*p)[dp ? "dpnum" : "spnum"] = v;
+                else if (k != "method" && k != "ver" && k != "iidxid" && k != "cltype") (*p)[k] = v;
             save_players();
         }
         return ok();
+    }
+    // A dan course's end (grade raised iidxid gtype gid cflg achi: SP 0 or DP 1, the grade, the stages
+    // cleared, the percentage): each grade's best kept, and the highest cleared (all four stages) is the
+    // player's grade (pc get's sgid, dgid), which opens the next ones
+    if (mod == "grade" && method == "raised") {
+        if (Record *p = player("id", attr(r.attrs, "iidxid"))) {
+            const long t = std::atol(attr(r.attrs, "gtype").c_str()) == 1 ? 1 : 0, g = std::atol(attr(r.attrs, "gid").c_str());
+            const long st = std::atol(attr(r.attrs, "cflg").c_str()), ach = std::atol(attr(r.attrs, "achi").c_str());
+            if (g >= 0 && g < 64) {
+                const std::string k = "gr" + std::to_string(t) + "_" + std::to_string(g);
+                long st0 = -1, ach0 = -1;
+                sscanf(get(*p, k.c_str()).c_str(), "%ld,%ld", &st0, &ach0);
+                if (st > st0 || (st == st0 && ach > ach0)) (*p)[k] = std::to_string(st) + "," + std::to_string(ach);
+                const char *top = t ? "dgid" : "sgid";
+                if (st >= 4 && (get(*p, top).empty() || g > field(*p, top))) (*p)[top] = std::to_string(g);
+                save_players();
+            }
+        }
+        return ok(a("pnum", "0"));
+    }
+    // The EXPERT courses (ranking entry after one: iidxid coid clid pgnum gnum clr cstage opt...): each
+    // player's best kept by course and chart; ranking getranker coid clid gives them back, the best
+    // first (I00 0x4b0903: <ranker gnum pgnum name opname pid udate/>), and entry the place
+    if (mod == "ranking" && (method == "entry" || method == "getranker")) {
+        const std::string coid = attr(r.attrs, "coid"), clid = attr(r.attrs, "clid");
+        std::vector<Record> courses = from_lines(read_file("iidx-" + game + "-courses"));
+        if (method == "entry" && safe_name(coid) && safe_name(clid) && safe_name(attr(r.attrs, "iidxid"))) {
+            const std::string id = attr(r.attrs, "iidxid");
+            const long pg = std::atol(attr(r.attrs, "pgnum").c_str()), gr = std::atol(attr(r.attrs, "gnum").c_str());
+            Record *best = nullptr;
+            for (Record &x : courses)
+                if (get(x, "id") == id && get(x, "coid") == coid && get(x, "clid") == clid) best = &x;
+            if (!best) {
+                courses.push_back({{"id", id}, {"coid", coid}, {"clid", clid}, {"pgnum", "0"}, {"gnum", "0"}});
+                best = &courses.back();
+            }
+            if (2 * pg + gr > 2 * field(*best, "pgnum") + field(*best, "gnum") || get(*best, "udate").empty()) {
+                (*best)["pgnum"] = std::to_string(pg), (*best)["gnum"] = std::to_string(gr);
+                (*best)["clr"] = attr(r.attrs, "clr"), (*best)["cstage"] = attr(r.attrs, "cstage");
+                (*best)["udate"] = std::to_string((long)time(nullptr));
+            }
+            std::string text;
+            for (const Record &x : courses) text += to_line(x);
+            write_file("iidx-" + game + "-courses", text);
+        }
+        std::vector<const Record *> list;
+        for (const Record &x : courses)
+            if (get(x, "coid") == coid && get(x, "clid") == clid) list.push_back(&x);
+        std::stable_sort(list.begin(), list.end(), [](const Record *x, const Record *y) {
+            return 2 * field(*x, "pgnum") + field(*x, "gnum") > 2 * field(*y, "pgnum") + field(*y, "gnum");
+        });
+        if (method == "entry") {
+            long jun = 0;
+            for (size_t k = 0; k < list.size(); k++)
+                if (get(*list[k], "id") == attr(r.attrs, "iidxid")) jun = (long)k + 1;
+            return ok(a("anum", std::to_string(list.size())) + a("jun", std::to_string(jun)));
+        }
+        std::string children;
+        for (const Record *x : list) {
+            if (game != "I00") break;   // (the others' ranker not read yet: none, as before)
+            const Record *pl = player("id", get(*x, "id"));
+            children += "<ranker" + a("gnum", get(*x, "gnum")) + a("pgnum", get(*x, "pgnum")) +
+                        a("name", pl ? get(*pl, "name") : "") + a("opname", "HIRAKU") + a("pid", pl ? get(*pl, "pid") : "13") +
+                        a("udate", get(*x, "udate")) + "/>";
+        }
+        return ok("", children);
     }
     // GOLD's scores (DistorteD's the same, JAG 0x4d0c30 and 0x4cd600): music reg after a stage (mid, the chart clid, pgnum and gnum, rid the DJ level
     // 0 AAA ... 7 F, cflg the clear), the best kept by IIDX ID, song and chart; music getrank as a
@@ -595,8 +678,6 @@ std::string EamuseServer::answer_iidx_fdd(const std::string &game, const Request
     if (mod == "pc" && method == "lcommon") return ok(a("ls", "0"));
     if (mod == "music" && (method == "reg" || method == "play" || method == "lplay"))   // the chart's clear rate
         return ok(a("mid", attr(r.attrs, "mid")) + a("clid", attr(r.attrs, "clid")) + a("crate", "0") + a("frate", "0"));   // (frate: EMPRESS's)
-    if (mod == "grade" && method == "raised") return ok(a("pnum", "0"));
-    if (mod == "ranking" && method == "entry") return ok(a("anum", "0") + a("jun", "0"));
     if (mod == "shop" && method == "getname")   // the shop's name (the location's), its prefecture, its closing time
         return ok(a("opname", "HIRAKU") + a("pid", "13") + a("cls_opt", "0") + a("hr", "0") + a("mi", "0"));
     return ok();

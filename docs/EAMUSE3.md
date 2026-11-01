@@ -1352,7 +1352,18 @@ unless said):
   on each game's music select; GOLD's and DJ TROOPERS' 3-5 not seen). DistorteD and GOLD show the DJ
   level sent; DJ TROOPERS works it out from the EX score.
 - **pc save** at the credit's end: `iidxid cltype achi pnum opt opt2 gno sflg0-2 sdhd ncomb mcomb mode
-  pmode lid` and GOLD's `now_g all_g use_g`.
+  pmode lid` and GOLD's `now_g all_g use_g`. `achi` (the DJ points) and `pnum` (the plays) are the side's
+  the credit was played on (cltype 0 SP, 1 DP): kept as `sach`/`spnum` or `dach`/`dpnum`, which pc
+  get gives back.
+- **grade raised** after a dan course: `iidxid gtype gid cflg achi` (SP 0 or DP 1, the grade, the
+  stages cleared, the percentage). Each grade's best is kept; the highest with all four stages
+  cleared is `sgid`/`dgid`, which opens the grades above. EMPRESS's pc get also lists them in
+  `<grade>`: a `<g __type="u8" __count="4">GTYPE GID STAGES ACHI</g>` each (I00 0x4b2da7). Taking
+  four stages as cleared follows later IIDX servers; not seen on a dan cleared in EMPRESS yet.
+- **ranking entry** after an EXPERT course: `iidxid coid clid pgnum gnum opt opt2 opname oppid clr
+  cstage pside` (answer `anum jun`, the entries and the place); **ranking getranker** `coid clid`:
+  EMPRESS reads `<ranker gnum pgnum name opname pid udate/>` elements (I00 0x4b0903). Each player's
+  best is kept by course and chart and given back best first (EMPRESS only for now).
 
 EMPRESS (`I00`, its e-AMUSE3 in `libavs-win32-ea3.dll`; method definitions at 0x57decc...: three
 routines a method, the parser last) the same, and: `pc reg` sends `did`; `pc get`'s pcdata adds

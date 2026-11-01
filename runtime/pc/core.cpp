@@ -317,6 +317,7 @@ public:
             return false;
         }
         if (m.count("family")) family_ = m["family"];
+        cab_hz_ = cabinet_rate(), hz_ = cab_hz_;
         c02_ = m["board"] == "c02" || m["board"] == "c02-driver";
         c02_driver_ = m["board"] == "c02-driver";
         data_as_ = m.count("data_as") ? m["data_as"] : drive + "\\data";
@@ -679,7 +680,7 @@ public:
     int audio_rate() const override { return HK_PC_AUDIO_RATE; }
     bool audio_per_frame() const override { return true; }   // each picture brings its frame's sound
     void set_on_fatal(std::function<void()> f) override { on_fatal_ = std::move(f); }
-    double native_rate() const override { return pc64_ ? 120.0 : HZ; }   // the cabinet's (a [[rate]]'s ticks)
+    double native_rate() const override { return pc64_ ? 120.0 : cab_hz(); }   // the cabinet's (a [[rate]]'s ticks)
     int monitor_khz() const override { return 31; }   // a PC's VGA monitor
     // the 64-bit PC pop'n: 1920x1080, square pixels; IIDX's 640x480 shown on its cabinet's widescreen
     // monitor (as Twinkle's IIDX)
@@ -697,12 +698,12 @@ public:
         return nullptr;
     }
     // A mod's [[rate]] (docs/MODS.md): the game draws hz pictures a second from the next shown frame
-    // (0: the cabinet's 60 again). Its clock, its sound's samples and the shell's time go on
+    // (0: the cabinet's own again). Its clock, its sound's samples and the shell's time go on
     // without a jump; the DLL counts the cabinet's ticks for the patches tied to the rate
     bool frame_repeated() const override { return repeating_; }
     bool set_vsync_rate(double hz) override {
         if (pc64_) return false;
-        want_hz_ = hz > 0 ? hz : HZ;
+        want_hz_ = hz > 0 ? hz : cab_hz();
         return true;
     }
     uint64_t frame_count() const override { return frame_; }
@@ -1116,7 +1117,22 @@ public:
     }
 
 private:
-    static constexpr double HZ = 60.0;   // the cabinet's VGA monitor
+    // The cabinet's rate: a PC's 60 Hz, or for beatmania IIDX the one its music keeps with its notes.
+    // The IIDX games count everything in frames, their notes' times too, while their music plays by
+    // the clock, so the game must run at the rate its charts were counted in, or the music and the
+    // notes and keysounds drift apart through each song (0.1 s in two minutes at 60). Measured from
+    // the charts (their bar lines against their tempo, all songs): 9th style to DistorteD count
+    // frames of 59.939 Hz, GOLD of 60.034 Hz; DJ TROOPERS and EMPRESS keep milliseconds (0.99975 of
+    // the music's) and count them in frames of the operator's DISPLAY TYPE (A 60.05 Hz, B 59.95 Hz:
+    // the DLL says which, chart_frame_ns), so 60.035 Hz or 59.935. Display sync shows them at 60 on a
+    // 120 Hz display (0.1 % faster or slower), the sound with them
+    double cab_hz() const { return cab_hz_; }
+    double cabinet_rate() const {
+        if (family_ != "iidx" || pc64_ || pc32_) return 60.0;
+        const int n = atoi(game_.c_str() + std::min<size_t>(4, game_.size()));   // iidx<N>
+        return n >= 15 ? 60.05 * CHART_MS : n == 14 ? 60.034 : 59.939;
+    }
+    static constexpr double CHART_MS = 0.99975;   // DJ TROOPERS' and EMPRESS's chart milliseconds, in the music's
 
     // The C02 cabinet's controls (the family iidx's names, shell/cabinet.cpp) to its pad (link.h)
     // A key's change, with when it happened (link.h: pad_ev): presses judged by their time (press.c)
@@ -1413,7 +1429,7 @@ private:
         link_->frame_go = seq;
     }
 
-    // The game's time in its own frames (ticks: 60 a second, the 64-bit PC pop'n's 120), each
+    // The game's time in its own frames (ticks: cab_hz() a second, the 64-bit PC pop'n's 120), each
     // shown frame per_frame_ of them; its sound, 44.1 kHz: where it ends with tick `t`
     double ghz() const { return pc64_ ? 120.0 : hz_; }
     uint64_t samples_at(uint64_t t) const {
@@ -1526,6 +1542,18 @@ private:
         tick_ += per_frame_;
         ++frame_;
         if (frame_hook_) frame_hook_(frame_, rgb, w, h);   // (mods::frame: set_vsync_rate)
+        // DJ TROOPERS' and EMPRESS's display type, as their charts are read: the rate it gives them
+        if (const uint32_t ns = link_->chart_frame_ns; ns && ns != chart_frame_ns_) {
+            chart_frame_ns_ = ns;
+            const double hz = 1e9 / ns * CHART_MS;
+            printf("hiraku-pc: the charts are counted in frames of %.2f Hz (display type %c): the game runs at %.3f Hz\n",
+                   1e9 / ns, ns < 16666667 ? 'A' : 'B', hz);
+            fflush(stdout);
+            if (std::fabs(hz - cab_hz_) > 0.001) {
+                if (hz_ == cab_hz_ && !want_hz_) want_hz_ = hz;
+                cab_hz_ = hz;
+            }
+        }
         if (want_hz_ > 0 && want_hz_ != hz_) {   // the new rate from here on, its time and sound continued
             samp0_ = samples_at(tick_);
             sec0_ = seconds();
@@ -1903,7 +1931,8 @@ private:
     uint64_t made_up_ = 0, not_made_up_ = 0;
     uint64_t tick_ = 0;    // the game's time in its frames (ghz())
     // ghz() and where it last changed (a [[rate]]): the tick, the time and the sound samples then
-    double hz_ = HZ, want_hz_ = 0, sec0_ = 0;
+    double hz_ = 60.0, want_hz_ = 0, sec0_ = 0, cab_hz_ = 60.0;
+    uint32_t chart_frame_ns_ = 0;   // link.h chart_frame_ns, as last taken
     uint64_t t0_ = 0, samp0_ = 0;
     mutable uint32_t watch_copy_[HK_PC_WATCHES] = {};
     bool repeating_ = false;   // show() of the last picture again (frame_repeated)

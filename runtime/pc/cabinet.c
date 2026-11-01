@@ -900,6 +900,8 @@ static void dbg_watch(void) {
     hk_log("hiraku-pc: debug: watching %d addresses from %08x (%d threads, and those started later)", naddr, addr[0], threads);
 }
 
+static const volatile float *g_chart_frame;   // IIDX DJ TROOPERS, EMPRESS: their charts' frame (chart_frame)
+
 // Each Present, Direct3D 9's or 8's (d3d8.c): the mods' patches and the debug watch first, before
 // the next frame runs
 void hk_present_begin(void) {
@@ -910,6 +912,10 @@ void hk_present_begin(void) {
         if (w) l->watch_val[i] = present(w, 4) ? *(const uint32_t *)w : 0;
     }
     rate_frame();
+    if (g_chart_frame) {
+        const float ms = *g_chart_frame;
+        l->chart_frame_ns = ms > 15.0f && ms < 18.0f ? (uint32_t)(ms * 1e6f + 0.5f) : 0;
+    }
     if (g_npatches) apply_patches();
     dbg_records();
     dbg_watch();
@@ -1645,6 +1651,32 @@ static void unlimit_frames(void) {
     if (!n) hk_log("hiraku-pc: no frame wait of the game's own found (its pictures may come late in the frame)");
 }
 
+// beatmania IIDX DJ TROOPERS and EMPRESS take their charts' times (ms) into frames as they read them,
+// at a frame the operator's DISPLAY TYPE picks: 16.6528 ms (A, 60.05 Hz) or 16.6806 ms (B, 59.95 Hz),
+// set into one float just before (mov ds:X, 0x418538ea or 0x418571cd). Found by those two stores,
+// read each picture for hiraku-pc (link.h, v13), which runs the game at the rate that keeps its music
+// with the notes (g_chart_frame, above)
+static void chart_frame(void) {
+    char *base = (char *)hk_program();
+    IMAGE_NT_HEADERS *nt = (IMAGE_NT_HEADERS *)(base + ((IMAGE_DOS_HEADER *)base)->e_lfanew);
+    IMAGE_SECTION_HEADER *sec = IMAGE_FIRST_SECTION(nt);
+    static const uint8_t a[4] = {0xea, 0x38, 0x85, 0x41}, b[4] = {0xcd, 0x71, 0x85, 0x41};
+    for (WORD k = 0; k < nt->FileHeader.NumberOfSections; k++, sec++) {
+        if (!(sec->Characteristics & IMAGE_SCN_MEM_EXECUTE)) continue;
+        const uint8_t *code = (const uint8_t *)base + sec->VirtualAddress;
+        const size_t size = sec->Misc.VirtualSize;
+        for (size_t i = 0; i + 10 <= size; i++) {
+            if (code[i] != 0xc7 || code[i + 1] != 0x05 || memcmp(code + i + 6, a, 4)) continue;
+            for (size_t j = i + 10; j + 10 <= size && j < i + 64; j++)
+                if (code[j] == 0xc7 && code[j + 1] == 0x05 && !memcmp(code + j + 2, code + i + 2, 4) && !memcmp(code + j + 6, b, 4)) {
+                    g_chart_frame = (const volatile float *)(uintptr_t)*(const uint32_t *)(code + i + 2);
+                    hk_log("hiraku-pc: the charts' frame (the display type's) at %p", (const void *)g_chart_frame);
+                    return;
+                }
+        }
+    }
+}
+
 // A fault's place and the way to it, in the log (the game's own handler ends it quietly): the module
 // and registers, and the return addresses on the stack that are in the program's code
 static LONG CALLBACK crash_log(EXCEPTION_POINTERS *e) {
@@ -1703,6 +1735,7 @@ void hk_cabinet_start(void) {
     if (hz && *hz) g_hz = atof(hz);
     hk_link();
     if (host_shows()) unlimit_frames();
+    chart_frame();
     hk_vsock_patch_program();
     hk_press_patch_program();
     if (g_npatches) apply_patches();   // the program's own code and data, as it's loaded

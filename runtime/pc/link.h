@@ -16,7 +16,7 @@
 #include <stdint.h>
 
 #define HK_PC_LINK_MAGIC 0x4b50484bu   // "HKPK"
-#define HK_PC_LINK_VERSION 12u
+#define HK_PC_LINK_VERSION 13u
 #define HK_PC_WATCHES 8u                           // [[rate]]'s words of the game's memory
 
 // The pad's bits, as Konami's ezusb.dll gives them to pop'n music (usbPadRead)
@@ -143,6 +143,11 @@ struct hk_pc_link {
     volatile int8_t fx_eq_db[10];
     volatile uint32_t fx_volume_milli;
     volatile uint32_t fx_seq;
+    // (v13) The frame beatmania IIDX DJ TROOPERS and EMPRESS count their charts' times in (ns; 0: not
+    // such a game, or no chart read yet): 16.6528 ms with the operator's DISPLAY TYPE A, 16.6806 ms
+    // with B (runtime/pc/cabinet.c chart_frame). hiraku-pc runs the game at the rate its music keeps
+    // with the charts then
+    volatile uint32_t chart_frame_ns;
 };
 
 // A quad the game drew (two triangles in screen space, one texture): the texture (its address, the

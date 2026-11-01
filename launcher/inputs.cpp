@@ -195,6 +195,9 @@ void Joysticks::reopen() {
     m_joys.clear();
     m_pads.clear();
     m_known.clear();
+    m_seen.clear();
+    m_buttonRest.clear();
+    m_hatRest.clear();
     int n = 0;
     SDL_JoystickID *ids = SDL_GetJoysticks(&n);
     for (int k = 0; k < n; k++)
@@ -251,6 +254,21 @@ int Joysticks::axisCount(int joy) const {
     return SDL_GetNumJoystickAxes((SDL_Joystick *)m_joys[joy]);
 }
 
+void Joysticks::firstReport(int joy) {
+    if (m_seen.contains(joy)) return;
+    m_seen.insert(joy);
+    auto *js = (SDL_Joystick *)m_joys[joy];
+    int held = 0;
+    for (int b = 0; b < SDL_GetNumJoystickButtons(js); b++) held += SDL_GetJoystickButton(js, b);
+    for (int h = 0; h < SDL_GetNumJoystickHats(js); h++)
+        for (int bit = 1; bit < 16; bit <<= 1) held += (SDL_GetJoystickHat(js, h) & bit) != 0;
+    if (held < 2) return;
+    for (int b = 0; b < SDL_GetNumJoystickButtons(js); b++)
+        if (SDL_GetJoystickButton(js, b)) m_buttonRest.insert(QString("%1:%2").arg(joy).arg(b));
+    for (int h = 0; h < SDL_GetNumJoystickHats(js); h++)
+        if (int v = SDL_GetJoystickHat(js, h) & 0x0f) m_hatRest[QString("%1:%2").arg(joy).arg(h)] = v;
+}
+
 void Joysticks::poll() {
     auto index = [&](SDL_JoystickID id) {
         for (int k = 0; k < m_joys.size(); k++)
@@ -265,16 +283,30 @@ void Joysticks::poll() {
         case SDL_EVENT_JOYSTICK_REMOVED: changed = true; break;
         case SDL_EVENT_JOYSTICK_BUTTON_DOWN:
         case SDL_EVENT_JOYSTICK_BUTTON_UP:
-            if (int j = index(e.jbutton.which); j >= 0) emit button(j, e.jbutton.button, e.type == SDL_EVENT_JOYSTICK_BUTTON_DOWN);
+            if (int j = index(e.jbutton.which); j >= 0) {
+                firstReport(j);
+                const QString key = QString("%1:%2").arg(j).arg(e.jbutton.button);
+                if (m_buttonRest.contains(key)) {   // resting: let go, it's pressed from now on
+                    if (e.type == SDL_EVENT_JOYSTICK_BUTTON_UP) m_buttonRest.remove(key);
+                    break;
+                }
+                emit button(j, e.jbutton.button, e.type == SDL_EVENT_JOYSTICK_BUTTON_DOWN);
+            }
             break;
         case SDL_EVENT_JOYSTICK_AXIS_MOTION:
             if (int j = index(e.jaxis.which); j >= 0) {
+                firstReport(j);
                 emit axis(j, e.jaxis.axis, e.jaxis.value);
                 m_known.insert(QString("%1:%2").arg(j).arg(e.jaxis.axis));
             }
             break;
         case SDL_EVENT_JOYSTICK_HAT_MOTION:
-            if (int j = index(e.jhat.which); j >= 0) emit hat(j, e.jhat.hat, e.jhat.value);
+            if (int j = index(e.jhat.which); j >= 0) {
+                firstReport(j);
+                int &rest = m_hatRest[QString("%1:%2").arg(j).arg(e.jhat.hat)];
+                rest &= e.jhat.value;
+                emit hat(j, e.jhat.hat, e.jhat.value & ~rest);
+            }
             break;
         default: break;
         }

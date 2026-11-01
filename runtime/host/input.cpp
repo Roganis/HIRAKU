@@ -124,6 +124,14 @@ std::map<std::string, double> g_analog;   // each such control's position (keys 
 // as pressed that way until it has come back. Some USB controllers report an axis only once
 // something changes: until then SDL gives 0, and the first key pressed brings the resting values.
 bool g_axis_known[16][16], g_rest_neg[16][16], g_rest_pos[16][16];
+// Buttons and hat directions held at a controller's first report, two or more of them: they rest
+// there and aren't pressed until released once. A PS2 BEMANI controller (pop'n, IIDX, Keyboardmania)
+// holds Left, Right and Down for good, its way of saying what it is to the PS2; through a USB
+// adapter that is buttons (or a hat) down from the first report on, which the Controls capture took
+// for the first key pressed and the game then read as held (Roganis/HIRAKU#10)
+bool g_joy_seen[16];
+std::set<std::pair<int, int>> g_button_rest;   // (joy, button)
+uint8_t g_hat_rest[16][8];                     // SDL hat bits
 const bool g_input_log = [] {
     const char *e = getenv("HK_INPUT_LOG");
     return e && *e && *e != '0';
@@ -134,6 +142,38 @@ int joy_index(SDL_JoystickID id) {
         if (SDL_GetJoystickID(g_joys[k]) == id) return (int)k;
     return -1;
 }
+
+// A controller's first report: what it holds then, if two or more, rests
+void first_report(int j) {
+    SDL_Joystick *js = g_joys[j];
+    std::vector<int> buttons;
+    int held = 0;
+    for (int b = 0; b < SDL_GetNumJoystickButtons(js); b++)
+        if (SDL_GetJoystickButton(js, b)) buttons.push_back(b), held++;
+    const int hats = std::min(SDL_GetNumJoystickHats(js), 8);
+    for (int h = 0; h < hats; h++)
+        for (int bit = 1; bit < 16; bit <<= 1) held += (SDL_GetJoystickHat(js, h) & bit) != 0;
+    if (held < 2) return;
+    std::string list;
+    for (int b : buttons) g_button_rest.insert({j, b}), list += " button" + std::to_string(b);
+    for (int h = 0; h < hats; h++)
+        if ((g_hat_rest[j][h] = SDL_GetJoystickHat(js, h) & 0x0f)) list += " hat" + std::to_string(h);
+    fprintf(stderr, "input: joy%d holds%s at its first report: taken as at rest, not pressed until released once (a PS2 "
+                    "BEMANI controller holds some for good)\n", j, list.c_str());
+}
+
+bool button_rests(const SDL_Event &e) {
+    return g_button_rest.count({joy_index(e.jbutton.which), (int)e.jbutton.button}) != 0;
+}
+// a hat's value without the directions resting
+uint8_t hat_value(const SDL_Event &e) {
+    const int j = joy_index(e.jhat.which);
+    return j >= 0 && j < 16 && e.jhat.hat < 8 ? e.jhat.value & ~g_hat_rest[j][e.jhat.hat] : e.jhat.value;
+}
+
+// Keyboardmania's wheels: moved last by keys (they spring back to the middle once let go, as MAME's
+// paddle does with keys) or by an axis (it stays where the axis puts it)
+std::set<std::string> g_wheel_by_keys;
 
 // The joystick a binding means now, or -1 (a named one that isn't plugged in)
 int bound_joy(const Binding &b) {
@@ -227,6 +267,15 @@ void input_event(const SDL_Event &e) {
             }
         }
     }
+    if (e.type == SDL_EVENT_JOYSTICK_AXIS_MOTION || e.type == SDL_EVENT_JOYSTICK_BUTTON_DOWN ||
+        e.type == SDL_EVENT_JOYSTICK_BUTTON_UP || e.type == SDL_EVENT_JOYSTICK_HAT_MOTION) {
+        // (the same field for each kind)
+        const int j = joy_index(e.jbutton.which);
+        if (j >= 0 && j < 16 && !g_joy_seen[j]) {
+            g_joy_seen[j] = true;
+            first_report(j);
+        }
+    }
     if (g_input_log && (e.type == SDL_EVENT_JOYSTICK_AXIS_MOTION || e.type == SDL_EVENT_JOYSTICK_BUTTON_DOWN ||
                         e.type == SDL_EVENT_JOYSTICK_BUTTON_UP || e.type == SDL_EVENT_JOYSTICK_HAT_MOTION)) {
         if (e.type == SDL_EVENT_JOYSTICK_AXIS_MOTION)
@@ -236,6 +285,15 @@ void input_event(const SDL_Event &e) {
         else
             fprintf(stderr, "input log: joy%d button%d %s\n", joy_index(e.jbutton.which), e.jbutton.button,
                     e.type == SDL_EVENT_JOYSTICK_BUTTON_DOWN ? "down" : "up");
+    }
+    if (e.type == SDL_EVENT_JOYSTICK_BUTTON_DOWN && button_rests(e)) return;
+    if (e.type == SDL_EVENT_JOYSTICK_BUTTON_UP && button_rests(e)) {   // let go: pressed from now on
+        g_button_rest.erase({joy_index(e.jbutton.which), (int)e.jbutton.button});
+        return;
+    }
+    if (e.type == SDL_EVENT_JOYSTICK_HAT_MOTION) {
+        const int j = joy_index(e.jhat.which);
+        if (j >= 0 && j < 16 && e.jhat.hat < 8) g_hat_rest[j][e.jhat.hat] &= e.jhat.value;
     }
     for (auto &[name, list] : g_bind)
         for (auto &b : list) {
@@ -251,7 +309,7 @@ void input_event(const SDL_Event &e) {
                 break;
             case SDL_EVENT_JOYSTICK_HAT_MOTION:
                 if (b.src == Src::hat && from(b, e.jhat.which) && e.jhat.hat == b.index) {
-                    bool down = (e.jhat.value & b.hat_dir) != 0;
+                    bool down = (hat_value(e) & b.hat_dir) != 0;
                     if (down != (g_held[name] > 0)) press(name, down);
                 }
                 break;
@@ -270,6 +328,7 @@ void input_event(const SDL_Event &e) {
                         v = std::clamp(b.scale < 0 ? max - v : v, 0, max);
                         if (g_analog.count(name) == 0 || (int)std::lround(g_analog[name]) != v) core().set_input(name, v);
                         g_analog[name] = v;
+                        g_wheel_by_keys.erase(name);
                     }
                 }
                 break;
@@ -287,11 +346,11 @@ int input_binding_event(const std::string &binding, const SDL_Event &e) {
         return b.src == Src::key && e.key.key == b.key ? (e.type == SDL_EVENT_KEY_DOWN ? 1 : -1) : 0;
     case SDL_EVENT_JOYSTICK_BUTTON_DOWN:
     case SDL_EVENT_JOYSTICK_BUTTON_UP:
-        if (b.src == Src::button && from(b, e.jbutton.which) && e.jbutton.button == b.index)
+        if (b.src == Src::button && from(b, e.jbutton.which) && e.jbutton.button == b.index && !button_rests(e))
             return e.type == SDL_EVENT_JOYSTICK_BUTTON_DOWN ? 1 : -1;
         return 0;
     case SDL_EVENT_JOYSTICK_HAT_MOTION:
-        if (b.src == Src::hat && from(b, e.jhat.which) && e.jhat.hat == b.index) return (e.jhat.value & b.hat_dir) ? 1 : -1;
+        if (b.src == Src::hat && from(b, e.jhat.which) && e.jhat.hat == b.index) return (hat_value(e) & b.hat_dir) ? 1 : -1;
         return 0;
     case SDL_EVENT_JOYSTICK_AXIS_MOTION:
         if ((b.src == Src::axis_neg || b.src == Src::axis_pos) && from(b, e.jaxis.which) && e.jaxis.axis == b.index)
@@ -303,14 +362,19 @@ int input_binding_event(const std::string &binding, const SDL_Event &e) {
 
 void input_update(double ms) {
     // Keyboardmania's wheels on keys or buttons: up and down move it (about MAME's KEYDELTA, 10 a
-    // 60 Hz frame); it stays where it's left, as a modulation wheel does
+    // 60 Hz frame); let go, it goes back to the middle as fast (MAME's paddle with keys: its
+    // CENTERDELTA is the KEYDELTA), or the game reads it as still pushed and keeps scrolling
     for (const char *w : {"P1 Wheel", "P2 Wheel"}) {
         const std::string n = w;
         const int dir = (g_held[n + " Up"] > 0 ? 1 : 0) - (g_held[n + " Down"] > 0 ? 1 : 0);
-        if (!dir) continue;
+        if (dir) g_wheel_by_keys.insert(n);
+        else if (!g_wheel_by_keys.count(n)) continue;
         double &pos = g_analog.try_emplace(n, 128.0).first->second;
         const int before = (int)std::lround(pos);
-        pos = std::clamp(pos + dir * ms * 0.6, 0.0, 255.0);
+        if (dir) pos = std::clamp(pos + dir * ms * 0.6, 0.0, 255.0);
+        else if (pos > 128.0) pos = std::max(pos - ms * 0.6, 128.0);
+        else pos = std::min(pos + ms * 0.6, 128.0);
+        if (!dir && pos == 128.0) g_wheel_by_keys.erase(n);
         if ((int)std::lround(pos) != before) core().set_input(n, (int)std::lround(pos));
     }
     for (int p = 0; p < 2; p++) {

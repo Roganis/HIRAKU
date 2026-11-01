@@ -4,6 +4,7 @@
 // runtime's bindings parser (runtime/host/input.cpp) reads back.
 #pragma once
 
+#include <QHash>
 #include <QObject>
 #include <QSet>
 #include <QString>
@@ -63,4 +64,11 @@ private:
     QVector<void *> m_joys;             // SDL_Joystick *
     QStringList m_pads;                 // pad() of each
     QSet<QString> m_known;              // "joy:axis" that have reported (axisKnown)
+    // as the game takes them (runtime/host/input.cpp first_report): two or more buttons or hat
+    // directions held at a controller's first report rest (a PS2 BEMANI controller holds some for
+    // good) and aren't pressed until released once
+    QSet<int> m_seen;                   // joysticks that have reported
+    QSet<QString> m_buttonRest;         // "joy:button"
+    QHash<QString, int> m_hatRest;      // "joy:hat" -> SDL hat bits
+    void firstReport(int joy);
 };

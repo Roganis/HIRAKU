@@ -61,6 +61,15 @@ bool parse_binding(const std::string &b, Binding &out) {
         if (sscanf(b.c_str(), "joy%d:", &joy) != 1 || c == std::string::npos) return false;
         r = b.substr(c + 1);
     }
+    // *<scale> at the end: a turntable's speed (an axis: negative to reverse it; a button, a hat's
+    // direction or an axis's: how fast it turns the turntable while held)
+    double scale = 1.0;
+    if (size_t star = r.find('*'); star != std::string::npos) {
+        char *end = nullptr;
+        scale = strtod(r.c_str() + star + 1, &end);
+        if (*end || scale == 0) return false;
+        r.resize(star);
+    }
     char rest[32] = {};
     if (sscanf(r.c_str(), "button%d", &idx) == 1 && r.rfind("button", 0) == 0) {
         out = {Src::button, joy, idx};
@@ -72,16 +81,12 @@ bool parse_binding(const std::string &b, Binding &out) {
     } else if (sscanf(r.c_str(), "axis%d%31s", &idx, rest) >= 1) {
         std::string x = rest;
         out = {x == "-" ? Src::axis_neg : x == "+" ? Src::axis_pos : Src::axis, joy, idx};
-        if (!x.empty() && x[0] == '*') {   // axis<K>*<scale>: a turntable's speed, negative to reverse it
-            char *end = nullptr;
-            out.scale = strtod(x.c_str() + 1, &end);
-            if (*end || out.scale == 0) return false;
-        } else if (!x.empty() && x != "-" && x != "+") {
-            return false;
-        }
+        if (!x.empty() && x != "-" && x != "+") return false;
     } else {
         return false;
     }
+    if (out.src != Src::axis && scale < 0) return false;
+    out.scale = scale;
     out.dev = dev;
     return true;
 }
@@ -98,7 +103,12 @@ void load_text(const std::string &text, const char *origin) {
     }
 }
 
-void press(const std::string &name, bool down) {
+// A turntable's button, a hat's direction or an axis's as one: how fast it turns it while held (its
+// binding's *<scale>), as the last one pressed for that input set it
+std::map<std::string, double> g_press_speed;
+
+void press(const std::string &name, bool down, double speed = 1.0) {
+    if (down) g_press_speed[name] = speed;
     int &n = g_held[name];
     int before = n;
     n = std::max(0, n + (down ? 1 : -1));
@@ -305,12 +315,12 @@ void input_event(const SDL_Event &e) {
             case SDL_EVENT_JOYSTICK_BUTTON_DOWN:
             case SDL_EVENT_JOYSTICK_BUTTON_UP:
                 if (b.src == Src::button && from(b, e.jbutton.which) && e.jbutton.button == b.index)
-                    press(name, e.type == SDL_EVENT_JOYSTICK_BUTTON_DOWN);
+                    press(name, e.type == SDL_EVENT_JOYSTICK_BUTTON_DOWN, b.scale);
                 break;
             case SDL_EVENT_JOYSTICK_HAT_MOTION:
                 if (b.src == Src::hat && from(b, e.jhat.which) && e.jhat.hat == b.index) {
                     bool down = (hat_value(e) & b.hat_dir) != 0;
-                    if (down != (g_held[name] > 0)) press(name, down);
+                    if (down != (g_held[name] > 0)) press(name, down, b.scale);
                 }
                 break;
             case SDL_EVENT_JOYSTICK_AXIS_MOTION:
@@ -318,7 +328,7 @@ void input_event(const SDL_Event &e) {
                     const int j = joy_index(e.jaxis.which), a = e.jaxis.axis;
                     const bool rests = j >= 0 && j < 16 && a < 16 && (b.src == Src::axis_neg ? g_rest_neg[j][a] : g_rest_pos[j][a]);
                     bool down = !rests && (b.src == Src::axis_neg ? e.jaxis.value < -16384 : e.jaxis.value > 16384);
-                    if (down != (g_held[name] > 0)) press(name, down);
+                    if (down != (g_held[name] > 0)) press(name, down, b.scale);
                 }
                 // an analog control's position: the axis from one end to the other (reversed with a
                 // negative speed)
@@ -379,9 +389,14 @@ void input_update(double ms) {
     }
     for (int p = 0; p < 2; p++) {
         std::string base = p == 0 ? "P1 Turntable" : "P2 Turntable";
-        // keys: about MAME's KEYDELTA (15 counts per 60 Hz frame)
+        // keys: about MAME's KEYDELTA (15 counts per 60 Hz frame); a button's speed times that (a
+        // digital turntable, as a PS2 controller's, sends a button held while it turns)
         static double frac[2] = {0, 0};
-        double v = (g_held[base + " +"] > 0 ? 1 : 0) - (g_held[base + " -"] > 0 ? 1 : 0);
+        auto speed = [](const std::string &n) {
+            auto it = g_press_speed.find(n);
+            return g_held[n] > 0 ? (it == g_press_speed.end() ? 1.0 : it->second) : 0.0;
+        };
+        double v = speed(base + " +") - speed(base + " -");
         frac[p] += v * ms * 0.9;
         int whole = (int)frac[p];
         frac[p] -= whole;
@@ -426,6 +441,7 @@ std::string input_describe() {
                 break;
             }
             s += buf;
+            if (b.src != Src::axis && b.src != Src::key && b.scale != 1.0) s += "*" + std::to_string(b.scale).erase(std::to_string(b.scale).find_last_not_of('0') + 1);
         }
         s += "\n";
     }

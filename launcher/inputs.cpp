@@ -116,15 +116,17 @@ QString describeBinding(const QString &b) {
     if (pad.isEmpty() || !m.hasMatch()) return b;
     QString who = pad.startsWith("joy[") ? pad.mid(4, pad.size() - 5).replace('@', " (") + (pad.contains('@') ? ")" : "")
                                          : "Pad " + pad.mid(3);
-    QString rest = m.captured(3);
-    if (rest.startsWith(':')) rest = " " + rest.mid(1);
-    if (rest.startsWith('*')) {
+    QString rest = m.captured(3), how;
+    if (int star = rest.indexOf('*'); star >= 0) {   // a turntable's speed (an axis's: negative reverses)
         double s = axisScale(b);
-        QStringList how;
-        if (s < 0) how << "reversed";
-        if (std::abs(s) != 1) how << QString("×%1").arg(std::abs(s));
-        rest = how.isEmpty() ? QString() : " (" + how.join(", ") + ")";
+        QStringList hows;
+        if (s < 0) hows << "reversed";
+        if (std::abs(s) != 1) hows << QString("×%1").arg(std::abs(s));
+        how = hows.isEmpty() ? QString() : " (" + hows.join(", ") + ")";
+        rest.truncate(star);
     }
+    if (rest.startsWith(':')) rest = " " + rest.mid(1);
+    rest += how;
     return QString("%1: %2 %3%4").arg(who, m.captured(1), m.captured(2), rest);
 }
 

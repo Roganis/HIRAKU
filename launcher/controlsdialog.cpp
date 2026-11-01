@@ -574,6 +574,29 @@ void ControlsDialog::bindingMenu(int k, QMenu *menu) {
                                   });
     reset->setEnabled(l != defaults);
 
+    // a turntable turned by buttons (Turntable - / +): how fast while one is held, for its buttons, hat
+    // directions and axis directions (a digital turntable, as a PS2 controller's, holds a button while
+    // it turns: at the keys' speed a short turn went past several songs); keys stay as they are
+    if (!c.analog && c.name.find("Turntable") != std::string::npos) {
+        auto held = [](const QString &b) { return !b.startsWith("key:"); };
+        QStringList pads;
+        for (const QString &b : l)
+            if (held(b)) pads << b;
+        if (pads.isEmpty()) return;
+        const double scale = axisScale(pads[0]);
+        auto *speed = menu->addMenu("Speed (buttons)");
+        for (double x : {0.1, 0.2, 0.3, 0.5, 0.75, 1.0, 1.5, 2.0}) {
+            auto *act = speed->addAction(x == 1.0 ? QString("×1 (as keys turn it)") : QString("×%1").arg(x), this, [this, name, held, x] {
+                for (QString &b : m_edits[m_family][name])
+                    if (held(b)) b = withAxisScale(b, x);
+                m_dirty.insert(m_family);
+                changed();
+            });
+            act->setCheckable(true);
+            act->setChecked(std::abs(scale - x) < 1e-6);
+        }
+        return;
+    }
     // a turntable's speed and direction, for each of its axes
     QStringList axes;
     for (const QString &b : l)

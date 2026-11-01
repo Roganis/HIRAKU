@@ -513,7 +513,10 @@ static void start_dxgi() {
     SDL_GetWindowSizeInPixels(g_win, &w, &h);
     std::string why;
     if (hwnd && dxgi::start(hwnd, w, h, why)) fprintf(stderr, "video: presented through a DXGI flip-model swap chain\n");
-    else fprintf(stderr, "video: OpenGL's own swap (no DXGI flip-model swap chain: %s)\n", hwnd ? why.c_str() : "no window handle");
+    else
+        fprintf(stderr, "video: OpenGL's own swap (no DXGI flip-model swap chain: %s); a PC game in full screen on an NVIDIA "
+                        "card then needs NVIDIA's \"Vulkan/OpenGL present method\" set to \"Prefer layered on DXGI Swapchain\" "
+                        "for this program\n", hwnd ? why.c_str() : "no window handle");
     picture::set_window_fbo(dxgi::fbo());
 }
 #endif

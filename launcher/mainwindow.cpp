@@ -1035,16 +1035,16 @@ void MainWindow::controls(const QString &family) {
 }
 
 // The PC games on Windows with an NVIDIA card: its "Vulkan/OpenGL present method" for the program
-// that shows them, in the run's log, and the steps to set it when it isn't "Prefer layered on DXGI
-// Swapchain" (launcher/nvidia.h: without it HIRAKU's full screen and the game's Direct3D can't
-// both be had). Only read: the player sets it, in NVIDIA's own panel.
+// that shows them, in the run's log. It mattered while HIRAKU's window used OpenGL's own swap (its
+// full screen and the game's Direct3D couldn't both be had without "Prefer layered on DXGI
+// Swapchain"); HIRAKU now presents through a DXGI swap chain of its own, which works with the
+// driver's default (an IIDX cabinet's GTX 1650), so the steps (nv::notice) are no longer shown. A
+// run that falls back to OpenGL's swap says so, with the setting, in its log (host/window.cpp)
 void MainWindow::nvidiaNotice(const Game &g) {
     const QString exe = QFileInfo(g.exe).fileName();
     const nv::PresentMethod m = nv::presentMethod(exe);
     if (!m.nvidia) return;
     log("NVIDIA: \"Vulkan/OpenGL present method\" for " + exe + ": " + nv::presentMethodName(m.value) + " (" + m.from + ")\n");
-    if (m.value == 1 || cfg::settings().value("notice/nvidiaPresent", true).toBool() == false) return;
-    if (nv::notice(this, QFileInfo(g.exe).absoluteFilePath(), m)) cfg::settings().setValue("notice/nvidiaPresent", false);
 }
 
 // The PC games on Linux run under Wine, which HIRAKU doesn't bring: not found (and no --wine among the

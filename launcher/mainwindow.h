@@ -101,5 +101,6 @@ private:
     bool m_checkAsked = false;
     bool m_updateBegun = false;
     bool m_stopping = false;
+    QString m_unitInstall;      // the game whose run installs its network unit's data (hasNetworkUnit)
     bool m_echo = false;
 };

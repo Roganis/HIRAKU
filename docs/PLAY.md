@@ -875,7 +875,7 @@ ninja -C build/cmake hiraku-gtfrk11m
 
 The effect knob is an analog axis (a joystick's first axis). Coin is 5; Test and Service are F2 and 9.
 
-**The network unit (e-AMUSEMENT)** works as DrumMania's (above): `hiraku-gtfrk11m --cd hdd` installs its data (about 15 minutes of game time, to INSTALLATION COMPLETED), then `--npu` fits it, and `--eamuse` picks the server. In its test mode, P1 R/B moves and **P2 R/B changes a value**. Each guitar has a card unit: Insert and the numeric keypad for the first, "P2 Card" (Delete) for the second, whose 10-key you bind yourself. Both cabinets of a session can share one `hiraku-eamuse`.
+**From the launcher** (GuitarFreaks 11th and DrumMania 10th, with the unit's CD ingested): **Game > Install the e-AMUSEMENT network unit**, then Play: the game installs the unit's hard disk (hold Tab to fast-forward); when it shows INSTALLATION COMPLETED, stop it and answer Yes. From then on the unit is fitted at each start (Game > e-AMUSEMENT network unit fitted, to take it out), with the server in Settings > e-AMUSEMENT or HIRAKU's own; turn e-AMUSEMENT on in test mode. **The network unit (e-AMUSEMENT)** works as DrumMania's (above): `hiraku-gtfrk11m --cd hdd` installs its data (about 15 minutes of game time, to INSTALLATION COMPLETED), then `--npu` fits it, and `--eamuse` picks the server. In its test mode, P1 R/B moves and **P2 R/B changes a value**. Each guitar has a card unit: Insert and the numeric keypad for the first, "P2 Card" (Delete) for the second, whose 10-key you bind yourself. Both cabinets of a session can share one `hiraku-eamuse`.
 
 **Session play.** DrumMania 10th Mix and GuitarFreaks 11th Mix play together through DrumMania's multi-session unit, each in its own process, joined by a session cable:
 

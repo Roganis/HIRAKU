@@ -54,6 +54,8 @@
 #include <QUrl>
 #include <QVBoxLayout>
 
+#include <utility>
+
 #include "aboutdialog.h"
 #include "config.h"
 #include "controlsdialog.h"
@@ -114,6 +116,9 @@ bool lightsFileUsed(const QString &path) {
 
 static bool installCassette(const Game &g);
 static bool installCd(const Game &g);
+static bool hasNetworkUnit(const Game &g);
+static bool unitInstalled(const Game &g);
+static QString unitState(const Game &g);
 static QString nvramSeed(const Game &g);
 static bool firstBoot(const Game &g);
 
@@ -477,6 +482,15 @@ MainWindow::MainWindow() {
         m_stopping = false;
         if (isHidden()) show();
         updateActions();
+        // a network unit's install: done (INSTALLATION COMPLETED on the screen), the unit is fitted from
+        // now on; else the next start installs again
+        if (const QString id = std::exchange(m_unitInstall, QString()); !id.isEmpty() && find(id)) {
+            if (unitInstalled(*find(id)) &&
+                QMessageBox::question(this, "HIRAKU", "Did " + title + " show INSTALLATION COMPLETED?\n\nYes: the e-AMUSEMENT "
+                                      "network unit is fitted from the next start (turn e-AMUSEMENT on in the game's test mode). "
+                                      "No: the next start installs its data again.") == QMessageBox::Yes)
+                cfg::settings().setValue("npu/" + id, "on");
+        }
         gameChanged();   // its saves now exist: no longer a first boot
         if (!ok) exitReport(title, code, st);
     });
@@ -686,10 +700,12 @@ static QString statusOf(const Game &g, bool *notable) {
     if (g.status != Game::Ready) return g.statusText();
     QStringList notes;
     if (installCassette(g) || installCd(g)) notes << "Installs at the next start", *notable = true;
+    else if (unitState(g) == "install") notes << "Installs the network unit's data at the next start", *notable = true;
     else if (firstBoot(g)) notes << "First boot", *notable = true;
     if (const int n = cfg::modsOn(g.id).size()) notes << (n == 1 ? QString("1 mod") : QString("%1 mods").arg(n));
     if (!cfg::settings().value("gameArgs/" + g.id).toString().isEmpty()) notes << "own arguments";
     if (cfg::settings().contains("dips/" + g.id)) notes << "DIP switches set";
+    if (unitState(g) == "on") notes << "e-AMUSEMENT unit";
     if (g.loader == "pc64" && cfg::settings().value("singleScreen/" + g.id).toBool()) notes << "one 4:3 screen";
     return notes.isEmpty() ? QString("Ready") : notes.join(", ");
 }
@@ -755,6 +771,9 @@ void MainWindow::updateActions() {
 static bool installCassette(const Game &g);
 static bool hasInstallCd(const Game &g);
 static bool installCd(const Game &g);
+static bool hasNetworkUnit(const Game &g);
+static bool unitInstalled(const Game &g);
+static QString unitState(const Game &g);
 static QString nvramSeed(const Game &g);
 
 // a folder and everything in it (a game's saves, for a mod set's first start)
@@ -806,6 +825,20 @@ void MainWindow::showDetails() {
         if (installCd(*g))
             h += "<p><b>The install CD is in the drive</b> for the next start: the game installs itself from it. "
                  "When it says the install is done, stop it and play again: it then boots from the game's CD.</p>";
+        if (hasNetworkUnit(*g)) {
+            const QString u = unitState(*g);
+            if (u == "install")
+                h += "<p><b>e-AMUSEMENT:</b> the next start installs the network unit's data from its CD (about 15 to 20 "
+                     "minutes of the game's time; hold Tab to fast-forward). When the game shows INSTALLATION COMPLETED, "
+                     "stop it: the unit is then fitted from the next start.</p>";
+            else if (u == "on")
+                h += "<p><b>e-AMUSEMENT:</b> the network unit is fitted (Game menu). Turn e-AMUSEMENT on in the game's test "
+                     "mode; each guitar or drum kit has a card unit (Card in Controls). The server is HIRAKU's own, or the "
+                     "one in Settings &gt; e-AMUSEMENT.</p>";
+            else
+                h += "<p><b>e-AMUSEMENT:</b> needs the cabinet's network unit, whose hard disk installs once from its CD: "
+                     "Game &gt; Install the e-AMUSEMENT network unit.</p>";
+        }
         h += "<p>Saves: <tt>" + cfg::saveDir(g->id).toHtmlEscaped() + "</tt>" + (fresh ? " (none yet)" : "") + "</p>";
         if (const QString mods = ModsDialog::summary(g->id); !mods.isEmpty())
             h += "<p><b>Mods on:</b> " + mods.toHtmlEscaped() + " (Game &gt; Mods…)</p>";
@@ -868,6 +901,31 @@ static bool installCd(const Game &g) {
     if (!hasInstallCd(g)) return false;
     if (cfg::settings().value("cd/" + g.id).toString() == "install") return true;
     return !QFileInfo::exists(cfg::nvramDir(g.id)) && nvramSeed(g).isEmpty();
+}
+
+// A System 573 game with the network PCB unit (e-AMUSEMENT GuitarFreaks and DrumMania,
+// runtime/sys573/npu.h) and the unit's installer CD ingested: machine.txt's npu=1 and hdd_cd
+static bool hasNetworkUnit(const Game &g) {
+    QFile f(cfg::rootDir() + "/dumps/" + g.id + "/machine.txt");
+    if (g.core != "sys573" || !f.open(QIODevice::ReadOnly)) return false;
+    bool npu = false, cd = false;
+    for (const QByteArray &line : f.readAll().split('\n')) {
+        npu = npu || line.trimmed() == "npu=1";
+        cd = cd || (line.startsWith("hdd_cd=") && line.trimmed().size() > 7);
+    }
+    return npu && cd;
+}
+// ... its disk installed: the save folder's npu_hdd/, formatted by the installer, with its songs
+static bool unitInstalled(const Game &g) {
+    const QString d = cfg::nvramDir(g.id) + "/npu_hdd";
+    return QFileInfo::exists(d + "/.format") && QFileInfo::exists(d + "/stage");
+}
+// ... what the next start does with it: "install" (its data from the installer CD), "on" (fitted),
+// or "" (none: the game offline, as before)
+static QString unitState(const Game &g) {
+    if (!hasNetworkUnit(g)) return {};
+    const QString v = cfg::settings().value("npu/" + g.id).toString();
+    return v == "install" || (v == "on" && unitInstalled(g)) ? v : QString();
 }
 
 QStringList MainWindow::arguments(const Game &g) const {
@@ -953,6 +1011,14 @@ QStringList MainWindow::arguments(const Game &g) const {
     else if (!cfg::nvramBase().isEmpty()) a << "--nvram" << cfg::nvramDir(g.id);
     if (installCassette(g)) a << "--cassette" << "install";
     if (installCd(g)) a << "--cd" << "install";
+    // the network unit (Game menu): its data installed from its CD, or fitted, with the e-AMUSEMENT
+    // server set in Settings (else the one in the core, offline)
+    if (unitState(g) == "install") a << "--cd" << "hdd";
+    else if (unitState(g) == "on") {
+        a << "--npu";
+        if (QString url = s.value("eamuse/url", s.value("eamuse/server")).toString().trimmed(); !url.isEmpty())
+            a << "--eamuse" << (url.contains("://") ? url : "http://" + url + "/");
+    }
     a << DipsDialog::arguments(g.id);            // the board's DIP switches (Game > DIP switches)
     a << UnlocksDialog::macroArguments(g.id);   // codes typed at every start
     a << QProcess::splitCommand(s.value("game/extraArgs").toString());   // every game's (Settings > General)
@@ -1055,6 +1121,7 @@ void MainWindow::play(const QString &id) {
         m_proc.setProcessEnvironment(env);
     }
     m_proc.start(g->exe, args);
+    m_unitInstall = unitState(*g) == "install" ? g->id : QString();
     cfg::settings().remove("cassette/" + g->id);   // "Boot once with the install cassette" is used up
     cfg::settings().remove("cd/" + g->id);         // ... and "Boot once with the install CD"
     statusBar()->showMessage("Running " + g->title);
@@ -1131,6 +1198,23 @@ void MainWindow::fillGameMenu(QMenu *menu, const Game &g) {
         cd->setCheckable(true);
         cd->setChecked(cfg::settings().value("cd/" + id).toString() == "install");
         cd->setToolTip("To install again, or finish an install that stopped before it was done");
+    }
+    if (hasNetworkUnit(g)) {   // e-AMUSEMENT GuitarFreaks and DrumMania: the network unit (runtime/sys573/npu.h)
+        menu->addAction(unitInstalled(g) ? "Install the e-AMUSEMENT network unit again" : "Install the e-AMUSEMENT network unit",
+                        this, [this, id] {
+                            cfg::settings().setValue("npu/" + id, "install");
+                            gameChanged();
+                        })
+            ->setToolTip("At the next start the game installs the unit's hard disk from its CD (about 15 to 20 minutes of "
+                         "its time). When it shows INSTALLATION COMPLETED, stop it: the unit is then fitted");
+        auto *fit = menu->addAction("e-AMUSEMENT network unit fitted", this, [this, id](bool on) {
+            cfg::settings().setValue("npu/" + id, on ? "on" : "off");
+            gameChanged();
+        });
+        fit->setCheckable(true);
+        fit->setEnabled(unitInstalled(g));
+        fit->setChecked(unitState(g) == "on");
+        fit->setToolTip("e-AMUSEMENT through the cabinet's network unit and its card units (installed first)");
     }
     if (g.loader == "pc64") {   // the 64-bit PC games: on one 4:3 screen (runtime/pc64/crt.c)
         auto *one = menu->addAction("One 4:3 screen, nine buttons", this, [this, id](bool on) {

@@ -213,9 +213,10 @@ SettingsDialog::SettingsDialog(QWidget *parent) : QDialog(parent) {
     displayPage(page("Display"));
     audioPage(page("Audio"));
     // as spicecfg's Network page, with its option names, so a spice2x setup carries over
-    eamusePage(page("e-AMUSEMENT", "For the Konami Python games (pop'n music 9-14, DrumMania V and V2) and the PC games "
-                                "(pop'n music 15-18), with spice2x's option names. The game's e-AMUSEMENT must be ON "
-                                "in its test mode."));
+    eamusePage(page("e-AMUSEMENT", "For the Konami Python games (pop'n music 9-14, DrumMania V and V2), the PC games "
+                                "(pop'n music 15-18, beatmania IIDX) and GuitarFreaks 11th and DrumMania 10th with "
+                                "their network unit (Game menu), with spice2x's option names. The game's e-AMUSEMENT "
+                                "must be ON in its test mode."));
     cabinetPage(page("Cabinet I/O"));
     generalPage(page("General"));
 

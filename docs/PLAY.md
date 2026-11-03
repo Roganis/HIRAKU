@@ -16,6 +16,10 @@ Give them all at once, in any order. The ingester recognises the game from:
 - for Firebeat, the program on the CD;
 - otherwise, the set's name or a CHD's name.
 
+A DJ Main, System 573 or Twinkle game's CHDs given without its MAME set are kept in
+`dumps/<game>/` and the error names the set to add, which then does on its own. A CHD given alone
+for a game added before joins it (GuitarFreaks 11th Mix's network unit CD, `d39jba02`).
+
 Several games' files can go at once too (a few sets, or a whole MAME `roms` folder): they're told
 apart by set name, a CHD by its folder or by the sets MAME has its disk in, and each game is added
 in turn. A clone given with its parent also gets the parent's disks; a BIOS set (`sys573.zip`)
@@ -27,7 +31,7 @@ into the HIRAKU folder or leave them where they are (`tools/ingest.py --place mo
 - *Move*: the CHDs, the disks and the ROM set (a PC game: its whole folder) go into
   `dumps/<game>/` (the set into `dumps/<game>/set/`) and are gone from where they were: renamed
   on the same drive, copied then removed from another. A game that can't be added (a CHD
-  missing) has its files put back. The BIOS and parent sets found beside the set (`sys573.zip`)
+  missing) has its files put back, but for CHDs waiting for their set. The BIOS and parent sets found beside the set (`sys573.zip`)
   stay, as other games use them.
 - *Leave*: HIRAKU reads them where they are (their full path in `machine.txt`): keep them there,
   and a USB drive plugged in, to play.

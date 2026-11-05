@@ -49,8 +49,11 @@ static int place(int env) {
 }
 
 // RtEffect.dll's (IIDX 10th style to DistorteD: rteffect.c). The VEFX slider, bottom to top,
-// chooses 17, 16, 20, 5, 2, 3, 13, 15, which RED, HAPPY SKY and DistorteD's labels call REVERB 3,
-// 2, 1, ECHO 1-5, as 10th style's own labels for those places do
+// chooses 17, 16, 20, 5, 2, 3, 13, 15 (a table of the slider's 16 values: 17 17 16 16 16 20 20 5 5 2
+// 2 3 3 13 13 15, the same in all four), which 10th style's, HAPPY SKY's and DistorteD's labels call
+// REVERB 3, 2, 1, ECHO 1-5. RED's labels go by pairs of the slider's values instead (0-1 REVERB 3,
+// ..., 14-15 ECHO 5), one ahead of what it sets at some (6: ECHO 1 shown, 20 set): its own doing, as
+// on its cabinet; what it sets is what is played
 int hk_fx_program_rt(int env) {
     switch (env) {
     case 5: return FX_ECHO_1;

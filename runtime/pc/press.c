@@ -21,19 +21,27 @@
 // the one it reads just before. Its one call is made a call to judge_press here, which moves the
 // lane's distance and calls it.
 //
-// beatmania IIDX (EMPRESS's shape, PLAN.md section 36) judges in whole frames: each frame, for a
-// lane pressed, its distance to the lane's nearest note (the frame it's read in less the note's,
-// late positive), from a table of 16 lanes, 8 bytes each (a note, then the 16-bit distance; player
-// 1's keys 1-7 and turntable, then player 2's), against windows of frames (keys: PGREAT 0 or 1,
-// GREAT 2 either way, GOOD 7, BAD 15). A press is read in the frame after it happened, so the
-// game's judging is right when frames are read on a steady grid, as on its cabinet. With
-// HK_PC_PRESS_TIME the distance is taken back by the frames between the press and its frame's
-// start (hiraku-pc's go, link.h): a press counts in the frame it happened in whenever the game
-// read it (a frame held up, or the frames caught up after one: core.cpp). HK_PC_JUDGE_OFFSET moves
-// every press by that many milliseconds, by whole frames from each press's own time: part of a
-// frame on average. The turntable is a position, not presses: the offset only. The one load of a
-// lane's distance before the judging (mov dx, [ebp*8 + table]; mov eax, [esp + 0x24]; sub dx, di)
-// is made a call to iidx_load here.
+// beatmania IIDX (9th style to EMPRESS, PLAN.md section 36) judges in whole frames: each frame
+// (each frame of its chart: a frame held up is made up in a loop), for a lane pressed, its distance
+// to the lane's nearest note (the frame it's read in less the note's, late positive), from a table
+// of 16 lanes, 8 bytes each (a note, then the 16-bit distance; player 1's keys 1-7 and turntable,
+// then player 2's), against windows of frames (EMPRESS's keys: PGREAT 0 or 1, GREAT 2 either way,
+// GOOD 7, BAD 15). A press is read in the frame after it happened, so the game's judging is right
+// when frames are read on a steady grid, as on its cabinet. With HK_PC_PRESS_TIME the distance is
+// taken back by the frames between the press and its frame's start (hiraku-pc's go, link.h): a
+// press counts in the frame it happened in whenever the game read it (a frame held up, or the
+// frames caught up after one: core.cpp). HK_PC_JUDGE_OFFSET moves every press by that many
+// milliseconds, by whole frames from each press's own time: part of a frame on average. The
+// turntable is a position, not presses: the offset only.
+//
+// Every game of the family has that table and that judging, each compiled its own way (EMPRESS
+// reads a lane's distance once, after its press; DJ TROOPERS reads every lane's first; 9th style to
+// DistorteD walk a pointer along the table), so the judging routine's one call is made a call to
+// iidx_judge here, which moves the pressed lanes' distances in the table, judges, and puts back
+// any the game left as moved. The table is found by the routine that empties it (each lane's note
+// 0, its distance 1024: mov [eax-4], edx; mov dword [eax], 0x400; add eax, 8; dec ecx; jnz; cmp
+// eax, END), the judging as the one routine with one call that uses both the table and the lanes'
+// pad bits (16 words: keys 1-7 one bit each, the turntable 0x300000, then player 2's).
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <stdint.h>
@@ -187,51 +195,138 @@ int16_t __cdecl hk_iidx_distance(uint32_t lane) {
     return (int16_t)(d - frames);
 }
 
-// in place of the load: the distance in dx (the rest of edx and every other register kept)
-__attribute__((naked)) static void iidx_load(void) {
+// The pressed lanes' distances moved in the table for the judging, and put back after it
+static int16_t g_iidx_was[16], g_iidx_set[16];
+static uint16_t g_iidx_moved;   // a bit a lane
+void *hk_iidx_judge_fn;          // the game's judging
+uint32_t hk_iidx_ret;            // its caller's return (the game's drawing thread only judges)
+
+void __cdecl hk_iidx_before(void) {
+    for (uint32_t lane = 0; lane < 16; lane++) {
+        int16_t *d = (int16_t *)(g_iidx_table + lane * 8 + 4);
+        const int16_t was = *d, set = hk_iidx_distance(lane);
+        if (set == was) continue;
+        g_iidx_was[lane] = was, g_iidx_set[lane] = set, g_iidx_moved |= (uint16_t)(1u << lane);
+        *d = set;
+    }
+}
+
+void __cdecl hk_iidx_after(void) {
+    for (uint32_t lane = 0; g_iidx_moved && lane < 16; lane++) {
+        if (!(g_iidx_moved & 1u << lane)) continue;
+        int16_t *d = (int16_t *)(g_iidx_table + lane * 8 + 4);
+        if (*d == g_iidx_set[lane]) *d = g_iidx_was[lane];   // else the game set it anew
+        g_iidx_moved &= (uint16_t)~(1u << lane);
+    }
+}
+
+// In place of the judging's call: every register and the stack as the game's caller left them
+// (9th style to RED pass an argument on the stack; the routines may take registers too)
+__attribute__((naked)) static void iidx_judge(void) {
     __asm__ volatile(
-        "pushl %eax\n\t"
-        "pushl %ecx\n\t"
-        "pushl %edx\n\t"
-        "pushl %ebp\n\t"
-        "call _hk_iidx_distance\n\t"
-        "addl $4, %esp\n\t"
-        "popl %edx\n\t"
-        "movw %ax, %dx\n\t"
-        "popl %ecx\n\t"
-        "popl %eax\n\t"
+        "pushal\n\t"
+        "call _hk_iidx_before\n\t"
+        "popal\n\t"
+        "popl _hk_iidx_ret\n\t"
+        "call *_hk_iidx_judge_fn\n\t"
+        "pushl _hk_iidx_ret\n\t"
+        "pushal\n\t"
+        "call _hk_iidx_after\n\t"
+        "popal\n\t"
         "ret\n\t");
 }
 
-// The load, by its shape in the program's sections: 66 8b 14 ed TABLE  8b 44 24 xx  66 2b d7. 1 if
-// it was found and made the call
+// A routine's start and end in the program's image: a 16-byte boundary after a ret (and any
+// padding of int3s or nops)
+static int after_ret(const uint8_t *s) {
+    const uint8_t *j = s - 1;
+    while (*j == 0xcc || *j == 0x90) j--;
+    return *j == 0xc3 || j[-2] == 0xc2;
+}
+static const uint8_t *iidx_start(const uint8_t *lo, const uint8_t *p) {
+    for (const uint8_t *s = p; s > p - 0x1000 && s - 4 > lo; s--)
+        if (!((uintptr_t)s & 15) && (s[-1] == 0xcc || s[-1] == 0x90 || s[-1] == 0xc3) && after_ret(s)) return s;
+    return NULL;
+}
+static const uint8_t *iidx_end(const uint8_t *s, const uint8_t *hi) {
+    for (const uint8_t *e = s + 16; e < s + 0x2000 && e < hi; e += 16)
+        if ((e[-1] == 0xcc || e[-1] == 0x90 || e[-1] == 0xc3) && after_ret(e)) return e;
+    return s + 0x2000 < hi ? s + 0x2000 : hi;
+}
+static int has_word(const uint8_t *p, const uint8_t *e, uint32_t w) {
+    for (; p + 4 <= e; p++)
+        if (!memcmp(p, &w, 4)) return 1;
+    return 0;
+}
+
+// The table, the judging and its call, as above; 1 if found and the call made iidx_judge's
 static int iidx_patch(char *base, IMAGE_NT_HEADERS *nt) {
-    IMAGE_SECTION_HEADER *sec = IMAGE_FIRST_SECTION(nt);
-    uint8_t *at = NULL;
-    int found = 0;
-    for (WORD s = 0; s < nt->FileHeader.NumberOfSections; s++, sec++) {
-        uint8_t *code = (uint8_t *)base + sec->VirtualAddress;
-        const size_t size = sec->Misc.VirtualSize;
-        for (size_t i = 0; i + 15 <= size; i++)
-            if (code[i] == 0x66 && code[i + 1] == 0x8b && code[i + 2] == 0x14 && code[i + 3] == 0xed && code[i + 8] == 0x8b &&
-                code[i + 9] == 0x44 && code[i + 10] == 0x24 && code[i + 12] == 0x66 && code[i + 13] == 0x2b && code[i + 14] == 0xd7)
-                at = code + i, found++;
+    static const uint32_t bits[16] = {1, 2, 4, 8, 0x10, 0x20, 0x40, 0x300000, 0x80, 0x100, 0x200, 0x400, 0x800, 0x1000, 0x2000, 0xc00000};
+    static const uint8_t empty[] = {0x89, 0x50, 0xfc, 0xc7, 0x00, 0x00, 0x04, 0x00, 0x00, 0x83, 0xc0, 0x08, 0x49, 0x75};
+    IMAGE_SECTION_HEADER *const first = IMAGE_FIRST_SECTION(nt);
+    const WORD n = nt->FileHeader.NumberOfSections;
+    uint32_t table = 0, masks[4];
+    int found = 0, nmasks = 0;
+    for (WORD s = 0; s < n; s++) {
+        const uint8_t *code = (uint8_t *)base + first[s].VirtualAddress;
+        const size_t size = first[s].Misc.VirtualSize;
+        for (size_t i = 0; i + 64 <= size; i++) {
+            if (!memcmp(code + i, empty, sizeof empty) && code[i + 15] == 0x3d) {
+                memcpy(&table, code + i + 16, 4), found++;
+            }
+            if (!memcmp(code + i, bits, 64) && nmasks < 4) masks[nmasks++] = (uint32_t)(uintptr_t)(code + i);
+        }
     }
-    if (found != 1) return 0;
-    uint32_t table;
-    memcpy(&table, at + 4, 4);
-    g_iidx_table = (const uint8_t *)(uintptr_t)(table - 4);
-    uint8_t patch[8] = {0xe8, 0, 0, 0, 0, 0x90, 0x90, 0x90};
-    const int32_t rel = (int32_t)((uint8_t *)(void *)iidx_load - (at + 5));
-    memcpy(patch + 1, &rel, 4);
+    if (found != 1 || !nmasks) return 0;
+    table -= 0x84;   // the lanes' end, from their first distance
+    const uint8_t *judge = NULL;
+    uint8_t *call = NULL;
+    found = 0;
+    for (WORD s = 0; s < n; s++) {
+        if (!(first[s].Characteristics & IMAGE_SCN_MEM_EXECUTE)) continue;
+        const uint8_t *code = (uint8_t *)base + first[s].VirtualAddress, *hi = code + first[s].Misc.VirtualSize;
+        const uint8_t *last = NULL;
+        for (const uint8_t *p = code; p + 4 <= hi; p++) {
+            int m = 0;
+            while (m < nmasks && memcmp(p, &masks[m], 4)) m++;
+            if (m == nmasks) continue;
+            const uint8_t *st = iidx_start(code, p);
+            if (!st || st == last) continue;
+            last = st;
+            const uint8_t *en = iidx_end(st, hi);
+            if (!has_word(st, en, table) && !has_word(st, en, table + 4)) continue;
+            // its direct calls, in every section of code
+            uint8_t *at = NULL;
+            int calls = 0;
+            for (WORD t = 0; t < n; t++) {
+                if (!(first[t].Characteristics & IMAGE_SCN_MEM_EXECUTE)) continue;
+                uint8_t *c = (uint8_t *)base + first[t].VirtualAddress;
+                const size_t size = first[t].Misc.VirtualSize;
+                for (size_t i = 0; i + 5 <= size; i++) {
+                    int32_t rel;
+                    memcpy(&rel, c + i + 1, 4);
+                    if (c[i] == 0xe8 && c + i + 5 + rel == st) at = c + i, calls++;
+                }
+            }
+            if (calls == 1) judge = st, call = at, found++;
+        }
+    }
+    if (found != 1) {
+        hk_log("hiraku-pc: IIDX's lanes at %08x, but %d judging routines: presses judged as the game does", (unsigned)table, found);
+        return 1;
+    }
+    g_iidx_table = (const uint8_t *)(uintptr_t)table;
+    hk_iidx_judge_fn = (void *)judge;
+    const int32_t rel = (int32_t)((uint8_t *)(void *)iidx_judge - (call + 5));
     DWORD old;
-    VirtualProtect(at, 8, PAGE_EXECUTE_READWRITE, &old);
-    memcpy(at, patch, 8);
-    VirtualProtect(at, 8, old, &old);
-    FlushInstructionCache(GetCurrentProcess(), at, 8);
-    hk_log("hiraku-pc: IIDX presses judged %s, then %.1f ms earlier (by whole frames; the lanes' distances at %08x, their load at %p)",
-           g_press_time ? "by when they happened" : "at the frame they're read in", g_offset_us / 1000.0, (unsigned)(table - 4),
-           (void *)at);
+    VirtualProtect(call + 1, 4, PAGE_EXECUTE_READWRITE, &old);
+    memcpy(call + 1, &rel, 4);
+    VirtualProtect(call + 1, 4, old, &old);
+    FlushInstructionCache(GetCurrentProcess(), call, 5);
+    hk_log("hiraku-pc: IIDX presses judged %s, then %.1f ms earlier (by whole frames; the lanes' distances at %08x, "
+           "the judging at %p, its call at %p)",
+           g_press_time ? "by when they happened" : "at the frame they're read in", g_offset_us / 1000.0, (unsigned)table,
+           (void *)judge, (void *)call);
     return 1;
 }
 

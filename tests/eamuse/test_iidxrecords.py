@@ -2,7 +2,8 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """beatmania IIDX EMPRESS's records on HIRAKU's server (docs/EAMUSE3.md, "GOLD, DJ TROOPERS and
 EMPRESS"): a credit's DJ points and plays (pc save), the dan grades (grade raised) and the EXPERT
-courses' results (ranking entry, getranker), from made-up calls.
+courses' results (ranking entry, getranker), and the course results of DistorteD, GOLD and DJ
+TROOPERS, from made-up calls.
 
     tests/eamuse/test_iidxrecords.py [build/cmake/hiraku-eamuse]      exit 0 when all hold
 """
@@ -64,6 +65,15 @@ try:
     check('rankers', re.findall(r'<ranker gnum="(\d+)" pgnum="(\d+)" name="(\w+)"', r), [('50', '400', 'BRAVO'), ('100', '300', 'ALPHA')])
     r = call('<ranking method="getranker" coid="6" clid="2"/>')
     check('another course empty', '<ranker' in r, False)
+    # the same course rankings for DistorteD (its answers named after the model), GOLD and DJ TROOPERS
+    for M, el in (('FDD:J:A:G', 'FDD'), ('GLD:J:A:A:2007072301', 'ranking'), ('HDD:J:A:A:2008031100', 'ranking')):
+        a, b = (attr(call(f'<pc method="reg" rid="{rid}" name="{name}" pid="13" did="0"/>'), 'FDD' if el == 'FDD' else 'pc', 'id')
+                for rid, name in (('48524B00000000B1', 'CHARLIE'), ('48524B00000000B2', 'DELTA')))
+        call(f'<ranking method="entry" iidxid="{a}" coid="3" clid="1" pgnum="200" gnum="10" clr="1" cstage="4" opt="0"/>')
+        e = call(f'<ranking method="entry" iidxid="{b}" coid="3" clid="1" pgnum="100" gnum="5" clr="1" cstage="4" opt="0"/>')
+        check(M[:3] + ' entry second, below', (attr(e, el, 'anum'), attr(e, el, 'jun')), ('2', '2'))
+        r = call('<ranking method="getranker" coid="3" clid="1"/>')
+        check(M[:3] + ' rankers', re.findall(r'<ranker gnum="(\d+)" pgnum="(\d+)" name="(\w+)"', r), [('10', '200', 'CHARLIE'), ('5', '100', 'DELTA')])
 finally:
     srv.terminate(); srv.wait()
     shutil.rmtree(D, ignore_errors=True)

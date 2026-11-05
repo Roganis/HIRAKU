@@ -559,7 +559,8 @@ std::string EamuseServer::answer_iidx_fdd(const std::string &game, const Request
     }
     // The EXPERT courses (ranking entry after one: iidxid coid clid pgnum gnum clr cstage opt...): each
     // player's best kept by course and chart; ranking getranker coid clid gives them back, the best
-    // first (I00 0x4b0903: <ranker gnum pgnum name opname pid udate/>), and entry the place
+    // first (<ranker gnum pgnum name opname pid udate/>, each read in that order: DistorteD JAG
+    // 0x4ccf70, GOLD 0x4938a2, DJ TROOPERS 0x49e6e0, EMPRESS 0x4b0903), and entry the place
     if (mod == "ranking" && (method == "entry" || method == "getranker")) {
         const std::string coid = attr(r.attrs, "coid"), clid = attr(r.attrs, "clid");
         std::vector<Record> courses = from_lines(read_file("iidx-" + game + "-courses"));
@@ -596,7 +597,6 @@ std::string EamuseServer::answer_iidx_fdd(const std::string &game, const Request
         }
         std::string children;
         for (const Record *x : list) {
-            if (game != "I00") break;   // (the others' ranker not read yet: none, as before)
             const Record *pl = player("id", get(*x, "id"));
             children += "<ranker" + a("gnum", get(*x, "gnum")) + a("pgnum", get(*x, "pgnum")) +
                         a("name", pl ? get(*pl, "name") : "") + a("opname", "HIRAKU") + a("pid", pl ? get(*pl, "pid") : "13") +

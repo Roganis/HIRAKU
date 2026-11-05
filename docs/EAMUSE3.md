@@ -1362,8 +1362,9 @@ unless said):
   four stages as cleared follows later IIDX servers; not seen on a dan cleared in EMPRESS yet.
 - **ranking entry** after an EXPERT course: `iidxid coid clid pgnum gnum opt opt2 opname oppid clr
   cstage pside` (answer `anum jun`, the entries and the place); **ranking getranker** `coid clid`:
-  EMPRESS reads `<ranker gnum pgnum name opname pid udate/>` elements (I00 0x4b0903). Each player's
-  best is kept by course and chart and given back best first (EMPRESS only for now).
+  `<ranker gnum pgnum name opname pid udate/>` elements, read in that order by each of DistorteD (JAG
+  0x4ccf70), GOLD (0x4938a2), DJ TROOPERS (0x49e6e0) and EMPRESS (I00 0x4b0903). Each player's best
+  is kept by course and chart and given back best first (not yet seen on a course's ranking screen).
 
 EMPRESS (`I00`, its e-AMUSE3 in `libavs-win32-ea3.dll`; method definitions at 0x57decc...: three
 routines a method, the parser last) the same, and: `pc reg` sends `did`; `pc get`'s pcdata adds

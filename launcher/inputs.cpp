@@ -27,8 +27,40 @@ QString nameOf(SDL_Keycode k) {
     return n;
 }
 
-// X11 / Wayland keycodes (evdev + 8) for keys Qt does not tell apart by Qt::Key
+// The keyboard's own codes for keys Qt does not tell apart by Qt::Key: on Windows its scancodes
+// (set 1, 0x100 marking the extended ones), elsewhere X11 / Wayland keycodes (evdev + 8). Read the
+// one way on both, Windows' K (0x25) was Linux's 37, Left Ctrl, and M, F4-F6 and the keypad as
+// wrong (issue 12).
 QString byScanCode(quint32 sc) {
+#ifdef _WIN32
+    switch (sc) {
+    case 0x2a: return "Left Shift";
+    case 0x36: return "Right Shift";
+    case 0x1d: return "Left Ctrl";
+    case 0x11d: return "Right Ctrl";
+    case 0x38: return "Left Alt";
+    case 0x138: return "Right Alt";
+    case 0x15b: return "Left GUI";
+    case 0x15c: return "Right GUI";
+    case 0x47: return "Keypad 7";
+    case 0x48: return "Keypad 8";
+    case 0x49: return "Keypad 9";
+    case 0x4a: return "Keypad -";
+    case 0x4b: return "Keypad 4";
+    case 0x4c: return "Keypad 5";
+    case 0x4d: return "Keypad 6";
+    case 0x4e: return "Keypad +";
+    case 0x4f: return "Keypad 1";
+    case 0x50: return "Keypad 2";
+    case 0x51: return "Keypad 3";
+    case 0x52: return "Keypad 0";
+    case 0x53: return "Keypad .";
+    case 0x11c: return "Keypad Enter";
+    case 0x135: return "Keypad /";
+    case 0x37: return "Keypad *";
+    default: return {};
+    }
+#else
     switch (sc) {
     case 50: return "Left Shift";
     case 62: return "Right Shift";
@@ -56,6 +88,7 @@ QString byScanCode(quint32 sc) {
     case 63: return "Keypad *";
     default: return {};
     }
+#endif
 }
 
 QString byQtKey(int k) {

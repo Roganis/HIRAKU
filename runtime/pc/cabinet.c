@@ -1011,22 +1011,45 @@ static const char *module_of(const void *p, uintptr_t *offset) {
     const char *b = strrchr(path, '\\');
     return b ? b + 1 : path;
 }
+// HIRAKU's Present, Reset and CreateTexture in the device's table now; 1 if one had to be put back
+static int keep_device_hooks(void) {
+    void **vt = *(void ***)g_dev;   // the device's table now (it may be another)
+    int again = 0;
+    if (vt[17] != (void *)my_Present) {
+        uintptr_t at;
+        const char *m = module_of(vt[17], &at);
+        hk_log("hiraku-pc: the game's Present was replaced (by %s+%lx): HIRAKU's put back, that one called by it", m, (unsigned long)at);
+        g_Present = (Present_t)vt[17];
+        patch_slot(&vt[17], (void *)my_Present);
+        again = 1;
+    }
+    if (vt[16] != (void *)my_Reset) {
+        g_Reset = (Reset_t)vt[16];
+        patch_slot(&vt[16], (void *)my_Reset);
+        again = 1;
+    }
+    // the 16-bit render targets made as A8R8G8B8 (IIDX GOLD makes 240 in A1R5G5B5 as it starts,
+    // which an NVIDIA card refuses: the game then never makes its state block and faults on it)
+    if (vt[23] != (void *)my_CreateTexture) {
+        static int said;
+        if (!said++) {
+            uintptr_t at;
+            const char *m = module_of(vt[23], &at);
+            hk_log("hiraku-pc: the game's CreateTexture was replaced too (by %s+%lx): HIRAKU's put back", m, (unsigned long)at);
+        }
+        g_CreateTexture = (CreateTexture_t)vt[23];
+        patch_slot(&vt[23], (void *)my_CreateTexture);
+        again = 1;
+    }
+    return again;
+}
+// Every 2 ms for the first 10 seconds (games make their textures as they start, right after the
+// device), every 100 ms to the first minute, then every half second (a Reset may do it again)
 static DWORD WINAPI present_watch(LPVOID unused) {
     (void)unused;
     for (int i = 0;; i++) {
-        Sleep(i < 600 ? 100 : 500);
-        void **vt = *(void ***)g_dev;   // the device's table now (it may be another)
-        if (vt[17] != (void *)my_Present) {
-            uintptr_t at;
-            const char *m = module_of(vt[17], &at);
-            hk_log("hiraku-pc: the game's Present was replaced (by %s+%lx): HIRAKU's put back, that one called by it", m, (unsigned long)at);
-            g_Present = (Present_t)vt[17];
-            patch_slot(&vt[17], (void *)my_Present);
-        }
-        if (vt[16] != (void *)my_Reset) {
-            g_Reset = (Reset_t)vt[16];
-            patch_slot(&vt[16], (void *)my_Reset);
-        }
+        Sleep(i < 5000 ? 2 : i < 5500 ? 100 : 500);
+        keep_device_hooks();
     }
 }
 
@@ -1059,14 +1082,18 @@ static HRESULT WINAPI my_CreateDevice(IDirect3D9 *self, UINT adapter, D3DDEVTYPE
         if (was) g_Reset = (Reset_t)was;
         was = patch_slot(&vt[17], (void *)my_Present);
         if (was) g_Present = (Present_t)was;
+        was = patch_slot(&vt[23], (void *)my_CreateTexture);
+        if (was) g_CreateTexture = (CreateTexture_t)was;
         hk_d3d9_hooks(*dev);
         if (!g_dev && host_shows()) {
             g_dev = *dev;
             IDirect3DDevice9_AddRef(g_dev);   // (the watcher's)
+            // Windows' Direct3D 9 may put its own table in place as the device is first used: a call
+            // that changes nothing, and the hooks looked at again before the game goes on
+            IDirect3DDevice9_TestCooperativeLevel(g_dev);
+            keep_device_hooks();
             CloseHandle(CreateThread(NULL, 0, present_watch, NULL, 0, NULL));
         }
-        was = patch_slot(&vt[23], (void *)my_CreateTexture);
-        if (was) g_CreateTexture = (CreateTexture_t)was;
     } else {
         hk_log("hiraku-pc: CreateDevice failed (%#lx)", (unsigned long)r);
     }

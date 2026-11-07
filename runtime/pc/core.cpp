@@ -879,6 +879,21 @@ public:
             printf("hiraku-pc: the game late for %llu frames and drew them at once after (its notes kept with its music)%s\n",
                    (unsigned long long)made_up_,
                    not_made_up_ ? (", " + std::to_string(not_made_up_) + " more in pauses (as they came)").c_str() : "");
+        if (!late_runs_.empty()) {   // when (a loading screen's is the game's own; one in a song shows)
+            std::string l;
+            size_t shown = 0;
+            for (const LateRun &r : late_runs_) {
+                if (shown++ == 60) {
+                    l += " ...";
+                    break;
+                }
+                char b[48];
+                snprintf(b, sizeof b, "%s%.1f s: %u", l.empty() ? "" : ", ", r.t, r.n);
+                l += b;
+            }
+            printf("hiraku-pc: the game's hold-ups (the second of the run: frames shown again): %s%s\n", l.c_str(),
+                   late_runs_.size() >= 400 ? " (the first 400 kept)" : "");
+        }
         if (between_drawn_ || between_late_)   // --smooth-motion (render_between)
             printf("hiraku-pc: smooth motion: %llu in-between pictures drawn by the game, %llu asked for and not answered\n",
                    (unsigned long long)between_drawn_, (unsigned long long)between_late_);
@@ -991,6 +1006,13 @@ public:
                 // once the game's sound has started: owed (above), as long as it's a moment's
                 // hold-up; a longer pause (loading) is the game's own, its frames as they come
                 if (sound_on_ && (owed_ += per_frame_) > MAX_OWED) not_made_up_ += owed_, owed_ = 0;
+                // when, for the report: a run of frames shown again, from the moment the game was
+                // told to go on (its sound started: not its start-up)
+                if (sound_on_) {
+                    const double t = std::chrono::duration<double>(now - run_start_).count();
+                    if (!late_runs_.empty() && late_runs_.back().last + 1 == frame_) late_runs_.back().last = frame_, late_runs_.back().n++;
+                    else if (late_runs_.size() < 400) late_runs_.push_back({t, frame_, frame_, 1});
+                }
                 last = now;
             } else if (sound_on_ && !ahead_ && now - go_at_ > std::chrono::microseconds((long long)(5e5 * per_frame_ / ghz())) &&
                        (int32_t)(sound_for(tick_ + per_frame_) - link_->audio_made) > 0) {
@@ -1929,6 +1951,10 @@ private:
     static constexpr int MAX_OWED = 30;
     int owed_ = 0;
     uint64_t made_up_ = 0, not_made_up_ = 0;
+    // the game's hold-ups, for the report: from the second `t` of the run, `n` frames shown again
+    struct LateRun { double t; uint64_t first, last; uint32_t n; };
+    std::vector<LateRun> late_runs_;
+    const std::chrono::steady_clock::time_point run_start_ = std::chrono::steady_clock::now();
     uint64_t tick_ = 0;    // the game's time in its frames (ghz())
     // ghz() and where it last changed (a [[rate]]): the tick, the time and the sound samples then
     double hz_ = 60.0, want_hz_ = 0, sec0_ = 0, cab_hz_ = 60.0;

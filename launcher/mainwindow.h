@@ -101,6 +101,7 @@ private:
     bool m_checkAsked = false;
     bool m_updateBegun = false;
     bool m_stopping = false;
+    bool m_killed = false;   // stop() ended it: it hadn't gone 5 s after being asked
     QString m_unitInstall;      // the game whose run installs its network unit's data (hasNetworkUnit)
     bool m_echo = false;
 };

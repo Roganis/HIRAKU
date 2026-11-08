@@ -474,12 +474,17 @@ MainWindow::MainWindow() {
         QString title = find(m_running) ? find(m_running)->title : m_running;
         bool ok = m_stopping || (st == QProcess::NormalExit && (code == 0 || code == 130));
         QString msg = st == QProcess::CrashExit ? title + " crashed" : QString("%1 exited (code %2)").arg(title).arg(code);
-        log("\n--- " + msg + " ---\n");
+        // the run log says why (a crash's exception, or the launcher's own ending of it)
+        const QString why = m_killed ? title + " ended by the launcher: it hadn't stopped 5 s after being asked"
+                            : st == QProcess::CrashExit ? title + " crashed: " + exitReason(code, st)
+                                                        : msg;
+        log("\n--- " + why + " ---\n");
         closeRunLog();
         statusBar()->showMessage(ok ? title + " stopped" : msg);
         if (!ok) m_logDock->show();
         m_running.clear();
         m_stopping = false;
+        m_killed = false;
         if (isHidden()) show();
         updateActions();
         // a network unit's install: done (INSTALLATION COMPLETED on the screen), the unit is fitted from
@@ -1135,7 +1140,7 @@ void MainWindow::stop() {
     m_stopping = true;
     m_proc.terminate();   // SIGTERM: the game saves its NVRAM and exits at the next frame
     QTimer::singleShot(5000, this, [this] {
-        if (m_proc.state() != QProcess::NotRunning) m_proc.kill();
+        if (m_proc.state() != QProcess::NotRunning) m_killed = true, m_proc.kill();
     });
 }
 

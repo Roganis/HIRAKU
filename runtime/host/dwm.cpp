@@ -65,13 +65,15 @@ using CloseFn = LONG(APIENTRY *)(const CloseAdapter *);
 constexpr size_t KEEP = 240;   // the vblanks the line goes through (2 s at 120 Hz)
 constexpr size_t READY = 60;   // ... and those needed before it's used
 
-std::mutex g_mu;
-std::wstring g_device;               // the monitor's (\\.\DISPLAY1), set by start(); changed: opened again
+// The thread runs to the end of the process: what it uses is never freed (exit() would free it under
+// the running thread while a game's machine is still being taken down: a Twinkle game crashed so)
+std::mutex &g_mu = *new std::mutex;
+std::wstring &g_device = *new std::wstring;   // the monitor's (\\.\DISPLAY1), set by start(); changed: opened again
 unsigned g_generation = 0;
-std::vector<std::pair<int64_t, int64_t>> g_seen;   // (the vblank's number, when it was seen, ns)
+std::vector<std::pair<int64_t, int64_t>> &g_seen = *new std::vector<std::pair<int64_t, int64_t>>;   // (the vblank's number, when it was seen, ns)
 int64_t g_line_at = 0, g_line_period = 0;          // the line's latest vblank and period
 std::atomic<bool> g_line{false}, g_started{false};
-std::string g_name = "DWM's vblank";
+std::string &g_name = *new std::string("DWM's vblank");
 int64_t g_lo = 0, g_hi = 0;                         // the line's periods over the run
 
 // the least-squares line through the vblanks seen, then again without those seen later than it by

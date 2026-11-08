@@ -341,9 +341,13 @@ static struct {
     uint8_t data[128];
 } g_cards[2];
 
-static const char *card_file(int u) { return getenv(u == 0 ? "HK_PC_CARD1" : "HK_PC_CARD2"); }
+// the card's file, chosen as it goes in (the real card held to the reader then: its own)
+static char g_card_file[2][MAX_PATH];
+static const char *card_file(int u) { return g_card_file[u]; }
 
 static void card_load(int u) {
+    const char *f0 = hk_magnetic_card_file(u);
+    snprintf(g_card_file[u], MAX_PATH, "%s", f0 ? f0 : "");
     memset(g_cards[u].data, 0, 128);
     memcpy(g_cards[u].data, new_card, sizeof new_card);
     const char *f = card_file(u);

@@ -251,6 +251,18 @@ uint32_t hk_card_seq(void) {
 uint32_t hk_keypad2_now(void) { return hk_link()->keypad2; }
 uint32_t hk_card_seq2(void) { return hk_link()->card_seq2; }
 
+const char *hk_magnetic_card_file(int u) {
+    static char path[2][MAX_PATH];
+    const uint8_t *uid = u ? hk_link()->card_uid2 : hk_link()->card_uid;
+    const char *dir = getenv("HK_PC_CARDS");
+    int any = 0;
+    for (int i = 0; i < 8; i++) any |= uid[i];
+    if (!dir || !*dir || !any) return getenv(u ? "HK_PC_CARD2" : "HK_PC_CARD1");
+    snprintf(path[u & 1], MAX_PATH, "%s\\%02X%02X%02X%02X%02X%02X%02X%02X.bin", dir, uid[0], uid[1], uid[2], uid[3], uid[4],
+             uid[5], uid[6], uid[7]);
+    return path[u & 1];
+}
+
 // --- the game's paths (HK_PC_MAP)
 
 static struct { char from[MAX_PATH], to[MAX_PATH]; size_t n; } g_map[8];

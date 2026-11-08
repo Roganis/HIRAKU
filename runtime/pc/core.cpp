@@ -343,7 +343,11 @@ public:
             // asks "services." of (runtime/pc/net.c), and the board's PCB id (-p's, else HIRAKU's)
             set_env("HK_PC_EA_DOMAIN", "eamuse.konami.fun");
             set_env("HK_PC_PCBID", ea_.pcbid.empty() ? "01201000000000C02001" : ea_.pcbid);
-            set_env("HK_PC_CARD1", win_path(save_ + "/card.bin"));   // the magnetic cards (ezusb_c02.c)
+            // the magnetic cards (ezusb_c02.c, ezusb_dev.c): each real card's its own, in cards/; the
+            // slots' one file each (before: every card's) for a card with no number
+            mkdirs(save_ + "/cards");
+            set_env("HK_PC_CARDS", win_path(save_ + "/cards"));
+            set_env("HK_PC_CARD1", win_path(save_ + "/card.bin"));
             set_env("HK_PC_CARD2", win_path(save_ + "/card2.bin"));
         }
         // a bare pop'n board's firmware: the game's own ezusb.dll, unless --popn-io-dll gave one
@@ -1087,6 +1091,7 @@ public:
             return true;
         }
         if (player != 1 || number.size() != 16) return false;
+        claim_magnetic(1, number);
         for (int i = 0; i < 8; i++) link_->card_uid2[i] = (uint8_t)std::stoul(number.substr(2 * i, 2), nullptr, 16);
         link_->card_seq2 = link_->card_seq2 + 1;
         printf("e-AMUSEMENT: card %s held to player 2's reader\n", number.c_str());
@@ -1182,9 +1187,11 @@ private:
         else if (name == "Service") bit(link_->pad, HK_PC_C02_SERVICE);
         else if (name == "Coin 1") {
             if (value) link_->coins = link_->coins + 1;
-        } else if (name == "Card") {   // player 1's card held to the slot
+        } else if (name == "Card") {   // player 1's card held to the slot (-card0's, the link's card_uid)
+            if (value && ea_.card[0].size() == 16) claim_magnetic(0, ea_.card[0]);
             if (value) link_->card_seq = link_->card_seq + 1;
         } else if (name == "P2 Card") {
+            if (value && ea_.card[1].size() == 16) claim_magnetic(1, ea_.card[1]);
             if (value) link_->card_seq2 = link_->card_seq2 + 1;
         } else if (name.rfind("Keypad ", 0) == 0 || name.rfind("P2 Keypad ", 0) == 0) {   // the 10-keys
             const bool two = name[0] == 'P';
@@ -1260,6 +1267,7 @@ private:
         // (hiraku-eamuse's, port 5740: cabinets with servers of their own meeting there, as tests do)
         if (const char *r = getenv("HK_PC_RELAY"); r && *r) printf("NET TAISEN: the relay at %s\n", r);
         else if (relay_.start("127.0.0.1", 0)) set_env("HK_PC_RELAY", "127.0.0.1:" + std::to_string(relay_.port()));
+        ea_dir_ = dir;
         printf("e-AMUSEMENT: HIRAKU's server, data in %s\n", dir.c_str());
         std::thread([this] { serve(); }).detach();
         return true;
@@ -1595,9 +1603,100 @@ private:
             printf("e-AMUSEMENT: no card number (-card0, or card0.txt in the save folder)\n");
             return;
         }
+        claim_magnetic(0, number);
         for (int i = 0; i < 8; i++) link_->card_uid[i] = (uint8_t)std::stoul(number.substr(2 * i, 2), nullptr, 16);
         link_->card_seq = link_->card_seq + 1;
         printf("e-AMUSEMENT: card %s held to the reader\n", number.c_str());
+    }
+
+    // The magnetic cards (9th style to HAPPY SKY): each real card has its own now (cards/<number>.bin).
+    // Before, every card held to a slot was that slot's one file (card.bin, card2.bin): the player on
+    // it goes to the first real card held with that player's PIN (its file renamed)
+    static std::string read_text(const std::string &path) {
+        std::string t;
+        if (FILE *f = fopen(path.c_str(), "rb")) {
+            char b[4096];
+            for (size_t n; (n = fread(b, 1, sizeof b, f)) > 0;) t.append(b, n);
+            fclose(f);
+        }
+        return t;
+    }
+    // a field of a server file's line (name=value, tab-separated)
+    static std::string field_of(const std::string &line, const std::string &name) {
+        size_t at = 0;
+        for (;;) {
+            if (line.compare(at, name.size() + 1, name + "=") == 0) {
+                const size_t end = line.find('\t', at);
+                return line.substr(at + name.size() + 1, end == std::string::npos ? std::string::npos : end - at - name.size() - 1);
+            }
+            at = line.find('\t', at);
+            if (at == std::string::npos) return "";
+            at++;
+        }
+    }
+    // a line of the server file with name=value
+    static std::string line_with(const std::string &text, const std::string &name, const std::string &value) {
+        size_t at = 0;
+        while (at < text.size()) {
+            size_t end = text.find('\n', at);
+            if (end == std::string::npos) end = text.size();
+            const std::string line = text.substr(at, end - at);
+            if (field_of(line, name) == value) return line;
+            at = end + 1;
+        }
+        return "";
+    }
+    // the PIN of a magnetic card file's player: 9th style's card number in bytes 6-13, the later
+    // games' in 5-12 (each backwards, two digits a byte), its PIN in the players file (pass=) or 9th
+    // style's record (userdata-C02-<number>: 4 digits at 12)
+    std::string magnetic_pin(const std::string &file) const {
+        const std::string data = read_text(file);
+        if (data.size() != 128) return "";
+        for (int off : {5, 6}) {
+            char num[17];
+            for (int i = 0; i < 8; i++) snprintf(num + 2 * i, 3, "%02x", (uint8_t)data[off + 7 - i]);
+            std::error_code ec;
+            for (const auto &e : std::filesystem::directory_iterator(ea_dir_, ec)) {
+                const std::string name = e.path().filename().string();
+                if (name.rfind("iidx-", 0) != 0 || name.size() < 8 || name.compare(name.size() - 8, 8, "-players") != 0) continue;
+                const std::string line = line_with(read_text(e.path().string()), "card", num);
+                if (!line.empty()) return field_of(line, "pass");
+            }
+            const std::string rec = read_text(ea_dir_ + "/userdata-C02-" + num);
+            const size_t b = rec.find("<b>"), b2 = rec.find("</b>");
+            if (b != std::string::npos && b2 != std::string::npos) {
+                std::string bytes;   // its base64
+                uint32_t acc = 0;
+                int bits = 0;
+                for (char ch : rec.substr(b + 3, b2 - b - 3)) {
+                    const char *k = strchr("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/", ch);
+                    if (!ch || !k) continue;
+                    acc = acc << 6 | (uint32_t)(k - "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/");
+                    if ((bits += 6) >= 8) bits -= 8, bytes += (char)(acc >> bits & 0xff);
+                }
+                if (bytes.size() >= 16) return bytes.substr(12, 4);
+            }
+        }
+        return "";
+    }
+    void claim_magnetic(int player, const std::string &number) {
+        if (!c02_ || ea_dir_.empty()) return;
+        const std::string mine = save_ + "/cards/" + number + ".bin";
+        if (FILE *f = fopen(mine.c_str(), "rb")) {
+            fclose(f);
+            return;
+        }
+        const std::string pin = field_of(line_with(read_text(ea_dir_ + "/cards"), "cardid", number), "pass");
+        if (pin.empty()) return;
+        const char *names[2] = {"card.bin", "card2.bin"};
+        for (int k : {player, 1 - player}) {
+            const std::string old = save_ + "/" + names[k];
+            if (magnetic_pin(old) == pin && std::rename(old.c_str(), mine.c_str()) == 0) {
+                printf("e-AMUSEMENT: the magnetic card in %s (its player's PIN is this card's) is card %s's now\n", names[k],
+                       number.c_str());
+                return;
+            }
+        }
     }
 
     // The data files the game's list (pop'n 15's dat.bin: each file's MD5 and path) names that its
@@ -1908,6 +2007,7 @@ private:
     bool pc64_ = false;               // the 64-bit loader runs the game (init_pc64)
     bool pc32_ = false;               // the 32-bit AVS2 loader runs the game (init_pc32)
     bool dxvk32_ = false;             // ... with DXVK's Direct3D 9 beside it
+    std::string ea_dir_;              // HIRAKU's e-AMUSEMENT server's files ("": -url's server)
     bool c02_ = false;                // the C02 cabinet's board (beatmania IIDX 9th style, PLAN.md section 33)
     bool c02_driver_ = false;         // ... under its driver (IIDX RED, PLAN.md section 36)
     std::string data_as_;             // the name the game gives its data folder (HK_PC_MAP)

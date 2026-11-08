@@ -274,7 +274,9 @@ struct card {
 };
 static struct card g_cards[2];
 
-static const char *card_file(int u) { return getenv(u == 0 ? "HK_PC_CARD1" : "HK_PC_CARD2"); }
+// the card's file, chosen as it goes in (the real card held to the reader then: its own)
+static char g_card_file[2][MAX_PATH];
+static const char *card_file(int u) { return g_card_file[u]; }
 
 // A card nobody has written yet: a new e-AMUSEMENT card, the arcades' common one. The game knows a
 // card by its first 5 bytes (bm2dx.exe 0x469880, the header 0x469740 makes for each kind, its 5th
@@ -284,6 +286,8 @@ static const char *card_file(int u) { return getenv(u == 0 ? "HK_PC_CARD1" : "HK
 static const uint8_t new_card[5] = {0x08, 0x20, 0x82, 0x01, 0x7c};
 
 static void card_load(int u) {
+    const char *f0 = hk_magnetic_card_file(u);
+    snprintf(g_card_file[u], MAX_PATH, "%s", f0 ? f0 : "");
     memset(g_cards[u].data, 0, 128);
     memcpy(g_cards[u].data, new_card, sizeof new_card);
     const char *f = card_file(u);

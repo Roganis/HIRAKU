@@ -64,6 +64,9 @@ uint32_t hk_keypad_now(void);   // HK_PC_KEY_* and digits: hiraku-pc's and the k
 uint32_t hk_card_seq(void);     // moves on with each card: hiraku-pc's and the card key's
 uint32_t hk_keypad2_now(void);  // the same for a second reader (the C02 cabinet's player 2): hiraku-pc's only
 uint32_t hk_card_seq2(void);
+// The file of the magnetic card held to player u's slot (0 or 1; the C02 cabinet's): each real card
+// its own (HK_PC_CARDS\<its number>.bin), else the one file of the slot's (HK_PC_CARD1, HK_PC_CARD2)
+const char *hk_magnetic_card_file(int u);
 // The network's calls that lead to e-AMUSEMENT (net.c): the hook for a ws2_32 call, or NULL
 void *hk_net_hook(const char *fn);
 void *hk_net_card_hook(const char *fn);   // iphlpapi's

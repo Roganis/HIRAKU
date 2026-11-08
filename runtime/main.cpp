@@ -274,6 +274,9 @@ double boot_seconds(const std::string &toml) {
 }  // namespace
 
 int main(int argc, char **argv) {
+    // a crash's report in the run log (the exception or signal, the calls on the stack)
+    static std::string program = std::string(argv[0]).substr(std::string(argv[0]).find_last_of("/\\") + 1);
+    hk::sys::report_crashes(program.c_str());
     Core &machine = core();
     Core::Options opt;
     opt.root = find_root();
@@ -384,6 +387,7 @@ int main(int argc, char **argv) {
     if (!nvram_given && window_scale) nvram_dir = hk::user_data_dir(opt.root) + "/" + game;
     opt.nvram_dir = nvram_dir;
     opt.window = window_scale != 0;
+    if (window_scale) printf("build: %s %s\n", program.c_str(), hk::sys::build_id());   // which ran (a test zip swaps one program)
     if (!nvram_dir.empty()) {
         mkdirs(nvram_dir);
         printf("nvram: %s\n", nvram_dir.c_str());

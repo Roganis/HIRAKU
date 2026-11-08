@@ -19,8 +19,15 @@ if(MSVC)
 	set_directory_properties(PROPERTIES COMPILE_DEFINITIONS "${HK_PY_DEFS}")
 endif()
 
+# the build's commit (hk::sys::build_id(), as HIRAKU's own build makes it: cmake/build_id.cmake)
+set(HK_PY_BUILD_ID ${CMAKE_CURRENT_BINARY_DIR}/build_id.cpp)
+execute_process(COMMAND ${CMAKE_COMMAND} -DSRC=${HK} -DOUT=${HK_PY_BUILD_ID} -P ${HK}/cmake/build_id.cmake)
+add_custom_target(hk_python_build_id BYPRODUCTS ${HK_PY_BUILD_ID}
+	COMMAND ${CMAKE_COMMAND} -DSRC=${HK} -DOUT=${HK_PY_BUILD_ID} -P ${HK}/cmake/build_id.cmake VERBATIM)
+
 # HIRAKU's shell: the same sources as HIRAKU's hiraku_shell, hiraku_cabinet and hiraku_host
 add_library(hk_python_shell STATIC
+	${HK_PY_BUILD_ID}
 	${HK}/runtime/shell/cabinet.cpp
 	${HK}/runtime/shell/sys.cpp
 	${HK}/runtime/shell/net.cpp
@@ -47,6 +54,7 @@ add_library(hk_python_shell STATIC
 	${HK}/runtime/host/lights.cpp
 	${HK}/runtime/host/pacing.cpp)
 target_include_directories(hk_python_shell PUBLIC ${HK}/runtime ${HK}/include)
+add_dependencies(hk_python_shell hk_python_build_id)
 target_compile_definitions(hk_python_shell PUBLIC HK_WITH_SDL=1)
 target_link_libraries(hk_python_shell PUBLIC SDL3::SDL3)
 find_package(ZLIB REQUIRED)   # mods' PNG pictures (runtime/host/png.h)

@@ -65,6 +65,8 @@
 #include "picturedialog.h"
 #include "unlocksdialog.h"
 #include "settingsdialog.h"
+#include "report.h"
+#include "shell/sys.h"
 #include "updater.h"
 
 namespace {
@@ -406,6 +408,9 @@ MainWindow::MainWindow() {
         QDir().mkpath(cfg::logsDir());
         QDesktopServices::openUrl(QUrl::fromLocalFile(cfg::logsDir()));
     })->setToolTip(QString("A file for each of the last %1 games run: what the log pane showed").arg(cfg::kRunLogs));
+    help->addAction("Report a problem…", this, [this] { ReportDialog(this).exec(); })
+        ->setToolTip("A run's logs and what system this is, cleaned of your folders, names and card numbers, "
+                     "to attach to an issue on GitHub");
     help->addSeparator();
     auto *updAct = help->addAction("Check for updates…", this, [this] { checkForUpdate(true); });
     if (!upd::available()) {
@@ -1485,7 +1490,11 @@ void MainWindow::openRunLog(const QString &game) {
         m_runLog = nullptr;
         return;
     }
-    m_runLog->write(("# HIRAKU, " + game + ", " + QDateTime::currentDateTime().toString(Qt::ISODate) + "\n").toUtf8());
+    // which HIRAKU: the package's version, and this launcher's build (each program prints its own)
+    QString version;
+    if (QFile v(cfg::rootDir() + "/VERSION"); v.open(QIODevice::ReadOnly)) version = " " + QString::fromUtf8(v.readAll()).trimmed();
+    m_runLog->write(("# HIRAKU" + version + " (launcher " + QString::fromUtf8(hk::sys::build_id()) + "), " + game + ", " +
+                     QDateTime::currentDateTime().toString(Qt::ISODate) + "\n").toUtf8());
 }
 
 void MainWindow::closeRunLog() {
@@ -1532,11 +1541,14 @@ void MainWindow::exitReport(const QString &title, int code, QProcess::ExitStatus
     box.setText(QString("%1 stopped: %2.").arg(title, exitReason(code, st)));
     box.setInformativeText((lines.isEmpty() ? QString("It wrote nothing.") : "Its last messages:\n\n" + lines.join('\n')) +
                            "\n\nThe whole log is in the log pane, and in the run's log file (Help > Open the last "
-                           "runs' logs): send that file when you report the problem.");
-    QPushButton *open = nullptr;
-    if (!m_lastRunLog.isEmpty() && QFileInfo::exists(m_lastRunLog))
+                           "runs' logs): report it with the button below (or Help > Report a problem).");
+    QPushButton *open = nullptr, *report = nullptr;
+    if (!m_lastRunLog.isEmpty() && QFileInfo::exists(m_lastRunLog)) {
+        report = box.addButton("Report this problem…", QMessageBox::ActionRole);
         open = box.addButton("Open the log file", QMessageBox::ActionRole);
+    }
     box.addButton(QMessageBox::Close);
     box.exec();
     if (open && box.clickedButton() == open) QDesktopServices::openUrl(QUrl::fromLocalFile(m_lastRunLog));
+    if (report && box.clickedButton() == report) ReportDialog(this, m_lastRunLog).exec();
 }

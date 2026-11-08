@@ -435,7 +435,19 @@ The launcher keeps what each game printed (its log pane: the command line, the s
 exit report with its `video:`, `audio:` and `picture:` lines, how it ended) in a file a run, for
 the last 10 runs: `~/.local/share/hiraku/logs/<date>-<time>-<game>.log` (a portable package:
 `user/data/logs/`). Help > **Open the last runs' logs** opens the folder. When something looks
-wrong in a game, that file says what HIRAKU saw.
+wrong in a game, that file says what HIRAKU saw. Its first lines say which HIRAKU ran: the
+package's version and the launcher's build, then the game's program's own (`build: hiraku-pc.exe
+20063d7 2026-11-08`; a `+` after the commit: built from changed files). A program that crashes
+writes where (`crash:` lines: the exception or signal, and the calls on the stack as program+offset)
+before it ends, and the log's last line says how it ended.
+
+To report a problem, Help > **Report a problem…** (or the button in the window that says a game
+stopped) makes one text file of a run's log, the game's own log (a PC game's `pc.log`) and what
+system this is, cleaned first: HIRAKU's folder shows as `<hiraku>`, any other folder as
+`<folder>` and its last part, your home folder, user and computer names as `<home>`, `<user>`,
+`<computer>`, e-AMUSEMENT card numbers as `#1`, `#2`..., PCB ids and network addresses blanked.
+The window shows the whole file before you save it; then **Open a GitHub issue** opens a new issue
+with the system and game filled in, to attach the file to. Nothing is sent anywhere by HIRAKU.
 
 ## Recording and testing
 

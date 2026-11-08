@@ -22,6 +22,13 @@ typedef intptr_t ssize_t;   // MSVC's C library has none (the Python core builds
 
 namespace hk::sys {
 
+// This build: its commit and date ("37d10c2 2026-11-08"; "+" after the commit when built from changed
+// files; "unknown" built without git), from cmake/build_id.cmake
+const char *build_id();
+// A crash's report (Windows: the exception, where, and the calls on the stack, each as module+offset;
+// Linux: the signal and the stack) written to stderr before the program dies as it would have
+void report_crashes(const char *program);
+
 size_t page_size();
 void *alloc_pages(size_t n);   // page-aligned, read-write; nullptr if there's no memory
 void free_pages(void *p);

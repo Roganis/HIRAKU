@@ -30,6 +30,9 @@
 #include <sys/stat.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#if defined(__GLIBC__)
+#include <execinfo.h>
+#endif
 
 extern char **environ;
 #endif
@@ -208,6 +211,59 @@ void *fiber_new(size_t stack, void (*entry)()) { return CreateFiber(stack, fiber
 void fiber_switch(void *to) { SwitchToFiber(to); }
 void fiber_delete(void *f) { DeleteFiber(f); }
 
+namespace {
+const char *g_crash_program = "hiraku";
+// an address as its module's file name and the offset in it ("hiraku-pc.exe+1a2b3c")
+void where(uintptr_t a, char *out, size_t n) {
+    HMODULE m = nullptr;
+    char path[MAX_PATH] = "?";
+    if (GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                           reinterpret_cast<LPCSTR>(a), &m) && m)
+        GetModuleFileNameA(m, path, MAX_PATH);
+    const char *base = std::max(strrchr(path, '\\'), strrchr(path, '/'));
+    snprintf(out, n, "%s+%llx", base ? base + 1 : path, (unsigned long long)(a - reinterpret_cast<uintptr_t>(m)));
+}
+LONG WINAPI on_crash(EXCEPTION_POINTERS *e) {
+    const EXCEPTION_RECORD *r = e->ExceptionRecord;
+    char at[300];
+    where(reinterpret_cast<uintptr_t>(r->ExceptionAddress), at, sizeof at);
+    fprintf(stderr, "crash: %s (build %s): exception %08lx at %s", g_crash_program, build_id(), (unsigned long)r->ExceptionCode, at);
+    if (r->ExceptionCode == EXCEPTION_ACCESS_VIOLATION && r->NumberParameters >= 2)
+        fprintf(stderr, " (%s %p)", r->ExceptionInformation[0] == 1 ? "writing" : r->ExceptionInformation[0] == 8 ? "running" : "reading",
+                reinterpret_cast<void *>(r->ExceptionInformation[1]));
+    fprintf(stderr, "\n");
+#if defined(_M_X64) || defined(__x86_64__)
+    // the calls on the stack, unwound from the crash's own registers by the modules' unwind tables
+    CONTEXT c = *e->ContextRecord;
+    fprintf(stderr, "crash: the calls:");
+    for (int i = 0; i < 24 && c.Rip; i++) {
+        where(c.Rip, at, sizeof at);
+        fprintf(stderr, " %s", at);
+        DWORD64 base = 0;
+        if (PRUNTIME_FUNCTION f = RtlLookupFunctionEntry(c.Rip, &base, nullptr)) {
+            void *handler_data = nullptr;
+            DWORD64 frame = 0;
+            RtlVirtualUnwind(UNW_FLAG_NHANDLER, base, c.Rip, f, &c, &handler_data, &frame, nullptr);
+        } else {   // a leaf: its return address on top of the stack
+            MEMORY_BASIC_INFORMATION mi;
+            if (!c.Rsp || !VirtualQuery(reinterpret_cast<void *>(c.Rsp), &mi, sizeof mi) || mi.State != MEM_COMMIT) break;
+            c.Rip = *reinterpret_cast<DWORD64 *>(c.Rsp);
+            c.Rsp += 8;
+        }
+    }
+    fprintf(stderr, "\n");
+#endif
+    fflush(stderr);
+    fflush(stdout);
+    return EXCEPTION_CONTINUE_SEARCH;   // the program ends as it would have (the launcher says why)
+}
+}  // namespace
+
+void report_crashes(const char *program) {
+    g_crash_program = program;
+    SetUnhandledExceptionFilter(on_crash);
+}
+
 #else
 
 size_t page_size() { return (size_t)sysconf(_SC_PAGESIZE); }
@@ -237,6 +293,34 @@ void on_segv(int sig, siginfo_t *si, void *uc) {
     }
 }
 }  // namespace
+
+namespace {
+const char *g_crash_program = "hiraku";
+void on_crash(int sig, siginfo_t *si, void *) {
+    // (stdio from a signal handler: the program is ending anyway)
+    fprintf(stderr, "crash: %s (build %s): signal %d (%s) at %p\n", g_crash_program, build_id(), sig, strsignal(sig), si ? si->si_addr : nullptr);
+#if defined(__GLIBC__)
+    void *calls[32];
+    const int n = backtrace(calls, 32);
+    fprintf(stderr, "crash: the calls:\n");
+    fflush(stderr);
+    backtrace_symbols_fd(calls, n, 2);
+#endif
+    fflush(stderr);
+    fflush(stdout);
+    signal(sig, SIG_DFL);   // the fault again on return, now the system's: the program ends as it would have
+    if (sig == SIGABRT) raise(sig);
+}
+}  // namespace
+
+void report_crashes(const char *program) {
+    g_crash_program = program;
+    struct sigaction sa {};
+    sa.sa_sigaction = on_crash;
+    sa.sa_flags = SA_SIGINFO | SA_NODEFER;
+    sigemptyset(&sa.sa_mask);
+    for (int sig : {SIGSEGV, SIGBUS, SIGILL, SIGFPE, SIGABRT}) sigaction(sig, &sa, nullptr);
+}
 
 void catch_write_faults(bool (*handler)(void *)) {
     g_write_fault = handler;

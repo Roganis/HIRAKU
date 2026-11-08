@@ -152,6 +152,13 @@ target_link_libraries(hiraku-xt446 PRIVATE hiraku_xt446)
 # --- what Linux and Windows do differently (runtime/shell/sys.h) ------------------
 add_library(hiraku_sys STATIC runtime/shell/sys.cpp runtime/shell/net.cpp runtime/shell/overlay.cpp)
 target_include_directories(hiraku_sys PUBLIC runtime)
+# the build's commit (hk::sys::build_id(): run logs say which build ran), checked at every build
+set(HK_BUILD_ID_CPP ${CMAKE_BINARY_DIR}/build_id.cpp)
+execute_process(COMMAND ${CMAKE_COMMAND} -DSRC=${CMAKE_SOURCE_DIR} -DOUT=${HK_BUILD_ID_CPP} -P ${CMAKE_SOURCE_DIR}/cmake/build_id.cmake)
+add_custom_target(hk_build_id BYPRODUCTS ${HK_BUILD_ID_CPP}
+  COMMAND ${CMAKE_COMMAND} -DSRC=${CMAKE_SOURCE_DIR} -DOUT=${HK_BUILD_ID_CPP} -P ${CMAKE_SOURCE_DIR}/cmake/build_id.cmake VERBATIM)
+target_sources(hiraku_sys PRIVATE ${HK_BUILD_ID_CPP})
+add_dependencies(hiraku_sys hk_build_id)
 if(WIN32)
   target_link_libraries(hiraku_sys PUBLIC ws2_32)
 endif()
@@ -533,6 +540,7 @@ if(Qt6_FOUND AND TARGET hiraku_hidout)
     launcher/picturedialog.cpp
     launcher/unlocksdialog.cpp
     launcher/updater.cpp
+    launcher/report.cpp
     launcher/nvidia.cpp)
   qt_add_resources(hiraku "launcher_res" PREFIX "/" BASE launcher/res
     FILES launcher/res/icon.png launcher/res/logo.png)

@@ -1,0 +1,50 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Help > Report a problem: a run's log, the game's own log (a PC game's pc.log) and what the system
+// is, in one text file to attach to a GitHub issue, cleaned of what says who the player is or where
+// their files are:
+//   HIRAKU's folder            <hiraku>/... (its own layout kept: bin/, user/data/<game>/...)
+//   any other folder           <folder>/<its last part> (the game's revision folder, say, stays readable)
+//   the home folder, the user's and the computer's names     <home>, <user>, <computer>
+//   e-AMUSEMENT card numbers   #1, #2... (the same card the same number through the report)
+//   a PCB id, addresses on the network (not this computer's own), MAC addresses
+// The person sees all of it before saving it.
+#pragma once
+
+#include <QDialog>
+#include <QMap>
+#include <QString>
+#include <QStringList>
+
+class QComboBox;
+class QPlainTextEdit;
+
+namespace report {
+
+// What a report replaces, and the cards met so far (their numbers in a report, in turn)
+struct Cleaner {
+    QStringList folders;          // HIRAKU's own: <hiraku>
+    QStringList homes;            // the home folder, as each tool writes it
+    QStringList names;            // the user's and the computer's names, in that order
+    QMap<QString, int> cards;
+    QString clean(const QString &text);
+    static Cleaner forThisComputer();
+};
+
+// The report's text for a run log (a file in cfg::logsDir()); game: the run's game id, title its name
+QString make(const QString &runLog, const QString &game, const QString &title, Cleaner &c);
+
+}  // namespace report
+
+class ReportDialog : public QDialog {
+public:
+    // runLog: the run to start with ("" the newest)
+    explicit ReportDialog(QWidget *parent, const QString &runLog = QString());
+
+private:
+    void fill();
+    void save();
+    void openIssue();
+    QComboBox *m_runs;
+    QPlainTextEdit *m_text;
+    QString m_saved;
+};

@@ -72,7 +72,7 @@ static int capture(IDirect3DDevice8 *d) {
 // frame's starting state and its ending one (state blocks), the moved quads shifted, and read back.
 // A frame that draws in a way this doesn't record (vertex buffers, another render target, shaders'
 // constants) gets none: its refreshes show it as it is.
-enum { OP_RS, OP_TSS, OP_TEX, OP_VS, OP_TRANSFORM, OP_VIEWPORT, OP_MATERIAL, OP_LIGHT, OP_LIGHT_ON, OP_CLEAR, OP_BEGIN, OP_END, OP_DPUP };
+enum { OP_RS, OP_TSS, OP_TEX, OP_VS, OP_TRANSFORM, OP_VIEWPORT, OP_MATERIAL, OP_LIGHT, OP_LIGHT_ON, OP_CLEAR, OP_BEGIN, OP_END, OP_DPUP, OP_APPLY };
 struct op {
     int kind;
     DWORD a, b, c;
@@ -128,13 +128,15 @@ static struct op *add(int kind, DWORD a, DWORD b, DWORD c) {
     o->kind = kind, o->a = a, o->b = b, o->c = c, o->at = 0, o->size = 0, o->quad = -1, o->nquads = 0, o->per = 0;
     return o;
 }
-static int recording(void) { return g_rec.on && !g_rec.broken && !g_replaying; }
+// between the game's BeginStateBlock and EndStateBlock its Set calls fill a block, not the device
+static int g_in_sb;
+static int recording(void) { return g_rec.on && !g_rec.broken && !g_replaying && !g_in_sb; }
 // HK_PC_DRAWLOG=FIRST,COUNT: each draw of those pictures in pc.log (how a game draws)
 static unsigned g_frame, g_log_first = ~0u, g_log_count;
 static int logging(void) { return !g_replaying && g_frame >= g_log_first && g_frame < g_log_first + g_log_count; }
 // a frame that can't be drawn again: why, said once a kind
 static void cant(const char *why) {
-    static char said[16][24];
+    static char said[16][64];
     g_rec.broken = 1;
     for (int i = 0; i < 16; i++) {
         if (!said[i][0]) {
@@ -201,10 +203,13 @@ static HRESULT WINAPI my_TSS(IDirect3DDevice8 *d, DWORD st, D3DTEXTURESTAGESTATE
     return g_TSS(d, st, s, v);
 }
 static HRESULT WINAPI my_ST(IDirect3DDevice8 *d, DWORD st, IDirect3DBaseTexture8 *t) {
-    if (!g_replaying && st == 0) g_rec.tex0 = t;
+    if (!g_replaying && !g_in_sb && st == 0) g_rec.tex0 = t;
     if (recording()) {
-        if (t) {
-            if (g_rec.nheld == (int)(sizeof g_rec.held / sizeof *g_rec.held)) cant("more than 256 textures");
+        if (t) {   // kept alive for the frame's replay: each texture once
+            int held = 0;
+            for (int i = 0; i < g_rec.nheld && !held; i++) held = g_rec.held[i] == t;
+            if (held) {
+            } else if (g_rec.nheld == (int)(sizeof g_rec.held / sizeof *g_rec.held)) cant("more than 256 textures");
             else IDirect3DBaseTexture8_AddRef(t), g_rec.held[g_rec.nheld++] = t;
         }
         add(OP_TEX, st, (DWORD)(uintptr_t)t, 0);
@@ -212,7 +217,7 @@ static HRESULT WINAPI my_ST(IDirect3DDevice8 *d, DWORD st, IDirect3DBaseTexture8
     return g_ST(d, st, t);
 }
 static HRESULT WINAPI my_SVS(IDirect3DDevice8 *d, DWORD h) {
-    if (!g_replaying) g_rec.fvf = h;
+    if (!g_replaying && !g_in_sb) g_rec.fvf = h;
     if (recording()) {
         if (h & 1) cant("a vertex shader");   // the game's own (a handle, not an FVF; also checked at each draw)
         add(OP_VS, h, 0, 0);
@@ -317,15 +322,102 @@ static HRESULT WINAPI my_DPUP(IDirect3DDevice8 *d, D3DPRIMITIVETYPE t, UINT n, c
     return g_DPUP(d, t, n, v, stride);
 }
 // what isn't recorded: the frame can't be drawn again
-// A vertex buffer's draw: its vertices read and recorded as DrawPrimitiveUP's (drawn again so; the
-// frame's end state puts the stream back). A buffer that can't be read (write-only): not recorded
+// The vertex buffers' copies (with smooth motion: HK_PC_SMOOTH): a game's buffers are write-only (in
+// the graphics card's memory), which Windows' Direct3D 8 won't lock to read (Wine's does). So each
+// buffer has a copy in the game's memory, kept with it as its private data (freed with it): a lock
+// for writing hands the game the copy, and its unlock passes what was written on to the buffer
+struct vb_copy {
+    const IUnknownVtbl *vt;
+    LONG ref;
+    UINT size;
+    BYTE *data;
+    BYTE *locked;   // the buffer's own memory while the game has the copy locked
+    UINT at, len;
+};
+static HRESULT WINAPI copy_QI(IUnknown *u, REFIID iid, void **out) {
+    (void)u, (void)iid;
+    *out = NULL;
+    return E_NOINTERFACE;
+}
+static ULONG WINAPI copy_AddRef(IUnknown *u) { return (ULONG)InterlockedIncrement(&((struct vb_copy *)u)->ref); }
+static ULONG WINAPI copy_Release(IUnknown *u) {
+    struct vb_copy *c = (struct vb_copy *)u;
+    const LONG r = InterlockedDecrement(&c->ref);
+    if (!r) free(c->data), free(c);
+    return (ULONG)r;
+}
+static const IUnknownVtbl g_copy_vt = {copy_QI, copy_AddRef, copy_Release};
+static const GUID g_copy_guid = {0x6b8a1f2e, 0x4c3d, 0x4e51, {0x9a, 0x77, 0x48, 0x49, 0x52, 0x41, 0x4b, 0x55}};
+static struct vb_copy *copy_of(IDirect3DVertexBuffer8 *vb) {
+    IUnknown *u = NULL;
+    DWORD n = sizeof u;
+    if (!vb || FAILED(IDirect3DVertexBuffer8_GetPrivateData(vb, &g_copy_guid, &u, &n)) || !u) return NULL;
+    IUnknown_Release(u);   // (GetPrivateData added a reference; the buffer keeps its own)
+    return (struct vb_copy *)u;
+}
+typedef HRESULT(WINAPI *VBLock8_t)(IDirect3DVertexBuffer8 *, UINT, UINT, BYTE **, DWORD);
+typedef HRESULT(WINAPI *VBUnlock8_t)(IDirect3DVertexBuffer8 *);
+static VBLock8_t g_VBLock;
+static VBUnlock8_t g_VBUnlock;
+static HRESULT WINAPI my_VBLock(IDirect3DVertexBuffer8 *vb, UINT at, UINT len, BYTE **out, DWORD flags) {
+    const HRESULT r = g_VBLock(vb, at, len, out, flags);
+    struct vb_copy *c;
+    if (FAILED(r) || g_replaying || (flags & D3DLOCK_READONLY) || !(c = copy_of(vb)) || c->locked || at >= c->size) return r;
+    if (!len || len > c->size - at) len = c->size - at;
+    c->locked = *out, c->at = at, c->len = len;
+    *out = c->data + at;
+    return r;
+}
+static HRESULT WINAPI my_VBUnlock(IDirect3DVertexBuffer8 *vb) {
+    struct vb_copy *c = copy_of(vb);
+    if (c && c->locked) {
+        memcpy(c->locked, c->data + c->at, c->len);
+        c->locked = NULL;
+    }
+    return g_VBUnlock(vb);
+}
+typedef HRESULT(WINAPI *CVB8_t)(IDirect3DDevice8 *, UINT, DWORD, DWORD, D3DPOOL, IDirect3DVertexBuffer8 **);
+static CVB8_t g_CVB;
+static HRESULT WINAPI my_CVB(IDirect3DDevice8 *d, UINT len, DWORD usage, DWORD fvf, D3DPOOL pool, IDirect3DVertexBuffer8 **out) {
+    const HRESULT r = g_CVB(d, len, usage, fvf, pool, out);
+    if (FAILED(r) || !out || !*out || !len) return r;
+    IDirect3DVertexBuffer8 *vb = *out;
+    struct vb_copy *c = (struct vb_copy *)calloc(1, sizeof *c);
+    BYTE *data = c ? (BYTE *)calloc(1, len) : NULL;
+    if (!data) {
+        free(c);
+        return r;
+    }
+    c->vt = &g_copy_vt, c->ref = 1, c->size = len, c->data = data;
+    IUnknown *u = (IUnknown *)c;
+    if (FAILED(IDirect3DVertexBuffer8_SetPrivateData(vb, &g_copy_guid, u, sizeof u, D3DSPD_IUNKNOWN))) {   // (the interface itself)
+        copy_Release(u);
+        return r;
+    }
+    copy_Release(u);   // the buffer's reference keeps it
+    if (!g_VBLock) {   // the buffers' methods (one table for all)
+        IDirect3DVertexBuffer8Vtbl *vt = (IDirect3DVertexBuffer8Vtbl *)vb->lpVtbl;
+        void *was = hk_patch_slot((void **)&vt->Lock, (void *)my_VBLock);
+        if (was) g_VBLock = (VBLock8_t)was;
+        if ((was = hk_patch_slot((void **)&vt->Unlock, (void *)my_VBUnlock))) g_VBUnlock = (VBUnlock8_t)was;
+        hk_log("hiraku-pc: smooth motion: the vertex buffers kept in copies (their own can't be read back on every system)");
+    }
+    return r;
+}
+
+// A vertex buffer's draw: its vertices read (from its copy, else the buffer locked to read) and
+// recorded as DrawPrimitiveUP's (drawn again so; the frame's end state puts the stream back). A
+// buffer that can't be read: not recorded
 static IDirect3DVertexBuffer8 *g_vb0;
 static UINT g_vb0_stride;
 static HRESULT WINAPI my_DP(IDirect3DDevice8 *d, D3DPRIMITIVETYPE t, UINT a, UINT n) {
     if (recording() || logging()) {
         BYTE *p = NULL;
         const UINT size = verts_of(t, n) * g_vb0_stride;
-        if (g_vb0 && g_vb0_stride && SUCCEEDED(IDirect3DVertexBuffer8_Lock(g_vb0, a * g_vb0_stride, size, &p, D3DLOCK_READONLY))) {
+        const struct vb_copy *c = g_vb0_stride ? copy_of(g_vb0) : NULL;
+        if (c && !c->locked && (uint64_t)a * g_vb0_stride + size <= c->size) {
+            record_draw(t, n, c->data + a * g_vb0_stride, g_vb0_stride);
+        } else if (g_vb0 && g_vb0_stride && SUCCEEDED(IDirect3DVertexBuffer8_Lock(g_vb0, a * g_vb0_stride, size, &p, D3DLOCK_READONLY))) {
             record_draw(t, n, p, g_vb0_stride);
             IDirect3DVertexBuffer8_Unlock(g_vb0);
         } else {
@@ -337,8 +429,58 @@ static HRESULT WINAPI my_DP(IDirect3DDevice8 *d, D3DPRIMITIVETYPE t, UINT a, UIN
 typedef HRESULT(WINAPI *SSS8_t)(IDirect3DDevice8 *, UINT, IDirect3DVertexBuffer8 *, UINT);
 static SSS8_t g_SSS;
 static HRESULT WINAPI my_SSS(IDirect3DDevice8 *d, UINT i, IDirect3DVertexBuffer8 *vb, UINT stride) {
-    if (!g_replaying && i == 0) g_vb0 = vb, g_vb0_stride = stride;
+    if (!g_replaying && !g_in_sb && i == 0) g_vb0 = vb, g_vb0_stride = stride;
     return g_SSS(d, i, vb, stride);
+}
+// The game's state blocks (beatmania IIDX HAPPY SKY sets its draws' vertex format, textures and
+// states so): an applied one recorded and applied again in the replay, and what the recorder follows
+// (the vertex format, stage 0's texture, the pixel shader, stream 0) read back from the device after it
+typedef HRESULT(WINAPI *SB8_t)(IDirect3DDevice8 *);
+typedef HRESULT(WINAPI *ESB8_t)(IDirect3DDevice8 *, DWORD *);
+typedef HRESULT(WINAPI *ASB8_t)(IDirect3DDevice8 *, DWORD);
+static SB8_t g_BSB;
+static ESB8_t g_ESB;
+static ASB8_t g_ASB, g_DSB;
+static HRESULT WINAPI my_BSB(IDirect3DDevice8 *d) {
+    const HRESULT r = g_BSB(d);
+    if (SUCCEEDED(r)) g_in_sb = 1;
+    return r;
+}
+static HRESULT WINAPI my_ESB(IDirect3DDevice8 *d, DWORD *token) {
+    g_in_sb = 0;
+    return g_ESB(d, token);
+}
+static HRESULT WINAPI my_ASB(IDirect3DDevice8 *d, DWORD token) {
+    const HRESULT r = g_ASB(d, token);
+    if (g_replaying || g_in_sb || FAILED(r)) return r;
+    if (recording()) add(OP_APPLY, token, 0, 0);
+    DWORD h = 0;
+    if (SUCCEEDED(IDirect3DDevice8_GetVertexShader(d, &h))) g_rec.fvf = h;
+    if (SUCCEEDED(IDirect3DDevice8_GetPixelShader(d, &h))) g_rec.ps = h != 0;
+    IDirect3DBaseTexture8 *t = NULL;
+    if (SUCCEEDED(IDirect3DDevice8_GetTexture(d, 0, &t))) {
+        g_rec.tex0 = t;
+        if (t) {
+            if (recording()) {   // held for the replay as SetTexture's are
+                int held = 0;
+                for (int i = 0; i < g_rec.nheld && !held; i++) held = g_rec.held[i] == t;
+                if (!held && g_rec.nheld < (int)(sizeof g_rec.held / sizeof *g_rec.held))
+                    IDirect3DBaseTexture8_AddRef(t), g_rec.held[g_rec.nheld++] = t;
+            }
+            IDirect3DBaseTexture8_Release(t);   // (GetTexture's reference)
+        }
+    }
+    IDirect3DVertexBuffer8 *vb = NULL;
+    UINT stride = 0;
+    if (SUCCEEDED(IDirect3DDevice8_GetStreamSource(d, 0, &vb, &stride))) {
+        g_vb0 = vb, g_vb0_stride = stride;
+        if (vb) IDirect3DVertexBuffer8_Release(vb);
+    }
+    return r;
+}
+static HRESULT WINAPI my_DSB(IDirect3DDevice8 *d, DWORD token) {
+    if (recording() && token != g_sb_start && token != g_sb_end) cant("a state block deleted");   // its replay would apply none
+    return g_DSB(d, token);
 }
 static HRESULT WINAPI my_DIP(IDirect3DDevice8 *d, D3DPRIMITIVETYPE t, UINT a, UINT b, UINT c, UINT n) {
     if (recording()) cant("DrawIndexedPrimitive");
@@ -353,7 +495,7 @@ static HRESULT WINAPI my_SRT(IDirect3DDevice8 *d, IDirect3DSurface8 *rt, IDirect
     return g_SRT(d, rt, z);
 }
 static HRESULT WINAPI my_SPS(IDirect3DDevice8 *d, DWORD h) {
-    if (!g_replaying) g_rec.ps = h != 0;
+    if (!g_replaying && !g_in_sb) g_rec.ps = h != 0;
     return g_SPS(d, h);
 }
 static HRESULT WINAPI my_SVSC(IDirect3DDevice8 *d, DWORD r, const void *c, DWORD n) {
@@ -415,6 +557,7 @@ static void draw_between(void) {
                     break;
                 }
                 case OP_BEGIN: g_BS(d); break;
+                case OP_APPLY: g_ASB(d, o->a); break;
                 case OP_END: g_ES(d); break;
                 case OP_DPUP: {
                     const void *v = data;
@@ -557,6 +700,11 @@ static HRESULT WINAPI my_CreateDevice(IDirect3D8 *self, UINT adapter, D3DDEVTYPE
         HOOK(DrawPrimitiveUP, my_DPUP, g_DPUP, DPUP8_t);
         HOOK(DrawPrimitive, my_DP, g_DP, DP8_t);
         HOOK(SetStreamSource, my_SSS, g_SSS, SSS8_t);
+        HOOK(BeginStateBlock, my_BSB, g_BSB, SB8_t);
+        HOOK(EndStateBlock, my_ESB, g_ESB, ESB8_t);
+        HOOK(ApplyStateBlock, my_ASB, g_ASB, ASB8_t);
+        HOOK(DeleteStateBlock, my_DSB, g_DSB, ASB8_t);
+        if (getenv("HK_PC_SMOOTH") && *getenv("HK_PC_SMOOTH")) HOOK(CreateVertexBuffer, my_CVB, g_CVB, CVB8_t);
         HOOK(DrawIndexedPrimitive, my_DIP, g_DIP, DIP8_t);
         HOOK(DrawIndexedPrimitiveUP, my_DIPUP, g_DIPUP, DIPUP8_t);
         HOOK(SetRenderTarget, my_SRT, g_SRT, SRT8_t);

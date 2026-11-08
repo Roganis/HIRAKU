@@ -47,6 +47,7 @@ void window_set_split(bool on);
 // the k - 1 refreshes after each frame show the core's in-between pictures (Core::render_between)
 // instead of holding the frame
 void window_set_smooth_motion(bool on);
+bool window_smooth_motion();   // --smooth-motion asked for
 // --crt-beam: the Blur Busters CRT beam simulator (host/picture.h, set_beam) over the picture on a
 // display faster than the game: each refresh lights the part of the tube the beam sweeps then. It
 // needs what smooth motion does (display pacing, a picture every refresh: Wayland's fifo-v1 or

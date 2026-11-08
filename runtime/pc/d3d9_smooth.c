@@ -57,7 +57,7 @@ static unsigned g_frame, g_log_first = ~0u, g_log_count;
 static int logging(void) { return g_frame >= g_log_first && g_frame < g_log_first + g_log_count; }
 static int recording(void) { return g_rec.on && !g_rec.broken && !g_replaying; }
 static void cant(const char *why) {
-    static char said[16][32];
+    static char said[16][64];
     g_rec.broken = 1;
     for (int i = 0; i < 16; i++) {
         if (!said[i][0]) {
@@ -146,8 +146,11 @@ static HRESULT WINAPI my_SS(IDirect3DDevice9 *d, DWORD st, D3DSAMPLERSTATETYPE s
 static HRESULT WINAPI my_ST(IDirect3DDevice9 *d, DWORD st, IDirect3DBaseTexture9 *t) {
     if (!g_replaying && st == 0) g_rec.tex0 = t;
     if (recording()) {
-        if (t) {
-            if (g_rec.nheld == (int)(sizeof g_rec.held / sizeof *g_rec.held)) cant("more than 256 textures");
+        if (t) {   // kept alive for the frame's replay: each texture once
+            int held = 0;
+            for (int i = 0; i < g_rec.nheld && !held; i++) held = g_rec.held[i] == t;
+            if (held) {
+            } else if (g_rec.nheld == (int)(sizeof g_rec.held / sizeof *g_rec.held)) cant("more than 256 textures");
             else IDirect3DBaseTexture9_AddRef(t), g_rec.held[g_rec.nheld++] = t;
         }
         add(OP_TEX, st, (DWORD)(uintptr_t)t, 0);

@@ -277,11 +277,22 @@ else that moved: letters and score digits paired with the same ones a line up, a
 count-up and its sparks, attract mode's sliding pictures, a panel's rolling text. A frame drawn some
 other way (shaders, other render targets, indexed draws) isn't drawn again (pc.log says what, once).
 
+What the recording needs from the device, Direct3D 8 (9th style to DistorteD): the game's vertex
+buffers are write-only, which Windows' own Direct3D 8 won't lock to read back (Wine's does), so with
+smooth motion each buffer gets a copy in the game's memory as it is made (`HK_PC_SMOOTH`, from
+hiraku-pc): the game writes into the copy, its unlock passes that on to the buffer, and a draw's
+vertices are read from the copy. And the games' state blocks: HAPPY SKY sets its draws' vertex
+format with ApplyStateBlock, which the recording takes as a step of its own (applied again in the
+replay), reading the format, texture and stream back from the device after it; without it its
+panels and lanes were drawn in the wrong format, black where a note moved.
+
 Checked under Wine in a virtual KWin, with the in-between pictures as snapshots (`--snap-between`):
 RED, HAPPY SKY, DistorteD and GOLD move the notes and bar lines in the lanes, nothing else, the
 notes never stepping back; with the game at 30 Hz on the 60 Hz display, each frame's second refresh
-showed one and the frames' timing was as without. Not yet: 9th style, 10th style, DJ TROOPERS and
-EMPRESS; a real 120/144/240 Hz display; real Windows (DWM's pacing).
+showed one and the frames' timing was as without. 9th style and HAPPY SKY again with the buffer
+copies and the state blocks (2026-11-08): the notes and bar lines move in player 1's lanes, the lanes
+drawn whole. On real Windows (a cabinet's GTX 1650, 120 Hz) GOLD and EMPRESS draw theirs; 9th style
+and HAPPY SKY drew none there before the buffer copies. Not yet: 10th style, DJ TROOPERS.
 
 ## A CRT's motion clarity (`--crt-beam`)
 

@@ -75,6 +75,7 @@ extern char **environ;
 #include "host/macro.h"
 #include "host/mods.h"
 #include "host/pacing.h"
+#include "host/window.h"
 #include "host/popnio.h"
 #include "host/script.h"
 #include "pc/link.h"
@@ -927,6 +928,8 @@ public:
     // draws none (starting, loading), the last is shown again a 60th of a second on, so the window
     // keeps answering.
     [[noreturn]] void run() override {
+        // smooth motion: the Direct3D 8 games' vertex buffers kept in copies from the start (d3d8.c)
+        set_env("HK_PC_SMOOTH", hk::host::window_smooth_motion() ? "1" : "");
         if (!start_game()) fatal();
         // A new save folder: the game makes its backup files and asks to be switched off and on
         // (BACKUP ERROR 5-1502); that is done for it, once, when they've been there a few seconds

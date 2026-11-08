@@ -304,6 +304,7 @@ bool window_set_shader_key(const std::string &spec) {
     return eq != std::string::npos && shaderview::set_control(spec.substr(0, eq), spec.substr(eq + 1));
 }
 void window_set_smooth_motion(bool on) { g_smooth_motion = on, pacing::set_smooth_motion(on || g_beam); }
+bool window_smooth_motion() { return g_smooth_motion; }
 void window_set_beam(bool on, float gamma, float gain) {
     g_beam = on, g_beam_gamma = gamma, g_beam_gain = gain;
     pacing::set_smooth_motion(on || g_smooth_motion);   // the game at its own speed, every refresh a picture

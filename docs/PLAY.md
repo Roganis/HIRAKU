@@ -163,7 +163,12 @@ for the games that have a `games/<id>/macros.txt`.
 | **Full** | TroggleMonkey's crt-royale: beam shapes, real phosphor-mask textures, bloom, halation, optional curvature | moderate |
 | **Analog** | Zoki's Lola Retro: the whole analog chain, the cable's signal, the TV's or monitor's electronics, a beam whose spot grows with brightness, the mask, the glass, phosphor afterglow | the heaviest |
 
-F10 cycles the four while you play, and the window's title says which one is on.
+F10 cycles the four while you play, and the window's title says which one is on. The modes not in
+use are made ready in the background in the game's first seconds (a second OpenGL context in a
+thread of its own; the run log's "ready, made in the background"), so a switch while you play
+doesn't hold the game up. `HK_PICTURE_PRELOAD=0` turns that off: each mode is then made when it's
+first chosen, which can hold up the game for a fraction of a second, or several seconds the first
+time after a graphics driver update.
 
 **Changing them while you play (F8):** a panel with the shader's settings, the same as the
 launcher's sliders, beside the picture so you see each change at once. F8 shows it on the right,

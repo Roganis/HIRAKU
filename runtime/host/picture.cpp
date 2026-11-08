@@ -16,8 +16,10 @@
 #include <fstream>
 #include <map>
 #include <algorithm>
+#include <atomic>
 #include <memory>
 #include <sstream>
+#include <thread>
 #include <tuple>
 
 namespace hk::host::picture {
@@ -38,7 +40,8 @@ namespace {
     X(glGenVertexArrays) X(glBindVertexArray) X(glDeleteVertexArrays) X(glVertexAttribPointer)                \
     X(glEnableVertexAttribArray) X(glDrawArrays) X(glGenSamplers) X(glDeleteSamplers) X(glBindSampler)        \
     X(glSamplerParameteri) X(glReadPixels) X(glGenQueries) X(glDeleteQueries) X(glBeginQuery)   \
-    X(glEndQuery) X(glGetQueryObjectiv) X(glGetQueryObjectui64v) X(glBlendFunc) X(glQueryCounter)
+    X(glEndQuery) X(glGetQueryObjectiv) X(glGetQueryObjectui64v) X(glBlendFunc) X(glQueryCounter)     \
+    X(glFinish)
 
 struct Gl {
 #define X(f) decltype(&::f) f = nullptr;
@@ -85,46 +88,68 @@ std::map<std::string, std::string> read_keys(const std::string &path, bool *ok =
     return out;
 }
 
-GLuint compile(GLenum type, const std::string &src, const std::string &what) {
-    GLuint s = gl.glCreateShader(type);
-    const char *p = src.c_str();
-    gl.glShaderSource(s, 1, &p, nullptr);
-    gl.glCompileShader(s);
+// A program being built: its shaders compiled and the program linked (build_start asks; the driver
+// may do it in threads of its own; build_finish takes it, waiting for it if need be)
+struct Building {
+    GLuint vs = 0, fs = 0, prog = 0;
+};
+
+Building build_start(const std::string &vs_src, const std::string &fs_src) {
+    Building b;
+    auto shader = [](GLenum type, const std::string &src) {
+        GLuint s = gl.glCreateShader(type);
+        const char *p = src.c_str();
+        gl.glShaderSource(s, 1, &p, nullptr);
+        gl.glCompileShader(s);
+        return s;
+    };
+    b.vs = shader(GL_VERTEX_SHADER, vs_src);
+    b.fs = shader(GL_FRAGMENT_SHADER, fs_src);
+    b.prog = gl.glCreateProgram();
+    gl.glAttachShader(b.prog, b.vs);
+    gl.glAttachShader(b.prog, b.fs);
+    gl.glLinkProgram(b.prog);
+    return b;
+}
+
+void build_drop(Building &b) {
+    if (b.vs) gl.glDeleteShader(b.vs);
+    if (b.fs) gl.glDeleteShader(b.fs);
+    if (b.prog) gl.glDeleteProgram(b.prog);
+    b = Building();
+}
+
+// The program, or 0 (the compiler's or the linker's message printed)
+GLuint build_finish(Building &b, const std::string &what) {
+    char log[4096];
+    for (auto [s, kind] : {std::pair{b.vs, " (vertex)"}, std::pair{b.fs, " (fragment)"}}) {
+        GLint ok = 0;
+        gl.glGetShaderiv(s, GL_COMPILE_STATUS, &ok);
+        if (!ok) {
+            gl.glGetShaderInfoLog(s, sizeof log, nullptr, log);
+            fprintf(stderr, "picture: %s%s does not compile:\n%s\n", what.c_str(), kind, log);
+            build_drop(b);
+            return 0;
+        }
+    }
     GLint ok = 0;
-    gl.glGetShaderiv(s, GL_COMPILE_STATUS, &ok);
+    gl.glGetProgramiv(b.prog, GL_LINK_STATUS, &ok);
     if (!ok) {
-        char log[4096];
-        gl.glGetShaderInfoLog(s, sizeof log, nullptr, log);
-        fprintf(stderr, "picture: %s does not compile:\n%s\n", what.c_str(), log);
-        gl.glDeleteShader(s);
+        gl.glGetProgramInfoLog(b.prog, sizeof log, nullptr, log);
+        fprintf(stderr, "picture: %s does not link:\n%s\n", what.c_str(), log);
+        build_drop(b);
         return 0;
     }
-    return s;
+    gl.glDeleteShader(b.vs);
+    gl.glDeleteShader(b.fs);
+    const GLuint p = b.prog;
+    b = Building();
+    return p;
 }
 
 GLuint link(const std::string &vs_src, const std::string &fs_src, const std::string &what) {
-    GLuint vs = compile(GL_VERTEX_SHADER, vs_src, what + " (vertex)");
-    GLuint fs = vs ? compile(GL_FRAGMENT_SHADER, fs_src, what + " (fragment)") : 0;
-    if (!fs) {
-        if (vs) gl.glDeleteShader(vs);
-        return 0;
-    }
-    GLuint p = gl.glCreateProgram();
-    gl.glAttachShader(p, vs);
-    gl.glAttachShader(p, fs);
-    gl.glLinkProgram(p);
-    gl.glDeleteShader(vs);
-    gl.glDeleteShader(fs);
-    GLint ok = 0;
-    gl.glGetProgramiv(p, GL_LINK_STATUS, &ok);
-    if (!ok) {
-        char log[4096];
-        gl.glGetProgramInfoLog(p, sizeof log, nullptr, log);
-        fprintf(stderr, "picture: %s does not link:\n%s\n", what.c_str(), log);
-        gl.glDeleteProgram(p);
-        return 0;
-    }
-    return p;
+    Building b = build_start(vs_src, fs_src);
+    return build_finish(b, what);
 }
 
 GLenum wrap_mode(const std::string &s) {
@@ -226,6 +251,7 @@ struct Lut {
     GLuint tex = 0;
     int w = 0, h = 0;
     Sampling sampling;
+    SDL_Surface *pixels = nullptr;   // read, not yet a texture (R, G, B, A bytes)
 };
 
 GLuint g_vao = 0, g_vbo = 0, g_plain = 0, g_over = 0, g_over_tex = 0;
@@ -258,7 +284,13 @@ std::string g_snap_path;
 class Chain {
 public:
     std::string name;
-    bool load(const std::string &dir);
+    bool load(const std::string &dir);   // all at once: read, then upload until done, then finish
+    // In steps: read: the files (no OpenGL); upload: one preset texture or one pass's program asked
+    // for, true when nothing is left; finish: the programs' inputs found (waits for the driver).
+    // The settings (read_params) are read once the chain is in use (install).
+    bool read(const std::string &dir);
+    bool upload();
+    bool finish();
     // next: a new frame (the passes' feedback turns over); frame: FrameCount; fbo: where the picture
     // goes (0: the window, else a win_w x win_h target)
     void draw(int w, int h, int x, int y, int vw, int vh, int win_w, int win_h, bool next, uint32_t frame, GLuint fbo = 0);
@@ -273,6 +305,9 @@ private:
     std::string m_dir;
     std::vector<Pass> m_passes;
     std::vector<Lut> m_luts;
+    std::vector<std::pair<std::string, std::string>> m_src;   // each pass's vertex and fragment shader
+    std::vector<Building> m_build;                            // each pass's program, being built
+    size_t m_uploaded = 0;                                    // upload's steps taken
     std::vector<Param> m_params;
     std::vector<std::pair<std::string, time_t>> m_param_files;   // and their mtimes
     size_t m_history = 1;
@@ -286,7 +321,7 @@ private:
     bool resolve(const std::string &name, Src &src, int &idx, int pass) const;
     Sampling sampling_of(Src src, int idx) const;
     void size_of(Src src, int idx, int pass, int &w, int &h) const;
-    bool link_pass(int i, const std::string &vs, const std::string &fs);
+    bool link_pass(int i);
     void target(Target &t, int i, int w, int h, GLenum fmt, bool mip);
 };
 
@@ -300,6 +335,7 @@ Chain::~Chain() {
                     i + 1 < m_pass_ms.size() ? "," : "\n");
     }
     if (!m_stamps.empty()) gl.glDeleteQueries((GLsizei)m_stamps.size(), m_stamps.data());
+    for (auto &b : m_build) build_drop(b);
     for (auto &p : m_passes) {
         if (p.prog) gl.glDeleteProgram(p.prog);
         if (p.ubo) gl.glDeleteBuffers(1, &p.ubo);
@@ -308,8 +344,10 @@ Chain::~Chain() {
         if (p.prev.tex) gl.glDeleteTextures(1, &p.prev.tex);
         if (p.prev.fbo) gl.glDeleteFramebuffers(1, &p.prev.fbo);
     }
-    for (auto &l : m_luts)
+    for (auto &l : m_luts) {
         if (l.tex) gl.glDeleteTextures(1, &l.tex);
+        if (l.pixels) SDL_DestroySurface(l.pixels);
+    }
 }
 
 // `prefix` then a number (OriginalHistory3, PassFeedback0): the number, else -1
@@ -396,9 +434,9 @@ void Chain::size_of(Src src, int idx, int pass, int &w, int &h) const {
     }
 }
 
-bool Chain::link_pass(int i, const std::string &vs, const std::string &fs) {
+bool Chain::link_pass(int i) {
     Pass &p = m_passes[i];
-    p.prog = link(vs, fs, name + " pass " + std::to_string(i));
+    p.prog = build_finish(m_build[i], name + " pass " + std::to_string(i));
     if (!p.prog) return false;
     gl.glUseProgram(p.prog);
     GLuint block = gl.glGetUniformBlockIndex(p.prog, "UBO");
@@ -511,6 +549,13 @@ void Chain::check_params() {
 }
 
 bool Chain::load(const std::string &dir) {
+    if (!read(dir)) return false;
+    while (!upload()) {
+    }
+    return finish();
+}
+
+bool Chain::read(const std::string &dir) {
     m_dir = dir;
     bool ok = false;
     auto preset = read_keys(dir + "/preset.slangp", &ok);
@@ -556,16 +601,9 @@ bool Chain::load(const std::string &dir) {
             fprintf(stderr, "picture: cannot read %s (%s)\n", path.c_str(), SDL_GetError());
             return false;
         }
-        gl.glGenTextures(1, &l.tex);
-        gl.glBindTexture(GL_TEXTURE_2D, l.tex);
-        gl.glPixelStorei(GL_UNPACK_ROW_LENGTH, c->pitch / 4);
-        gl.glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, c->w, c->h, 0, GL_RGBA, GL_UNSIGNED_BYTE, c->pixels);
-        gl.glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
-        if (l.sampling.mip) gl.glGenerateMipmap(GL_TEXTURE_2D);
-        else gl.glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0);
         l.w = c->w;
         l.h = c->h;
-        SDL_DestroySurface(c);
+        l.pixels = c;
         m_luts.push_back(l);
     }
     int n = atoi(get("shaders", "0").c_str());
@@ -591,7 +629,6 @@ bool Chain::load(const std::string &dir) {
         p.scale_x = (float)atof(get("scale_x" + k, sc).c_str());
         p.scale_y = (float)atof(get("scale_y" + k, sc).c_str());
     }
-    // linked once every pass's alias is known: a pass may read a later pass's feedback
     for (int i = 0; i < n; i++) {
         std::string k = std::to_string(i);
         std::string vs = read_file(dir + "/" + get("shader" + k) + ".vert");
@@ -600,12 +637,42 @@ bool Chain::load(const std::string &dir) {
             fprintf(stderr, "picture: cannot read %s/%s.vert/.frag\n", dir.c_str(), get("shader" + k).c_str());
             return false;
         }
-        if (!link_pass(i, vs, fs)) return false;
+        m_src.emplace_back(std::move(vs), std::move(fs));
     }
+    return true;
+}
+
+bool Chain::upload() {
+    if (m_uploaded < m_luts.size()) {   // a preset texture
+        Lut &l = m_luts[m_uploaded++];
+        SDL_Surface *c = l.pixels;
+        gl.glGenTextures(1, &l.tex);
+        gl.glBindTexture(GL_TEXTURE_2D, l.tex);
+        gl.glPixelStorei(GL_UNPACK_ROW_LENGTH, c->pitch / 4);
+        gl.glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, c->w, c->h, 0, GL_RGBA, GL_UNSIGNED_BYTE, c->pixels);
+        gl.glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+        if (l.sampling.mip) gl.glGenerateMipmap(GL_TEXTURE_2D);
+        else gl.glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0);
+        SDL_DestroySurface(c);
+        l.pixels = nullptr;
+    } else if (m_build.size() < m_src.size()) {   // a pass's program
+        auto &[vs, fs] = m_src[m_build.size()];
+        m_build.push_back(build_start(vs, fs));
+        vs.clear(), vs.shrink_to_fit(), fs.clear(), fs.shrink_to_fit();
+        m_uploaded++;
+    }
+    return m_uploaded >= m_luts.size() && m_build.size() >= m_src.size();
+}
+
+bool Chain::finish() {
+    // each pass's inputs found once every pass's alias is known: a pass may read a later pass's feedback
+    for (int i = 0; i < (int)m_passes.size(); i++)
+        if (!link_pass(i)) return false;
+    m_build.clear();
+    m_src.clear();
     if (m_passes.back().type_x != "viewport" || m_passes.back().type_y != "viewport" || m_passes.back().scale_x != 1 ||
         m_passes.back().scale_y != 1)
         fprintf(stderr, "picture: %s: the last pass is drawn at the viewport size\n", name.c_str());
-    read_params();
     return true;
 }
 
@@ -892,6 +959,10 @@ bool parse_mode(const std::string &s, Mode &m) {
     return true;
 }
 
+namespace {
+void bg_open();   // the background preparing (below)
+}  // namespace
+
 bool init(const std::string &shaders_dir, const std::vector<std::string> &config_dirs) {
     if (!load_gl()) return false;
     g_shaders_dir = shaders_dir;
@@ -922,6 +993,7 @@ bool init(const std::string &shaders_dir, const std::vector<std::string> &config
     }
     fprintf(stderr, "picture: OpenGL %s on %s\n", (const char *)gl.glGetString(GL_VERSION),
             (const char *)gl.glGetString(GL_RENDERER));
+    bg_open();
     g_ok = true;
     return true;
 }
@@ -1038,22 +1110,13 @@ bool save_settings(Mode m, bool this_game, std::string &message) {
     return true;
 }
 
-bool prepare(Mode m) {
-    int k = (int)m;
-    if (m == Mode::off || g_chain[g_view][k]) return true;
-    if (g_failed[k] || !g_ok) return false;
-    auto c = std::make_unique<Chain>();
-    c->name = DIRS[k];
-    uint64_t t0 = SDL_GetTicksNS();
-    if (!c->load(g_shaders_dir + "/" + DIRS[k])) {
-        fprintf(stderr, "picture: no %s here: sharp pixels instead\n", mode_label(m));
-        g_failed[k] = true;
-        return false;
-    }
-    fprintf(stderr, "picture: %s ready (%.0f ms)\n", mode_label(m), (SDL_GetTicksNS() - t0) / 1e6);
-    // the frames it reads before this one: the ring kept that long (the new places black until
-    // frames reach them), its order kept
-    Frame &f = g_frames[g_view];
+namespace {
+
+// A preset made ready for a window (view): its settings read; the frames it reads before this one get
+// the ring kept that long (the new places black until frames reach them), its order kept
+void install(int view, int k, std::unique_ptr<Chain> c) {
+    c->read_params();
+    Frame &f = g_frames[view];
     if (f.ring.size() < c->history()) {
         std::vector<Image> ring;
         for (size_t a = 0; a < f.ring.size(); a++) ring.push_back(f.ago(a));
@@ -1061,7 +1124,147 @@ bool prepare(Mode m) {
         f.ring = std::move(ring);
         f.head = 0;
     }
-    g_chain[g_view][k] = std::move(c);
+    g_chain[view][k] = std::move(c);
+}
+
+// The presets not in use made ready while the game runs, one at a time, in a thread with an OpenGL
+// context of its own sharing the window's objects (its programs, textures and buffers): a frame never
+// waits for the compiler, which on some drivers works in the thread that asks (a second, the first
+// time). The context draws to a hidden window of its own. HK_PICTURE_PRELOAD=0: each preset made when
+// it's chosen.
+bool g_preload = true;
+SDL_Window *g_bg_win = nullptr;
+SDL_GLContext g_bg_ctx = nullptr;
+
+struct Background {
+    std::unique_ptr<Chain> chain;
+    int view = 0, k = 0;
+    std::thread thread;
+    std::atomic<bool> done{false};
+    bool ran = false;   // the context worked in the thread
+    bool ok = false;
+    uint64_t t0 = 0;
+};
+std::unique_ptr<Background> g_bg;
+
+// The worker's context (init, the window's context current), else no background preparing
+void bg_open() {
+    if (const char *e = getenv("HK_PICTURE_PRELOAD")) g_preload = *e && *e != '0';
+    if (!g_preload) return;
+    SDL_Window *win = SDL_GL_GetCurrentWindow();
+    SDL_GLContext ctx = SDL_GL_GetCurrentContext();
+    g_bg_win = SDL_CreateWindow("", 16, 16, SDL_WINDOW_OPENGL | SDL_WINDOW_HIDDEN);
+    SDL_GL_SetAttribute(SDL_GL_SHARE_WITH_CURRENT_CONTEXT, 1);
+    if (g_bg_win) g_bg_ctx = SDL_GL_CreateContext(g_bg_win);   // current here: given back below
+    SDL_GL_SetAttribute(SDL_GL_SHARE_WITH_CURRENT_CONTEXT, 0);
+    if (g_bg_ctx) SDL_GL_MakeCurrent(nullptr, nullptr);
+    SDL_GL_MakeCurrent(win, ctx);
+    if (!g_bg_ctx) {
+        fprintf(stderr, "picture: no second OpenGL context (%s): a shader is made when chosen, holding up the game\n",
+                SDL_GetError());
+        if (g_bg_win) SDL_DestroyWindow(g_bg_win);
+        g_bg_win = nullptr;
+        g_preload = false;
+    }
+}
+
+void bg_start(int view, int k) {
+    g_bg = std::make_unique<Background>();
+    Background &b = *g_bg;
+    b.chain = std::make_unique<Chain>();
+    b.chain->name = DIRS[k];
+    b.view = view;
+    b.k = k;
+    b.t0 = SDL_GetTicksNS();
+    b.thread = std::thread([&b, dir = g_shaders_dir + "/" + DIRS[k]] {
+        if (SDL_GL_MakeCurrent(g_bg_win, g_bg_ctx)) {
+            b.ran = true;
+            b.ok = b.chain->load(dir);
+            if (!b.ok) b.chain.reset();   // its objects let go of in this context
+            gl.glFinish();                // all of it done before the window's context uses it
+            SDL_GL_MakeCurrent(nullptr, nullptr);
+        } else {
+            fprintf(stderr, "picture: the background's OpenGL context won't work in its thread (%s): a shader is made "
+                            "when chosen, holding up the game\n", SDL_GetError());
+        }
+        b.done.store(true, std::memory_order_release);
+    });
+}
+
+// The background's join, its preset handed over (or the mode marked as failed; or, the context not
+// working there, nothing and no more background preparing); in the window's context
+std::unique_ptr<Chain> bg_take(bool &ok) {
+    g_bg->thread.join();
+    ok = g_bg->ok;
+    auto c = std::move(g_bg->chain);
+    if (!g_bg->ran) g_preload = false;
+    else if (!ok) g_failed[g_bg->k] = true;
+    g_bg.reset();
+    return ok ? std::move(c) : nullptr;
+}
+
+// Once a draw: the next preset started, or the one made handed over
+void bg_step() {
+    if (!g_preload) return;
+    if (!g_bg) {
+        for (int v = 0; v < 2; v++) {
+            if (!g_frames[v].count) continue;   // a window that hasn't drawn yet
+            for (int k = 1; k < NMODES; k++)
+                if (!g_chain[v][k] && !g_failed[k]) return bg_start(v, k);
+        }
+        return;
+    }
+    if (!g_bg->done.load(std::memory_order_acquire)) return;
+    const int view = g_bg->view, k = g_bg->k;
+    const double ms = (SDL_GetTicksNS() - g_bg->t0) / 1e6;
+    bool ok;
+    auto c = bg_take(ok);
+    if (!ok && g_failed[k]) {
+        fprintf(stderr, "picture: no %s here: sharp pixels when it's chosen\n", mode_label((Mode)k));
+        return;
+    }
+    if (!c) return;
+    fprintf(stderr, "picture: %s ready, made in the background (%.0f ms)\n", mode_label((Mode)k), ms);
+    install(view, k, std::move(c));
+}
+
+void bg_close() {
+    if (g_bg) {
+        g_bg->thread.join();
+        g_bg.reset();
+    }
+    if (g_bg_ctx) SDL_GL_DestroyContext(g_bg_ctx);
+    if (g_bg_win) SDL_DestroyWindow(g_bg_win);
+    g_bg_ctx = nullptr;
+    g_bg_win = nullptr;
+}
+
+}  // namespace
+
+bool prepare(Mode m) {
+    int k = (int)m;
+    if (m == Mode::off || g_chain[g_view][k]) return true;
+    if (g_failed[k] || !g_ok) return false;
+    uint64_t t0 = SDL_GetTicksNS();
+    std::unique_ptr<Chain> c;
+    bool ok = false;
+    const char *how = "";
+    if (g_bg && g_bg->view == g_view && g_bg->k == k) {   // being made in the background: waited for
+        c = bg_take(ok);
+        if (c) how = ", the rest of its making in the background waited for";
+    }
+    if (!c && !g_failed[k]) {
+        c = std::make_unique<Chain>();
+        c->name = DIRS[k];
+        ok = c->load(g_shaders_dir + "/" + DIRS[k]);
+    }
+    if (!ok) {
+        fprintf(stderr, "picture: no %s here: sharp pixels instead\n", mode_label(m));
+        g_failed[k] = true;
+        return false;
+    }
+    fprintf(stderr, "picture: %s ready (%.0f ms%s)\n", mode_label(m), (SDL_GetTicksNS() - t0) / 1e6, how);
+    install(g_view, k, std::move(c));
     return true;
 }
 
@@ -1070,6 +1273,7 @@ Mode draw(const uint32_t *rgb, int w, int h, int x, int y, int vw, int vh, int w
     if (!g_ok || w <= 0 || h <= 0 || vw <= 0 || vh <= 0) return Mode::off;
     g_view = view & 1;
     g_cur = &g_frames[g_view];
+    bg_step();
     // a new frame turns the ring (its oldest picture's texture takes this one); the same frame
     // again replaces its picture only
     const bool next = frame == UINT64_MAX || frame != g_cur->number;
@@ -1209,6 +1413,7 @@ void overlay(const uint32_t *argb, int w, int h, int x, int y, int dw, int dh, f
 
 void shutdown() {
     if (!g_ok) return;
+    bg_close();
     gpu_collect(true);
     for (int m = 0; m <= NMODES; m++)
         if (g_gpu.n[m] > 31)

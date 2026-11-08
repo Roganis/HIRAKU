@@ -68,8 +68,12 @@ void set_setting(Mode m, const std::string &name, float value);   // at once, un
 // it went. The launcher's Picture dialog keeps the same files.
 bool save_settings(Mode m, bool this_game, std::string &message);
 unsigned settings_generation();   // turns when a preset's settings are read again (their files changed)
-// Load a mode's preset now (compiling its shaders takes up to a second the first time; the
-// draw that needs it otherwise does). False if it can't run here.
+// Load a mode's preset now (compiling its shaders takes up to a second the first time, more on some
+// drivers; the draw that needs it otherwise does). False if it can't run here.
+// The presets not in use are made ready in the background once a window draws (a thread with an
+// OpenGL context of its own, sharing the window's; draw hands each over when it's done), so choosing
+// one while the game runs doesn't hold it up; one chosen before that's done is waited for.
+// HK_PICTURE_PRELOAD=0 turns it off.
 bool prepare(Mode m);
 // Draw a w x h XRGB8888 frame into the rectangle (x, y, vw, vh), from the top left, of a
 // win_w x win_h default framebuffer; the rest is black. Returns the mode drawn: `m`, or off

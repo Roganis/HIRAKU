@@ -35,7 +35,7 @@
 
 static int usb_log(void) {
     static int on = -1;
-    if (on < 0) on = getenv("HK_PC_USB_LOG") != NULL;
+    if (on < 0) on = getenv("HK_PC_USB_LOG") ? atoi(getenv("HK_PC_USB_LOG")) > 1 ? 2 : 1 : 0;   // 2: every call, its thread and time
     return on;
 }
 
@@ -864,7 +864,8 @@ static HANDLE WINAPI dev_CreateFileA(LPCSTR p, DWORD acc, DWORD share, LPSECURIT
             return INVALID_HANDLE_VALUE;
         }
         static int n;
-        if (n++ < 2 || usb_log()) hk_log("hiraku-pc: board: the game opens %s (HIRAKU's)", p);
+        if (usb_log() > 1) hk_log("usb2: %lu t%04lx open", (unsigned long)GetTickCount(), (unsigned long)GetCurrentThreadId());
+        else if (n++ < 2 || usb_log()) hk_log("hiraku-pc: board: the game opens %s (HIRAKU's)", p);
         return g_handle;
     }
     return next_CreateFileA(p, acc, share, sa, cd, fl, t);
@@ -877,6 +878,9 @@ static BOOL WINAPI dev_CloseHandle(HANDLE h) {
 static BOOL WINAPI dev_DeviceIoControl(HANDLE h, DWORD code, LPVOID in, DWORD in_n, LPVOID out, DWORD out_n, LPDWORD got,
                                        LPOVERLAPPED ov) {
     if (h != g_handle) return DeviceIoControl(h, code, in, in_n, out, out_n, got, ov);
+    if (usb_log() > 1)
+        hk_log("usb2: %lu t%04lx call %08lx ep %02x, %lu in, %lu out, %s", (unsigned long)GetTickCount(), (unsigned long)GetCurrentThreadId(),
+               (unsigned long)code, in_n > 13 ? ((const uint8_t *)in)[13] : 0, (unsigned long)in_n, (unsigned long)out_n, ov ? "overlapped" : "waited");
     // The game's main thread reads the packet the library reads into while the library's thread
     // reads the next (bemanitools' finding): an answer is made apart and copied in whole, or a read
     // between clearing and filling it sees every button held (RED went to its test menu at start-up)
@@ -989,6 +993,51 @@ static BOOL WINAPI dev_SetupDiDestroyDeviceInfoList(HDEVINFO l) {
     return l == (HDEVINFO)&g_devs ? TRUE : SetupDiDestroyDeviceInfoList(l);
 }
 
+// The board library's transfers (FUN_004bf630 and on, EMPRESS): each opens the board, resets an
+// event, starts the transfer with it and waits for it (10 s at most). The event is a named one,
+// "ezusb_transfer_done_event", so every board object of every thread has the same: one thread's
+// reset can come between another's transfer setting it and that thread's wait, which would then sit
+// out the 10 s and stop the game (not caught happening: the lost request below was the start-up
+// error; this is the same kind of race). A real board's transfers end a moment after the wait has
+// begun; HIRAKU's end before it. Each object gets an event of its own (the name dropped: nothing
+// else opens it)
+static HANDLE WINAPI dev_CreateEventA(LPSECURITY_ATTRIBUTES sa, BOOL manual, BOOL initial, LPCSTR name) {
+    if (name && !strcmp(name, "ezusb_transfer_done_event")) {
+        static int said;
+        if (!said++) hk_log("hiraku-pc: board: the board library's transfer events each its own (not one named event)");
+        name = NULL;
+    }
+    return CreateEventA(sa, manual, initial, name);
+}
+
+// The board library's requests (FUN_004bfa00, EMPRESS): a thread sets a flag and releases a named
+// semaphore, "Ezusb_Semaph", then waits up to 10 s for the board's thread to do it and clear it.
+// The library runs its board loop twice (FUN_004b9670), one for each board object, and both wait on
+// that one semaphore 1 ms at a time; the loop whose board isn't the one in use can take the release
+// and do nothing with it, and the request is lost: 10 s on, "USB I/O ERROR / FM TRNS-OUT" (now and
+// then at start-up; the board's own thread caught waiting on it). Each loop looks at the request
+// flags before it does anything, so its 1 ms wait is made to count as woken: no release can be lost
+static HANDLE g_semaph[8];
+static LONG g_nsemaph;
+
+static HANDLE WINAPI dev_CreateSemaphoreA(LPSECURITY_ATTRIBUTES sa, LONG initial, LONG most, LPCSTR name) {
+    const HANDLE h = CreateSemaphoreA(sa, initial, most, name);
+    if (h && name && !strcmp(name, "Ezusb_Semaph")) {
+        const LONG i = InterlockedIncrement(&g_nsemaph) - 1;
+        if (i < (LONG)(sizeof g_semaph / sizeof *g_semaph)) g_semaph[i] = h;
+        if (i == 0) hk_log("hiraku-pc: board: the board library's request semaphore never loses a release");
+    }
+    return h;
+}
+
+static DWORD WINAPI dev_WaitForSingleObject(HANDLE h, DWORD ms) {
+    const DWORD r = WaitForSingleObject(h, ms);
+    if (r == WAIT_TIMEOUT && ms != INFINITE)
+        for (LONG i = 0; i < g_nsemaph && i < (LONG)(sizeof g_semaph / sizeof *g_semaph); i++)
+            if (g_semaph[i] == h) return WAIT_OBJECT_0;
+    return r;
+}
+
 static void *dev_hook(const char *dll, const char *fn, void *next) {
     if (!_stricmp(dll, "setupapi.dll")) {
         static const struct { const char *fn; void *to; } setupapi[] = {
@@ -1012,11 +1061,78 @@ static void *dev_hook(const char *dll, const char *fn, void *next) {
     if (!strcmp(fn, "DeviceIoControl")) return (void *)dev_DeviceIoControl;
     if (!strcmp(fn, "GetOverlappedResult")) return (void *)dev_GetOverlappedResult;
     if (!strcmp(fn, "CancelIo")) return (void *)dev_CancelIo;
+    if (!strcmp(fn, "CreateEventA")) return (void *)dev_CreateEventA;
+    if (!strcmp(fn, "CreateSemaphoreA")) return (void *)dev_CreateSemaphoreA;
+    if (!strcmp(fn, "WaitForSingleObject")) return (void *)dev_WaitForSingleObject;   // (HK_PC_WAITLOG's left out)
     return NULL;
+}
+
+// The board library's lock (built into the program from RED on): "if the flag is clear, set it and
+// take the critical section" in two steps, and "leave it and clear the flag" by any thread. Two
+// threads can both pass the test, or one clear the flag the other set; the flag and the critical
+// section then disagree, and the next thread to take it waits for ever (EMPRESS: a board thread was
+// caught waiting there after a start-up's "USB I/O ERROR / FM TRNS-OUT"). A real board's calls take a millisecond and
+// keep the threads apart; HIRAKU's answer at once and they meet. The two functions rewritten in
+// their place: the flag alone, taken in one step (lock cmpxchg) and cleared in one (xchg); the
+// critical section, only ever entered when the flag was won, was never needed
+static int matches(const uint8_t *p, const uint8_t *pat, const uint8_t *mask, size_t n) {
+    for (size_t k = 0; k < n; k++)
+        if ((p[k] & mask[k]) != pat[k]) return 0;
+    return 1;
+}
+
+static void rewrite(uint8_t *at, size_t n, const uint8_t *with, size_t wn) {
+    DWORD old;
+    VirtualProtect(at, n, PAGE_EXECUTE_READWRITE, &old);
+    memset(at, 0xcc, n);
+    memcpy(at, with, wn);
+    VirtualProtect(at, n, old, &old);
+    FlushInstructionCache(GetCurrentProcess(), at, n);
+}
+
+static void fix_lock(void) {
+    // the test-and-take: mov eax,[ecx+4]; test eax,eax; je +3; xor eax,eax; ret; mov dword [ecx+4],1;
+    // add ecx,8; push ecx; call [EnterCriticalSection]; mov eax,1; ret
+    static const uint8_t take[] = {0x8b, 0x41, 0x04, 0x85, 0xc0, 0x74, 0x03, 0x33, 0xc0, 0xc3, 0xc7, 0x41, 0x04, 0x01, 0x00, 0x00, 0x00,
+                                   0x83, 0xc1, 0x08, 0x51, 0xff, 0x15, 0x00, 0x00, 0x00, 0x00, 0xb8, 0x01, 0x00, 0x00, 0x00, 0xc3};
+    // the leave: push esi; mov esi,ecx; mov eax,[esi+4]; test eax,eax; je +17; lea eax,[esi+8]; push eax;
+    // call [LeaveCriticalSection]; mov dword [esi+4],0; pop esi; ret
+    static const uint8_t leave[] = {0x56, 0x8b, 0xf1, 0x8b, 0x46, 0x04, 0x85, 0xc0, 0x74, 0x11, 0x8d, 0x46, 0x08, 0x50, 0xff,
+                                    0x15, 0x00, 0x00, 0x00, 0x00, 0xc7, 0x46, 0x04, 0x00, 0x00, 0x00, 0x00, 0x5e, 0xc3};
+    uint8_t take_mask[sizeof take], leave_mask[sizeof leave];
+    memset(take_mask, 0xff, sizeof take_mask);
+    memset(take_mask + 23, 0, 4);   // the import's address
+    memset(leave_mask, 0xff, sizeof leave_mask);
+    memset(leave_mask + 16, 0, 4);
+    // xor eax,eax; mov edx,1; lock cmpxchg [ecx+4],edx; sete al; movzx eax,al; ret
+    static const uint8_t take_new[] = {0x33, 0xc0, 0xba, 0x01, 0x00, 0x00, 0x00, 0xf0, 0x0f, 0xb1,
+                                       0x51, 0x04, 0x0f, 0x94, 0xc0, 0x0f, 0xb6, 0xc0, 0xc3};
+    // xor eax,eax; xchg [ecx+4],eax; ret
+    static const uint8_t leave_new[] = {0x33, 0xc0, 0x87, 0x41, 0x04, 0xc3};
+    char *base = (char *)hk_program();
+    IMAGE_NT_HEADERS *nt = (IMAGE_NT_HEADERS *)(base + ((IMAGE_DOS_HEADER *)base)->e_lfanew);
+    IMAGE_SECTION_HEADER *sec = IMAGE_FIRST_SECTION(nt);
+    size_t pairs = 0;
+    for (WORD s = 0; s < nt->FileHeader.NumberOfSections; s++, sec++) {   // (the unpacked program's sections aren't marked as code)
+        uint8_t *p = (uint8_t *)base + sec->VirtualAddress;
+        const size_t n = sec->Misc.VirtualSize;
+        for (size_t i = 0; i + sizeof take + 128 <= n; i++) {
+            if (!matches(p + i, take, take_mask, sizeof take)) continue;
+            for (size_t j = i + sizeof take; j < i + sizeof take + 96; j++)   // its leave just after it (EMPRESS: 0x30 on)
+                if (matches(p + j, leave, leave_mask, sizeof leave)) {
+                    rewrite(p + i, sizeof take, take_new, sizeof take_new);
+                    rewrite(p + j, sizeof leave, leave_new, sizeof leave_new);
+                    pairs++;
+                    break;
+                }
+        }
+    }
+    if (pairs) hk_log("hiraku-pc: board: the board library's lock taken and left in one step each (%zu)", pairs);
 }
 
 void hk_ezusb_dev_start(void) {
     InitializeCriticalSection(&g_lock);
+    fix_lock();
     g_handle = CreateFileA("NUL", GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, NULL);
     memset(g_eeprom, 0xff, sizeof g_eeprom);
     // The game's plug (HK_PC_SECURITY: its model code, the boot's seeds, "GQE11JAA 0:2:2"), the

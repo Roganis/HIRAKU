@@ -786,10 +786,14 @@ static bool unitInstalled(const Game &g);
 static QString unitState(const Game &g);
 static QString nvramSeed(const Game &g);
 
-// a folder and everything in it (a game's saves, for a mod set's first start)
+// a folder and everything in it (a game's saves, for a mod set's first start). Not what its links
+// lead to: a PC game's saves link its data (prog/data -> the game's gigabytes), which the core makes
+// again each run; followed, the copy took minutes, and one cut short left a folder of part of the
+// data where the link belongs (EMPRESS's movies missing: "Could not create source filter")
 static void copyTree(const QString &from, const QString &to) {
     QDir().mkpath(to);
-    for (const QFileInfo &f : QDir(from).entryInfoList(QDir::Files | QDir::Dirs | QDir::NoDotAndDotDot | QDir::Hidden)) {
+    for (const QFileInfo &f : QDir(from).entryInfoList(QDir::Files | QDir::Dirs | QDir::NoDotAndDotDot | QDir::Hidden | QDir::System)) {
+        if (f.isSymLink() || f.isJunction()) continue;
         if (f.isDir()) copyTree(f.filePath(), to + "/" + f.fileName());
         else QFile::copy(f.filePath(), to + "/" + f.fileName());
     }

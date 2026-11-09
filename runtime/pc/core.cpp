@@ -451,6 +451,9 @@ public:
 #else
         std::error_code ec;
         if (std::filesystem::is_symlink(at, ec)) std::filesystem::remove(at, ec);
+        else if (hk::sys::is_dir(at))   // never removed (it may be someone's): said, as the game will miss what isn't in it
+            fprintf(stderr, "hiraku-pc: %s is a folder, not a link to the game's data (%s): the game sees only what is in it; "
+                            "move it away to have the link made again\n", at.c_str(), to.c_str());
         std::filesystem::create_directory_symlink(to, at, ec);
 #endif
         if (!hk::sys::is_dir(at)) {

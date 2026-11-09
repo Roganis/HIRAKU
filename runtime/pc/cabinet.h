@@ -88,6 +88,8 @@ void hk_convert_pixels(uint32_t *out, const void *bits, int pitch, unsigned w, u
 // In-between pictures (link v11, smooth motion): drawn when hiraku-pc asks, while the game waits for
 // its next frame (the Direct3D 8 hooks set it)
 extern void (*hk_between)(void);
+// a mod's charts counted in frames this many times shorter (IIDX EMPRESS at a high frame rate), else 1
+extern int hk_chart_scale;
 // ... the Direct3D 9 games' (d3d9_smooth.c): their device's hooks; at each Present, the frame's end
 // (its picture read back or not) and, once the game may draw the next, its start; before a Reset
 struct IDirect3DDevice9;

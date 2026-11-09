@@ -151,6 +151,7 @@ bool to_sjis(const std::string &utf8, std::vector<uint8_t> &out) {
 struct Rate {
     std::string mod;
     double hz = 0, now = 0;   // as asked; as set
+    int times = 0;            // hz = "x2"...: that many times the machine's own rate (as it is: a PC IIDX's display type)
     uint32_t address = 0, last = 0;
     int changed = 0, still = 0;   // frames in a row the word changed, didn't
     bool always = false;          // no while_changing: from the first frame on
@@ -549,7 +550,10 @@ bool load(const std::vector<std::string> &dirs, const std::string &game, const s
                     Rate r;
                     r.mod = mod.name;
                     if (t.values.count("hz") && t.is_string.at("hz")) {
-                        if (str("hz", true) != "display") fail("'hz' is a number, or \"display\" (the display's refresh rate)");
+                        const std::string h = str("hz", true);
+                        if (h.size() == 2 && h[0] == 'x' && h[1] >= '2' && h[1] <= '8') r.times = h[1] - '0';
+                        else if (h != "display")
+                            fail("'hz' is a number, \"display\" (the display's refresh rate) or \"x2\" to \"x8\" (times the machine's own)");
                     } else {
                         r.hz = real("hz");
                         if (r.hz < 30 || r.hz > 1000) fail("'hz' is between 30 and 1000");
@@ -643,7 +647,7 @@ void frame() {
         }
         const bool want = in_state && (r.on ? r.still < 2 : r.changed >= 2);
         // hz = "display": follow the display (a window moved to another one)
-        const double hz = r.hz > 0 ? r.hz : g_display_hz > 30 ? g_display_hz : kDisplayFallbackHz;
+        const double hz = r.times ? r.times * core().native_rate() : r.hz > 0 ? r.hz : g_display_hz > 30 ? g_display_hz : kDisplayFallbackHz;
         if (want == r.on && (!want || hz == r.now)) continue;
         if (!core().set_vsync_rate(want ? hz : 0)) {
             fprintf(stderr, "mods: %s: this machine's core can't change its vsync rate ([[rate]] ignored)\n", r.mod.c_str());

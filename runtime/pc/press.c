@@ -187,8 +187,9 @@ int16_t __cdecl hk_iidx_distance(uint32_t lane) {
     }
     const int32_t frame_us = l->game_hz_milli ? (int32_t)(1000000000u / l->game_hz_milli) : 16667;
     int32_t frames = us >= 0 ? us / frame_us : -((-us + frame_us - 1) / frame_us);   // floor
-    if (frames > 15) frames = 15;
-    if (frames < -15) frames = -15;
+    const int32_t most = 15 * hk_chart_scale;   // (the chart's frames: shorter ones with a high frame rate's mod)
+    if (frames > most) frames = most;
+    if (frames < -most) frames = -most;
     static int log = -1;
     if (log < 0) log = getenv("HK_PC_JUDGE_LOG") != NULL;
     if (log && frames) hk_log("judge: lane %u, %d frames from its note, %d frames earlier (%d us)", lane, d, frames, us);
@@ -201,10 +202,19 @@ static uint16_t g_iidx_moved;   // a bit a lane
 void *hk_iidx_judge_fn;          // the game's judging
 uint32_t hk_iidx_ret;            // its caller's return (the game's drawing thread only judges)
 
+// A distance in a high frame rate's shorter chart frames (hk_chart_scale to a cabinet frame) as the
+// cabinet's frames: the frame it falls in (floor), so every window the game judges by (all in its own
+// frames: the chart's, PGREAT's 0 and 1, the turntable's one frame) is as long in time as on the cabinet
+static int16_t cabinet_frames(int16_t d) {
+    const int k = hk_chart_scale;
+    if (k <= 1 || d >= 1024 || d <= -1024) return d;
+    return (int16_t)(d >= 0 ? d / k : -((-d + k - 1) / k));
+}
+
 void __cdecl hk_iidx_before(void) {
     for (uint32_t lane = 0; lane < 16; lane++) {
         int16_t *d = (int16_t *)(g_iidx_table + lane * 8 + 4);
-        const int16_t was = *d, set = hk_iidx_distance(lane);
+        const int16_t was = *d, set = cabinet_frames(hk_iidx_distance(lane));
         if (set == was) continue;
         g_iidx_was[lane] = was, g_iidx_set[lane] = set, g_iidx_moved |= (uint16_t)(1u << lane);
         *d = set;
@@ -323,10 +333,10 @@ static int iidx_patch(char *base, IMAGE_NT_HEADERS *nt) {
     memcpy(call + 1, &rel, 4);
     VirtualProtect(call + 1, 4, old, &old);
     FlushInstructionCache(GetCurrentProcess(), call, 5);
-    hk_log("hiraku-pc: IIDX presses judged %s, then %.1f ms earlier (by whole frames; the lanes' distances at %08x, "
+    hk_log("hiraku-pc: IIDX presses judged %s, then %.1f ms earlier (by whole frames%s; the lanes' distances at %08x, "
            "the judging at %p, its call at %p)",
-           g_press_time ? "by when they happened" : "at the frame they're read in", g_offset_us / 1000.0, (unsigned)table,
-           (void *)judge, (void *)call);
+           g_press_time ? "by when they happened" : "at the frame they're read in", g_offset_us / 1000.0,
+           hk_chart_scale > 1 ? ", the cabinet's: the charts' shorter ones taken back to them" : "", (unsigned)table, (void *)judge, (void *)call);
     return 1;
 }
 
@@ -334,7 +344,7 @@ void hk_press_patch_program(void) {
     const char *pt = getenv("HK_PC_PRESS_TIME"), *off = getenv("HK_PC_JUDGE_OFFSET");
     g_press_time = pt && *pt && *pt != '0';
     g_offset_us = off && *off ? (int32_t)(atof(off) * 1000) : 0;
-    if (!g_press_time && !g_offset_us) return;
+    if (!g_press_time && !g_offset_us && hk_chart_scale <= 1) return;
     char *base = (char *)hk_program();
     IMAGE_NT_HEADERS *nt = (IMAGE_NT_HEADERS *)(base + ((IMAGE_DOS_HEADER *)base)->e_lfanew);
     IMAGE_SECTION_HEADER *sec = IMAGE_FIRST_SECTION(nt);

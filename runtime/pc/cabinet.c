@@ -467,6 +467,14 @@ static void rate_frame(void) {
         owed = 0, g_tick = 1;
         return;
     }
+    // a whole multiple of the cabinet's rate (a mod's hz = "x2": a PC IIDX's 59.935 or 60.035 Hz
+    // twice): every that many frames exactly, whatever the cabinet's own rate
+    const uint32_t k = (hz + 30000) / 60000;
+    if (k >= 2 && hz >= k * 59800 && hz <= k * 60200) {
+        static uint32_t n;
+        g_tick = ++n % k == 0;
+        return;
+    }
     owed += 59940.0 / hz;
     g_tick = owed >= 1 - 1e-9;
     if (g_tick) owed -= 1;
@@ -913,6 +921,7 @@ static void dbg_watch(void) {
 }
 
 static const volatile float *g_chart_frame;   // IIDX DJ TROOPERS, EMPRESS: their charts' frame (chart_frame)
+int hk_chart_scale = 1;   // a mod's charts counted in frames this many times shorter (chart_frame)
 
 // Each Present, Direct3D 9's or 8's (d3d8.c): the mods' patches and the debug watch first, before
 // the next frame runs
@@ -925,7 +934,7 @@ void hk_present_begin(void) {
     }
     rate_frame();
     if (g_chart_frame) {
-        const float ms = *g_chart_frame;
+        const float ms = *g_chart_frame * (float)hk_chart_scale;
         l->chart_frame_ns = ms > 15.0f && ms < 18.0f ? (uint32_t)(ms * 1e6f + 0.5f) : 0;
     }
     if (g_npatches) apply_patches();
@@ -1710,6 +1719,21 @@ static void chart_frame(void) {
                 if (code[j] == 0xc7 && code[j + 1] == 0x05 && !memcmp(code + j + 2, code + i + 2, 4) && !memcmp(code + j + 6, b, 4)) {
                     g_chart_frame = (const volatile float *)(uintptr_t)*(const uint32_t *)(code + i + 2);
                     hk_log("hiraku-pc: the charts' frame (the display type's) at %p", (const void *)g_chart_frame);
+                    // a mod that counts the charts in shorter frames (a high frame rate's: the frame
+                    // halved, the game run at twice the rate while a chart plays): by how much, so
+                    // that hiraku-pc still hears the display type and the judging takes the lanes'
+                    // distances back to the cabinet's frames (press.c)
+                    for (int q = 0; q < g_npatches; q++) {
+                        const struct patch *p = &g_patches[q];
+                        if (p->n != 4 || p->at != code + i + 6) continue;
+                        float was, now;
+                        memcpy(&was, a, 4), memcpy(&now, p->replace, 4);
+                        const int k = now > 0.5f ? (int)(was / now + 0.5f) : 0;
+                        if (k >= 2 && k <= 8) {
+                            hk_chart_scale = k;
+                            hk_log("hiraku-pc: mods: the charts counted in frames %d times shorter", k);
+                        }
+                    }
                     return;
                 }
         }

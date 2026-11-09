@@ -204,7 +204,8 @@ replace = "COINS"               # what goes in its place: no longer than its roo
 # every = true                  # each place it's found (default: it must be in one place only)
 
 [[rate]]                        # the machine's vsync at another rate while the game is somewhere
-hz = "display"                  # the display's refresh rate (no window: 119.88), or a number (30-1000)
+hz = "display"                  # the display's refresh rate (no window: 119.88), a number (30-1000),
+                                # or "x2" to "x8": that many times the machine's own rate
 while_changing = 0x018ff668     # ... while this word of its memory changes from frame to frame
 # while_equal = 0x00f898d8      # ... and (optional) while this word (4 bytes) holds `value`
 # value = 4
@@ -235,7 +236,9 @@ A game draws one picture per vsync. `[[rate]]` makes the vsync come `hz` times a
 machine's own time while a word of the game's memory keeps changing (two frames in a row: on;
 two still: back to the machine's rate). `hz = "display"` follows the display's refresh rate, so
 the game's frames meet the display's one for one (display pacing then shows each for one
-refresh). The CPUs keep their clocks, so each frame has less time; a game that keeps up draws
+refresh). `hz = "x2"` (to `"x8"`) is a whole multiple of the machine's own rate as it is (a PC
+IIDX's display type: 59.935 or 60.035 Hz), for a game whose mod counts in shorter frames itself
+(beatmania IIDX EMPRESS, below), where only an exact multiple keeps its music with its notes. The CPUs keep their clocks, so each frame has less time; a game that keeps up draws
 more pictures a second. What it computes from a clock (a song's position, timing windows) stays
 right and moves more smoothly; what it counts in frames (animations, effects, menu timers) would
 run faster, which is why the rate is tied to a condition, and what `between_ticks` is for.
@@ -363,6 +366,42 @@ program date): the same design as 9-14's, found by the same shapes in all four p
 | pop'n 16 | 2008052700 | 0x00d27f78 | 0x00d12c4c (4) | 20 |
 | pop'n 17 | 2009022500 | 0x010408f8 | 0x0102b520 (2) | 18 |
 | pop'n 18 | 2010040500 | 0x0107c030 | 0x0106699c (2) | 20 |
+
+beatmania IIDX 16 EMPRESS on the PC (`games/iidx16/mods/high-frame-rate`, 2026-11-09; the program of
+2009072200): a game that counts everything in frames, its song's position too, so the clock-following
+design above doesn't fit. Its charts are milliseconds converted to frames as a song loads (0x489300,
+with the frame of the operator's DISPLAY TYPE: 16.6528 ms for A, 16.6806 for B, kept in 0x2951764),
+and the scroll's speed is figured from the same frame (0x4879f0, 0x4892c0). The mod halves both
+frames: the charts are counted in half frames, and the game runs at exactly twice its rate
+(`hz = "x2"`, 120.07 or 119.87 Hz) while the chart's position (0x029393b0) moves, in a song and in the
+attract demo, so its notes move twice as often at the same speed, in step with its music.
+- What the chart code counts in its frames, doubled: a note missed 15 frames late (31 half frames:
+  16 frames' worth, less one), drawn 4 frames past its time, the lanes' coming notes 21 frames
+  ahead, a note let go 60 frames late, the longest chart (18,000 frames), the turntable's move
+  (measured over 2 frames, 4 now) and its turning back (4 frames, 8), and a failed stage's end
+  (153 frames of the chart's position after the failure: its STAGE FAILED shutter closed in half
+  the time without it).
+- The judging: every window is the game's own, in its frames (the chart's, PGREAT's distance 0 or
+  1, the turntable's frame). HIRAKU's DLL sees the halved frame in the mod's patch
+  (runtime/pc/cabinet.c `chart_frame`, `hk_chart_scale`) and, around the game's judging, takes each
+  lane's distance back to whole frames (the frame it falls in; runtime/pc/press.c, the same place
+  as `--press-time`), so each window is as long in time as on the cabinet. hiraku-pc still hears the
+  display type (the frame given doubled).
+- Held to the cabinet's pace (`between_ticks`): the engine's animated objects (each drawn at its
+  frame, then stepped: 0x405642), the effects' objects (judgements, combo), the keys' bombs, beams
+  and presses, the turntables' pictures, the play and demo screens' frame counters and fades, a
+  lamp's blink, a background effect, and the timers beside them: found by dumps of four pictures
+  in a row at 120 Hz in a song and in the demo (`HK_PC_DUMP`, `HK_PC_DUMP_HEAP`) and data
+  watchpoints (`HK_PC_WATCH`): the demo ends when its animated object reaches its end (0x46a6ec),
+  which had it end in 18 to 21 seconds of its 35.
+- Not for a song longer than 4 minutes 32 seconds: the notes' times are 16-bit (32,767 half frames).
+- Checked under Wine (a 60 Hz nested display, two pictures a frame), against the same song at 60 Hz
+  with the same presses at the same moments: a new picture every frame, the bar lines 1.6 pixels a
+  frame where they move 3.2, at the same height at the same moment of the song (2 to 5 pixels: the
+  two frames before the rate comes on); the stage failed at the same moment (88.6 s into the
+  chart), with the same judgements to within a press or two (GOOD 6/4, BAD 11/11, POOR 75/76:
+  windows of half the length would have halved them); the movies in time. Then played by the
+  owner on a 240 Hz display (2026-11-09, smooth motion on as well): nothing found wrong.
 
 The Firebeat pop'n music (4-8) are another case (checked on pop'n 4, 2026-10-19, with the
 Firebeat core's frame period halved by hand): the attract demo's song lasts the same number of

@@ -194,9 +194,10 @@ void RelayServer::run() {
             return;
         }
         if (fds[0].revents & POLLIN) {
-            const int fd = net::accept(listen_fd_);
-            if (fd >= 0 && cabinets.size() >= kCabinets) {
-                net::close(fd);
+            sockaddr_in peer{};
+            const int fd = net::accept(listen_fd_, &peer);
+            if (fd >= 0 && (cabinets.size() >= kCabinets || (admit && !admit(ntohl(peer.sin_addr.s_addr))))) {
+                net::close(fd);   // (too many, or not an address the server takes: the refusal is the caller's to log)
             } else if (fd >= 0) {
                 net::set_int(fd, IPPROTO_TCP, TCP_NODELAY, 1);
                 net::set_timeouts(fd, kSendMs);   // (its receives come after poll says there is something)

@@ -27,6 +27,9 @@ public:
     // One HTTP request (head and body, as sent) to the whole HTTP response.
     std::string handle(const std::string &request);
 
+    // Whether the cabinet a call says it is from (its srcid, the PCBID) is answered: a server on a
+    // network takes the ones it was told (eamuse/access.h). Unset: every one, as a core's own server
+    std::function<bool(const std::string &srcid)> admit;
     // Each call in clear (request and answer), for a core's network log.
     std::function<void(const std::string &)> log;
     // The cabinet's wall clock, as seconds since 1970 read as local time: in a core, the emulated

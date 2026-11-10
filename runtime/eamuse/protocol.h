@@ -22,6 +22,10 @@ void rc4(const std::vector<uint8_t> &key, std::string &data);
 std::string header(const std::string &head, const char *name);
 // An HTTP message (request or answer) as text: its first line and its body in clear.
 std::string clear(const std::string &message);
+// A call as a cabinet sends it (the whole HTTP request), with its <call>'s srcid made `pcbid`: the
+// cabinet's own PCBID in place of the one the game's dump carries, which every copy has (-p,
+// shell/eaoptions.h). Left as it is when it isn't such a call
+void set_srcid(std::string &request, const std::string &pcbid);
 
 // One module element of a call: <MODULE method=.. ...>inner</MODULE>. A call can carry several
 // (pop'n's posevent sends three at once); the answer has one element each, in order.

@@ -545,7 +545,8 @@ void SettingsDialog::eamusePage(QVBoxLayout *v) {
     m_pcbid = new QLineEdit(s.value("eamuse/pcbid").toString());
     m_pcbid->setValidator(new QRegularExpressionValidator(hex20, m_pcbid));
     m_pcbid->setPlaceholderText("the game's own (pop'n 9: 01401401000100045FEF)");
-    m_pcbid->setToolTip("-p: the cabinet's PCBID, 20 hex digits, for a server that only takes the machines it knows.");
+    m_pcbid->setToolTip("-p: the cabinet's PCBID, 20 hex digits, for a server that only takes the machines it knows.\n"
+                        "HIRAKU's own server (hiraku-eamuse) makes one with --new-cabinet and then answers only the cabinets it lists.");
     fe->addRow("PCBID:", m_pcbid);
     v->addWidget(ea);
     auto *cards = new QGroupBox("Cards");

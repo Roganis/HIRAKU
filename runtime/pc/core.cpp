@@ -616,6 +616,7 @@ public:
         if (!make_link()) return false;
         set_env("HK_PC64_SAVE", win_path(save_ + "/run"));
         set_env("HK_PC64_LOG", win_path(save_ + "/pc.log"));
+        if (!ea_.pcbid.empty()) set_env("HK_PC64_PCBID", ea_.pcbid);   // (-p: the cabinet's own, not ea3-config's)
         // --single-screen: the save folder's single-screen/ (the game's files rearranged for one 4:3
         // screen, made from the player's own) read before the game's (the loader's HK_PC64_OVERLAY)
         if (crt_ && hk::sys::is_dir(save_ + "/single-screen")) {
@@ -700,6 +701,7 @@ public:
         set_env("HK_PC_JUDGE_OFFSET", judge_offset_ ? std::to_string(judge_offset_) : "");
         set_env("HK_PC_LOG", win_path(save_ + "/pc.log"));
         set_env("HK_PC32_LOG", win_path(save_ + "/pc.log"));
+        if (!ea_.pcbid.empty()) set_env("HK_PC32_PCBID", ea_.pcbid);   // (-p: the cabinet's own, not ea3-config's)
         set_env("HK_PC32_SKIP_TUTORIAL", skip_tutorial_ ? "1" : "");
         set_env("HK_PC_PROGRAM", m.count("exe") ? m["exe"] : "popn22.dll");   // the game's own code: the DLL, not the loader
         // the mods (docs/MODS.md): each folder laid over the game's data folder, new files too, and

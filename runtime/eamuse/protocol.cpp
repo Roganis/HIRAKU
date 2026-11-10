@@ -281,4 +281,34 @@ void Store::write(const std::string &name, const std::string &data) const {
     if (!sys::write_file(path, data)) fprintf(stderr, "e-AMUSEMENT: cannot write %s: the one from before is kept\n", path.c_str());
 }
 
+void set_srcid(std::string &request, const std::string &pcbid) {
+    const size_t he = request.find("\r\n\r\n");
+    if (he == std::string::npos) return;
+    std::string head = request.substr(0, he), body = request.substr(he + 4);
+    const std::string info = header(head, "X-Eamuse-Info");
+    if (!info.empty()) rc4(key(info), body);
+    // the <call ...> tag's own srcid="..." (a space before it: not another attribute's end)
+    const size_t call = body.find("<call");
+    const size_t end = call == std::string::npos ? call : body.find('>', call);
+    size_t at = call == std::string::npos ? call : body.find(" srcid=\"", call);
+    if (end == std::string::npos || at == std::string::npos || at > end) return;
+    at += 8;
+    const size_t close = body.find('"', at);
+    if (close == std::string::npos || close > end) return;
+    const size_t was = body.size();
+    body.replace(at, close - at, pcbid);
+    if (!info.empty()) rc4(key(info), body);
+    if (body.size() != was)
+        for (size_t l = head.find("\r\n"); l != std::string::npos; l = head.find("\r\n", l + 2)) {
+            if (head.size() < l + 17) break;
+            std::string name = head.substr(l + 2, 15);
+            for (char &c : name) c = (char)std::tolower((unsigned char)c);
+            if (name != "content-length:") continue;
+            const size_t e = head.find("\r\n", l + 2);
+            head.replace(l + 2, (e == std::string::npos ? head.size() : e) - l - 2, "Content-Length: " + std::to_string(body.size()));
+            break;
+        }
+    request = head + "\r\n\r\n" + body;
+}
+
 }  // namespace hk::ea

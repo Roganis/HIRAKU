@@ -12,7 +12,9 @@
 
 namespace hk::k573 {
 
-bool Eamuse::open(const std::string &where, const std::string &dir, const std::string &log, std::function<int64_t()> now) {
+bool Eamuse::open(const std::string &where, const std::string &dir, const std::string &log, std::function<int64_t()> now,
+                  const std::string &pcbid) {
+    pcbid_ = pcbid;
     if (where != "local") {
         remote_ = std::make_unique<ea::Remote>(where);
         if (!remote_->ok()) {
@@ -32,8 +34,9 @@ bool Eamuse::open(const std::string &where, const std::string &dir, const std::s
             return;
         }
         // online: off the emulator's thread; the unit's recv waits for it
-        std::thread([this, t, req, done = std::move(done)] {
+        std::thread([this, t, req = std::string(req), done = std::move(done)]() mutable {
             std::string error;
+            if (!pcbid_.empty()) ea::set_srcid(req, pcbid_);   // (-p: this cabinet's own, not the dump's)
             std::string answer = remote_->exchange(t, req, &error);
             if (log_) {
                 fprintf(log_, "online %s:%u\n  %s\n  %s\n", t.services ? remote_->host().c_str() : t.host.c_str(),
@@ -46,7 +49,7 @@ bool Eamuse::open(const std::string &where, const std::string &dir, const std::s
     });
     lan_->now = server_->now;
     if (log_) lan_->log = server_->log = [this](const std::string &s) { fprintf(log_, "%s\n", s.c_str()); fflush(log_); };
-    if (remote_) printf("e-AMUSEMENT: online, %s\n", where.c_str());
+    if (remote_) printf("e-AMUSEMENT: online, %s%s%s\n", where.c_str(), pcbid_.empty() ? "" : ", as cabinet ", pcbid_.c_str());
     return true;
 }
 

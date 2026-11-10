@@ -107,6 +107,8 @@ std::string Server::handle(const std::string &req) try {
     Call c;
     std::string xml;
     if (parse(body, c)) {
+        // a cabinet the server wasn't told to take: no answer to read anything from
+        if (admit && !admit(c.srcid)) return "HTTP/1.0 403 Forbidden\r\nContent-Length: 0\r\n\r\n";
         xml = "<response>";
         for (const Request &r : c.requests) {
             std::string a = game_ ? game_(*this, c, r, header(head, "Host")) : "";

@@ -101,7 +101,15 @@ if(Python3_Interpreter_FOUND AND NOT WIN32)
   add_test(NAME eamuse_iidx_records COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/eamuse/test_iidxrecords.py $<TARGET_FILE:hiraku-eamuse>)
   # ... and calls no game would send (it listens on a network): answered or dropped, the server goes on
   add_test(NAME eamuse_malformed COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/eamuse/test_malformed.py $<TARGET_FILE:hiraku-eamuse>)
+  # ... told which cabinets to answer (cabinets.txt) and which addresses to take (--allow); the relay's
+  # port is the one pc_vsock uses
+  add_test(NAME eamuse_access COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/eamuse/test_access.py $<TARGET_FILE:hiraku-eamuse>)
+  set_tests_properties(eamuse_access PROPERTIES RESOURCE_LOCK relay_5740 TIMEOUT 120)
 endif()
+# The lists a server on a network keeps (runtime/eamuse/access.h): addresses, cabinets by PCBID
+add_executable(test_access_lists eamuse/test_access_lists.cpp)
+target_include_directories(test_access_lists PRIVATE ${CMAKE_SOURCE_DIR}/runtime)
+add_test(NAME eamuse_access_lists COMMAND test_access_lists)
 # The PC games' NET TAISEN (runtime/pc/vsock.c) between two processes on one relay, under Wine
 find_program(HK_WINE wine)
 if(TARGET hiraku-pc-test-vsock AND HK_WINE AND NOT WIN32)

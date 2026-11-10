@@ -4,11 +4,13 @@
 // the ROM files of MAME's set (BIOS, H8 response, cassette and I/O board chips),
 // the CD image and the PC Card in slot 2.
 #include <cstdio>
+#include <cstdlib>
 #include <ctime>
 #include <fstream>
 #include <map>
 #include <string>
 
+#include "eamuse/access.h"
 #include "shell/kvfile.h"
 #include "shell/core.h"
 #include "sys573/board.h"
@@ -34,6 +36,12 @@ public:
         if (name == "--rental") { rental_ = 1; return true; }
         if (name == "--master-calendar") { master_calendar_ = std::stoi(value()); return true; }
         if (name == "--eamuse") { eamuse_ = value(); return true; }
+        if (name == "--p" || name == "--pcbid") {   // (-p, as the other cores take it: shell/eaoptions.h)
+            const std::string v = value();
+            pcbid_ = hk::ea::pcbid_of(v);
+            if (pcbid_.empty()) { fprintf(stderr, "-p: a PCBID is 20 hex digits, not \"%s\"\n", v.c_str()); exit(2); }
+            return true;
+        }
         return false;
     }
     std::string options_help() const override {
@@ -48,6 +56,8 @@ public:
                "  --eamuse local|URL  with the unit, when the game has e-AMUSEMENT on: the server in the core\n"
                "                    (default, offline; its data in the save folder's eamuse/) or a server at\n"
                "                    http://host[:port][/path] (online)\n"
+               "  -p PCBID          online: this cabinet's own PCBID (20 hex digits) in place of the game's, which\n"
+               "                    every copy of it has, for a server that answers the cabinets it lists\n"
                "  --cd hdd          boot the unit's data installer CD (implies --npu): it installs the\n"
                "                    e-AMUSEMENT data on the unit's disk; power off when it says it is done\n"
                "  --cd install      boot the game's install CD (MAME's \"install\" disc: the first boot of\n"
@@ -134,6 +144,7 @@ public:
             }
             cfg.pccard2 = "npu";
             cfg.eamuse = eamuse_;
+            cfg.pcbid = pcbid_;
             // the card units come with it: one on DrumMania, one per guitar on GuitarFreaks
             cfg.card_readers = machine["family"] == "gtrf" ? 2 : 1;
         }
@@ -198,6 +209,7 @@ private:
     std::string cassette_slot_;
     bool npu_ = false;
     std::string eamuse_ = "local";
+    std::string pcbid_;
     std::string cd_;
     std::string session_host_, session_join_;
     int session_quantum_ = 500;

@@ -226,6 +226,9 @@ int main(int argc, char **argv) {
     text(e, "/ea3/id/softid", softid, sizeof softid);
     text(e, "/ea3/id/hardid", hardid, sizeof hardid);
     text(e, "/ea3/id/accountid", account, sizeof account);
+    // HK_PC64_PCBID: the cabinet's own PCB ID (20 hex digits: hiraku-pc's -p) in place of ea3-config's
+    const char *own_id = getenv("HK_PC64_PCBID");
+    if (own_id && strlen(own_id) == 20) snprintf(pcbid, sizeof pcbid, "%s", own_id);
     // HK_PC64_MARKET: the cabinet's market (dest: J Japan, A Asia, K Korea, U the USA) in place of
     // ea3-config's. The game writes a mark of its market (dev/raw/X.dest) at its first start and
     // won't start as another while one is there (dll_entry_init): the others' put aside

@@ -46,7 +46,7 @@ and the launcher's Settings > e-AMUSEMENT writes them, laid out like spicecfg's 
 | `-ea` | Basic Local EA Emulation | the server inside HIRAKU. It is also what runs without `-url`, and it is ignored with `-url`, as in spice2x. Unlike spice2x's, it is the whole server: cards and data are kept |
 | `-url URL` | EA Service URL | the cabinet's server: `host:port[/path]` (spice2x's form) or `http://host[:port][/path]`. `--eamuse URL` is the older name |
 | `-smartea` | Smart EA | with `-url`: if that server doesn't take a connection at start (3 s), the server inside HIRAKU |
-| `-p PCBID` | PCBID | 20 hex digits, sent in place of the game's own (pop'n 9's is `01401401000100045FEF`) as `srcid` and `gpcb_id`, for a server that only takes the machines it knows |
+| `-p PCBID` | PCBID | 20 hex digits, sent in place of the game's own (pop'n 9's is `01401401000100045FEF`) as `srcid` and `gpcb_id`, for a server that only takes the machines it knows (`hiraku-eamuse` with a `cabinets.txt`: `--new-cabinet` makes one). Also on System 573 GuitarFreaks and DrumMania (`srcid`) and the PC games except pop'n 15-18 |
 | `-card0 NUMBER` | Player 1 Card | the card's number, 16 hex digits (`E004...`). Without it, `card0.txt` (the working directory's, then the save folder's), as spice2x reads it. `-card1` and `card1.txt` are player 2's; pop'n has one reader |
 | `-autocard off\|p1\|p2\|both` | Auto Card Insert | the card goes in by itself: it is in the slot from the start, and back in it 8 s after the reader gives it out, so the game takes it whenever it opens the slot |
 | `-autopin` (HIRAKU's) | Type the card's PIN | a card HIRAKU's own server knows and holds a PIN for: its PIN typed on the 10-key when the game asks for it, a fixed time after the server reads the card (pop'n 14: 3 s; 15-18: 4 s, then Enter). Not with `-url` (the PIN is the other server's) |
@@ -70,11 +70,31 @@ and the launcher's Settings > e-AMUSEMENT writes them, laid out like spicecfg's 
   - `--tz 9`: with the host's clock, the cabinet's time zone in hours from UTC (default 9, Japan);
   - `--quiet`: don't print the calls.
 - **Who can reach `hiraku-eamuse`:** e-AMUSE3 has no log-in of its own (a cabinet is whoever sends
-  its calls), so whoever can reach the port can read and change the players the server keeps. Run
-  it on a network you trust (a home LAN, a VPN between friends), not open to the internet;
-  `--bind 127.0.0.1` keeps it to the one computer. It says so when it starts. A call it can't
-  read is refused, a connection that says nothing is let go after 15 s, and nothing a call holds
-  names a file outside the data folder (`tests/eamuse/test_malformed.py`).
+  its calls), so left as it is, whoever can reach the port can read and change the players the
+  server keeps (it says so when it starts). Two lists say whom it takes; either can be used alone:
+  - **Addresses** (`--allow 192.168.1.0/24,10.0.0.5`): connections from other addresses are closed
+    unanswered, on the calls' port and on NET TAISEN's relay. This computer itself is always taken.
+    Nothing to set on any cabinet: the right list for a home network or a party.
+  - **Cabinets** (`cabinets.txt` in the data folder, or `--cabinets FILE`): a PCBID a line, 20 hex
+    digits, with a name after it if you like, `#` for notes. Once the file is there, only calls
+    from those cabinets are answered (the others get an empty 403), from whatever address: the
+    list for cabinets that come over the internet. `hiraku-eamuse --data DIR --new-cabinet "NAME"`
+    makes a PCBID nobody else has, adds it to the file and prints it; the file is read again
+    whenever it changes, with no restart. The relay carries no PCBID, so it needs `--allow`.
+  - **The cabinet's side:** start it with `-p PCBID` (the launcher: Options > Settings >
+    e-AMUSEMENT, PCBID). Without it a game sends the PCBID its dump carries, which every copy of
+    that game has: listing that one lets every such copy in. `-p` takes effect on the Konami
+    Python games, System 573 GuitarFreaks and DrumMania, the PC beatmania IIDX games and the two
+    AVS2 PC pop'n loaders. **Not yet on PC pop'n 15-18**, which send `00000000000000000000`: list
+    that for them and use `--allow`.
+  - The server says what it refused, once a minute at most for each: `refused: a call from
+    ADDRESS as cabinet PCBID` (add that line to let it in) or `refused: a connection from ADDRESS`.
+  - Neither list hides the traffic (e-AMUSE3 is plain HTTP with a cipher whose key is known): on a
+    network where others can listen, a PCBID can be read and reused; put the server behind a VPN there.
+
+  A call it can't read is refused, a connection that says nothing is let go after 15 s, and nothing
+  a call holds names a file outside the data folder (`tests/eamuse/test_malformed.py`,
+  `test_access.py`).
 
 **What the HIRAKU server keeps** (the save folder's `eamuse/`, or `--data`), plain text, one record
 a line, tab-separated `key=value` fields:

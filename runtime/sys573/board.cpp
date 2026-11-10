@@ -958,7 +958,7 @@ bool init(const Config &cfg) {
         // the server's clock: the timekeeper's, as it was set at power-on and has run since
         const char *log = getenv("HK_573_NET_LOG");
         if (!g_eamuse.open(cfg.eamuse, cfg.nvram_dir.empty() ? "" : cfg.nvram_dir + "/eamuse", log ? log : "",
-                           [] { return g.cfg.rtc_time + (int64_t)g.machine->time().as_double(); }))
+                           [] { return g.cfg.rtc_time + (int64_t)g.machine->time().as_double(); }, cfg.pcbid))
             return false;
     }
     g_cards.configure(cfg.card_readers, cfg.nvram_dir);

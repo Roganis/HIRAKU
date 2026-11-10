@@ -1031,8 +1031,11 @@ QStringList MainWindow::arguments(const Game &g) const {
     if (unitState(g) == "install") a << "--cd" << "hdd";
     else if (unitState(g) == "on") {
         a << "--npu";
-        if (QString url = s.value("eamuse/url", s.value("eamuse/server")).toString().trimmed(); !url.isEmpty())
+        if (QString url = s.value("eamuse/url", s.value("eamuse/server")).toString().trimmed(); !url.isEmpty()) {
             a << "--eamuse" << (url.contains("://") ? url : "http://" + url + "/");
+            // the cabinet's own PCBID for that server (Settings > e-AMUSEMENT), as the other games get it
+            if (QString p = s.value("eamuse/pcbid").toString(); !p.isEmpty()) a << "-p" << p;
+        }
     }
     a << DipsDialog::arguments(g.id);            // the board's DIP switches (Game > DIP switches)
     a << UnlocksDialog::macroArguments(g.id);   // codes typed at every start

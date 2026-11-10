@@ -44,6 +44,7 @@ struct Config {
     // the network unit's e-AMUSEMENT server (eagfdm.h): "local" (in the core, its data in the save
     // folder's eamuse/) or http://host[:port][/path]; HK_573_NET_LOG=FILE logs the traffic
     std::string eamuse = "local";
+    std::string pcbid;   // "" or the cabinet's own PCBID for an online server (-p)
     // the e-AMUSEMENT card units (cardunit.h) on SIO1, switched with the multi-session unit by the
     // cassette's d7: 1 (DrumMania) or 2 (GuitarFreaks); 0 = none
     int card_readers = 0;

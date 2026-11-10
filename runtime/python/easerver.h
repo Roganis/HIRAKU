@@ -28,6 +28,9 @@ public:
     // One HTTP request (head and body, as sent) to the whole HTTP response.
     std::string handle(const std::string &request);
 
+    // Whether the cabinet a call says it is from (its srcid, the PCBID) is answered: a server on a
+    // network takes the ones it was told (eamuse/access.h). Unset: every one, as a core's own server
+    std::function<bool(const std::string &srcid)> admit;
     // Each call in clear (request and answer), for HK_PY_NET_LOG.
     std::function<void(const std::string &)> log;
     // Each call's module and method as it comes ("playerdata.get"; the core's scripts wait on them)

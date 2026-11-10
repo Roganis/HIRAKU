@@ -60,6 +60,9 @@ public:
     bool start(const std::string &bind_addr, uint16_t port);
     uint16_t port() const { return port_; }   // where it listens
     std::function<void(const std::string &)> log;
+    // Whether a connection from this address (host byte order) is taken (eamuse/access.h); unset: any.
+    // Set before start()
+    std::function<bool(uint32_t ip)> admit;
 
 private:
     void run();

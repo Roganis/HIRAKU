@@ -51,6 +51,10 @@ std::string esc(const std::string &v);   // XML-escaped
 std::string attr(const std::map<std::string, std::string> &m, const char *k);
 long num(const std::map<std::string, std::string> &m, const char *k, int base = 10);
 bool safe_name(const std::string &s);   // a card number or id fit for a file name
+// A whole file name in a server's folder ("pdata-F14-<ref id>", "E13-rank-shop"): letters, digits,
+// - _ and . only, no dot first. The two stores refuse any other, whatever a call's fields (a model, a
+// card, an id) were put into it: nothing a cabinet sends names a file outside the folder
+bool safe_file(const std::string &name);
 
 // What a server keeps: plain files in a folder, records as lines of tab-separated key=value
 // fields (values never hold tabs or newlines).

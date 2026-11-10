@@ -17,13 +17,18 @@
 //              games set their clocks to what ntp.get says and stamp their own times "+9")
 //     --quiet  don't print each call
 //     --no-relay  no NET TAISEN relay
+#include <atomic>
 #include <cctype>
+#include <chrono>
 #include <csignal>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <ctime>
+#include <exception>
+#include <mutex>
 #include <string>
+#include <thread>
 
 #include "eamuse/server.h"
 #include "python/easerver.h"
@@ -35,10 +40,12 @@
 
 namespace {
 
-// One HTTP/1.0 request from a connection: the head and Content-Length bytes of body
-bool read_request(int fd, std::string &req) {
+// One HTTP/1.0 request from a connection: the head and Content-Length bytes of body, all of it
+// before `until` (a connection that sends a byte now and then is let go, not waited on for ever)
+bool read_request(int fd, std::string &req, std::chrono::steady_clock::time_point until) {
     char buf[4096];
     for (;;) {
+        if (std::chrono::steady_clock::now() > until) return false;
         const size_t he = req.find("\r\n\r\n");
         if (he != std::string::npos) {
             std::string head = req.substr(0, he);
@@ -141,6 +148,10 @@ int main(int argc, char **argv) {
         return 1;
     }
     printf("hiraku-eamuse: e-AMUSE3 on %s:%d, data in %s\n", bind_addr.c_str(), port, data.c_str());
+    // e-AMUSE3 has no log-in of its own: a cabinet is whoever sends its calls
+    if (bind_addr != "127.0.0.1")
+        printf("hiraku-eamuse: whoever can reach this port can read and change the players kept here: for a network you trust "
+               "(--bind 127.0.0.1: this computer only)\n");
     hk::py::RelayServer relay;
     if (relay_on) {
         relay.log = server.log;
@@ -148,19 +159,47 @@ int main(int argc, char **argv) {
             printf("hiraku-eamuse: NET TAISEN lobby and relay on %s:%u\n", bind_addr.c_str(), hk::py::Lobby::PORT);
     }
     fflush(stdout);
-    for (;;) {   // one connection at a time: the game makes one request per connection (HTTP/1.0)
+    // The game makes one request per connection (HTTP/1.0). Each connection is read and answered on a
+    // thread of its own, so one that is slow (or says nothing) holds up no other cabinet; the calls
+    // themselves are answered one at a time (the servers' files and counters are one cabinet's at a
+    // time), which takes no longer than it did. At most kConnections at once, each kSeconds in all.
+    constexpr int kConnections = 64, kSeconds = 15;
+    std::mutex answering;
+    std::atomic<int> connections{0};
+    for (;;) {
         const int fd = hk::net::accept(ls);
-        if (fd < 0) continue;
-        hk::net::set_timeouts(fd, 10000);
-        std::string req;
-        if (read_request(fd, req)) {
-            const std::string answer = gfdm(req) ? server.handle(req) : popn.handle(req);
-            for (size_t sent = 0; sent < answer.size();) {
-                const ssize_t n = hk::net::send(fd, answer.data() + sent, answer.size() - sent);
-                if (n <= 0) break;
-                sent += (size_t)n;
-            }
+        if (fd < 0) {   // (no descriptors left, say: not a loop that spins)
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            continue;
         }
-        hk::net::close(fd);
+        if (connections >= kConnections) {
+            hk::net::close(fd);
+            continue;
+        }
+        connections++;
+        auto serve = [&, fd] {
+            const auto until = std::chrono::steady_clock::now() + std::chrono::seconds(kSeconds);
+            hk::net::set_timeouts(fd, 3000);
+            std::string req;
+            if (read_request(fd, req, until)) {
+                std::string answer;
+                {
+                    std::lock_guard<std::mutex> one(answering);
+                    answer = gfdm(req) ? server.handle(req) : popn.handle(req);
+                }
+                for (size_t sent = 0; sent < answer.size() && std::chrono::steady_clock::now() < until;) {
+                    const ssize_t n = hk::net::send(fd, answer.data() + sent, answer.size() - sent);
+                    if (n <= 0) break;
+                    sent += (size_t)n;
+                }
+            }
+            hk::net::close(fd);
+            connections--;
+        };
+        try {
+            std::thread(serve).detach();
+        } catch (const std::exception &) {   // no thread to be had: this connection on the main one
+            serve();
+        }
     }
 }

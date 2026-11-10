@@ -157,7 +157,7 @@ std::string EamuseServer::answer_hc(const Request &r) {
     std::vector<Record> players = from_lines(read_file(file));
     auto record = [&](const Record &p) {
         // g_pm_id: the ref id's last eight digits, as 1234-5678
-        const std::string tail = ref.size() >= 8 ? ref.substr(ref.size() - 8) : ref;
+        const std::string tail = (std::string(8, '0') + ref).substr(ref.size());   // (a shorter one: zeros before it)
         std::map<std::string, std::string> account = kept(p, "account", ACCOUNT);
         account.erase("name");
         account["g_pm_id"] = tail.substr(0, 4) + "-" + tail.substr(4);

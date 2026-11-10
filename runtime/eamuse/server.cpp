@@ -5,6 +5,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <exception>
 
 namespace hk::ea {
 
@@ -89,7 +90,7 @@ std::string Server::common(const Call &, const Request &r) {
     return "<" + m + " status=\"0\"/>";
 }
 
-std::string Server::handle(const std::string &req) {
+std::string Server::handle(const std::string &req) try {
     if (req.compare(0, 4, "GET ") == 0) {   // a package's download: the message
         const size_t sp = req.find(' ', 4);
         const std::string path = req.substr(4, sp == std::string::npos ? std::string::npos : sp - 4);
@@ -132,6 +133,11 @@ std::string Server::handle(const std::string &req) {
     }
     return "HTTP/1.0 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: " + std::to_string(xml.size()) +
            "\r\n" + info_line + "\r\n" + xml;
+} catch (const std::exception &e) {
+    // a call this server's code trips over (a field shorter or longer than it reckoned with) is one
+    // bad call, answered as such: never the end of the server and of every other cabinet's session
+    if (log) log(std::string("e-AMUSE3 call not answered: ") + e.what());
+    return "HTTP/1.0 500 Internal Server Error\r\nContent-Length: 0\r\n\r\n";
 }
 
 }  // namespace hk::ea

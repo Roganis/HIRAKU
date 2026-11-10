@@ -15,6 +15,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <exception>
 #include <iterator>
 #include <set>
 #include <ctime>
@@ -114,13 +115,17 @@ bool pc_popn(const std::string &game) { return game == "G15" || game == "H16" ||
 // The PC beatmania IIDX games on libavs's e-AMUSE3 (runtime/pc/, PLAN.md section 36): GOLD, DJ TROOPERS, EMPRESS
 bool pc_iidx(const std::string &game) { return game == "GLD" || game == "HDD" || game == "I00"; }
 std::string EamuseServer::read_file(const std::string &name) const {
-    if (dir_.empty()) return "";
+    if (dir_.empty() || !ea::safe_file(name)) return "";
     std::ifstream f(dir_ + "/" + name, std::ios::binary);
     return std::string(std::istreambuf_iterator<char>(f), std::istreambuf_iterator<char>());
 }
 
 void EamuseServer::write_file(const std::string &name, const std::string &data) const {
     if (dir_.empty()) return;
+    if (!ea::safe_file(name)) {   // (ea::Store's rule: a call's field never names a file outside the folder)
+        fprintf(stderr, "e-AMUSEMENT: not written: a call's field made no file name (%zu bytes)\n", name.size());
+        return;
+    }
     sys::make_dir(dir_);
     // whole or not at all: a full or failing disk keeps the player's file from before
     const std::string path = dir_ + "/" + name;
@@ -299,7 +304,7 @@ std::string EamuseServer::message() const {
     return t;
 }
 
-std::string EamuseServer::handle(const std::string &req) {
+std::string EamuseServer::handle(const std::string &req) try {
     if (req.compare(0, 4, "GET ") == 0) {   // a package's download: the message
         const size_t sp = req.find(' ', 4);
         const std::string path = req.substr(4, sp == std::string::npos ? std::string::npos : sp - 4);
@@ -348,6 +353,11 @@ std::string EamuseServer::handle(const std::string &req) {
     }
     if (xml.empty()) return "HTTP/1.0 400 Bad Request\r\nContent-Length: 0\r\n\r\n";
     return reply(req, xml, binary);
+} catch (const std::exception &e) {
+    // a call this server's code trips over (a field shorter or longer than it reckoned with) is one
+    // bad call, answered as such: never the end of the server and of every other cabinet's session
+    if (log) log(std::string("e-AMUSE3 call not answered: ") + e.what());
+    return "HTTP/1.0 500 Internal Server Error\r\nContent-Length: 0\r\n\r\n";
 }
 
 std::string EamuseServer::reply(const std::string &req, std::string xml, bool binary) {

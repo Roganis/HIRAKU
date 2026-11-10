@@ -173,7 +173,13 @@ void RelayServer::run() {
         uint32_t address = 0;
         bool greeted = false;
         std::string in;   // bytes not yet a whole hello or datagram
+        std::chrono::steady_clock::time_point came = std::chrono::steady_clock::now();
     };
+    // At most kCabinets connections; one that hasn't said its hello kHelloSeconds after it came is let
+    // go (connections that only take up places); a cabinet that takes nothing for kSendMs is let go
+    // too, where the others' packets to it would wait on it for ever
+    constexpr size_t kCabinets = 64;
+    constexpr int kHelloSeconds = 10, kSendMs = 2000;
     std::map<int, Cabinet> cabinets;
     uint32_t next = FIRST;
     Lobby lobby;   // pop'n 12-14's
@@ -183,18 +189,23 @@ void RelayServer::run() {
     for (;;) {
         std::vector<pollfd> fds{net::watch(listen_fd_, POLLIN)};
         for (auto &[fd, c] : cabinets) fds.push_back(net::watch(fd, POLLIN));
-        if (net::poll(fds.data(), fds.size(), -1) < 0) {
+        if (net::poll(fds.data(), fds.size(), 1000) < 0) {
             if (net::interrupted()) continue;
             return;
         }
         if (fds[0].revents & POLLIN) {
             const int fd = net::accept(listen_fd_);
-            if (fd >= 0) {
+            if (fd >= 0 && cabinets.size() >= kCabinets) {
+                net::close(fd);
+            } else if (fd >= 0) {
                 net::set_int(fd, IPPROTO_TCP, TCP_NODELAY, 1);
+                net::set_timeouts(fd, kSendMs);   // (its receives come after poll says there is something)
                 cabinets[fd];
             }
         }
         std::vector<int> gone;
+        for (auto &[fd, c] : cabinets)
+            if (!c.greeted && std::chrono::steady_clock::now() - c.came > std::chrono::seconds(kHelloSeconds)) gone.push_back(fd);
         for (size_t i = 1; i < fds.size(); i++) {
             if (!(fds[i].revents & (POLLIN | POLLHUP | POLLERR))) continue;
             const int fd = net::fd_of(fds[i]);

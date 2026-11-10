@@ -69,6 +69,12 @@ and the launcher's Settings > e-AMUSEMENT writes them, laid out like spicecfg's 
     host's clock);
   - `--tz 9`: with the host's clock, the cabinet's time zone in hours from UTC (default 9, Japan);
   - `--quiet`: don't print the calls.
+- **Who can reach `hiraku-eamuse`:** e-AMUSE3 has no log-in of its own (a cabinet is whoever sends
+  its calls), so whoever can reach the port can read and change the players the server keeps. Run
+  it on a network you trust (a home LAN, a VPN between friends), not open to the internet;
+  `--bind 127.0.0.1` keeps it to the one computer. It says so when it starts. A call it can't
+  read is refused, a connection that says nothing is let go after 15 s, and nothing a call holds
+  names a file outside the data folder (`tests/eamuse/test_malformed.py`).
 
 **What the HIRAKU server keeps** (the save folder's `eamuse/`, or `--data`), plain text, one record
 a line, tab-separated `key=value` fields:

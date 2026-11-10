@@ -54,6 +54,9 @@ int type_id(const std::string &name) {
 }
 
 constexpr int kAttr = 46, kEnd = 190, kEndAll = 191, kArray = 64;
+// Limits on what is read (a call comes from the network): elements inside elements, and the values
+// an array's __count asks for. The games' own calls are a handful deep, their arrays a few thousand
+constexpr int kMaxDepth = 64, kMaxCount = 1 << 20;
 const char kSix[] = "0123456789:ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz";
 
 uint64_t be(const uint8_t *p, int n) {
@@ -160,6 +163,7 @@ bool to_text(const std::string &bin, std::string &xml) {
     };
     Node root;
     Node *cur = &root;
+    int depth = 0;
     size_t i = 8;
     while (i < node_end) {
         if (p[i] == 0) {
@@ -170,7 +174,7 @@ bool to_text(const std::string &bin, std::string &xml) {
         const bool arr = t & kArray;
         t &= ~kArray;
         if (t == kEnd) {
-            if (cur->up) cur = cur->up;
+            if (cur->up) cur = cur->up, depth--;
             continue;
         }
         if (t == kEndAll) break;
@@ -199,7 +203,7 @@ bool to_text(const std::string &bin, std::string &xml) {
             continue;
         }
         const Type &ty = type_of(t);
-        if (!ty.name) return false;
+        if (!ty.name || ++depth > kMaxDepth) return false;
         auto node = std::make_unique<Node>();
         node->name = name;
         node->type = ty.name;
@@ -268,7 +272,8 @@ std::string unescaped(const std::string &s) {
 }
 
 // The XML the server writes: elements, attributes in double or single quotes, text, <?..?> and comments
-bool parse_xml(const std::string &x, size_t &i, Node &n) {
+bool parse_xml(const std::string &x, size_t &i, Node &n, int depth = 0) {
+    if (depth > kMaxDepth) return false;
     auto skip = [&] {
         for (;;) {
             while (i < x.size() && std::isspace((unsigned char)x[i])) i++;
@@ -326,7 +331,7 @@ bool parse_xml(const std::string &x, size_t &i, Node &n) {
             continue;
         }
         auto kid = std::make_unique<Node>();
-        if (!parse_xml(x, i, *kid)) return false;
+        if (!parse_xml(x, i, *kid, depth + 1)) return false;
         n.kids.push_back(std::move(kid));
     }
 }
@@ -431,7 +436,7 @@ struct Writer {
                 for (int k = ty.size - 1; k >= 0; k--) v += (char)(u >> (8 * k));
                 values++;
             }
-            const int want = arr ? std::atoi(n.count.c_str()) * ty.count : ty.count;
+            const int want = arr ? std::clamp(std::atoi(n.count.c_str()), 0, kMaxCount / ty.count) * ty.count : ty.count;
             while (values < want) {   // missing values: zeros
                 v.append((size_t)ty.size, '\0');
                 values++;

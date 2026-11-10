@@ -168,7 +168,9 @@ bool parse(const std::string &x, Call &c) {
         if (!sc) {
             const size_t close = x.find("</" + r.module, at);
             r.inner = x.substr(at, close == std::string::npos ? std::string::npos : close - at);
-            at = close == std::string::npos ? x.size() : x.find('>', close) + 1;
+            // (a close tag cut before its '>': the call ends there; + 1 on "none" would start it over)
+            const size_t end = close == std::string::npos ? close : x.find('>', close);
+            at = end == std::string::npos ? x.size() : end + 1;
         }
         c.requests.push_back(std::move(r));
     }
@@ -220,6 +222,13 @@ bool safe_name(const std::string &s) {
     return true;
 }
 
+bool safe_file(const std::string &s) {
+    if (s.empty() || s.size() > 120 || s[0] == '.') return false;
+    for (char ch : s)
+        if (!std::isalnum((unsigned char)ch) && ch != '-' && ch != '_' && ch != '.') return false;
+    return true;
+}
+
 std::string to_line(const Record &r) {
     std::string l;
     for (const auto &[k, v] : r) {
@@ -255,13 +264,17 @@ std::vector<Record> from_lines(const std::string &text) {
 }
 
 std::string Store::read(const std::string &name) const {
-    if (dir_.empty()) return "";
+    if (dir_.empty() || !safe_file(name)) return "";
     std::ifstream f(dir_ + "/" + name, std::ios::binary);
     return std::string(std::istreambuf_iterator<char>(f), std::istreambuf_iterator<char>());
 }
 
 void Store::write(const std::string &name, const std::string &data) const {
     if (dir_.empty()) return;
+    if (!safe_file(name)) {
+        fprintf(stderr, "e-AMUSEMENT: not written: a call's field made no file name (%zu bytes)\n", name.size());
+        return;
+    }
     sys::make_dir(dir_);
     // whole or not at all: a full or failing disk keeps the player's file from before
     const std::string path = dir_ + "/" + name;

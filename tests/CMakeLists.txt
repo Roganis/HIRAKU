@@ -120,6 +120,11 @@ set_tests_properties(pc_game_process PROPERTIES TIMEOUT 120)
 add_executable(test_write_file sys/test_write_file.cpp)
 target_link_libraries(test_write_file PRIVATE hiraku_sys)
 add_test(NAME save_write_file COMMAND test_write_file)
+# A file one process has until it ends (runtime/shell/sys.h, lock_file): a PC game's save folder
+add_executable(test_lock_file sys/test_lock_file.cpp)
+target_include_directories(test_lock_file PRIVATE ${CMAKE_SOURCE_DIR}/runtime)
+target_link_libraries(test_lock_file PRIVATE hiraku_sys)
+add_test(NAME save_folder_lock COMMAND test_lock_file)
 
 # The problem report's cleaner (launcher/cleaner.h): names, folders, cards and servers gone from a log
 if(Qt6_FOUND)

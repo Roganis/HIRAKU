@@ -61,6 +61,12 @@ bool replace_file(const std::string &from, const std::string &to);
 // way leaves the file from before as it was. false then (and no .tmp left behind)
 bool write_file(const std::string &path, const void *data, size_t n);
 inline bool write_file(const std::string &path, const std::string &data) { return write_file(path, data.data(), data.size()); }
+// The file at `path` (made if it isn't there) taken as this process's until the process ends, however
+// it ends: a second process asking for the same file is told Held. For a folder only one program at a
+// time may write in (a PC game's saves). None: the file can't be made, or this file system has no
+// locks: nothing is known, and the caller goes on as before there were any
+enum class Lock { Taken, Held, None };
+Lock lock_file(const std::string &path);
 std::string exe_path();   // this program's file, with / between folders; empty if unknown
 // Runs a program (argv[0]: its file) with no window of its own and its output thrown away, and
 // waits for it: its exit code, -1 if it couldn't be started

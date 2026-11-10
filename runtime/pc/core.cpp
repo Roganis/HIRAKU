@@ -327,6 +327,7 @@ public:
 
         // The save folder: the program's copy (HIRAKU's DLLs for Konami's), the backup drive (e/)
         save_ = o.nvram_dir.empty() ? hk::user_data_dir(o.root) + "/" + game_ : o.nvram_dir;
+        if (!take_save_folder()) return false;
         const std::string prog_name = program_.substr(program_.find_last_of("/\\") + 1);
         run_prog_ = save_ + "/prog/" + prog_name;
         run_e_ = save_ + "/e";
@@ -515,6 +516,19 @@ public:
     }
 #endif
 
+    // The save folder is one game's at a time: Konami's program writes its backup there as it runs, and
+    // hiraku-pc its copy of the program, so a second start of the same game on the same folder (by
+    // hand, or a second launcher) would have two games overwriting each other's saves. Its file
+    // `lock` is this process's until it ends, however it ends (a hiraku-pc killed leaves nothing held)
+    bool take_save_folder() {
+        mkdirs(save_);
+        if (hk::sys::lock_file(save_ + "/lock") != hk::sys::Lock::Held) return true;
+        fprintf(stderr, "hiraku-pc: %s is already running with these saves (%s): two games on one set of saves would overwrite "
+                        "each other's. Close the other one first, or give this one a save folder of its own with --nvram FOLDER\n",
+                game_.c_str(), save_.c_str());
+        return false;
+    }
+
     // The link: a file both map. Linux: in /dev/shm (memory); Windows: in the save folder
     bool make_link() {
 #ifdef _WIN32
@@ -587,6 +601,7 @@ public:
         if (crt_) set_env("HK_PC64_OUTPUT", "crt");   // the loader's single-screen mode (runtime/pc64/crt.c)
         set_env("HK_PC64_MARKET", market_);           // (runtime/pc64/main.c)
         save_ = o.nvram_dir.empty() ? hk::user_data_dir(o.root) + "/" + game_ : o.nvram_dir;
+        if (!take_save_folder()) return false;
         mkdirs(save_ + "/run");
         const std::string bin_dir = hk::sys::exe_path().substr(0, hk::sys::exe_path().rfind('/'));
         loader_ = bin_dir + "/pc/hiraku-pc64.exe";
@@ -660,6 +675,7 @@ public:
         exe_ = "hiraku-pc32.exe";
         program_ = contents_ + "/modules";
         save_ = o.nvram_dir.empty() ? hk::user_data_dir(o.root) + "/" + game_ : o.nvram_dir;
+        if (!take_save_folder()) return false;
         const std::string run = save_ + "/run";
         run_prog_ = run + "/modules";
         mkdirs(run_prog_);

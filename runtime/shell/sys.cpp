@@ -25,6 +25,7 @@
 #include <fcntl.h>
 #include <signal.h>
 #include <spawn.h>
+#include <sys/file.h>
 #include <sys/mman.h>
 #include <sys/resource.h>
 #include <sys/stat.h>
@@ -498,6 +499,27 @@ bool write_file(const std::string &path, const void *data, size_t n) {
     if (ok && replace_file(tmp, path)) return true;
     std::remove(tmp.c_str());
     return false;
+}
+
+Lock lock_file(const std::string &path) {
+#ifdef _WIN32
+    // (others may read it, none may write: a second process asking the same is refused; not inherited
+    // by what this process starts)
+    HANDLE h = CreateFileA(path.c_str(), GENERIC_WRITE, FILE_SHARE_READ, nullptr, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (h != INVALID_HANDLE_VALUE) return Lock::Taken;   // (kept open: Windows closes it with the process)
+    return GetLastError() == ERROR_SHARING_VIOLATION ? Lock::Held : Lock::None;
+#else
+    // (close-on-exec: a program this one starts mustn't hold the lock on after it)
+    const int fd = open(path.c_str(), O_RDWR | O_CREAT | O_CLOEXEC, 0666);
+    if (fd < 0) return Lock::None;
+    while (flock(fd, LOCK_EX | LOCK_NB) != 0) {
+        if (errno == EINTR) continue;
+        const bool held = errno == EWOULDBLOCK;
+        close(fd);
+        return held ? Lock::Held : Lock::None;
+    }
+    return Lock::Taken;   // (kept open: the system lets go of it with the process)
+#endif
 }
 
 }  // namespace hk::sys

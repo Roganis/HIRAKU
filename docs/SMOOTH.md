@@ -10,7 +10,7 @@ third, the CRT beam, for a CRT's sharpness in motion rather than more pictures):
 | a clock (a hardware timer read each frame) | more vsyncs: the game draws more pictures (`[[rate]]` mods) | per game: docs/MODS.md | pop'n music 9-14 (Python) |
 | frames (each frame moves the notes a fixed step) | in-between pictures: HIRAKU draws them (`--smooth-motion`) | per core: every game on it | DJ Main, Firebeat, Twinkle, System 573 |
 | frames, on a Windows PC | in-between pictures: the game's own Direct3D draws them again, the notes moved (`--smooth-motion`) | the PC core (runtime/pc/) | beatmania IIDX RED to GOLD (9th style to EMPRESS) |
-| frames, its charts converted from milliseconds as they load | more vsyncs: the charts counted in half frames, the game at twice its rate (`[[rate]]` mod) | per game: docs/MODS.md | beatmania IIDX EMPRESS (a test) |
+| frames, its charts converted from milliseconds as they load | more vsyncs: the charts counted in half frames, the game at twice its rate (`[[rate]]` mod) | per game: docs/MODS.md | beatmania IIDX DJ TROOPERS, EMPRESS |
 
 To tell which one a game is: run its attract demo (or a play script) with the vsync at twice the
 rate. If the demo song takes the same number of frames (it plays twice as fast, out of step with
@@ -301,8 +301,8 @@ frame halved its charts are in half frames, and run at twice its rate it plays t
 speed, judging as on the cabinet (HIRAKU's DLL takes the lanes' distances back to whole frames).
 Every picture is then the game's own, the notes read and judged twice as often; the frame-counted
 rest (animations, effects, timers) is held to the cabinet's pace. Checked under Wine, then played on
-a 240 Hz display; for that one game so far (DJ TROOPERS converts its charts the same way, not done;
-9th style to GOLD store theirs in frames).
+a 240 Hz display. DJ TROOPERS, the same engine, has the same mod (`games/iidx15/mods/high-frame-rate`,
+checked the same way); 9th style to GOLD store their charts in frames.
 
 ## A CRT's motion clarity (`--crt-beam`)
 

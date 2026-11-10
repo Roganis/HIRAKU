@@ -403,6 +403,19 @@ attract demo, so its notes move twice as often at the same speed, in step with i
   windows of half the length would have halved them); the movies in time. Then played by the
   owner on a 240 Hz display (2026-11-09, smooth motion on as well): nothing found wrong.
 
+beatmania IIDX 15 DJ TROOPERS on the PC (`games/iidx15/mods/high-frame-rate`, 2026-11-10; the program
+of 2008031100) is EMPRESS's engine, done the same way: its charts are converted as they load at
+0x47c750 (the frame in 0x29c53f4), its position is 0x029ad048, and most of its places were found from
+EMPRESS's by the code around them, the rest by what they count. The rate is on in a song and in the
+attract demo (a HOW TO PLAY lesson that is a chart on autoplay). One counter EMPRESS's notes don't
+have: the cabinet's idle timer (0x27adf70, frames without a key or the turntable touched: a song
+ends after 40 s of it, a warning at 28 s) is held to the cabinet's pace, or an idle song ended
+after 20 s. Checked under Wine against the same song at 60 Hz: the same notes, bar lines, movie
+and gauge at the same moment; a song played to its end in 6,766 frames at both rates; an idle song
+ended at the same moment (2,555 and 2,557 frames); the judging windows the same in both
+(0x298d8e0: ±2, ±7, ±15 frames for the keys); the demo the same length and combos. Then played by
+the owner on a 240 Hz display (2026-11-10, display type B: 119.87 Hz): nothing found wrong.
+
 The Firebeat pop'n music (4-8) are another case (checked on pop'n 4, 2026-10-19, with the
 Firebeat core's frame period halved by hand): the attract demo's song lasts the same number of
 frames at twice the rate (about 2,400 at both), so its play goes by frames, not by a clock, and

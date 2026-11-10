@@ -1,0 +1,338 @@
+name = "High frame rate (120 Hz)"
+version = "0.1"
+game = "iidx15"
+description = "While a song plays (and the attract demo), the game runs at twice its rate (120 Hz on a 120 or 240 Hz display): its notes and bar lines move twice as often, its presses are read twice as often, and it judges as on the cabinet. The charts are counted in half frames; the judging takes them back to the cabinet's frames, so every window is as long as before. The animations, the effects and the timers keep the cabinet's pace. For the program of 2008031100. A song longer than 4 minutes 32 seconds can't be counted in half frames: don't play one with it."
+
+# DJ TROOPERS is EMPRESS's engine (games/iidx16/mods/high-frame-rate, docs/MODS.md): it counts
+# everything in frames, the song's position too, and converts its charts (in milliseconds) to frames
+# as a song loads (0x47c750, with the frame of the operator's DISPLAY TYPE: 16.6528 ms for A,
+# 16.6806 for B, kept in 0x029c53f4). Halved, the charts are in half frames and the game, at twice
+# its rate, plays them at the same speed; HIRAKU's DLL sees the halved frame and judges each press
+# with the lanes' distances taken back to whole frames. The places below were found from EMPRESS's
+# by the code around them (the hiraku-high-frame-rate skill's portpatches.py), each read again here.
+
+[[rate]]
+hz = "x2"                      # exactly twice the cabinet's rate (59.935 or 60.035 Hz, as the display type)
+while_changing = 0x029ad048    # the chart's position (frames from its start): while a chart plays (the
+                               # attract demo's HOW TO PLAY lesson too: a chart on autoplay)
+
+# --- the charts in half frames, and what the chart code counts with them
+
+[[patch]]
+# the charts' frame, DISPLAY TYPE A: 16.6528 ms -> 8.3264
+address = 0x0047c75e
+original = "ea388541"
+replace = "ea380541"
+
+[[patch]]
+# ... DISPLAY TYPE B: 16.6806 ms -> 8.3403
+address = 0x0047c76a
+original = "cd718541"
+replace = "cd710541"
+
+[[patch]]
+# a note missed 15 frames after its time -> 31 half frames (16 frames' worth, less one)
+address = 0x0047c0e2
+original = "83c20f"
+replace = "83c21f"
+
+[[patch]]
+# the longest chart: 18000 frames -> 36000 (here, its end looked for; below, its default)
+# (from 0x00487f3b)
+address = 0x0047b55b
+original = "50460000"
+replace = "a08c0000"
+
+[[patch]]
+# (from 0x00487f54)
+address = 0x0047b574
+original = "50460000"
+replace = "a08c0000"
+
+[[patch]]
+# (from 0x004894ce)
+address = 0x0047c8ee
+original = "50460000"
+replace = "a08c0000"
+
+[[patch]]
+# a note drawn up to 4 frames after its time -> 9
+# (from 0x00488e29)
+address = 0x0047c289
+original = "83c204"
+replace = "83c209"
+
+[[patch]]
+# a lane's coming note counted 21 frames before -> 43
+# (from 0x004890fa)
+address = 0x0047c54a
+original = "83f915"
+replace = "83f92b"
+
+[[patch]]
+# a note let go 60 frames after its time -> 121
+# (from 0x0048911f)
+address = 0x0047c56f
+original = "83c13c"
+replace = "83c179"
+
+[[patch]]
+# a lane's nearest note looked for up to 60 frames late -> 121
+# (from 0x004881b0)
+address = 0x0047b7e0
+original = "83fe3c"
+replace = "83fe79"
+
+[[patch]]
+# a turntable's move measured over 2 frames -> 4 (the ring's 8 entries: 6 ahead = 2 back, 4 = 4 back)
+# (from 0x0048835b)
+address = 0x0047b98b
+original = "83c206"
+replace = "83c204"
+
+[[patch]]
+# a turntable turned back within 4 frames is the same scratch -> 8
+# (from 0x004883d4)
+address = 0x0047ba04
+original = "83fa04"
+replace = "83fa08"
+
+[[patch]]
+# a failed stage ends 153 frames (of the chart's position) after the failure -> 306 half frames
+# (from 0x00467be6)
+address = 0x0045b10b
+original = "98000000"
+replace = "31010000"
+
+[[patch]]
+# a key's bomb, frame by frame (0-23)
+# (from 0x00465c6a)
+address = 0x00458d7e
+original = "41"
+replace = "90"
+between_ticks = true
+
+[[patch]]
+# a key's beam, counted down
+# (from 0x004664c8)
+address = 0x00459598
+original = "48"
+replace = "90"
+between_ticks = true
+
+[[patch]]
+# the effects' objects (judgements, combo...), each its frame
+# (from 0x0041d6a0)
+address = 0x0041bc10
+original = "66ff461e"
+replace = "90909090"
+between_ticks = true
+
+[[patch]]
+# the play screen's frame counter
+# (from 0x00469fe8)
+address = 0x0045d10f
+original = "ff0548d57a02"
+replace = "909090909090"
+between_ticks = true
+
+[[patch]]
+# the chart's frame counter (from its start)
+# (from 0x004892b0)
+address = 0x0047c700
+original = "ff05d8cd9a02"
+replace = "909090909090"
+between_ticks = true
+
+[[patch]]
+# the play screen's own counters (its phases' frames)
+# (from 0x0046a152)
+address = 0x0045d292
+original = "4642"
+replace = "9090"
+between_ticks = true
+
+[[patch]]
+# the stage's counter (its state machine)
+# (from 0x0048c715)
+address = 0x0047f8f5
+original = "ff0548229f02"
+replace = "909090909090"
+between_ticks = true
+
+[[patch]]
+# the scenes' frame counter
+# (from 0x004775ea)
+address = 0x00468a8a
+original = "42"
+replace = "90"
+between_ticks = true
+
+[[patch]]
+# the play screen's frame counter (one phase)
+# (from 0x00467c9c)
+address = 0x0045b17c
+original = "40"
+replace = "90"
+between_ticks = true
+
+[[patch]]
+# the play screen's frame counter (another phase)
+# (from 0x00467dae)
+address = 0x0045d3a5
+original = "41"
+replace = "90"
+between_ticks = true
+
+[[patch]]
+# the demo screen's fades
+# (from 0x0046a821)
+address = 0x0045d96b
+original = "ff05e0e57a02"
+replace = "909090909090"
+between_ticks = true
+
+[[patch]]
+# a 180-frame timer
+# (from 0x0048e4f8)
+address = 0x00481608
+original = "40"
+replace = "90"
+between_ticks = true
+
+[[patch]]
+# a 180-frame timer (another)
+# (from 0x0047c138)
+address = 0x0046e738
+original = "40"
+replace = "90"
+between_ticks = true
+
+[[patch]]
+# a counter beside the 180-frame timer
+# (from 0x0047c8f0)
+address = 0x0046ef3d
+original = "42"
+replace = "90"
+between_ticks = true
+
+[[patch]]
+# the turntables' pictures turning (two counters)
+# (from 0x00455b4d)
+address = 0x0044eafa
+original = "4140"
+replace = "9090"
+between_ticks = true
+
+[[patch]]
+# the turntables' pictures (another screen)
+# (from 0x00453ee6)
+address = 0x0044e616
+original = "40"
+replace = "90"
+between_ticks = true
+
+[[patch]]
+# a 30-frame countdown
+# (from 0x0048c0e7)
+address = 0x0047f2c7
+original = "48"
+replace = "90"
+between_ticks = true
+
+[[patch]]
+# every animated object in the engine's list, its frame stepped after it's drawn
+# (from 0x00405642)
+address = 0x004050da
+original = "40"
+replace = "90"
+between_ticks = true
+
+# --- held to the cabinet's pace: found in DJ TROOPERS itself (EMPRESS's equivalents didn't match by
+# the code around them), each the increment of a counter EMPRESS holds too
+
+[[patch]]
+# the demo screen's own counter (its phases' frames; the play screen's is held above)
+address = 0x0045d69b
+original = "42"
+replace = "90"
+between_ticks = true
+
+[[patch]]
+# a key's press, frame by frame (its picture)
+address = 0x0045cc21
+original = "41"
+replace = "90"
+between_ticks = true
+
+[[patch]]
+# the screens' frame counter (0x027ad548), its other steps: a 60-frame phase
+address = 0x0045b283
+original = "40"
+replace = "90"
+between_ticks = true
+
+[[patch]]
+# ... the play screen's
+address = 0x0045d52c
+original = "40"
+replace = "90"
+between_ticks = true
+
+[[patch]]
+# ... a loading timeout (3000 frames: SD LOAD TIMEOUT)
+address = 0x0045d7a5
+original = "40"
+replace = "90"
+between_ticks = true
+
+[[patch]]
+# ... the demo screen's
+address = 0x0045d938
+original = "ff0548d57a02"
+replace = "909090909090"
+between_ticks = true
+
+[[patch]]
+# the screen's frame counter (its fades; 0x027ae5e0)
+address = 0x0045d596
+original = "40"
+replace = "90"
+between_ticks = true
+
+[[patch]]
+# a background effect's frames (at random times)
+address = 0x00453f52
+original = "66ff0524c37a02"
+replace = "90909090909090"
+between_ticks = true
+
+[[patch]]
+# ... and its other counter
+address = 0x00453f59
+original = "66ff052ac37a02"
+replace = "90909090909090"
+between_ticks = true
+
+[[patch]]
+# a lamp blinking (60 frames)
+address = 0x00409597
+original = "40"
+replace = "90"
+between_ticks = true
+
+[[patch]]
+# the lamps' frame counter
+address = 0x00409669
+original = "40"
+replace = "90"
+between_ticks = true
+
+[[patch]]
+# the time without a key or the turntable touched (frames, 0x027adf70): a song ends after 2400 (40 s)
+# and warns at 1680; a time, not the chart's: at the cabinet's pace (at 120 Hz an idle song ended
+# after 20 s)
+address = 0x0045bb76
+original = "42"
+replace = "90"
+between_ticks = true

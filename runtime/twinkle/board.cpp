@@ -926,6 +926,10 @@ void save_nvram() {
     k573::mips::finish();
 }
 
+void save_nvram_now() {
+    if (g.machine) g.machine->nvram_save_now();
+}
+
 double seconds() { return g.machine ? g.machine->m_basetime.as_double() : 0.0; }
 uint64_t frame_count() { return g.frames; }
 const std::string &family() { return g.cfg.family; }

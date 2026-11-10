@@ -58,7 +58,7 @@ void Flash29F016A::write(uint32_t off, uint8_t v) {
         break;
     case Mode::program:
         data_[off] &= v;   // programming can only clear bits
-        dirty = true;
+        dirty = unsaved = true;
         mode_ = Mode::normal;
         break;
     case Mode::erase1:
@@ -70,12 +70,12 @@ void Flash29F016A::write(uint32_t off, uint8_t v) {
     case Mode::erase3:
         if (v == 0x10 && a == 0x555) {                           // chip erase
             std::fill(data_.begin(), data_.end(), 0xff);
-            dirty = true;
+            dirty = unsaved = true;
             start_erase(16);
         } else if (v == 0x30) {                                  // sector erase (64 KiB)
             uint32_t base = off & ~0xffffu;
             std::fill(data_.begin() + base, data_.begin() + base + 0x10000, 0xff);
-            dirty = true;
+            dirty = unsaved = true;
             start_erase(1);
         }
         mode_ = Mode::normal;

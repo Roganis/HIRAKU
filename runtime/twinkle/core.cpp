@@ -110,6 +110,7 @@ public:
     void set_on_fatal(std::function<void()> f) override { on_fatal_ = std::move(f); }
     [[noreturn]] void run() override { twinkle::run(); }
     void shutdown() override { twinkle::save_nvram(); }
+    void save_now() override { twinkle::save_nvram_now(); }
     void report() override {
         printf("frames %llu, virtual time %.3f s, pc %08x, 68000 pc %06x, %llu lamp changes, display [%s]\n",
                (unsigned long long)twinkle::frame_count(), twinkle::seconds(), twinkle::pc(), twinkle::audio_pc(),

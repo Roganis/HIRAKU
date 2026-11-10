@@ -2,6 +2,7 @@
 // HIRAKU: the MAME framework subset declared in emu.h.
 #include "emu.h"
 #include "core/prof.h"
+#include "shell/saves.h"
 #include "shell/sys.h"
 
 #include <ctime>
@@ -1074,24 +1075,69 @@ void running_machine::nvram_load() {
         if (nv->nvram_backup_enabled() && !m_nvram_dir.empty()) f = fopen((m_nvram_dir + "/" + nvram_filename(*d)).c_str(), "rb");
         if (f) {
             file_read_stream st(f);
-            if (!nv->nvram_load(st)) fprintf(stderr, "error reading NVRAM file %s\n", nvram_filename(*d).c_str());
+            const bool read = nv->nvram_load(st);
+            if (!read) fprintf(stderr, "error reading NVRAM file %s\n", nvram_filename(*d).c_str());
             fclose(f);
+            // what the folder has of it: the memory as it would be written now (a save writes only
+            // what is no longer that)
+            if (read && nv->nvram_can_save()) {
+                memory_write_stream now;
+                nv->nvram_save(now);
+                m_nvram_kept[nvram_filename(*d)] = {hk::saves::hash(now.data), now.data.size()};
+            }
         } else {
             nv->nvram_reset();
         }
     }
 }
 
-void running_machine::nvram_save() {
-    if (m_nvram_dir.empty()) return;
+// The memories that aren't what the save folder has, as files. all: every one looked at; else the
+// large ones only if a board said one was written
+void running_machine::nvram_changed(std::vector<std::pair<std::string, std::string>> &out, bool all) {
+    constexpr size_t LARGE = 0x40000;
+    // a set the writer couldn't write: nothing is known of the folder any more
+    if (const unsigned failed = hk::saves::writer().failed(); failed != m_nvram_failed) {
+        m_nvram_failed = failed;
+        m_nvram_kept.clear();
+        all = true;
+    }
+    const bool large = all || m_nvram_large_written;
+    m_nvram_large_written = false;
     for (device_t *d : m_devices) {
         auto *nv = dynamic_cast<device_nvram_interface *>(d);
         if (!nv || !nv->nvram_can_save()) continue;
-        // whole or not at all (hk::sys::write_file): a full or failing disk, or a kill half way, keeps
-        // the file from before (a 573's installed game is in these)
-        std::string path = m_nvram_dir + "/" + nvram_filename(*d);
+        const std::string name = nvram_filename(*d);
+        const auto kept = m_nvram_kept.find(name);
+        if (!large && kept != m_nvram_kept.end() && kept->second.size >= LARGE) continue;
         memory_write_stream st;
         nv->nvram_save(st);
-        if (!hk::sys::write_file(path, st.data)) fprintf(stderr, "cannot write %s: the one from before is kept\n", path.c_str());
+        const uint64_t h = hk::saves::hash(st.data);
+        if (kept != m_nvram_kept.end() && kept->second.hash == h && kept->second.size == st.data.size()) continue;
+        m_nvram_kept[name] = {h, st.data.size()};
+        out.emplace_back(name, std::move(st.data));
+    }
+}
+
+void running_machine::nvram_save_now() {
+    if (m_nvram_dir.empty()) return;
+    std::vector<std::pair<std::string, std::string>> changed;
+    nvram_changed(changed, false);
+    std::vector<hk::saves::File> set;
+    for (auto &[name, data] : changed) set.push_back({name, std::move(data)});
+    hk::saves::writer().write(m_nvram_dir, std::move(set));
+}
+
+void running_machine::nvram_save() {
+    if (m_nvram_dir.empty()) return;
+    hk::saves::writer().drain();   // (a set still being written: its files first)
+    std::vector<std::pair<std::string, std::string>> changed;
+    nvram_changed(changed, true);
+    std::vector<hk::saves::File> set;
+    for (auto &[name, data] : changed) set.push_back({name, std::move(data)});
+    // whole or not at all (hk::saves::write_set): a full or failing disk, or a kill half way, keeps
+    // the files from before, all of them (a 573's installed game is in these)
+    if (!hk::saves::write_set(m_nvram_dir, set)) {
+        m_nvram_kept.clear();
+        fprintf(stderr, "cannot write the machine's saved memories to %s: the ones from before are kept\n", m_nvram_dir.c_str());
     }
 }

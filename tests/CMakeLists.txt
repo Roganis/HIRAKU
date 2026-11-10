@@ -134,6 +134,13 @@ set_tests_properties(pc_game_process PROPERTIES TIMEOUT 120)
 add_executable(test_write_file sys/test_write_file.cpp)
 target_link_libraries(test_write_file PRIVATE hiraku_sys)
 add_test(NAME save_write_file COMMAND test_write_file)
+# A machine's saved memories written while a game is played (runtime/shell/saves.h): a set of files is
+# the folder's whole or not at all, however the program ends
+add_executable(test_saves sys/test_saves.cpp)
+target_include_directories(test_saves PRIVATE ${CMAKE_SOURCE_DIR}/runtime)
+target_link_libraries(test_saves PRIVATE hiraku_sys)
+add_test(NAME save_sets COMMAND test_saves)
+set_tests_properties(save_sets PROPERTIES TIMEOUT 120)
 # A file one process has until it ends (runtime/shell/sys.h, lock_file): a PC game's save folder
 add_executable(test_lock_file sys/test_lock_file.cpp)
 target_include_directories(test_lock_file PRIVATE ${CMAKE_SOURCE_DIR}/runtime)

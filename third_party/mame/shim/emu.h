@@ -1868,9 +1868,20 @@ public:
     // NVRAM files (MAME's nvram_load/nvram_save), named as MAME names them; "" = none
     std::string m_nvram_dir;
     void nvram_load();
-    void nvram_save();
+    void nvram_save();       // at exit: every memory looked at, those that changed written, and waited for
+    // While a game is played (HIRAKU's, shell/saves.h): the memories that changed since they were last
+    // written, as they are at this moment, handed to the writer thread as one set. The small ones
+    // (clock chips, EEPROMs) are looked at each time; the large ones (flash chips, 2 MiB each and
+    // 50 MB of them on a 573) only after the board said one was written (m_nvram_large_written):
+    // looking at them all takes the time of a frame.
+    void nvram_save_now();
+    bool m_nvram_large_written = false;
     std::function<void()> m_after_nvram_load;   // run after nvram_load at start (MAME sets the RTCs there)
     static std::string nvram_filename(device_t &dev);
+    struct nvram_kept { uint64_t hash; size_t size; };
+    std::map<std::string, nvram_kept> m_nvram_kept;   // by file: what the save folder has (unknown: not there)
+    unsigned m_nvram_failed = 0;                      // the writer's failures seen so far
+    void nvram_changed(std::vector<std::pair<std::string, std::string>> &out, bool all);
     void timeslice();
     emu_timer *synchronize(std::function<void(s32)> cb, s32 param = 0);
     void abort_timeslice();

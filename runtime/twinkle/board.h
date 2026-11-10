@@ -71,6 +71,7 @@ const uint32_t *render_between(double t, int &w, int &h);
 void set_audio_sink(AudioSink s);
 [[noreturn]] void run();
 void save_nvram();
+void save_nvram_now();   // while playing: what changed, handed to the writer thread (shell/saves.h)
 
 double seconds();
 uint64_t frame_count();

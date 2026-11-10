@@ -101,11 +101,16 @@
 //                       Default with --window: ~/.local/share/hiraku/<game> (a portable install's
 //                       user/data/<game>: shell/userdir.h); otherwise none (every run starts from
 //                       the ROM set's defaults, so scripted runs are reproducible)
+//     --save-every S    ... and saved while the game is played, every S seconds, when it changed
+//                       (shell/saves.h): a crash or a power cut costs seconds, not the session.
+//                       Default with --window: 15; otherwise 0, at exit only. The game's results
+//                       are the same either way
 //   plus the core's own options (--help lists them).
 //
 // The machine is described by dumps/<game>/machine.txt and dumps/<game>/rom/,
 // both written by tools/ingest.py from the user's own dumps.
 
+#include <chrono>
 #include <algorithm>
 #include <atomic>
 #include <csignal>
@@ -126,6 +131,7 @@
 #include "shell/built.h"
 #include "shell/core.h"
 #include "shell/userdir.h"
+#include "shell/saves.h"
 #include "shell/sys.h"
 #ifdef HK_WITH_SDL
 #include "host/lights.h"
@@ -308,6 +314,7 @@ int main(int argc, char **argv) {
     float beam_gamma = 2.2f, beam_gain = 0.7f;
     std::string lights_log_path;
     bool nvram_given = false;
+    double save_every = -1;   // (not given: 15 s in a window)
     int audio_ms = 8, audio_buffer = 0;
     bool audio_fixed = false, normal_priority = false;
     std::string audio_device;
@@ -356,6 +363,7 @@ int main(int argc, char **argv) {
         else if (a == "--lights-overlay") lights_overlay = true;
         else if (a == "--lights-log") lights_log_path = val();
         else if (a == "--nvram") { nvram_dir = val(); nvram_given = true; }
+        else if (a == "--save-every") save_every = std::stod(val());
         else if (a == "--audio-ms") audio_ms = std::stoi(val());
         else if (a == "--audio-fixed") audio_fixed = true;
         else if (a == "--normal-priority") normal_priority = true;
@@ -400,7 +408,10 @@ int main(int argc, char **argv) {
     if (!nvram_dir.empty()) {
         mkdirs(nvram_dir);
         printf("nvram: %s\n", nvram_dir.c_str());
+        hk::saves::recover(nvram_dir);   // (a save cut short by a kill or a power cut: finished or dropped, before it is read)
     }
+    if (save_every < 0) save_every = window_scale ? 15 : 0;
+    if (nvram_dir.empty()) save_every = 0;
 
     FILE *wav = nullptr;
     uint64_t wav_frames = 0;
@@ -564,8 +575,15 @@ int main(int argc, char **argv) {
             host::window_present(rgb, w, h, machine.seconds());
         });
 #endif
+    auto last_save = std::chrono::steady_clock::now();
     machine.set_frame_hook([&](uint64_t f, const uint32_t *rgb, int w, int h) {
         frame_times.frame(f);
+        // the machine's saved memories, every so often (the core hands what changed to another thread)
+        if (save_every > 0)
+            if (const auto t = std::chrono::steady_clock::now(); std::chrono::duration<double>(t - last_save).count() >= save_every) {
+                last_save = t;
+                machine.save_now();
+            }
         if (digest)
             fprintf(digest, "%llu %016llx %016llx\n", (unsigned long long)f,
                     (unsigned long long)hash_words(HASH_SEED, rgb, (size_t)w * h), (unsigned long long)audio_hash);

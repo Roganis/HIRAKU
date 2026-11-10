@@ -47,6 +47,7 @@ void turntable_add(int player, int delta);
 void note_input_change();
 uint64_t last_input_change();
 void shutdown();                       // flush NVRAM and traces
+void save_now();                       // while playing: the saved memories that changed, to the writer thread (shell/saves.h)
 Inputs &inputs();
 
 // Called at the start of each vertical blank, with the composed frame.

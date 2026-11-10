@@ -19,7 +19,8 @@ public:
     uint8_t read(uint32_t offset);
     void write(uint32_t offset, uint8_t v);
     std::vector<uint8_t> &data() { return data_; }
-    bool dirty = false;
+    bool dirty = false;     // written at all in this run
+    bool unsaved = false;   // ... since its owner last saved it (cleared by the owner)
     // the owner's clock and its rate; without one, erases complete at once
     std::function<uint64_t()> clock;
     uint64_t clock_hz = 0;

@@ -28,6 +28,7 @@
 #include "../dev/ymz280b.h"
 #include "../spu/spu.h"
 #include "../shell/cabinet.h"
+#include "../shell/saves.h"
 #include "../shell/sys.h"
 #include "spectrum.h"
 #include "synth.h"
@@ -827,6 +828,35 @@ void init(const Config &cfg) {
     g_ymz_tick.in(ticks_from_us(2000));
 }
 
+// The saved memories that aren't what the save folder has, as they are at this moment
+// (shell/saves.h): the clock chip with its RAM (its clock makes it another every second), and each
+// flash chip written since it was last saved
+static uint64_t g_rtc_kept = 0;
+static bool g_rtc_known = false;
+static unsigned g_saves_failed = 0;
+
+static std::vector<saves::File> changed_saves() {
+    // a set the writer couldn't write: nothing is known of the folder any more
+    if (const unsigned failed = saves::writer().failed(); failed != g_saves_failed) {
+        g_saves_failed = failed;
+        g_rtc_known = false;
+        for (int k = 0; k < 3; k++) g_flash[k].unsaved = g_flash[k].dirty;
+    }
+    std::vector<saves::File> set;
+    std::string rtc = g_rtc->save_nvram();
+    if (const uint64_t h = saves::hash(rtc); !g_rtc_known || h != g_rtc_kept) {
+        g_rtc_kept = h, g_rtc_known = true;
+        set.push_back({"rtc.nv", std::move(rtc)});
+    }
+    for (int k = 0; k < 3; k++) {
+        if (!g_flash[k].unsaved) continue;
+        g_flash[k].unsaved = false;
+        const auto &d = g_flash[k].data();
+        set.push_back({"flash" + std::to_string(k) + ".bin", std::string(d.begin(), d.end())});
+    }
+    return set;
+}
+
 void shutdown() {
     static bool done = false;
     if (done) return;
@@ -837,16 +867,18 @@ void shutdown() {
     if (g_trace.f) fclose(g_trace.f);
     g_trace.f = nullptr;
     if (!g_cfg.nvram_dir.empty()) {
-        // each whole or not at all (sys::write_file): a full or failing disk keeps the save from before
-        const auto save = [](const std::string &name, const void *d, size_t n) {
-            const std::string path = g_cfg.nvram_dir + "/" + name;
-            if (!sys::write_file(path, d, n)) fprintf(stderr, "board: cannot write %s: the one from before is kept\n", path.c_str());
-        };
-        const std::string rtc = g_rtc->save_nvram();
-        save("rtc.nv", rtc.data(), rtc.size());
-        for (int k = 0; k < 3; k++)
-            if (g_flash[k].dirty) save("flash" + std::to_string(k) + ".bin", g_flash[k].data().data(), 0x200000);
+        // all whole or none (saves::write_set): a full or failing disk, or a kill half way, keeps the
+        // save from before
+        saves::writer().drain();   // (a set still being written: its files first)
+        if (!saves::write_set(g_cfg.nvram_dir, changed_saves())) {
+            g_rtc_known = false;
+            fprintf(stderr, "board: cannot write the saved memories to %s: the ones from before are kept\n", g_cfg.nvram_dir.c_str());
+        }
     }
+}
+
+void save_now() {
+    if (!g_cfg.nvram_dir.empty() && g_rtc) saves::writer().write(g_cfg.nvram_dir, changed_saves());
 }
 
 void note_input_change() { g_last_input = now(); }

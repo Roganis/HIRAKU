@@ -64,6 +64,10 @@ public:
 
     [[noreturn]] virtual void run() = 0;
     virtual void shutdown() = 0;        // flush NVRAM and traces (before exiting)
+    // The machine's saved memories written if they changed since they were last (shell/saves.h). The
+    // shell calls it every so often while a game is played (--save-every), from the frame hook: a
+    // crash or a power cut then costs seconds, not the session. The writing is another thread's.
+    virtual void save_now() {}
     virtual void report() = 0;          // run statistics, one stdout line each
     virtual int exit_code() const { return 0; }   // non-zero if the run found a fault
     virtual void debug_line(uint64_t /*frame*/) {}  // --debug-every: one line of CPU state

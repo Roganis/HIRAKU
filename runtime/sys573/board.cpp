@@ -592,6 +592,7 @@ u16 sys573_state::flash_r(offs_t offset, u16 mem_mask) {
 }
 
 void sys573_state::flash_w(offs_t offset, u16 data, u16 mem_mask) {
+    machine().m_nvram_large_written = true;   // (the flash chips are looked at again at the next save while playing)
     const u32 a = (u32)(m_control & 0x3f) * 0x400000 + offset * 2;
     if (a < 0x1000000) {
         const int pair = (int)(a >> 22) * 2;
@@ -1219,6 +1220,10 @@ void save_nvram() {
     if (g.machine) g.machine->nvram_save();
     g_cards.save();
     mips::finish();
+}
+
+void save_nvram_now() {
+    if (g.machine) g.machine->nvram_save_now();
 }
 
 double seconds() { return g.machine ? g.machine->m_basetime.as_double() : 0.0; }

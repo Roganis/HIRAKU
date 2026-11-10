@@ -182,6 +182,7 @@ public:
     void set_on_fatal(std::function<void()> f) override { on_fatal_ = std::move(f); }
     [[noreturn]] void run() override { k573::run(); }
     void shutdown() override { k573::save_nvram(); }
+    void save_now() override { k573::save_nvram_now(); }
     void report() override {
         printf("frames %llu, virtual time %.3f s, pc %08x, %llu lamp changes\n", (unsigned long long)k573::frame_count(),
                k573::seconds(), k573::pc(), (unsigned long long)k573::lamp_changes());

@@ -220,6 +220,7 @@ public:
     }
 
     void shutdown() override { fb::shutdown(); }
+    void save_now() override { fb::save_now(); }
 
     void report() override {
         printf("frames %llu, virtual time %.3f s, %llu interpreted insns, %llu native calls, %llu exceptions "

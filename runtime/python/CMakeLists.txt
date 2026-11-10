@@ -30,6 +30,7 @@ add_library(hk_python_shell STATIC
 	${HK_PY_BUILD_ID}
 	${HK}/runtime/shell/cabinet.cpp
 	${HK}/runtime/shell/sys.cpp
+	${HK}/runtime/shell/saves.cpp
 	${HK}/runtime/shell/net.cpp
 	${HK}/runtime/shell/overlay.cpp
 	${HK}/runtime/host/hiddesc.cpp

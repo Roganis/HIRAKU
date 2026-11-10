@@ -185,6 +185,20 @@ void pc64_touch(int x, int y) {
     event(w, x, y, TOUCHEVENTF_UP);
 }
 
+// A touch kept on the sub screen at (x, y) of its 1280x800 while HELD says so, MS at most (a button
+// that wants to be pressed and held)
+void pc64_touch_while(int x, int y, int (*held)(void), int ms) {
+    HWND w = sub_screen();
+    if (!w) return;
+    client_point(w, x, y, &x, &y);
+    event(w, x, y, TOUCHEVENTF_DOWN | TOUCHEVENTF_INRANGE);
+    for (int t = 0; t < ms && held(); t += 33) {
+        Sleep(33);
+        event(w, x, y, TOUCHEVENTF_MOVE | TOUCHEVENTF_INRANGE);
+    }
+    event(w, x, y, TOUCHEVENTF_UP);
+}
+
 // A drag on the sub screen from (x0, y0) to (x1, y1) of its 1280x800: down, moved in steps over 0.3 s,
 // held still a moment (no fling), up
 void pc64_drag(int x0, int y0, int x1, int y1) {

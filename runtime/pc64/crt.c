@@ -9,7 +9,10 @@
 //   - No touch screen and no view of it: what the player needs of it (a menu, the PIN typed) is
 //     shown over the main screen's picture, its part of the touch screen (display.c), the item the
 //     buttons are on marked.
-//   - A new card's terms (after its PIN): button 5 touches YES, then OK; then its name (below).
+//   - A new card's terms (after its PIN) and its name's question: the game takes blue (4, 6) for
+//     their YES and NO itself; their box is shown under the main screen's text, the answer chosen
+//     marked; button 5 touches OK (YES first, if the terms have no answer chosen yet). Then its name
+//     (below).
 //     A card's data shown: button 5 touches OK.
 //   - HI-SPEED on buttons 4 (down) and 6 (up) at the options (held: again every 0.2 s), the option
 //     editor opened first when it isn't (the main screen then shows the game's preview).
@@ -27,6 +30,16 @@
 //     next, red the one chosen, then the same for its choices (letters, levels, versions..., found
 //     on the picture; the list dragged on past its last row, the cursor's choice found again after
 //     by its label). Each touch is checked on the picture and made again if the game let it go.
+//     The options' menu shows the option's own column beside the lanes and its line of help above
+//     them: the main screen previews the option on the lanes and lists every option's value.
+//   - During a song, on the 10-key: a column for each of the touch screen's two sliders, as they
+//     stand there (the switch at the foot, the arrows above): 1 switches SUDDEN on or off, 4 is its
+//     down arrow and 7 its up arrow, touched for as long as the key is held (the game steps the
+//     value once, then some 14 a second); 2, 5 and 8 the same for HIDDEN; 9 held is RETIRE (pressed
+//     and held there).
+//   - The event after the last stage, played with the big buttons: the buttons left of the middle
+//     and the middle one are the big red one, those right of it the big blue one; on its touch
+//     screen, button 5 its SKIP and OK, buttons 4 and 6 its choice's arrows.
 //   - The play screen's characters, smaller and in the 4:3 picture's side columns (as pop'n's 4:3
 //     games have them): the game moves each to its place each frame (AFP's layer position, which
 //     popn.dll imports by ordinal); for its characters' layers the whole matrix is set instead. Their
@@ -66,6 +79,11 @@ static const struct place EDIT_OPTIONS = {653, 623}, SPEED_UP = {362, 87}, SPEED
 static const struct place YES = {393, 450}, ENTRY_OK = {645, 744};   // a new card's terms (YES, then OK), a card's data (OK)
 #define START_X 640                      // the options' START
 #define START_Y 738
+#define PLAY 34                          // a song: the touch screen's HIDDEN and SUDDEN sliders (their labels switch them) and RETIRE
+static const struct place PLAY_HIDDEN = {528, 648}, PLAY_SUDDEN = {748, 648}, PLAY_RETIRE = {982, 110};   // (RETIRE beside its letters)
+#define EVENT 33                         // the event after the last stage: played with the big buttons
+// (its SKIP is touched beside its letters: a touch on them does nothing)
+static const struct place EVENT_SKIP = {420, 440}, EVENT_LEFT = {340, 414}, EVENT_RIGHT = {890, 414}, EVENT_OK = {640, 742};
 
 // The characters (1080-line coordinates): scaled by CHARA_SCALE about a point at the bottom of the
 // 16:9 picture's side columns (x 300 and 1620), that point moved into the 4:3 picture's (x 427 and
@@ -89,9 +107,11 @@ int pc64_crt(void) {
 
 // The touches, made on a thread of their own (a touch takes 160 ms: the board's reads go on):
 // sequences of up to four in turn, a second between (a list opened, then a choice in it): touches,
-// drags, or a button pressed for the game (PRESS: a.x its number); a few sequences waiting their
-// turn (the buttons pressed quicker than the touches go)
-enum { TOUCH, DRAG, PRESS };
+// drags, a touch held (HOLD), or a button pressed for the game (PRESS: a.x its number); a few
+// sequences waiting their turn (the buttons pressed quicker than the touches go)
+enum { TOUCH, DRAG, PRESS, HOLD };
+static int hold_held(void);
+static volatile unsigned g_hold_keys;   // a touch held (HOLD: b.x): the 10-key's keys that keep it
 struct act { struct place a, b; int drag; DWORD wait; };
 struct seq { struct act acts[4]; int count; };
 #define QUEUE 8
@@ -110,6 +130,9 @@ static DWORD WINAPI toucher(void *unused) {
                 if (i) Sleep(q.acts[i].wait);
                 if (q.acts[i].drag == DRAG) {
                     pc64_drag(q.acts[i].a.x, q.acts[i].a.y, q.acts[i].b.x, q.acts[i].b.y);
+                } else if (q.acts[i].drag == HOLD) {   // (RETIRE, a slider's arrow: held as long as its key is)
+                    g_hold_keys = (unsigned)q.acts[i].b.x;
+                    pc64_touch_while(q.acts[i].a.x, q.acts[i].a.y, hold_held, 8000);
                 } else if (q.acts[i].drag == PRESS) {
                     pc64_held |= PC64_IN_BUTTON(q.acts[i].a.x);
                     Sleep(120);
@@ -153,6 +176,7 @@ static void touch_soon(int count, struct place a, struct place b) {
 static volatile int g_cx = 640, g_cy = 400;
 
 #define KEY(n) (1u << (n))           // the 10-key's digits (runtime/pc/link.h)
+static int hold_held(void) { return pc64_scene == PLAY && (pc64_link_keypad() & g_hold_keys) != 0; }
 #define MENU_BUTTONS (PC64_IN_BUTTON(1) | PC64_IN_BUTTON(2) | PC64_IN_BUTTON(3) | PC64_IN_BUTTON(4) | PC64_IN_BUTTON(5) | \
                       PC64_IN_BUTTON(6) | PC64_IN_BUTTON(7) | PC64_IN_BUTTON(8) | PC64_IN_BUTTON(9))
 
@@ -173,6 +197,7 @@ static DWORD g_menu_at;       // the choices: when their category was touched; a
 static int g_dragged;         // the choices: dragged by (pixels, up < 0), the cursor to be put after it
 static int g_steps;           // the choices: blue's steps pressed while the list was moving
 static int g_closing;         // the choice touched: the menu closes once it has taken
+static volatile DWORD g_options_from;   // the options' panel shown from then (the editor's page up)
 static const struct place EDIT_FULL = {133, 609}, CLOSE = {117, 107};
 static const int FULL_PAGE_X = 328, FULL_PAGE_Y[4] = {206, 307, 408, 509};   // サポート, アレンジ, エリア, ガイド
 #define CHOICE_Y_4 {142, 267, 392, 517}
@@ -287,6 +312,18 @@ static int off_label(const struct option *o) {
 
 static void cursor_to(struct place p) { g_cx = p.x, g_cy = p.y; }
 
+// The option editor's line about the option at its top (dark blue words on white; empty until one of
+// the option's values has been touched)
+static int help_seen(void) {
+    int dark = 0;
+    for (int y = 22; y <= 34; y += 6)
+        for (int x = 320; x <= 1200; x += 6) {
+            const uint32_t p = sub_px(x, y);
+            dark += (p >> 16 & 255) < 110 && (p >> 8 & 255) < 110;
+        }
+    return dark >= 6;
+}
+
 static void options_menu_show(void) {
     const struct option *o = &OPTIONS_LIST[g_item];
     cursor_to((struct place){o->x, OPTION_LABEL_Y});
@@ -298,7 +335,12 @@ static void options_menu_show(void) {
         const struct place page = {FULL_PAGE_X, FULL_PAGE_Y[o->page]};
         acts[n++] = (struct act){page, page, TOUCH, 500};
     }
-    if (n && run_acts(acts, n)) g_editing = 1, g_page = o->page;
+    if (n && run_acts(acts, n)) {
+        // its panel once the page is up: the touches (160 ms each), their waits, the page's coming in
+        DWORD wait = 350;
+        for (int i = 0; i < n; i++) wait += 160 + (i ? acts[i].wait : 0);
+        g_editing = 1, g_page = o->page, g_options_from = GetTickCount() + wait;
+    }
     pc64_log("crt: the options' %s", o->name);
 }
 static void option_change(int up) {
@@ -449,7 +491,9 @@ static int checking(void) {
 // (the one it shows chosen, else the first, touched); given up if a screen isn't seen in time
 static volatile int g_auto;      // the step: 0 none, 1 the header, 2 the panel, 3 the letters
 static DWORD g_auto_at;          // the step's start
-int pc64_crt_wants_sub(void) { return g_auto != 0 || g_menu != 0 || pc64_scene == MUSIC_SELECT || pc64_scene == ENTRY; }
+int pc64_crt_wants_sub(void) {
+    return g_auto != 0 || g_menu != 0 || pc64_scene == MUSIC_SELECT || pc64_scene == ENTRY || pc64_scene == EVENT;
+}
 static void auto_index(void) {
     const DWORD now = GetTickCount(), since = now - g_auto_at;
     if (g_sub_at < g_auto_at + 200 || checking()) return;   // a picture since the step began; a touch's screen
@@ -541,15 +585,31 @@ static int keyboard_seen(void) {
     return yellow(sub_px(KEYS_X(0) - 27, KEY_Y[0] - 20)) && yellow(sub_px(KEYS_X(9) - 27, KEY_Y[4] - 20)) &&
            yellow(sub_px(KEYS_X(4) - 27, KEY_Y[3] - 20));
 }
-// The terms' question (its YES red, its NO dark blue); an OK at the foot (the terms' once YES is
-// touched, the name's question's, a card's data's)
-static int terms_seen(void) {
-    const uint32_t y = sub_px(340, 450), n = sub_px(870, 450);
-    return (y >> 16 & 255) > 200 && (y >> 8 & 255) < 100 && (n >> 16 & 255) < 40 && (n >> 8 & 255) < 40 && (n & 255) < 70;
+// A question with YES and NO (the terms', the name's): its box (pink between its buttons, its yellow
+// bar), whichever of them is chosen; the one the game shows chosen (bigger and brighter: YES's red,
+// NO's blue), 1 YES, 2 NO, 0 neither yet. The game takes blue (4, 6) for them itself, and then shows
+// an OK at the foot (the terms' once one is chosen, the name's from the start, a card's data's).
+static int question_seen(void) {
+    const uint32_t m = sub_px(640, 445), b = sub_px(1040, 290);
+    return (m >> 16 & 255) > 235 && (m >> 8 & 255) > 85 && (m >> 8 & 255) < 125 && (m & 255) > 100 && (m & 255) < 140 &&
+           (b >> 16 & 255) > 225 && (b >> 8 & 255) > 205 && (b & 255) > 85 && (b & 255) < 135;
+}
+static int answer_chosen(void) {
+    const uint32_t y = sub_px(340, 450), n = sub_px(760, 445);
+    return (y >> 16 & 255) > 230 && (y >> 8 & 255) < 80 ? 1 : (n & 255) > 240 && (n >> 16 & 255) < 110 ? 2 : 0;
 }
 static int ok_seen(void) {
     const uint32_t p = sub_px(560, 745);
     return (p >> 16 & 255) > 200 && (p >> 8 & 255) < 100 && (p & 255) < 120;
+}
+// The event's first screen: its SKIP button (red, the touch screen's middle; its ends and above its letters)
+static int skip_seen(void) {
+    static const struct place ENDS[3] = {{330, 480}, {950, 480}, {640, 385}};
+    for (int i = 0; i < 3; i++) {
+        const uint32_t p = sub_px(ENDS[i].x, ENDS[i].y);
+        if (!((p >> 16 & 255) > 200 && (p >> 8 & 255) < 110 && (p & 255) < 130)) return 0;
+    }
+    return 1;
 }
 
 // The PIN pad up (its keys' yellow)
@@ -560,16 +620,23 @@ static int pad_seen(void) {
     return 1;
 }
 
-// What's shown over the main screen (display.c, at each of its pictures): the open menu's part of the
-// touch screen, the item it's on marked (the options: the FULL OPTION editor's columns at half size,
-// the option's; the music select: the panel at 0.55, its button), or the PIN pad's boxes while it's
-// up (over the main screen's picture of a cabinet); a new card's name: the keyboard at 0.54
-int pc64_crt_panel(struct pc64_panel *p) {
+// What's shown over the main screen (display.c, at each of its pictures): the open menu's parts of the
+// touch screen, the item it's on marked (the music select: the panel at 0.55, its button), or the PIN
+// pad's boxes while it's up (over the main screen's picture of a cabinet); a new card's name: the
+// keyboard at 0.54. The options: the option's own column of the FULL OPTION editor at half size, over
+// the rival, and the editor's line about it along the top: the lanes between stay clear, where the
+// main screen previews the option (the speed, the lanes' covers, the pop-kun), and the left, where it
+// lists every option's value (pc64_crt_mark: the option's line there).
+int pc64_crt_panels(struct pc64_panel p[PC64_PANELS]) {
     struct pc64_panel q;
     const int menu = g_menu;
     if (menu == MENU_OPTIONS) {
-        q = (struct pc64_panel){410, 10, 820, 660, 115, 105, 410, 330, OPTIONS_LIST[g_item].x - 88, 30, 176, 640};
+        if ((int)(GetTickCount() - g_options_from) < 0) return 0;   // (the editor's page not up yet)
+        p[0] = (struct pc64_panel){OPTIONS_LIST[g_item].x - 88, 50, 176, 624, 524, 96, 88, 312, 0, 0, 0, 0};
+        p[1] = (struct pc64_panel){304, 4, 912, 48, 92, 4, 456, 24, 0, 0, 0, 0};
+        return help_seen() ? 2 : 1;
     } else if (menu == MENU_CATEGORIES) {
+        if (!panel_seen()) return 0;   // (the game's panel not up yet: the song list is still there)
         q = (struct pc64_panel){100, 80, 1090, 600, 20, 95, 600, 330, g_cx - 120, g_cy - 52, 240, 104};
     } else if (menu == MENU_CHOICES) {
         const int five = teal(sub_px(364, g_cy)), w = five ? 88 : 111, h = five ? 30 : 46;   // 5 across, or 4
@@ -581,12 +648,23 @@ int pc64_crt_panel(struct pc64_panel *p) {
         q = (struct pc64_panel){20, 20, 1140, 770, 12, 32, 616, 416, k.x - w, k.y - h, 2 * w, 2 * h};
     } else if (pc64_scene == MUSIC_SELECT && close_seen()) {   // the game's panel, opened by its own buttons
         q = (struct pc64_panel){100, 80, 1090, 600, 20, 95, 600, 330, 0, 0, 0, 0};
+    } else if (pc64_scene == ENTRY && question_seen()) {   // a question's box under the main screen's text, the answer chosen marked
+        const int chosen = answer_chosen();
+        q = (struct pc64_panel){198, 265, 884, 267, 100, 356, 371, 112, chosen == 2 ? 718 : 318, 398, chosen ? 244 : 0, 94};
     } else if (pc64_scene == ENTRY && pad_seen()) {
         q = (struct pc64_panel){44, 296, 352, 180, 218, 191, 211, 108, 0, 0, 0, 0};
     } else {
         return 0;
     }
-    if (p) *p = q;
+    p[0] = q;
+    return 1;
+}
+
+// The options' menu: its option's line in the main screen's list of every option's value (the list's
+// thirteen lines are the menu's options in its order; its place on the 640x480)
+int pc64_crt_mark(int at[4]) {
+    if (g_menu != MENU_OPTIONS || (int)(GetTickCount() - g_options_from) < 0) return 0;
+    at[0] = 65, at[1] = 255 + g_item * 128 / 10, at[2] = 87, at[3] = 13;
     return 1;
 }
 
@@ -724,6 +802,7 @@ static void watch(unsigned in, unsigned keys) {
         g_auto = 0, g_check = 0, g_check_failed = 0, g_closing = 0;
         if (scene == TITLE) nine_done = 0;   // a new credit
     }
+    if (g_menu == MENU_NAME && question_seen()) g_menu = 0;   // the name's question: the game's own (blue its YES and NO)
     if (g_menu) {
         menu(in, in_down);
         return;
@@ -766,7 +845,42 @@ static void watch(unsigned in, unsigned keys) {
             }
         }
     }
-    if (scene == ENTRY && (keys_down & 0x7ffu)) {   // the PIN pad's buttons
+    if (scene == PLAY) {   // a song, on the 10-key: a column each for SUDDEN (1, 4, 7) and HIDDEN (2, 5, 8), 9 held RETIRE
+        static const struct { unsigned key; struct place at; } ARROWS[4] = {
+            {KEY(7), {750, 98}}, {KEY(4), {750, 572}}, {KEY(8), {530, 98}}, {KEY(5), {530, 572}}};   // SUDDEN's, HIDDEN's
+        for (int i = 0; i < 4; i++)
+            if ((keys_down & ARROWS[i].key) && !g_pending) {   // the arrow touched for as long as its key is held
+                const struct act hold = {ARROWS[i].at, {(int)ARROWS[i].key, 0}, HOLD, 0};
+                run_acts(&hold, 1);
+                break;
+            }
+        if (keys_down & KEY(1)) touch_soon(1, PLAY_SUDDEN, PLAY_SUDDEN);
+        if (keys_down & KEY(2)) touch_soon(1, PLAY_HIDDEN, PLAY_HIDDEN);
+        if (keys_down & (KEY(1) | KEY(2))) pc64_log("crt: the 10-key switches %s", keys_down & KEY(1) ? "SUDDEN" : "HIDDEN");
+        if ((keys_down & KEY(9)) && !g_pending) {
+            const struct act hold = {PLAY_RETIRE, {(int)KEY(9), 0}, HOLD, 0};
+            pc64_log("crt: the 10-key's 9 holds RETIRE");
+            run_acts(&hold, 1);
+        }
+        return;
+    }
+    if (scene == EVENT) {   // the event's touches: its SKIP; its choice (blue the arrows, red OK)
+        const unsigned b = in_down;
+        if (ok_seen()) {
+            const struct place p = b & PC64_IN_BUTTON(4) ? EVENT_LEFT : b & PC64_IN_BUTTON(6) ? EVENT_RIGHT : EVENT_OK;
+            if (b & (PC64_IN_BUTTON(4) | PC64_IN_BUTTON(5) | PC64_IN_BUTTON(6))) {
+                pc64_log("crt: the event's choice: a touch at %d,%d", p.x, p.y);
+                touch_soon(1, p, p);
+            }
+        } else if ((b & PC64_IN_BUTTON(5)) && skip_seen()) {
+            pc64_log("crt: button 5 touches the event's SKIP");
+            touch_soon(1, EVENT_SKIP, EVENT_SKIP);
+        }
+        return;
+    }
+    static DWORD pad_at;   // the PIN pad last seen (a key touched changes colour for a moment)
+    if (scene == ENTRY && pad_seen()) pad_at = GetTickCount();
+    if (scene == ENTRY && (keys_down & 0x7ffu) && pad_at && GetTickCount() - pad_at < 1500) {   // the PIN pad's buttons
         struct place p = {PIN_CLEAR_X, PIN_CLEAR_Y};
         for (int d = 0; d <= 9; d++)
             if (keys_down & KEY(d)) p = d ? (struct place){PIN_X[(d - 1) % 3], PIN_Y[2 - (d - 1) / 3]} : (struct place){PIN_X[0], PIN_Y[3]};
@@ -777,10 +891,10 @@ static void watch(unsigned in, unsigned keys) {
         pc64_log("crt: the name's keyboard");
         return;
     }
-    if ((in_down & PC64_IN_BUTTON(5)) && scene == ENTRY && pc64_cards_given != cards_seen) {   // a card's: the terms' YES, else OK
-        const int yes = terms_seen() && !ok_seen();
+    if ((in_down & PC64_IN_BUTTON(5)) && scene == ENTRY && pc64_cards_given != cards_seen) {   // a card's: a question's YES, else OK
+        const int yes = question_seen() && !ok_seen();   // (no answer chosen yet: the terms as they come up)
         const struct place p = yes ? YES : ENTRY_OK;
-        pc64_log("crt: button 5 touches %d,%d (a card's %s)", p.x, p.y, yes ? "terms" : "OK");
+        pc64_log("crt: button 5 touches %d,%d (a card's %s)", p.x, p.y, yes ? "question" : "OK");
         touch_soon(1, p, p);
         return;
     }
@@ -808,13 +922,28 @@ static DWORD WINAPI watcher(void *unused) {
     return 0;
 }
 
-// The board's inputs as the game reads them (board.c, each status read): none of the buttons while
-// a menu is open
+// The board's inputs as the game reads them (board.c, each status read):
+//   - none of the buttons while a menu is open, nor after it closes until they're all let go (the
+//     press that closed it, still held, was the game's: green moved its song list on);
+//   - no green at the options and the music select: it opens the menus here (the watcher sees a press
+//     up to 2 ms after the game could);
+//   - the event after the last stage is played with the big buttons, which this cabinet hasn't: the
+//     buttons left of the middle and the middle one are its big red one, those right of it its big
+//     blue one; not on its first screen and its choice, which the watcher's touches work.
 unsigned pc64_crt_inputs(unsigned in) {
     if (!pc64_crt()) return in;
-    static int started;
+    static int started, kept;
     if (!started) started = 1, CreateThread(NULL, 0, watcher, NULL, 0, NULL);
-    return g_menu ? in & ~MENU_BUTTONS : in;
+    const int scene = pc64_scene;
+    if (g_menu) kept = 1;
+    else if (kept && !(in & MENU_BUTTONS)) kept = 0;
+    if (kept) return in & ~MENU_BUTTONS;
+    if (scene == OPTIONS || scene == MUSIC_SELECT) in &= ~(PC64_IN_BUTTON(3) | PC64_IN_BUTTON(7));
+    if (scene == EVENT && !ok_seen() && !skip_seen()) {
+        if (in & (PC64_IN_BUTTON(1) | PC64_IN_BUTTON(2) | PC64_IN_BUTTON(3) | PC64_IN_BUTTON(4) | PC64_IN_BUTTON(5))) in |= PC64_IN_RED;
+        if (in & (PC64_IN_BUTTON(6) | PC64_IN_BUTTON(7) | PC64_IN_BUTTON(8) | PC64_IN_BUTTON(9))) in |= PC64_IN_BLUE;
+    }
+    return in;
 }
 
 // The play screen's characters. The game keeps its two players' characters in a table (0xe0 bytes

@@ -64,6 +64,7 @@ void pc64_link_picture(unsigned w, unsigned h);   // it's there: counted, then w
 void pc64_touch(int x, int y);
 // touch.c: a drag on the sub screen (a list scrolled), held still at its end before it lets go
 void pc64_drag(int x0, int y0, int x1, int y1);
+void pc64_touch_while(int x, int y, int (*held)(void), int ms);   // kept there while HELD says so
 // touch.c: a mouse click posted to the sub screen's window there (the mouse's way to a touch)
 void pc64_click(int x, int y);
 // link.c: the card held to the reader (a count that moves on with each) and its UID; HK_SCRIPT's
@@ -79,14 +80,17 @@ void pc64_trace_d3dx_install(HMODULE game);
 // link.c: the picture being drawn won't be shown by hiraku-pc (no need to read it back)
 int pc64_link_not_shown(void);
 // crt.c: the single-screen mode (HK_PC64_OUTPUT=crt): on; the board's inputs for its touches (those
-// the game gets back: none of the buttons while a menu is open)
+// the game gets back: none of the buttons while a menu is open; the event's big buttons)
 int pc64_crt(void);
 unsigned pc64_crt_inputs(unsigned in);
-// crt.c: a part of the touch screen shown over the main screen's picture (a menu, the PIN): its place
-// on the touch screen (1280x800), where it goes on the 640x480, the item marked on it (touch screen
-// places; hw 0: none)
+// crt.c: the parts of the touch screen shown over the main screen's picture (a menu, the PIN), how
+// many (none: 0): each one's place on the touch screen (1280x800), where it goes on the 640x480, the
+// item marked on it (touch screen places; hw 0: none)
+#define PC64_PANELS 2
 struct pc64_panel { int sx, sy, sw, sh, dx, dy, dw, dh, hx, hy, hw, hh; };
-int pc64_crt_panel(struct pc64_panel *p);
+int pc64_crt_panels(struct pc64_panel p[PC64_PANELS]);
+// crt.c: a place marked on the main screen's own picture (x, y, w, h on the 640x480), or 0
+int pc64_crt_mark(int at[4]);
 // crt.c: the touch screen's picture (640x400, 0x00RRGGBB), kept for the menus to find the buttons on
 // it (display.c gives it, 10 times a second while wanted)
 void pc64_crt_sub_picture(const uint32_t *px, int w, int h);

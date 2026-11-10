@@ -234,16 +234,22 @@ static HRESULT WINAPI StretchRect_(IDirect3DDevice9Ex *d, IDirect3DSurface9 *src
 // The main screen's picture into hiraku-pc's link (HIRAKU's window shows it): read back through a
 // surface in system memory, X8R8G8B8 (the desktop's, windowed)
 // The single-screen mode's picture (crt.c): the main screen's middle 4:3 scaled down on the GPU in
-// two linear steps (1440x1080 to 960x720 to 640x480: each 1.5 times, no pixel skipped), read back
-// The touch screen's part a menu shows over it (crt.c's panel): copied at the touch screen's presents
-// at the size it's shown (a GPU stretch, linear), read back with the main screen's picture and put
-// on it, framed, the item marked. Its whole picture at half its size (640x400) read back for crt.c's
-// menus to look at, 10 times a second while they want it.
+// two linear steps, 1440x1080 to 1280x960 to 640x480: the second an exact half (each pixel the mean
+// of four, none counted twice or skipped), the first a ninth less. Small text comes out a little
+// crisper than through 960x720 (two steps of 1.5, each pixel a quarter and three quarters of two).
+// Read back
+// The touch screen's parts a menu shows over it (crt.c's panels): copied at the touch screen's
+// presents at the size and the place they're shown (a GPU stretch, linear, into a picture of the
+// 640x480's size), read back with the main screen's picture and put on it, framed, the item marked.
+// Its whole picture at half its size (640x400) read back for crt.c's menus to look at, 10 times a
+// second while they want it.
 static IDirect3DSurface9 *g_sub_small, *g_sub_readback, *g_panel, *g_panel_readback;
-static struct pc64_panel g_panel_at;   // the panel's place as last copied
+static struct pc64_panel g_panel_at[PC64_PANELS];   // the panels' places as last copied
+static int g_panels_kept;
 static void keep_sub(IDirect3DSwapChain9 *s) {
-    struct pc64_panel q;
-    const int panel = pc64_crt() && pc64_crt_panel(&q);
+    struct pc64_panel q[PC64_PANELS];
+    const int panel = pc64_crt() ? pc64_crt_panels(q) : 0;
+    if (!panel) g_panels_kept = 0;
     if (!pc64_crt() || (!panel && !pc64_crt_wants_sub())) return;
     IDirect3DSurface9 *bb = NULL;
     if (FAILED(IDirect3DSwapChain9_GetBackBuffer(s, 0, D3DBACKBUFFER_TYPE_MONO, &bb))) return;
@@ -259,9 +265,18 @@ static void keep_sub(IDirect3DSwapChain9 *s) {
         (FAILED(IDirect3DDevice9_CreateRenderTarget(dev, 640, 480, d.Format, D3DMULTISAMPLE_NONE, 0, FALSE, &g_panel, NULL)) ||
          FAILED(IDirect3DDevice9_CreateOffscreenPlainSurface(dev, 640, 480, d.Format, D3DPOOL_SYSTEMMEM, &g_panel_readback, NULL))))
         g_panel = NULL;
-    if (panel && g_panel && d.Width == 1280 && d.Height == 800 && q.dw > 0 && q.dh > 0 && q.dw <= 640 && q.dh <= 480) {
-        const RECT from = {q.sx, q.sy, q.sx + q.sw, q.sy + q.sh}, to = {0, 0, q.dw, q.dh};
-        if (SUCCEEDED(rdev.StretchRect(g_dev, bb, &from, g_panel, &to, D3DTEXF_LINEAR))) g_panel_at = q;
+    if (panel && g_panel && d.Width == 1280 && d.Height == 800) {
+        int kept = 0;
+        for (; kept < panel; kept++) {
+            const struct pc64_panel *p = &q[kept];
+            if (p->sx < 0 || p->sy < 0 || p->sw <= 0 || p->sh <= 0 || p->sx + p->sw > 1280 || p->sy + p->sh > 800 ||
+                p->dx < 0 || p->dy < 0 || p->dw <= 0 || p->dh <= 0 || p->dx + p->dw > 640 || p->dy + p->dh > 480)
+                break;
+            const RECT from = {p->sx, p->sy, p->sx + p->sw, p->sy + p->sh}, to = {p->dx, p->dy, p->dx + p->dw, p->dy + p->dh};
+            if (FAILED(rdev.StretchRect(g_dev, bb, &from, g_panel, &to, D3DTEXF_LINEAR))) break;
+            g_panel_at[kept] = *p;
+        }
+        g_panels_kept = kept;
     }
     IDirect3DSurface9_Release(bb);
 }
@@ -294,32 +309,45 @@ static void frame(uint32_t *out, int x, int y, int w, int h, int n, uint32_t col
                 out[j * 640 + i] = colour;
 }
 
-// The panel put on the picture: framed in dark blue and white (as the game's panels), its item marked
-// in yellow and red, blinking twice a second
+// The panels put on the picture: each framed in dark blue and white (as the game's panels), its item
+// marked in yellow and red, blinking twice a second; the place marked on the main screen's own
+// picture the same way. A panel whose part of the touch screen has just changed (the next option's
+// column) shows the last one copied until the next is.
+static void mark(uint32_t *out, int x, int y, int w, int h) {
+    const int on = GetTickCount() / 250 % 2;
+    frame(out, x - 1, y - 1, w + 2, h + 2, 4, on ? 0xffe000 : 0xff3050);
+    frame(out, x - 2, y - 2, w + 4, h + 4, 1, 0x000000);
+}
 static void put_panel(uint32_t *out) {
-    struct pc64_panel now;
-    if (!g_panel || !pc64_crt_panel(&now)) return;
-    const struct pc64_panel q = g_panel_at;
-    if (q.sx != now.sx || q.sy != now.sy || q.dw != now.dw || q.dh != now.dh) return;   // (not copied yet)
+    struct pc64_panel now[PC64_PANELS];
+    int shown = g_panel ? pc64_crt_panels(now) : 0, at[4];
+    if (shown > g_panels_kept) shown = g_panels_kept;
+    for (int i = 0; i < shown; i++) {   // (not copied yet: none)
+        const struct pc64_panel *q = &g_panel_at[i];
+        if (q->dx != now[i].dx || q->dy != now[i].dy || q->dw != now[i].dw || q->dh != now[i].dh) shown = 0;
+    }
     D3DLOCKED_RECT lr;
-    if (FAILED(IDirect3DDevice9_GetRenderTargetData((IDirect3DDevice9 *)g_dev, g_panel, g_panel_readback)) ||
-        FAILED(IDirect3DSurface9_LockRect(g_panel_readback, &lr, NULL, D3DLOCK_READONLY)))
-        return;
-    for (int y = 0; y < q.dh && q.dy + y < 480; y++) {
-        const uint32_t *p = (const uint32_t *)((const uint8_t *)lr.pBits + (size_t)y * lr.Pitch);
-        uint32_t *o = out + (size_t)(q.dy + y) * 640 + q.dx;
-        for (int x = 0; x < q.dw && q.dx + x < 640; x++) o[x] = p[x] & 0xffffff;
+    if (shown && SUCCEEDED(IDirect3DDevice9_GetRenderTargetData((IDirect3DDevice9 *)g_dev, g_panel, g_panel_readback)) &&
+        SUCCEEDED(IDirect3DSurface9_LockRect(g_panel_readback, &lr, NULL, D3DLOCK_READONLY))) {
+        for (int i = 0; i < shown; i++) {
+            const struct pc64_panel q = g_panel_at[i];
+            for (int y = 0; y < q.dh; y++) {
+                const uint32_t *p = (const uint32_t *)((const uint8_t *)lr.pBits + (size_t)(q.dy + y) * lr.Pitch) + q.dx;
+                uint32_t *o = out + (size_t)(q.dy + y) * 640 + q.dx;
+                for (int x = 0; x < q.dw; x++) o[x] = p[x] & 0xffffff;
+            }
+        }
+        IDirect3DSurface9_UnlockRect(g_panel_readback);
+        for (int i = 0; i < shown; i++) {
+            const struct pc64_panel q = g_panel_at[i];
+            frame(out, q.dx - 5, q.dy - 5, q.dw + 10, q.dh + 10, 3, 0x172a8c);
+            frame(out, q.dx - 2, q.dy - 2, q.dw + 4, q.dh + 4, 2, 0xffffff);
+            if (now[i].hw > 0)   // the item: its place on the touch screen to the panel's
+                mark(out, q.dx + (now[i].hx - q.sx) * q.dw / q.sw, q.dy + (now[i].hy - q.sy) * q.dh / q.sh, now[i].hw * q.dw / q.sw,
+                     now[i].hh * q.dh / q.sh);
+        }
     }
-    IDirect3DSurface9_UnlockRect(g_panel_readback);
-    frame(out, q.dx - 5, q.dy - 5, q.dw + 10, q.dh + 10, 3, 0x172a8c);
-    frame(out, q.dx - 2, q.dy - 2, q.dw + 4, q.dh + 4, 2, 0xffffff);
-    if (now.hw > 0) {   // the item: its place on the touch screen to the panel's
-        const int x = q.dx + (now.hx - q.sx) * q.dw / q.sw, y = q.dy + (now.hy - q.sy) * q.dh / q.sh;
-        const int w = now.hw * q.dw / q.sw, h = now.hh * q.dh / q.sh;
-        const int on = GetTickCount() / 250 % 2;
-        frame(out, x - 1, y - 1, w + 2, h + 2, 4, on ? 0xffe000 : 0xff3050);
-        frame(out, x - 2, y - 2, w + 4, h + 4, 1, 0x000000);
-    }
+    if (pc64_crt_mark(at)) mark(out, at[0], at[1], at[2], at[3]);
 }
 
 static int to_link_crt(IDirect3DSurface9 *bb, const D3DSURFACE_DESC *d, uint32_t *out) {
@@ -328,7 +356,7 @@ static int to_link_crt(IDirect3DSurface9 *bb, const D3DSURFACE_DESC *d, uint32_t
     if (pc64_crt_wants_sub()) sub_for_menus();
     if (!readback) {
         IDirect3DDevice9 *dev = (IDirect3DDevice9 *)g_dev;
-        if (FAILED(IDirect3DDevice9_CreateRenderTarget(dev, W * 3 / 2, H * 3 / 2, d->Format, D3DMULTISAMPLE_NONE, 0, FALSE, &half, NULL)) ||
+        if (FAILED(IDirect3DDevice9_CreateRenderTarget(dev, W * 2, H * 2, d->Format, D3DMULTISAMPLE_NONE, 0, FALSE, &half, NULL)) ||
             FAILED(IDirect3DDevice9_CreateRenderTarget(dev, W, H, d->Format, D3DMULTISAMPLE_NONE, 0, FALSE, &small, NULL)) ||
             FAILED(IDirect3DDevice9_CreateOffscreenPlainSurface(dev, W, H, d->Format, D3DPOOL_SYSTEMMEM, &readback, NULL)))
             return 0;

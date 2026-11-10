@@ -59,6 +59,7 @@
 #include <windows.h>
 #include <winioctl.h>
 #else
+#include <cerrno>
 #include <csignal>
 #include <dirent.h>
 #include <fcntl.h>
@@ -79,6 +80,7 @@ extern char **environ;
 #include "host/popnio.h"
 #include "host/script.h"
 #include "pc/link.h"
+#include "pc/process.h"
 #include "python/easerver.h"
 #include "python/lobby.h"
 #include "python/netrelay.h"
@@ -522,7 +524,17 @@ public:
         HANDLE lm = lf != INVALID_HANDLE_VALUE ? CreateFileMappingA(lf, nullptr, PAGE_READWRITE, 0, HK_PC_LINK_SIZE, nullptr) : nullptr;
         link_ = lm ? (hk_pc_link *)MapViewOfFile(lm, FILE_MAP_ALL_ACCESS, 0, 0, HK_PC_LINK_SIZE) : nullptr;
 #else
+        // the links of hiraku-pcs that ended without removing theirs (no such process now)
+        if (DIR *d = opendir("/dev/shm")) {
+            while (const dirent *e = readdir(d)) {
+                char *end = nullptr;
+                const long pid = strncmp(e->d_name, "hiraku-pc-", 10) ? 0 : strtol(e->d_name + 10, &end, 10);
+                if (pid > 0 && !*end && kill((pid_t)pid, 0) != 0 && errno == ESRCH) unlink((std::string("/dev/shm/") + e->d_name).c_str());
+            }
+            closedir(d);
+        }
         link_path_ = "/dev/shm/hiraku-pc-" + std::to_string(getpid());
+        process_.remove_too(link_path_);   // ... which this one's watcher does, should it end so
         const int lfd = open(link_path_.c_str(), O_RDWR | O_CREAT | O_TRUNC, 0600);
         if (lfd >= 0 && ftruncate(lfd, HK_PC_LINK_SIZE) == 0) {
             void *p = mmap(nullptr, HK_PC_LINK_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, lfd, 0);
@@ -1740,27 +1752,27 @@ private:
                " files its list names (dat.bin; the first: " + first + "): a dump missing files, which the game faults on";
     }
 
+    // The game's process and what it starts (process.h): ended with hiraku-pc however hiraku-pc ends,
+    // and stopped alone (another PC game on this PC goes on)
+    hk::pc::GameProcess process_;
+    bool game_running() { return process_.running(); }
+    void stop_game() { process_.stop(); }
+
 #ifdef _WIN32
-    PROCESS_INFORMATION pi_{};
-    bool started_ = false;
     bool start_game() {
-        STARTUPINFOA si{};
-        si.cb = sizeof si;
-        std::string cmd = "\"" + win_path(run_prog_ + "/" + exe_) + "\"";
+        std::vector<std::string> cmd = {win_path(run_prog_ + "/" + exe_)};
         std::string dir = win_path(run_prog_);
-        if (pc64_) cmd = "\"" + win_path(loader_) + "\" \"" + win_path(contents_) + "\"", dir = win_path(save_ + "/run");
-        if (pc32_) cmd += " .", dir = win_path(save_ + "/run");   // the loader's game folder: run/, AVS2's root
-        if (CreateProcessA(nullptr, cmd.data(), nullptr, nullptr, FALSE, 0, nullptr, dir.c_str(), &si, &pi_))
-            return started_ = true;
-        fprintf(stderr, "hiraku-pc: can't start %s (error %lu)\n", cmd.c_str(), GetLastError());
+        if (pc64_) cmd = {win_path(loader_), win_path(contents_)}, dir = win_path(save_ + "/run");
+        if (pc32_) cmd.push_back("."), dir = win_path(save_ + "/run");   // the loader's game folder: run/, AVS2's root
+        if (process_.start(cmd, dir)) return true;
+        fprintf(stderr, "hiraku-pc: can't start %s (error %lu)\n", cmd[0].c_str(), GetLastError());
         return false;
     }
-    bool game_running() { return started_ && WaitForSingleObject(pi_.hProcess, 0) == WAIT_TIMEOUT; }
     std::string exit_note() {   // its exit code: 0xc0000005 a fault, 0xc0000409 a fail-fast...
-        DWORD code = 0;
+        unsigned long code = 0;
         char s[48];
-        if (!started_ || !GetExitCodeProcess(pi_.hProcess, &code)) return "";
-        snprintf(s, sizeof s, " (exit code %#lx)", (unsigned long)code);
+        if (!process_.exit_code(code)) return "";
+        snprintf(s, sizeof s, " (exit code %#lx)", code);
         if (code == 0xc0000135) return s + missing_dlls();
         return code ? s + missing_data() : s;
     }
@@ -1804,15 +1816,7 @@ private:
         if (directx) s += "; Microsoft's DirectX End-User Runtime (June 2010) installs it too";
         return s;
     }
-    void stop_game() {
-        if (!started_) return;
-        started_ = false;
-        TerminateProcess(pi_.hProcess, 0);
-        WaitForSingleObject(pi_.hProcess, 5000);
-        CloseHandle(pi_.hProcess), CloseHandle(pi_.hThread);
-    }
 #else
-    pid_t pid_ = 0;
     // The IIDX games' movies (MPEG-1, MPEG-2 from GOLD on) go through DirectShow, which Wine hands to
     // the system's GStreamer: without its MPEG demuxer and decoder for Wine's side (32-bit for a Wine
     // with a 32-bit half, 64-bit for a 64-bit-only one) each movie fails, the stages stay black and the
@@ -1946,7 +1950,8 @@ private:
         }
         const std::string exe_path = pc64_ ? loader_ : run_prog_ + "/" + exe_, game_dir = pc32_ ? "." : win_path(contents_);
         const std::string dir = pc64_ || pc32_ ? save_ + "/run" : run_prog_;
-        char *args[] = {(char *)wine_.c_str(), (char *)exe_path.c_str(), pc64_ || pc32_ ? (char *)game_dir.c_str() : nullptr, nullptr};
+        std::vector<std::string> args = {wine_, exe_path};
+        if (pc64_ || pc32_) args.push_back(game_dir);
         // The AVS2 pop'n's environment: Japanese (its text is Shift-JIS: Wine's code page 932), and for
         // the 64-bit one DXVK's Direct3D 9 when it is beside the loader (bin/pc/d3d9.dll: Wine's own
         // misplaces its pictures, PLAN.md section 32)
@@ -1986,32 +1991,12 @@ private:
             for (std::string &e : env_own) env.push_back(e.data());
         }
         env.push_back(nullptr);
-        posix_spawn_file_actions_t fa;
-        posix_spawn_file_actions_init(&fa);
-        posix_spawn_file_actions_addchdir_np(&fa, dir.c_str());
-        const int r = posix_spawnp(&pid_, wine_.c_str(), &fa, nullptr, args, env.data());
-        posix_spawn_file_actions_destroy(&fa);
-        if (r == 0) return true;
-        pid_ = 0;
+        // (the game alone is stopped, never Wine's server: every PC game here shares the one Wine folder)
+        if (process_.start(args, dir, env.data())) return true;
         fprintf(stderr, "hiraku-pc: can't start %s (is Wine installed? --wine PROGRAM)\n", wine_.c_str());
         return false;
     }
     std::string exit_note() { return missing_data(); }
-    bool game_running() {
-        int status;
-        return pid_ > 0 && waitpid(pid_, &status, WNOHANG) == 0;
-    }
-    // The game and whatever else Wine runs for it in this folder
-    void stop_game() {
-        if (pid_ <= 0) return;
-        const std::string ws = wine_.size() >= 4 && wine_.compare(wine_.size() - 4, 4, "wine") == 0
-                                   ? wine_.substr(0, wine_.size() - 4) + "wineserver" : "wineserver";
-        hk::sys::run_quiet({"/bin/sh", "-c", "exec \"$0\" -k", ws});
-        kill(pid_, SIGTERM);
-        int status;
-        waitpid(pid_, &status, 0);
-        pid_ = 0;
-    }
 #endif
 
     std::string game_, family_ = "pcpopn", exe_, program_, save_, run_prog_, run_e_, link_path_, wine_ = "wine";

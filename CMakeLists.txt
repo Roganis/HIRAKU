@@ -511,7 +511,7 @@ if(SDL3_FOUND)
   message(STATUS "hiraku: SDL3 front end enabled")
   # hiraku-pc: the PC games, Konami's own programs, as a core of HIRAKU's shell (runtime/pc/core.cpp,
   # PLAN.md section 30); its DLLs are the hiraku-pc-dlls above
-  add_executable(hiraku-pc runtime/pc/core.cpp)
+  add_executable(hiraku-pc runtime/pc/core.cpp runtime/pc/process.cpp)
   target_link_libraries(hiraku-pc PRIVATE hiraku_main hiraku_built_none hiraku_easerver hiraku_host hiraku_shell)
   target_compile_definitions(hiraku-pc PRIVATE HK_ROOT="${CMAKE_SOURCE_DIR}")
   if(TARGET hiraku-pc-dlls)

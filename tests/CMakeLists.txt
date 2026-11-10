@@ -109,6 +109,12 @@ if(TARGET hiraku-pc-test-vsock AND HK_WINE AND NOT WIN32)
   set_tests_properties(pc_vsock PROPERTIES RESOURCE_LOCK relay_5740 TIMEOUT 120)
 endif()
 
+# The PC game's process (runtime/pc/process.h): ended with hiraku-pc however hiraku-pc ends, stopped alone
+add_executable(test_game_process pc/test_game_process.cpp ${CMAKE_SOURCE_DIR}/runtime/pc/process.cpp)
+target_include_directories(test_game_process PRIVATE ${CMAKE_SOURCE_DIR}/runtime)
+add_test(NAME pc_game_process COMMAND test_game_process)
+set_tests_properties(pc_game_process PROPERTIES TIMEOUT 120)
+
 # Saves written whole or not at all (runtime/shell/sys.h, write_file): NVRAM, cards, the e-AMUSEMENT
 # server's files
 add_executable(test_write_file sys/test_write_file.cpp)

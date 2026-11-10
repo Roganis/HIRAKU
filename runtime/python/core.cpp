@@ -54,6 +54,7 @@
 #include <thread>
 #include <vector>
 
+#include "eamuse/merge.h"
 #include "shell/kvfile.h"
 #include "shell/sys.h"
 #include "common/Console.h"
@@ -185,49 +186,6 @@ std::string base_name(const std::string &p) { return p.substr(p.find_last_of("/\
 #else
 std::string base_name(const std::string &p) { return p.substr(p.rfind('/') + 1); }
 #endif
-
-// One game's e-AMUSEMENT folder moved into the folder all the pop'n games share (pop'n 9-14 in the
-// saves' default places: a player carried from one game to the next is found there). A file the
-// shared folder lacks moves over; the card counters keep the larger; the card and KONAMI ID lists
-// gain the lines they lack. Anything else already there stays, and the old folder is kept, renamed.
-void merge_eamuse(const std::string &from, const std::string &to) {
-    namespace fs = std::filesystem;
-    std::error_code ec;
-    if (!fs::is_directory(from, ec)) return;
-    mkdirs(to);
-    auto read = [](const fs::path &p) {
-        std::ifstream f(p, std::ios::binary);
-        return std::string(std::istreambuf_iterator<char>(f), std::istreambuf_iterator<char>());
-    };
-    auto write = [](const fs::path &p, const std::string &d) {   // whole or not at all
-        if (!hk::sys::write_file(p.string(), d)) fprintf(stderr, "e-AMUSEMENT: cannot write %s: the one from before is kept\n", p.string().c_str());
-    };
-    bool left = false;
-    for (const fs::directory_entry &e : fs::directory_iterator(from, ec)) {
-        const std::string name = e.path().filename().string();
-        const fs::path dst = fs::path(to) / name;
-        if (!fs::exists(dst, ec)) {
-            fs::rename(e.path(), dst, ec);
-            if (ec) left = true;
-        } else if (name == "numbering" || name == "refid") {
-            const unsigned long long a = std::strtoull(read(e.path()).c_str(), nullptr, 10), b = std::strtoull(read(dst).c_str(), nullptr, 10);
-            write(dst, std::to_string(std::max(a, b)) + "\n");
-        } else if (name == "cards" || name == "users") {
-            std::string have = read(dst), add;
-            std::istringstream lines(read(e.path()));
-            for (std::string l; std::getline(lines, l);)
-                if (!l.empty() && have.find(l) == std::string::npos) add += l + "\n";
-            if (!have.empty() && have.back() != '\n') have += "\n";
-            write(dst, have + add);
-        } else {
-            left = true;
-            fprintf(stderr, "e-AMUSEMENT: %s is in both %s and %s; the shared one is kept\n", name.c_str(), from.c_str(), to.c_str());
-        }
-    }
-    fs::rename(from, from + ".moved", ec);
-    printf("e-AMUSEMENT: this game's data moved to %s, which the pop'n games share%s\n", to.c_str(),
-           left ? " (what couldn't move stays in eamuse.moved)" : "");
-}
 
 // pop'n buttons 1-9, left to right (MAME's names), on the interface board's JAMMA
 // inputs as Reliquary's POPN profile reads them (KonamiPython1.cpp,
@@ -596,7 +554,7 @@ public:
             // with --nvram elsewhere, that folder's own
             std::string ea_dir = run_dir_ + "/eamuse";
             if (!shared_saves_.empty()) {
-                merge_eamuse(ea_dir, shared_saves_ + "/eamuse");
+                hk::ea::merge_folder(ea_dir, shared_saves_ + "/eamuse");   // (eamuse/merge.h)
                 ea_dir = shared_saves_ + "/eamuse";
             }
             server_ = std::make_unique<hk::py::EamuseServer>(ea_dir);

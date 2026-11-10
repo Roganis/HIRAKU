@@ -197,7 +197,9 @@ std::string EamuseServer::answer_p24(const Request &r) {
     }
     if (!safe_name(ref)) return "<player24 status=\"0\"/>";
     const std::string file = "p24-" + ref;
-    std::vector<Record> players = from_lines(read_file(file));
+    const std::string had = read_file(file);
+    std::vector<Record> players = from_lines(had);
+    if (!players.empty() && players[0].empty()) players.clear();   // (a file no field of which reads isn't a player)
     auto record = [&](const Record &p) {
         // g_pm_id: the ref id's last eight digits, as 1234-5678
         const std::string tail = (std::string(8, '0') + ref).substr(ref.size());   // (a shorter one: zeros before it)
@@ -243,7 +245,12 @@ std::string EamuseServer::answer_p24(const Request &r) {
         if (players.empty()) return "<player24 status=\"0\"><result __type=\"s8\">2</result></player24>";
         return record(players[0]);
     }
-    if (f == "new") {
+    if (f == "new") {   // (asked only after read's "none": a card that has its player keeps it)
+        if (!players.empty()) {
+            say_kept(file);
+            return record(players[0]);
+        }
+        keep_aside(file, had);   // (a file no line of which reads)
         const Record p = {{"name", child(r.inner, "name")}};
         write_file(file, to_line(p));
         return record(p);

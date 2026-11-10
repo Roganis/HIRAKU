@@ -119,6 +119,14 @@ private:
     static std::string item(const Board &b, const std::map<std::string, std::string> &entry, size_t place);
     std::string read_file(const std::string &name) const;
     void write_file(const std::string &name, const std::string &data) const;
+    // A game asks for a new player (new, or one carried over from the game before) only after it
+    // was told the card has none. Asked for a card that has its player, the player is kept and
+    // answered as it is, and this says so: nothing a call says makes a new player of an old one.
+    void say_kept(const std::string &name) const;
+    // A player's file that isn't a player (not the size of the game's record, or no line of it
+    // reads: cut short by an older HIRAKU, damaged, another layout's) reads as "no player", and the
+    // next new or set would take its name: it is first kept beside it as NAME.unread-DATE, and said.
+    void keep_aside(const std::string &name, const std::string &had) const;
 
     std::string dir_;
     uint32_t serial_ = 0;   // for the answers' X-Eamuse-Info: deterministic

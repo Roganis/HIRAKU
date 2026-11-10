@@ -146,15 +146,18 @@ std::string EamuseServer::answer_hc(const Request &r) {
     if (f == "start") {   // play_id (the game's own count goes on from it), and the common info; a guest too
         const bool known = safe_name(ref);
         std::vector<Record> players = known ? from_lines(read_file("phc-" + ref)) : std::vector<Record>{};
-        Record p = players.empty() ? Record{} : players[0];
+        const bool player = !players.empty() && !players[0].empty();   // (not a file no field of which reads)
+        Record p = player ? players[0] : Record{};
         p["play_id"] = std::to_string(num(p, "play_id") + 1);
-        if (!players.empty()) write_file("phc-" + ref, to_line(p));
+        if (player) write_file("phc-" + ref, to_line(p));
         return "<player status=\"0\"><play_id __type=\"s32\">" + esc(attr(p, "play_id")) + "</play_id>" + common(read_file("phases-phc")) +
                "</player>";
     }
     if (!safe_name(ref)) return "<player status=\"0\"/>";
     const std::string file = "phc-" + ref, scores = "phcs-" + ref;
-    std::vector<Record> players = from_lines(read_file(file));
+    const std::string had = read_file(file);
+    std::vector<Record> players = from_lines(had);
+    if (!players.empty() && players[0].empty()) players.clear();   // (a file no field of which reads isn't a player)
     auto record = [&](const Record &p) {
         // g_pm_id: the ref id's last eight digits, as 1234-5678
         const std::string tail = (std::string(8, '0') + ref).substr(ref.size());   // (a shorter one: zeros before it)
@@ -171,7 +174,12 @@ std::string EamuseServer::answer_hc(const Request &r) {
         if (players.empty()) return "<player status=\"0\"><result __type=\"s8\">2</result></player>";   // none: the game makes one
         return record(players[0]);
     }
-    if (f == "new") {
+    if (f == "new") {   // (asked only after read's "none": a card that has its player keeps it)
+        if (!players.empty()) {
+            say_kept(file);
+            return record(players[0]);
+        }
+        keep_aside(file, had);   // (a file no line of which reads)
         const Record p = {{"name", child(r.inner, "name")}};
         write_file(file, to_line(p));
         return record(p);

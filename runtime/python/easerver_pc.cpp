@@ -124,6 +124,16 @@ std::string EamuseServer::answer_g15(const Request &r) {
         rec[0x947] = 1;           // the ADVENTURE map's start
     };
     auto answer = [&] { return open + " f_compress=\"1\"><b>" + base64(lzss(rec)) + "</b></G15>"; };
+    // (the game asks new, or conv, only after get's 109: a card that has its player keeps it)
+    auto kept = [&] {
+        if (rec.size() != RECORD) return false;
+        say_kept(file);
+        return true;
+    };
+    auto blank = [&] {   // a new player's record; what was there and wasn't a record kept aside
+        keep_aside(file, rec);
+        fresh();
+    };
     auto pin = [&](const std::string &pass) {   // the card's PIN, if it has none yet (cardmng authpass checks it)
         std::vector<Record> cards = from_lines(read_file("cards"));
         bool changed = false;
@@ -171,7 +181,8 @@ std::string EamuseServer::answer_g15(const Request &r) {
         return answer();
     }
     if (f == "playerdata_new") {   // name, ea_passwd (0x49e960)
-        fresh();
+        if (kept()) return answer();
+        blank();
         set_name(attr(r.attrs, "name"));
         pin(attr(r.attrs, "ea_passwd"));
         write_file(file, rec);
@@ -183,7 +194,8 @@ std::string EamuseServer::answer_g15(const Request &r) {
     if (f == "playerdata_conv") {
         const std::string old = read_file("pdata-F14-" + ref);
         if (old.size() != 0xdb8) return "<G15 status=\"109\"/>";
-        fresh();
+        if (kept()) return answer();
+        blank();
         set_name(attr(r.attrs, "name"));
         for (size_t n = 0; n < SONGS && 0x24 + 4 * n + 2 <= old.size(); n++)
             put16(0x58 + 2 * n, ((uint8_t)old[0x24 + 4 * n] | (uint8_t)old[0x25 + 4 * n] << 8) & 0x7fff);
@@ -195,7 +207,7 @@ std::string EamuseServer::answer_g15(const Request &r) {
     }
     if (f != "playerdata_set") return open + "/>";
 
-    if (rec.size() != RECORD) fresh();
+    if (rec.size() != RECORD) blank();
     auto has = [&](const std::map<std::string, std::string> &m, const char *k) { return m.count(k) && attr(m, k) != "-1"; };
     const auto &a = r.attrs;
     if (has(a, "option")) put32(0x1c, num(a, "option"));
@@ -450,8 +462,19 @@ std::string EamuseServer::answer_j39(const std::string &game, const Request &r) 
         return "<playerdata status=\"0\"><b __type=\"bin\">" + hex(rec) + "</b><hiscore __type=\"bin\">" + hex(hiscore) +
                "</hiscore></playerdata>";
     };
-    if (f == "new") {   // the name (Shift-JIS, 12 bytes) first, as pop'n 12-15's records
+    // (the game asks new, or conversion, only after get's 109: a card that has its player keeps it)
+    auto kept = [&] {
+        if (rec.size() != RECORD) return false;
+        say_kept(file);
+        return true;
+    };
+    auto blank = [&] {   // a new player's record; what was there and wasn't a record kept aside
+        keep_aside(file, rec);
         fresh();
+    };
+    if (f == "new") {   // the name (Shift-JIS, 12 bytes) first, as pop'n 12-15's records
+        if (kept()) return answer();
+        blank();
         const std::string name = attr(r.attrs, "name");
         for (size_t i = 0; i < name.size() && i < 12; i++) rec[i] = name[i];
         write_file(file, rec);
@@ -490,7 +513,8 @@ std::string EamuseServer::answer_j39(const std::string &game, const Request &r) 
     if (f == "conversion") {
         const std::string old = read_file(std::string("pdata-") + before + "-" + ref);
         if (old.size() != BEFORE) return packed ? "<playerdata status=\"109\" f_compress=\"1\"/>" : "<playerdata status=\"109\"/>";
-        fresh();
+        if (kept()) return answer();
+        blank();
         const std::string name = attr(r.attrs, "name");
         for (size_t i = 0; i < 13; i++) rec[i] = name.empty() ? old[i] : i < name.size() && i < 12 ? name[i] : '\0';
         auto old16 = [&](size_t at) { return at + 2 <= old.size() ? (long)((uint8_t)old[at] | (uint8_t)old[at + 1] << 8) : 0L; };
@@ -520,7 +544,7 @@ std::string EamuseServer::answer_j39(const std::string &game, const Request &r) 
         return "<playerdata status=\"0\" score=\"" + std::to_string(best) + "\" nr_active_friend=\"0\"/>";
     }
     if (f != "set") return "<playerdata status=\"0\"/>";   // expire, friend: nothing
-    if (rec.size() != RECORD) fresh();
+    if (rec.size() != RECORD) blank();
     auto has = [&](const std::map<std::string, std::string> &m, const char *k) { return m.count(k) && attr(m, k) != "-1"; };
     const auto &a = r.attrs;
     if (has(a, "option")) put32(L.option, num(a, "option"));

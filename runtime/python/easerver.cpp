@@ -132,6 +132,21 @@ void EamuseServer::write_file(const std::string &name, const std::string &data) 
     if (!sys::write_file(path, data)) fprintf(stderr, "e-AMUSEMENT: cannot write %s: the one from before is kept\n", path.c_str());
 }
 
+void EamuseServer::say_kept(const std::string &name) const {
+    fprintf(stderr, "e-AMUSEMENT: a new player was asked for where there is one (%s): the player is kept\n", name.c_str());
+}
+
+void EamuseServer::keep_aside(const std::string &name, const std::string &had) const {
+    if (had.empty() || dir_.empty()) return;
+    char date[32];
+    const time_t t = time(nullptr);
+    strftime(date, sizeof date, "%Y%m%d-%H%M%S", localtime(&t));
+    const std::string aside = name + ".unread-" + date;
+    write_file(aside, had);
+    fprintf(stderr, "e-AMUSEMENT: %s isn't a player's file as this HIRAKU keeps them (%zu bytes): kept as %s, a new one made\n",
+            name.c_str(), had.size(), aside.c_str());
+}
+
 std::string EamuseServer::answer(const Call &c, const Request &r, const std::string &host) {
     const std::string &m = r.module, &f = r.method;
     src_ = c.srcid;

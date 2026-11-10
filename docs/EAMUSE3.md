@@ -875,6 +875,13 @@ same number, and on to the PC games, 14 → 15 → 16 → 17 → 18 (their own s
   one e-AMUSEMENT folder beside them, `eamuse/`. A game's own `eamuse/` from before is merged into
   it once and kept renamed (`eamuse.moved`). With `--nvram` elsewhere a game keeps its own folder,
   as before (and regress runs are unchanged).
+  - **Each card keeps its own players in the merge.** pop'n 13 and 14 keep a player by the card's
+    ref id, a count that began at 1 in each game's folder, so two folders' players have the same
+    numbers without being the same players. A folder's ref ids are made the shared folder's before
+    its files move (`runtime/eamuse/merge.h`): a card the shared folder knows keeps its ref id
+    there, and the folder's files for that card take it; a card it doesn't know, whose ref id
+    another card has there, gets a new one. The folder's player files (`pdata-F14-REF`,
+    `pscore-F14-REF`) and its rankings' entries follow. The old folder keeps its own card list.
 - **The older card:** a numbered card a game has never seen (no `cards/NUMBER.bin` in its save) is
   shown as the game before's card, as that game left it in its save (`popn9`'s for pop'n 10, ...).
   pop'n 10 rewrites it as its own. pop'n 11-13 read it, then give it back and ask for an unused
@@ -1404,6 +1411,24 @@ needed. Its clears: 1 FAILED, 3 EASY CLEAR, 4 CLEAR (checked on music select); i
 out itself. libavs logs a parser's
 failure as "res: receiver returns failure" (`HK_PC_AVS_LOG`). A new pass is asked to accept terms
 (a page of its own) before NAME ENTRY.
+
+## The players' files
+
+What the server does so that a call, a cut file or another HIRAKU never costs a player
+(`tests/eamuse/test_players_kept.py`, with made-up calls):
+
+- **A new player is never made of an old one.** A game asks for a new player (`new`,
+  `playerdata_new`), or one carried over from the game before (`conv`, `conversion`), only after it
+  was told the card has none. Asked for a card that has its player, the server keeps the player as
+  it is, answers it, and says so (`a new player was asked for where there is one`). pop'n 12–18 and
+  the two later PC pop'n games.
+- **A file that isn't a player's is kept.** A record of another size than the game's (cut short,
+  damaged, or another layout's) reads as "no player" (`get`: 109), and nothing is changed by that.
+  When a new player or a credit's end then takes its name, the file is first kept beside it as
+  `NAME.unread-DATE`, and the server says so. For the games that keep a player as lines, a file no
+  field of which reads (zeros) is treated the same.
+- **Every file is written whole or not at all** (beside it, flushed, checked, then renamed): a full
+  disk or a kill keeps the file from before.
 
 ## Not known yet
 

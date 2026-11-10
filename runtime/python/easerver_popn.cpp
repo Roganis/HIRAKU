@@ -421,8 +421,19 @@ std::string EamuseServer::answer_playerdata(const std::string &game, const Reque
                    : open + "><b>" + base64(rec) + "</b></" + game + ">";
     };
 
-    if (f == "new") {   // a new card: its record (name, password; the rest zero)
+    // (a game asks new, or conv, only after get's 109: a card that has its player keeps it)
+    auto kept = [&] {
+        if (rec.size() != RECORD) return false;
+        say_kept(file);
+        return true;
+    };
+    auto blank = [&] {   // a record with nothing in it; what was there and wasn't a record kept aside
+        keep_aside(file, rec);
         rec.assign(RECORD, 0);
+    };
+    if (f == "new") {   // a new card: its record (name, password; the rest zero)
+        if (kept()) return with_record();
+        blank();
         set_name(attr(r.attrs, "name"));
         set_password(attr(r.attrs, "password"));
         write_file(file, rec);
@@ -469,7 +480,7 @@ std::string EamuseServer::answer_playerdata(const std::string &game, const Reque
         return with_record();
     }
     if (f == "set") {
-        if (rec.size() != RECORD) rec.assign(RECORD, 0);
+        if (rec.size() != RECORD) blank();
         if (r.attrs.count("name")) set_name(attr(r.attrs, "name"));
         if (r.attrs.count("password")) set_password(attr(r.attrs, "password"));
         if (r.attrs.count("option")) put16(L.option, num(r.attrs, "option"));
@@ -580,7 +591,8 @@ std::string EamuseServer::answer_playerdata(const std::string &game, const Reque
         const std::string old = attr(r.attrs, "old_card_id");
         if (!safe_name(old)) return "<" + game + " status=\"1\"/>";
         const std::string from = unbase64_b(read_file("userdata-D11-" + old));
-        if (rec.size() != RECORD) rec.assign(RECORD, 0);
+        if (kept()) return open + "/>";
+        blank();
         set_name(attr(r.attrs, "name"));
         // the PIN, a digit a byte at 0x9f3 (the name follows at 0x9f7): the credit's set sends it
         // too, but a later game asks for it even if this credit never ends properly
@@ -603,7 +615,8 @@ std::string EamuseServer::answer_playerdata(const std::string &game, const Reque
         const std::string old = attr(r.attrs, "old_card_id");
         if (!safe_name(old)) return "<" + game + " status=\"1\"/>";
         const std::string from = read_file("pdata-E12-" + old);
-        if (rec.size() != RECORD) rec.assign(RECORD, 0);
+        if (kept()) return open + "/>";
+        blank();
         set_name(attr(r.attrs, "name"));
         if (from.size() == 0x708) {
             for (size_t i = 0; i < 4; i++) rec[L.password + i] = (char)((uint8_t)from[0x34 + i] % 10);
@@ -625,7 +638,8 @@ std::string EamuseServer::answer_playerdata(const std::string &game, const Reque
     if (f == "conv" && p14) {
         const std::string old = read_file("pdata-E13-" + card);
         if (old.size() != 0xd6c) return "<" + game + " status=\"109\"/>";
-        rec.assign(RECORD, 0);
+        if (kept()) return with_record();
+        blank();
         set_name(attr(r.attrs, "name"));
         put16(L.option, (uint8_t)old[0x20] | (uint8_t)old[0x21] << 8);
         put16(L.chara, (uint8_t)old[0x22] | (uint8_t)old[0x23] << 8);

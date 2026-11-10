@@ -10,6 +10,17 @@
 *.img
 *.gpr
 *.rep/
+*.cue
+*.py1
+*.py2
+# ... nor a package or an archive left in the tree (a release's, a dump's), nor a Windows program
+*.tar.xz
+*.tar.gz
+*.zip
+*.7z
+*.rar
+*.exe
+*.dll
 __pycache__/
 *.pyc
 /compile_commands.json

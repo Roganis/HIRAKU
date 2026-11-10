@@ -449,7 +449,7 @@ MainWindow::MainWindow() {
         QStringList added, errors, kept;
         for (const QString &l : m_ingestOutput.split('\n')) {
             // dumps/<id>/machine.txt (Windows: dumps\<id>\machine.txt)
-            if (l.startsWith("wrote") && l.contains("machine.txt")) added << QString(l).replace('\\', '/').section('/', -2, -2);
+            if ((l.startsWith("wrote") || l.startsWith("OK ")) && l.contains("machine.txt")) added << QString(l).replace('\\', '/').section('/', -2, -2);
             if (l.startsWith("ERROR") || l.startsWith("NEXT")) errors << l.mid(9).trimmed();
             if (l.startsWith("KEPT")) kept << l.mid(9).trimmed();   // a Python BIOS or keys, kept for the games
         }

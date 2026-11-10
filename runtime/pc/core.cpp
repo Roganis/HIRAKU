@@ -427,7 +427,12 @@ public:
             fprintf(stderr, "hiraku-pc: no %s (HIRAKU's PC DLLs belong in a pc folder beside hiraku-pc)\n", from.c_str());
             return false;
         }
-        if (file_size(to) != file_size(from) || from.rfind(bin_dir(), 0) == 0)
+        // again when it isn't the same size, or was changed since it was copied (a program repaired
+        // or edited in place is as long as it was); HIRAKU's own files every time
+        std::error_code ec;
+        const auto changed = std::filesystem::last_write_time(from, ec);
+        const bool newer = !ec && changed > std::filesystem::last_write_time(to, ec) && !ec;
+        if (file_size(to) != file_size(from) || newer || from.rfind(bin_dir(), 0) == 0)
             if (!copy_file(from, to)) {
                 fprintf(stderr, "hiraku-pc: can't copy %s to %s\n", from.c_str(), to.c_str());
                 return false;
@@ -936,7 +941,7 @@ public:
         if (!start_game()) fatal();
         // A new save folder: the game makes its backup files and asks to be switched off and on
         // (BACKUP ERROR 5-1502); that is done for it, once, when they've been there a few seconds
-        bool first_boot = !c02_ && !pc32_ && list_files(run_e_ + "/settings").empty();
+        bool first_boot = !c02_ && !pc32_ && !pc64_ && list_files(run_e_ + "/settings").empty();
         auto backup_made = std::chrono::steady_clock::time_point{};
         auto last = std::chrono::steady_clock::now(), rate_from = last;
         uint32_t seen = link_->frame_seq, rate_pictures = seen;

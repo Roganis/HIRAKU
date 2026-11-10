@@ -127,9 +127,9 @@ bool load(const std::string &path, const std::string &out_dir) {
             if (t[0] == "game") continue;
             if (t[0] == "watch") {
                 int w = t.at(2) == "u8" ? 1 : t[2] == "u16" ? 2 : 4;
-                g_watch.emplace_back(t[1], w, (uint32_t)num(t.at(3)));
+                g_watch.emplace_back(t.at(1), w, (uint32_t)num(t.at(3)));
             } else if (t[0] == "hash") {
-                g_hash.emplace_back(t[1], (uint32_t)num(t.at(2)), (uint32_t)num(t.at(3)));
+                g_hash.emplace_back(t.at(1), (uint32_t)num(t.at(2)), (uint32_t)num(t.at(3)));
             } else if (t[0] == "at") {
                 g_at[(uint64_t)num(t.at(1))].push_back(parse_action(t, 2));
             } else if (t[0] == "on") {   // on "NAME"[#K] +N action
@@ -142,9 +142,11 @@ bool load(const std::string &path, const std::string &out_dir) {
                 g_on.push_back({name, nth, (uint64_t)num(off.substr(1)), parse_action(t, 3)});
             } else if (t[0] == "every") {
                 g_repeat.push_back({(uint64_t)num(t.at(1)), 0, parse_action(t, 2)});
+                if (!g_repeat.back().every) throw std::runtime_error("every <n>: n is 1 or more");
             } else if (t[0] == "from") {
                 if (t.at(2) != "every") throw std::runtime_error("expected: from <frame> every <n> <action>");
                 g_repeat.push_back({(uint64_t)num(t.at(3)), (uint64_t)num(t.at(1)), parse_action(t, 4)});
+                if (!g_repeat.back().every) throw std::runtime_error("every <n>: n is 1 or more");
             } else {
                 throw std::runtime_error("unknown directive '" + t[0] + "'");
             }
@@ -218,7 +220,10 @@ bool frame(uint64_t f, const std::function<void()> &snap) {
             // the memory input scripts read (mem()) is the guest's RAM itself: write it in place
             auto *m = const_cast<uint8_t *>(core().mem((uint32_t)a.a, (uint32_t)a.bytes.size()));
             if (!m) fprintf(stderr, "script: poke %llx: not plain memory\n", (unsigned long long)a.a);
-            else memcpy(m, a.bytes.data(), a.bytes.size());
+            else {
+                memcpy(m, a.bytes.data(), a.bytes.size());
+                core().code_changed((uint32_t)a.a, (uint32_t)a.bytes.size());   // (code, on a core that runs it translated)
+            }
         } else if (a.verb == "quit") keep = false;
     };
     for (auto &r : g_repeat)

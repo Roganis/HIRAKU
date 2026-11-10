@@ -98,6 +98,7 @@ struct Patch {
     std::string module;   // the PC games' (a module of the program's, address an offset in it): not frame()'s
     std::vector<uint8_t> original, replace;
     bool once = false, done = false, logged = false;
+    bool under = false;   // left out: written every frame (no 'original') where a mod before it in the list patches
     bool while_rate = false;   // in place only while a [[rate]] is on; the original bytes otherwise
     // ... and then only on the frames between the cabinet's ticks: an increment made 0 there keeps
     // the cabinet's pace at any rate (pop'n music 14's objects' frame counters)
@@ -433,6 +434,7 @@ bool load(const std::vector<std::string> &dirs, const std::string &game, const s
         // later range, file or patch wins, so the list is laid on from its last mod to its first
         for (auto d = dirs.rbegin(); d != dirs.rend(); ++d) {
             const std::string &dir = *d;
+            const size_t patches_before = g_patches.size();
             if (!std::filesystem::is_directory(fs_path(dir))) throw std::runtime_error(dir + ": no such mod folder");
             const std::string file = dir + "/mod.toml";
             const std::string text = read_file(file);
@@ -611,7 +613,23 @@ bool load(const std::vector<std::string> &dirs, const std::string &game, const s
             }
             lay_files(dir, mod.name, named, medium_paths, python_disks);
             g_mods.insert(g_mods.begin(), mod);   // in the list's order
+            // ... and its memory patches before those of the mods after it: patches go in in their
+            // order, and the one that finds its 'original' bytes there first is the one in place
+            std::rotate(g_patches.begin(), g_patches.begin() + (ptrdiff_t)patches_before, g_patches.end());
         }
+        // A patch with no 'original' is written every frame whatever is there: over a patch of a mod
+        // before it in the list it would win (and the two be written in turn, the code translated
+        // again each time). It is left out, and said
+        for (size_t i = 0; i < g_patches.size(); i++)
+            for (size_t j = 0; j < i && !g_patches[i].under; j++) {
+                Patch &a = g_patches[j], &b = g_patches[i];
+                if (a.mod == b.mod || a.module != b.module || !b.original.empty()) continue;
+                if ((uint64_t)a.address < (uint64_t)b.address + b.replace.size() && (uint64_t)b.address < (uint64_t)a.address + a.replace.size()) {
+                    b.under = true;
+                    fprintf(stderr, "mods: %s: its patch at 0x%08x is left out: %s, before it in the list, changes the same bytes\n",
+                            b.mod.c_str(), b.address, a.mod.c_str());
+                }
+            }
         for (auto &d : python_disks) d.second->finish();
     } catch (const std::exception &e) {
         err = e.what();
@@ -700,7 +718,7 @@ void frame() {
         }
     }
     for (Patch &p : g_patches) {
-        if (p.done || !p.module.empty()) continue;   // (a module's: the PC games' process puts it in)
+        if (p.done || p.under || !p.module.empty()) continue;   // (a module's: the PC games' process puts it in)
         if (p.while_rate && (!rate_on || (p.between_ticks && g_tick))) {   // the original back, if the patch is there
             const size_t n = p.original.size();
             auto *m = const_cast<uint8_t *>(core().mem(p.address, (uint32_t)n));
@@ -727,7 +745,7 @@ void frame() {
 std::vector<MemoryPatch> memory_patches() {
     std::vector<MemoryPatch> out;
     for (const Patch &p : g_patches)
-        if (!p.while_rate) out.push_back({p.mod, p.address, p.module, p.original, p.replace, p.once});
+        if (!p.while_rate && !p.under) out.push_back({p.mod, p.address, p.module, p.original, p.replace, p.once});
     return out;
 }
 

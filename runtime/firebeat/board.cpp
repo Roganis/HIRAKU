@@ -12,6 +12,7 @@
 #include <fstream>
 #include <memory>
 #include <set>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -854,7 +855,7 @@ uint64_t last_input_change() { return g_last_input; }
 Inputs &inputs() { return g_in; }
 const std::string &family() { return g_cfg.family; }
 
-bool set_input(const std::string &name0, int value) {
+bool set_input(const std::string &name0, int value) try {
     std::string name = name0, port;
     if (auto slash = name.find('/'); slash != std::string::npos) { port = name.substr(0, slash); name = name.substr(slash + 1); }
     auto low16 = [&](uint16_t &p, uint16_t bit) { p = value ? (p & ~bit) : (p | bit); };
@@ -949,6 +950,8 @@ bool set_input(const std::string &name0, int value) {
     }
     else return false;
     return true;
+} catch (const std::logic_error &) {   // "P1 Button R": no number where this machine's names have one
+    return false;
 }
 
 void turntable_add(int player, int delta) {

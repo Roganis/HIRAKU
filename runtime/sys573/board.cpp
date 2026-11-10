@@ -1377,7 +1377,7 @@ const uint8_t *mem(uint32_t addr, uint32_t len) {
     // main RAM through any of its mirrors (KUSEG, KSEG0, KSEG1), little-endian as the guest sees it
     const u32 phys = addr & 0x1fffffff;
     ram_device &ram = *g.state->m_ram;
-    if (phys + len > ram.size()) return nullptr;
+    if ((uint64_t)phys + len > ram.size()) return nullptr;   // (in 64 bits: phys + len wraps in 32)
     return ram.pointer() + phys;
 }
 

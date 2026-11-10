@@ -11,24 +11,14 @@
 #pragma once
 
 #include <QDialog>
-#include <QMap>
 #include <QString>
-#include <QStringList>
+
+#include "cleaner.h"
 
 class QComboBox;
 class QPlainTextEdit;
 
 namespace report {
-
-// What a report replaces, and the cards met so far (their numbers in a report, in turn)
-struct Cleaner {
-    QStringList folders;          // HIRAKU's own: <hiraku>
-    QStringList homes;            // the home folder, as each tool writes it
-    QStringList names;            // the user's and the computer's names, in that order
-    QMap<QString, int> cards;
-    QString clean(const QString &text);
-    static Cleaner forThisComputer();
-};
 
 // The report's text for a run log (a file in cfg::logsDir()); game: the run's game id, title its name
 QString make(const QString &runLog, const QString &game, const QString &title, Cleaner &c);

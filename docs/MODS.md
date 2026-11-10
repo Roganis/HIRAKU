@@ -26,7 +26,10 @@ and the files it names, or the game's files at their own paths (below), or both.
 with HIRAKU are in `games/<game>/mods/<mod>/` (pop'n music 9-14's `smooth-notes`); a folder of the
 player's with the same name wins. The launcher lists both under a game's **Mods…** (right-click
 the game), in order; the command line takes `--mod FOLDER`, several in order. Where two mods
-change the same thing, the first one wins, as with ifs_layeredfs (whose mods are listed by name).
+change the same thing, the first one wins, as with ifs_layeredfs (whose mods are listed by name). That
+holds for memory patches too: of two `[[patch]]`es that expect the same bytes, the first mod's goes
+in; one with no `original` (written every frame) is left out where a mod before it patches, and
+the log says so.
 
 ## The game's files at their own paths (as ifs_layeredfs)
 

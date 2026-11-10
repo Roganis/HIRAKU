@@ -1634,6 +1634,7 @@ static void patch_game_modules(void) {
     HMODULE mods[256];
     DWORD bytes = 0;
     if (!EnumProcessModules(GetCurrentProcess(), mods, sizeof mods, &bytes)) return;
+    if (bytes > sizeof mods) bytes = sizeof mods;   // (the bytes all the modules need: more than the array's when it is full)
     for (DWORD i = 0; i < bytes / sizeof *mods; i++) {
         char p[MAX_PATH];
         if (mods[i] == g_self || !GetModuleFileNameA(mods[i], p, MAX_PATH)) continue;

@@ -76,6 +76,14 @@ if(TARGET hiraku_host)
   set_tests_properties(picture_engine PROPERTIES SKIP_RETURN_CODE 77)
 endif()
 
+# Host controls (runtime/host/input.h) with a controller SDL makes up: bindings that share an input,
+# a controller unplugged and plugged back in
+if(TARGET hiraku_host)
+  add_executable(test_bindings input/test_bindings.cpp)
+  target_link_libraries(test_bindings PRIVATE hiraku_host)
+  add_test(NAME input_bindings COMMAND test_bindings)
+endif()
+
 # Smooth motion's in-between pictures: the scroll guess (include/hiraku/scroll_guess.h)
 add_executable(test_scroll_guess smooth/test_scroll_guess.cpp)
 target_include_directories(test_scroll_guess PRIVATE ${CMAKE_SOURCE_DIR}/include)
@@ -107,10 +115,22 @@ add_executable(test_write_file sys/test_write_file.cpp)
 target_link_libraries(test_write_file PRIVATE hiraku_sys)
 add_test(NAME save_write_file COMMAND test_write_file)
 
+# The problem report's cleaner (launcher/cleaner.h): names, folders, cards and servers gone from a log
+if(Qt6_FOUND)
+  add_executable(test_cleaner launcher/test_cleaner.cpp ${CMAKE_SOURCE_DIR}/launcher/cleaner.cpp)
+  target_include_directories(test_cleaner PRIVATE ${CMAKE_SOURCE_DIR}/launcher)
+  target_link_libraries(test_cleaner PRIVATE Qt6::Core)
+  add_test(NAME report_cleaner COMMAND test_cleaner)
+endif()
+
 # Mods' [[text]]: a string found in memory and its replacement (runtime/host/mods.h)
 add_executable(test_find_text mods/test_find_text.cpp)
 target_link_libraries(test_find_text PRIVATE hiraku_shell)
 add_test(NAME mods_text COMMAND test_find_text)
+# ... and their [[patch]]es where two mods change the same bytes: the first in the list wins
+add_executable(test_patch_order mods/test_patch_order.cpp)
+target_link_libraries(test_patch_order PRIVATE hiraku_shell)
+add_test(NAME mods_patch_order COMMAND test_patch_order)
 # tools/ingest.py (Python 3.11 or later: tomllib): a Konami Python game waiting for its BIOS and keys,
 # finished when they're dropped
 if(Python3_Interpreter_FOUND AND Python3_VERSION VERSION_GREATER_EQUAL 3.11)

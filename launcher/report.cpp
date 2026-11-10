@@ -28,39 +28,6 @@
 
 namespace report {
 
-namespace {
-
-// A folder as the run's programs may write it: either separator, and a Linux one as Wine's Z: drive
-QStringList spellings(const QString &path) {
-    QString p = QDir::fromNativeSeparators(path);
-    while (p.size() > 1 && p.endsWith('/')) p.chop(1);
-    QStringList out{p, QString(p).replace('/', '\\')};
-    if (p.startsWith('/')) out << "Z:" + p << "Z:" + QString(p).replace('/', '\\');
-    return out;
-}
-
-// The text with each match of re replaced by what f makes of it
-template <class F> QString each(const QString &s, const QRegularExpression &re, F f) {
-    QString out;
-    qsizetype at = 0;
-    for (auto it = re.globalMatch(s); it.hasNext();) {
-        const QRegularExpressionMatch m = it.next();
-        out += s.mid(at, m.capturedStart() - at);
-        out += f(m);
-        at = m.capturedEnd();
-    }
-    return out + s.mid(at);
-}
-
-// Folders that say nothing of the person, kept as they are
-bool system_folder(const QString &p) {
-    static const QRegularExpression sys(R"(^(/usr/|/opt/|/proc/|/sys/|/dev/|/etc/|/lib|/bin/|/run/user/\d+/?|[A-Za-z]:[\\/](Windows|Program Files|Program Files \(x86\)|ProgramData)[\\/]))",
-                                        QRegularExpression::CaseInsensitiveOption);
-    return sys.match(p).hasMatch();
-}
-
-}  // namespace
-
 Cleaner Cleaner::forThisComputer() {
     Cleaner c;
     c.folders << cfg::rootDir();
@@ -70,64 +37,6 @@ Cleaner Cleaner::forThisComputer() {
         if (const QString n = qEnvironmentVariable(v); !n.isEmpty() && !c.names.contains(n)) c.names << n;
     if (const QString h = QSysInfo::machineHostName(); !h.isEmpty()) c.names << h;
     return c;
-}
-
-QString Cleaner::clean(const QString &text) {
-    QString s = text;
-    // HIRAKU's folder, then the home folder around it (the longer first)
-    for (const QString &f : folders)
-        for (const QString &p : spellings(f))
-            if (p.size() > 3) s.replace(p, "<hiraku>", Qt::CaseInsensitive);
-    for (const QString &f : homes)
-        for (const QString &p : spellings(f))
-            if (p.size() > 3) s.replace(p, "<home>", Qt::CaseInsensitive);
-    // every other folder: its last part only (a Windows path stops at a space: a name with spaces may
-    // leave its later words, which the preview shows)
-    // (a folder on the way may have spaces in its name: "C:\\Users\\Some One\\Desktop\\...")
-    static const QRegularExpression win(R"((?<![\w<>])[A-Za-z]:[\\/](?:[^\s\\/:*?"<>|;,()']+(?: [^\s\\/:*?"<>|;,()']+)*[\\/])*[^\s\\/:*?"<>|;,()']*)");
-    static const QRegularExpression unix_(R"((?<![\w<>.:/~-])/(?:[^\s/;,"'()<>:]+(?: [^\s/;,"'()<>:]+)*/)+[^\s/;,"'()<>:]*)");
-    static const QRegularExpression home(R"(<home>(?:[\\/][^\s\\/:*?"<>|;,()']+)*[\\/]?)");
-    static const QRegularExpression drive(R"(^[A-Za-z]:[\\/]?$)");
-    for (const QRegularExpression *re : {&win, &unix_, &home})
-        s = each(s, *re, [](const QRegularExpressionMatch &m) {
-            const QString p = m.captured(0);
-            if (system_folder(p) || drive.match(p).hasMatch()) return p;   // (a drive alone: the game's own, as E:\\)
-            const qsizetype cut = std::max(p.lastIndexOf('/', p.size() - 2), p.lastIndexOf('\\', p.size() - 2));
-            const QString sep = p.contains('\\') ? "\\" : "/";
-            return "<folder>" + sep + p.mid(cut + 1);
-        });
-    // the user's and the computer's names, as whole words (not a name that's also HIRAKU's own words)
-    static const QStringList ours{"user", "users", "data", "game", "games", "hiraku", "admin", "home", "localhost"};
-    for (int i = 0; i < names.size(); i++) {
-        const QString &n = names[i];
-        if (n.size() < 3 || ours.contains(n, Qt::CaseInsensitive)) continue;
-        const QRegularExpression re("(?<![\\w])" + QRegularExpression::escape(n) + "(?![\\w])", QRegularExpression::CaseInsensitiveOption);
-        s.replace(re, i == names.size() - 1 && names.size() > 1 ? "<computer>" : "<user>");
-    }
-    // e-AMUSEMENT cards: a number each, the same through the report
-    static const QRegularExpression card(R"(\b(?:E004|012E)[0-9A-Fa-f]{12}\b)");
-    s = each(s, card, [this](const QRegularExpressionMatch &m) {
-        const QString k = m.captured(0).toUpper();
-        if (!cards.contains(k)) cards.insert(k, (int)cards.size() + 1);
-        return QString("#%1").arg(cards.value(k));
-    });
-    static const QRegularExpression pcbid(R"(\b[0-9A-Fa-f]{20}\b)");
-    s.replace(pcbid, "<pcbid>");
-    static const QRegularExpression mac(R"(\b(?:[0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}\b)");
-    s.replace(mac, "<mac>");
-    // addresses on the network: this computer's own (127.x), HIRAKU's NET TAISEN ones (10.57.x) kept
-    static const QRegularExpression ip(R"(\b(?:\d{1,3}\.){3}\d{1,3}\b)");
-    s = each(s, ip, [](const QRegularExpressionMatch &m) {
-        const QString a = m.captured(0);
-        return a.startsWith("127.") || a.startsWith("10.57.") || a == "0.0.0.0" ? a : QString("<address>");
-    });
-    static const QRegularExpression host(R"((https?://)([A-Za-z0-9.-]+))");
-    s = each(s, host, [](const QRegularExpressionMatch &m) {
-        const QString h = m.captured(2).toLower();
-        const bool keep = h == "localhost" || h == "github.com" || h.endsWith(".github.com") || h.startsWith("127.") || h.startsWith('<');
-        return m.captured(1) + (keep ? m.captured(2) : QString("<server>"));
-    });
-    return s;
 }
 
 QString make(const QString &runLog, const QString &game, const QString &title, Cleaner &c) {

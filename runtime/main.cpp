@@ -114,6 +114,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <ctime>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -322,6 +323,7 @@ int main(int argc, char **argv) {
             if (k + 1 >= argc) { fprintf(stderr, "%s needs a value\n", a.c_str()); exit(2); }
             return argv[++k];
         };
+        try {   // (a value that isn't the number the option takes: said, not a crash's report)
         if (a == "--game") val();   // read above
         else if (a == "--frames") frames = std::stoull(val());
         else if (a == "--snap-every") snap_every = std::stoull(val());
@@ -375,6 +377,10 @@ int main(int argc, char **argv) {
             if (!error.empty()) { fprintf(stderr, "%s\n", error.c_str()); return 2; }
         }
         else if (!machine.option(a, val)) { fprintf(stderr, "unknown option %s (--help lists them)\n", a.c_str()); return 2; }
+        } catch (const std::logic_error &) {   // std::stoi and its kin: not a number, or too large a one
+            fprintf(stderr, "%s: its value isn't a number it takes\n", a.c_str());
+            return 2;
+        }
     }
 #ifdef _WIN32
     setvbuf(stdout, nullptr, _IONBF, 0);   // Windows has no line buffering (_IOLBF is full), and MSVC's runtime rejects its size 0

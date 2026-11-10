@@ -164,7 +164,12 @@ bool schedule(const std::string &spec) {
     int64_t frame = -1;
     if (auto at = spec.rfind('@'); at != std::string::npos) {
         name = spec.substr(0, at);
-        frame = std::stoll(spec.substr(at + 1));
+        try {
+            frame = std::stoll(spec.substr(at + 1));
+        } catch (const std::exception &) {
+            fprintf(stderr, "macro %s: after @, the frame to play it at\n", spec.c_str());
+            return false;
+        }
     }
     for (size_t k = 0; k < g_macros.size(); k++)
         if (g_macros[k].info.name == name) {

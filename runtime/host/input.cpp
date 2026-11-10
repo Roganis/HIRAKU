@@ -7,6 +7,7 @@
 #include <cmath>
 #include <cstdlib>
 #include <cstdio>
+#include <cstring>
 #include <fstream>
 #include <map>
 #include <set>
@@ -27,12 +28,17 @@ struct Binding {
     SDL_Keycode key = 0;
     std::string dev = {};  // the controller by name (joy[<dev>]), or "": by number (joy<N>)
     double scale = 1.0;    // an analog axis: its turntable counts times this (negative: reversed)
+    // a controller's button, hat direction or axis direction: down now, by this binding. Each
+    // binding counts once in g_held, by its own state: another binding of the same input (a key
+    // held) isn't let go by this one's reports
+    bool held = false;
 };
 
 std::map<std::string, std::vector<Binding>> g_bind;   // input name -> bindings
 std::map<std::string, int> g_held;                    // input name -> number of bound sources down
 std::vector<SDL_Joystick *> g_joys;
 std::vector<std::string> g_joy_dev;                   // each one's name as bindings give it ("" once unplugged)
+std::vector<std::string> g_joy_was;                   // ... and the name an unplugged one had (its slot is its again)
 int16_t g_axis_last[16][16];
 bool g_axis_seen[16][16];
 double g_tt_scale = 1024.0 / 65536.0 * 4;             // turntable counts per axis unit (one wrap = 4 x 256)
@@ -86,6 +92,7 @@ bool parse_binding(const std::string &b, Binding &out) {
         return false;
     }
     if (out.src != Src::axis && scale < 0) return false;
+    if (idx < 0) return false;
     out.scale = scale;
     out.dev = dev;
     return true;
@@ -149,7 +156,7 @@ const bool g_input_log = [] {
 
 int joy_index(SDL_JoystickID id) {
     for (size_t k = 0; k < g_joys.size(); k++)
-        if (SDL_GetJoystickID(g_joys[k]) == id) return (int)k;
+        if (g_joys[k] && SDL_GetJoystickID(g_joys[k]) == id) return (int)k;
     return -1;
 }
 
@@ -198,17 +205,41 @@ bool from(const Binding &b, SDL_JoystickID id) {
     return j >= 0 && j == bound_joy(b);
 }
 
-// Slots stay as they were found (joy<N> keeps its meaning); an unplugged one loses its name, so a
-// controller plugged back in gets it again rather than "<name>@2"
+// Slots stay as they were found (joy<N> keeps its meaning). An unplugged controller's slot is free:
+// plugged back in (a cable knocked) it gets its slot and its name again, so joy<N> and joy[<name>]
+// bindings both work as before; another controller takes the lowest free slot, a new one otherwise
 void add_joystick(SDL_Joystick *j) {
-    std::string name = cab::pad_name(SDL_GetJoystickName(j) ? SDL_GetJoystickName(j) : ""), dev = name;
-    int same = 1;
-    for (auto &d : g_joy_dev)
-        if (d == name || d.rfind(name + "@", 0) == 0) same++;
-    if (same > 1) dev += "@" + std::to_string(same);
-    g_joys.push_back(j);
-    g_joy_dev.push_back(dev);
-    fprintf(stderr, "input: joy%zu = joy[%s] (%d buttons, %d axes)\n", g_joys.size() - 1, dev.c_str(), SDL_GetNumJoystickButtons(j),
+    std::string name = cab::pad_name(SDL_GetJoystickName(j) ? SDL_GetJoystickName(j) : ""), dev;
+    int slot = -1;
+    for (size_t k = 0; k < g_joys.size() && slot < 0; k++)
+        if (!g_joys[k] && (g_joy_was[k] == name || g_joy_was[k].rfind(name + "@", 0) == 0)) slot = (int)k, dev = g_joy_was[k];
+    for (size_t k = 0; k < g_joys.size() && slot < 0; k++)
+        if (!g_joys[k]) slot = (int)k;
+    if (dev.empty()) {
+        dev = name;
+        int same = 1;
+        for (auto &d : g_joy_dev)
+            if (d == name || d.rfind(name + "@", 0) == 0) same++;
+        if (same > 1) dev += "@" + std::to_string(same);
+    }
+    if (slot < 0) {
+        slot = (int)g_joys.size();
+        g_joys.push_back(nullptr);
+        g_joy_dev.emplace_back();
+        g_joy_was.emplace_back();
+    }
+    g_joys[slot] = j;
+    g_joy_dev[slot] = dev;
+    if (slot < 16) {   // what the slot's last controller rested at, and where its axes were, is not this one's
+        g_joy_seen[slot] = false;
+        memset(g_axis_known[slot], 0, sizeof g_axis_known[slot]);
+        memset(g_rest_neg[slot], 0, sizeof g_rest_neg[slot]);
+        memset(g_rest_pos[slot], 0, sizeof g_rest_pos[slot]);
+        memset(g_hat_rest[slot], 0, sizeof g_hat_rest[slot]);
+        memset(g_axis_seen[slot], 0, sizeof g_axis_seen[slot]);
+        std::erase_if(g_button_rest, [slot](const std::pair<int, int> &b) { return b.first == slot; });
+    }
+    fprintf(stderr, "input: joy%d = joy[%s] (%d buttons, %d axes)\n", slot, dev.c_str(), SDL_GetNumJoystickButtons(j),
             SDL_GetNumJoystickAxes(j));
 }
 
@@ -231,7 +262,7 @@ void input_init(const std::string &file) {
 
 void input_joystick_added(unsigned int id) {
     for (auto *j : g_joys)
-        if (SDL_GetJoystickID(j) == id) return;   // already open (enumerated at start)
+        if (j && SDL_GetJoystickID(j) == id) return;   // already open (enumerated at start)
     if (SDL_Joystick *j = SDL_OpenJoystick(id)) add_joystick(j);
 }
 
@@ -239,7 +270,14 @@ void input_joystick_removed(unsigned int id) {
     int k = joy_index(id);
     if (k < 0 || g_joy_dev[k].empty()) return;
     fprintf(stderr, "input: joy%d = joy[%s] unplugged\n", k, g_joy_dev[k].c_str());
+    // what it held is let go (no report will say so), its slot free for it to come back to
+    for (auto &[name, list] : g_bind)
+        for (Binding &b : list)
+            if (b.held && b.src != Src::key && bound_joy(b) == k) b.held = false, press(name, false);
+    g_joy_was[k] = g_joy_dev[k];
     g_joy_dev[k].clear();
+    SDL_CloseJoystick(g_joys[k]);
+    g_joys[k] = nullptr;
 }
 
 namespace {
@@ -314,13 +352,15 @@ void input_event(const SDL_Event &e) {
                 break;
             case SDL_EVENT_JOYSTICK_BUTTON_DOWN:
             case SDL_EVENT_JOYSTICK_BUTTON_UP:
-                if (b.src == Src::button && from(b, e.jbutton.which) && e.jbutton.button == b.index)
-                    press(name, e.type == SDL_EVENT_JOYSTICK_BUTTON_DOWN, b.scale);
+                if (b.src == Src::button && from(b, e.jbutton.which) && e.jbutton.button == b.index) {
+                    const bool down = e.type == SDL_EVENT_JOYSTICK_BUTTON_DOWN;
+                    if (down != b.held) b.held = down, press(name, down, b.scale);
+                }
                 break;
             case SDL_EVENT_JOYSTICK_HAT_MOTION:
                 if (b.src == Src::hat && from(b, e.jhat.which) && e.jhat.hat == b.index) {
                     bool down = (hat_value(e) & b.hat_dir) != 0;
-                    if (down != (g_held[name] > 0)) press(name, down, b.scale);
+                    if (down != b.held) b.held = down, press(name, down, b.scale);
                 }
                 break;
             case SDL_EVENT_JOYSTICK_AXIS_MOTION:
@@ -328,7 +368,7 @@ void input_event(const SDL_Event &e) {
                     const int j = joy_index(e.jaxis.which), a = e.jaxis.axis;
                     const bool rests = j >= 0 && j < 16 && a < 16 && (b.src == Src::axis_neg ? g_rest_neg[j][a] : g_rest_pos[j][a]);
                     bool down = !rests && (b.src == Src::axis_neg ? e.jaxis.value < -16384 : e.jaxis.value > 16384);
-                    if (down != (g_held[name] > 0)) press(name, down, b.scale);
+                    if (down != b.held) b.held = down, press(name, down, b.scale);
                 }
                 // an analog control's position: the axis from one end to the other (reversed with a
                 // negative speed)
@@ -404,7 +444,7 @@ void input_update(double ms) {
         // analog axis: follow its motion (wrapping, as turntable encoders do)
         for (auto &b : g_bind[base]) {
             int j = bound_joy(b);
-            if (b.src != Src::axis || j < 0 || j >= (int)g_joys.size() || j >= 16 || b.index >= 16) continue;
+            if (b.src != Src::axis || j < 0 || j >= (int)g_joys.size() || !g_joys[j] || j >= 16 || b.index >= 16) continue;
             int16_t a = SDL_GetJoystickAxis(g_joys[j], b.index);
             if (g_axis_seen[j][b.index]) {
                 int d = (int)a - g_axis_last[j][b.index];

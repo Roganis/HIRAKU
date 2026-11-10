@@ -7,6 +7,7 @@
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -129,11 +130,34 @@ int CALL usb_security_read_done(uint8_t *p) { (void)p; return 0; }
 int CALL usb_security_write(uint8_t *p) { (void)p; return 0; }
 int CALL usb_security_write_done(void) { return 0; }
 int CALL usb_security_test(int a) { (void)a; return 0; }
-int CALL usb_check_security_new(int a) { (void)a; return 0; }
+// The plug the game asks about next (usbCheckSecurityNew), then its id (usbGetKEYID, into 12 bytes the
+// game has zeroed). pop'n 15-18 check two at start-up: the game's own plug (0, 4, 6, 8), then
+// e-AMUSEMENT's (3, 5, 7, 9), whose id is the cabinet's PCBID: the ten bytes the game prints as
+// /ea3/id/pcbid, every call's srcid. HK_PC_PCBID (hiraku-pc's -p, 20 hex digits) is that id; without
+// it the id stays as the game zeroed it (the PCBID these games had under HIRAKU before -p reached them)
+static int g_plug;
+int CALL usb_check_security_new(int a) {
+    g_plug = a;
+    return 0;
+}
 int CALL usb_check_security(uint8_t *p, int a, int b, int c) { (void)p, (void)a, (void)b, (void)c; return 0; }
 int CALL usb_check_security_eep(int a) { (void)a; return 0; }
 int CALL usb_get_security(int a, uint8_t *p) { (void)a, (void)p; return 0; }
-int CALL usb_get_keyid(uint8_t *p, int a) { (void)p, (void)a; return 0; }
+int CALL usb_get_keyid(uint8_t *p, int a) {
+    (void)a;
+    const char *id = getenv("HK_PC_PCBID");
+    if (p && (g_plug & 1) && id && strlen(id) == 20) {
+        uint8_t b[10];
+        for (int i = 0; i < 10; i++) {
+            unsigned v = 0;
+            if (sscanf(id + 2 * i, "%2x", &v) != 1) return 0;   // (not hex: left as it was)
+            b[i] = (uint8_t)v;
+        }
+        memcpy(p, b, 10);
+        if (usb_log()) hk_log("usb: usbGetKEYID: plug %d, the cabinet's PCBID %s", g_plug, id);
+    }
+    return 0;
+}
 int CALL usb_get_pcbid(uint8_t *p) { (void)p; return 0; }
 int CALL usb_boot_security(uint8_t *p, int a, int b, int c) { (void)p, (void)a, (void)b, (void)c; return 0; }
 int CALL usb_setup_security(uint8_t *p, int a, int b, int c) { (void)p, (void)a, (void)b, (void)c; return 0; }

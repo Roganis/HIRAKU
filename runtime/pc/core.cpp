@@ -353,6 +353,9 @@ public:
             set_env("HK_PC_CARDS", win_path(save_ + "/cards"));
             set_env("HK_PC_CARD1", win_path(save_ + "/card.bin"));
             set_env("HK_PC_CARD2", win_path(save_ + "/card2.bin"));
+        } else if (!ea_.pcbid.empty()) {
+            // pop'n 15-18: the e-AMUSEMENT plug's id, which the game sends as its PCBID (runtime/pc/ezusb.c)
+            set_env("HK_PC_PCBID", ea_.pcbid);
         }
         // a bare pop'n board's firmware: the game's own ezusb.dll, unless --popn-io-dll gave one
         if (!c02_) hk::host::popnio_default_dll(program_ + "/ezusb.dll");

@@ -46,7 +46,7 @@ and the launcher's Settings > e-AMUSEMENT writes them, laid out like spicecfg's 
 | `-ea` | Basic Local EA Emulation | the server inside HIRAKU. It is also what runs without `-url`, and it is ignored with `-url`, as in spice2x. Unlike spice2x's, it is the whole server: cards and data are kept |
 | `-url URL` | EA Service URL | the cabinet's server: `host:port[/path]` (spice2x's form) or `http://host[:port][/path]`. `--eamuse URL` is the older name |
 | `-smartea` | Smart EA | with `-url`: if that server doesn't take a connection at start (3 s), the server inside HIRAKU |
-| `-p PCBID` | PCBID | 20 hex digits, sent in place of the game's own (pop'n 9's is `01401401000100045FEF`) as `srcid` and `gpcb_id`, for a server that only takes the machines it knows (`hiraku-eamuse` with a `cabinets.txt`: `--new-cabinet` makes one). Also on System 573 GuitarFreaks and DrumMania (`srcid`) and the PC games except pop'n 15-18 |
+| `-p PCBID` | PCBID | 20 hex digits, sent in place of the game's own (pop'n 9's is `01401401000100045FEF`) as `srcid` and `gpcb_id`, for a server that only takes the machines it knows (`hiraku-eamuse` with a `cabinets.txt`: `--new-cabinet` makes one). Also on System 573 GuitarFreaks and DrumMania (`srcid`) and the PC games |
 | `-card0 NUMBER` | Player 1 Card | the card's number, 16 hex digits (`E004...`). Without it, `card0.txt` (the working directory's, then the save folder's), as spice2x reads it. `-card1` and `card1.txt` are player 2's; pop'n has one reader |
 | `-autocard off\|p1\|p2\|both` | Auto Card Insert | the card goes in by itself: it is in the slot from the start, and back in it 8 s after the reader gives it out, so the game takes it whenever it opens the slot |
 | `-autopin` (HIRAKU's) | Type the card's PIN | a card HIRAKU's own server knows and holds a PIN for: its PIN typed on the 10-key when the game asks for it, a fixed time after the server reads the card (pop'n 14: 3 s; 15-18: 4 s, then Enter). Not with `-url` (the PIN is the other server's) |
@@ -83,10 +83,11 @@ and the launcher's Settings > e-AMUSEMENT writes them, laid out like spicecfg's 
     whenever it changes, with no restart. The relay carries no PCBID, so it needs `--allow`.
   - **The cabinet's side:** start it with `-p PCBID` (the launcher: Options > Settings >
     e-AMUSEMENT, PCBID). Without it a game sends the PCBID its dump carries, which every copy of
-    that game has: listing that one lets every such copy in. `-p` takes effect on the Konami
-    Python games, System 573 GuitarFreaks and DrumMania, the PC beatmania IIDX games and the two
-    AVS2 PC pop'n loaders. **Not yet on PC pop'n 15-18**, which send `00000000000000000000`: list
-    that for them and use `--allow`.
+    that game has: listing that one lets every such copy in. `-p` takes effect on every game with
+    e-AMUSEMENT: the Konami Python games, System 573 GuitarFreaks and DrumMania, and the PC games
+    (pop'n 15-18 take their PCBID from the board's e-AMUSEMENT plug, `usbGetKEYID` after
+    `usbCheckSecurityNew(3, 5, 7, 9)`: HIRAKU's board gives `-p`'s there; without `-p` they send
+    `00000000000000000000`, as before).
   - The server says what it refused, once a minute at most for each: `refused: a call from
     ADDRESS as cabinet PCBID` (add that line to let it in) or `refused: a connection from ADDRESS`.
   - Neither list hides the traffic (e-AMUSE3 is plain HTTP with a cipher whose key is known): on a

@@ -42,6 +42,15 @@ endif()
 # section 28): no Firebeat game binaries, no recorded 573/Twinkle blocks or XT446 MEG programs,
 # only the cores' own binaries (hiraku-djmain, hiraku-sys573, hiraku-twinkle: --game ID)
 option(HK_GAME_BINARIES "a binary per game (hiraku-<id>), with what build/ recorded for it" ON)
+# HK_ROOT, this checkout's path in the binaries: a build to work with finds dumps/ and games/ from
+# wherever its binaries are. A release's has none: its binaries take the folder above them (the
+# package), no path of the PC that built them goes out, and a folder of that name on the player's
+# PC is never taken for HIRAKU's
+if(HK_GAME_BINARIES)
+  set(HK_ROOT_DEFINE HK_ROOT="${CMAKE_SOURCE_DIR}")
+else()
+  set(HK_ROOT_DEFINE HK_ROOT="")
+endif()
 set(HK_PGO_DIR "" CACHE PATH "directory of per-core llvm-profdata profiles (tools/pgo.py)")
 option(HK_PGO_GENERATE "build instrumented, to train the profiles (tools/pgo.py)" OFF)
 set(HK_PGO_OK OFF)
@@ -194,7 +203,7 @@ target_link_libraries(hiraku_shell PUBLIC hiraku_cabinet Threads::Threads ZLIB::
 # The shell's main() (runtime/main.cpp) and the sampling profiler: compiled once for every core's
 # binaries. Which game a per-game binary is: runtime/shell/built.h, a one-line file each
 add_library(hiraku_main OBJECT runtime/main.cpp runtime/core/sampler.cpp)
-target_compile_definitions(hiraku_main PRIVATE HK_ROOT="${CMAKE_SOURCE_DIR}")
+target_compile_definitions(hiraku_main PRIVATE ${HK_ROOT_DEFINE})
 target_link_libraries(hiraku_main PRIVATE hiraku_shell)
 add_library(hiraku_built_none OBJECT runtime/shell/built_none.cpp)
 # hiraku_built_game(<target> <id>): <target> is <id>'s binary (a core's own binary links
@@ -513,7 +522,7 @@ if(SDL3_FOUND)
   # PLAN.md section 30); its DLLs are the hiraku-pc-dlls above
   add_executable(hiraku-pc runtime/pc/core.cpp runtime/pc/process.cpp)
   target_link_libraries(hiraku-pc PRIVATE hiraku_main hiraku_built_none hiraku_easerver hiraku_host hiraku_shell)
-  target_compile_definitions(hiraku-pc PRIVATE HK_ROOT="${CMAKE_SOURCE_DIR}")
+  target_compile_definitions(hiraku-pc PRIVATE ${HK_ROOT_DEFINE})
   if(TARGET hiraku-pc-dlls)
     add_dependencies(hiraku-pc hiraku-pc-dlls)
   endif()
@@ -545,7 +554,7 @@ if(Qt6_FOUND AND TARGET hiraku_hidout)
     launcher/nvidia.cpp)
   qt_add_resources(hiraku "launcher_res" PREFIX "/" BASE launcher/res
     FILES launcher/res/icon.png launcher/res/logo.png)
-  target_compile_definitions(hiraku PRIVATE HK_ROOT="${CMAKE_SOURCE_DIR}")
+  target_compile_definitions(hiraku PRIVATE ${HK_ROOT_DEFINE})
   target_link_libraries(hiraku PRIVATE Qt6::Widgets Qt6::Network hiraku_cabinet hiraku_hidout)
   set(CMAKE_AUTOMOC OFF)
   message(STATUS "hiraku: Qt ${Qt6_VERSION} launcher enabled")
@@ -601,7 +610,7 @@ function(hiraku_game id entry)
   target_compile_options(hiraku_${id}_code PRIVATE -w -O2 -fwrapv)
   add_executable(hiraku-${id} runtime/firebeat/core.cpp)
   target_compile_definitions(hiraku-${id} PRIVATE
-    HK_GAME_ID="${id}" HK_ENTRY=${entry}u HK_LOAD=${load}u HK_ROOT="${CMAKE_SOURCE_DIR}")
+    HK_GAME_ID="${id}" HK_ENTRY=${entry}u HK_LOAD=${load}u ${HK_ROOT_DEFINE})
   hiraku_built_game(hiraku-${id} ${id})
   if(TARGET hiraku_host)
     target_link_libraries(hiraku-${id} PRIVATE hiraku_host)
@@ -847,7 +856,7 @@ file(GLOB HK_573_RECORDINGS CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/build/*/mips57
 # hiraku-firebeat: every Firebeat game, from its program and recomp.txt, run by the executor
 # (runtime/core/exec.h: no compiler, no game's code in the binary; PLAN.md section 27)
 add_executable(hiraku-firebeat runtime/firebeat/core.cpp runtime/core/no_table.c)
-target_compile_definitions(hiraku-firebeat PRIVATE HK_EXECUTOR=1 HK_ROOT="${CMAKE_SOURCE_DIR}")
+target_compile_definitions(hiraku-firebeat PRIVATE HK_EXECUTOR=1 ${HK_ROOT_DEFINE})
 if(TARGET hiraku_host)
   target_link_libraries(hiraku-firebeat PRIVATE hiraku_host)
 endif()

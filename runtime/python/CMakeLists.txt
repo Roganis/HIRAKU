@@ -130,7 +130,14 @@ add_library(hk_python_core OBJECT ${HK}/runtime/main.cpp ${HK}/runtime/python/co
 	${HK}/runtime/python/easerver_p24.cpp
 	${HK}/runtime/python/easerver_iidx.cpp
 	${HK}/runtime/python/kbin.cpp ${HK}/runtime/eamuse/protocol.cpp ${HK}/runtime/eamuse/remote.cpp)
-target_compile_definitions(hk_python_core PRIVATE HK_ROOT="${HK}")
+# HK_ROOT, this checkout's path in the binary; none in a release's (HK_RELEASE: its binary takes the
+# folder above it, the package, as the other cores' do: the top CMakeLists.txt's HK_ROOT_DEFINE)
+option(HK_RELEASE "a release's build: this checkout's path isn't in the binary" OFF)
+if(HK_RELEASE)
+	target_compile_definitions(hk_python_core PRIVATE HK_ROOT="")
+else()
+	target_compile_definitions(hk_python_core PRIVATE HK_ROOT="${HK}")
+endif()
 target_include_directories(hk_python_core PRIVATE ${HK}/runtime "${CMAKE_BINARY_DIR}/common/include" "${CMAKE_SOURCE_DIR}/pcsx2")
 target_link_libraries(hk_python_core PRIVATE hk_python_shell PCSX2_FLAGS PCSX2)
 target_compile_options(hk_python_core PRIVATE ${HK_PY_FLAGS})

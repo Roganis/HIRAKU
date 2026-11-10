@@ -146,6 +146,16 @@ endif()
 if(Python3_Interpreter_FOUND AND Python3_VERSION VERSION_GREATER_EQUAL 3.11)
   add_test(NAME ingest_place COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/tools/test_ingest_place.py)
 endif()
+# tools/update.py download: a package the release gives no SHA-256 for, or another's, isn't unpacked
+if(Python3_Interpreter_FOUND AND NOT WIN32)
+  add_test(NAME update_download COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/tools/test_update.py)
+endif()
+# tools/package-files.sh: a package takes what git tracks in the repo's folders, nothing else in a checkout
+find_program(HK_GIT git)
+find_program(HK_BASH bash)
+if(HK_GIT AND HK_BASH AND NOT WIN32)
+  add_test(NAME package_files COMMAND ${HK_BASH} ${CMAKE_CURRENT_SOURCE_DIR}/tools/test_package_files.sh ${CMAKE_SOURCE_DIR})
+endif()
 # tools/ingest.py: a System 573 game's disks without its MAME set (kept for it), then a disk alone
 if(Python3_Interpreter_FOUND AND Python3_VERSION VERSION_GREATER_EQUAL 3.11)
   add_test(NAME ingest_disks COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/tools/test_ingest_disks.py $<TARGET_FILE:hiraku-chdcat>)

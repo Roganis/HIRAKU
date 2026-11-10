@@ -77,7 +77,7 @@ cmake -S "$src" -B "$build" -G Ninja -DCMAKE_BUILD_TYPE=Release -DDISABLE_ADVANC
   `# an RPATH, not a RUNPATH: it also finds the bundled libraries' own (libwebp's libsharpyuv)` \
   -DCMAKE_EXE_LINKER_FLAGS=-Wl,--disable-new-dtags \
   -DENABLE_QT_UI=OFF -DENABLE_TESTS=OFF -DUSE_LINKED_FFMPEG=OFF -DWAYLAND_SCANNER=OFF -DHK_PCSC_DLOPEN=ON \
-  -DHIRAKU_DIR="$root"
+  -DHIRAKU_DIR="$root" -DHK_RELEASE=ON
 cmake --build "$build" -j "$jobs" --target hiraku-python
 # no instruction some x86-64 CPUs lack: AMD's SSE4a (extrq, insertq), AVX-512 (zmm registers)
 bad=$(objdump -d --no-show-raw-insn "$build/bin/hiraku-python" | grep -cE '\s(extrq|insertq)\s|%zmm' || true)

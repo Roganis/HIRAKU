@@ -18,6 +18,7 @@ out=${2:?output .zip}
 mode=${3:-}
 case $mode in ""|portable) ;; *) echo "the third argument is 'portable' or nothing" >&2; exit 2 ;; esac
 root=$(cd "$(dirname "$0")/.." && pwd)
+. "$root/tools/package-files.sh"
 out=$(realpath -m "$out")
 stage=$(mktemp -d)
 trap 'rm -rf "$stage"' EXIT
@@ -62,14 +63,15 @@ done
 # adding a game needs nothing installed (the launcher looks for hiraku\python\python.exe first)
 py=$root/out/win-deps/python
 if [ -f "$py/python.exe" ]; then cp -r "$py" "$d/python"; else echo "no $py: the package will need Python installed" >&2; fi
-cp -r "$root/games" "$root/docs" "$root/shaders" "$d/"
-cp -r "$root/oracle/scripts" "$d/scripts"
+# the repo's folders: what git tracks in them, nothing a checkout holds besides (tools/package-files.sh)
+copy_tracked "$root" "$d" games docs shaders
+copy_tracked_as "$root" "$d/scripts" oracle/scripts
 mkdir -p "$d/tools"
 cp "$root"/tools/{ingest.py,checklist.py,chd.py,fbexe.py,pack-data.py,unlock.py,pythonfs.py,chdread.py,mameset.py,catalogue.py,update.py} "$d/tools/"
 mkdir -p "$d/tools/eamuse" && cp "$root"/tools/eamuse/{check.py,corpus.json} "$d/tools/eamuse/"
 # libchdr for tools/chdread.py (a Python game's disk is read through it), where it looks: build\
 if [ -f "$build/libchdr_mini.dll" ]; then mkdir -p "$d/build" && cp "$build/libchdr_mini.dll" "$d/build/"; else echo "no $build/libchdr_mini.dll: Python games can't be added" >&2; fi
-cp -r "$root/tools/data" "$d/tools/"
+copy_tracked "$root" "$d" tools/data
 cp "$root/LICENSE" "$d/" 2>/dev/null || true
 for f in $(grep -o '"third_party/[^"]*"' "$root/launcher/aboutdialog.cpp" | tr -d '"'); do
   [ -f "$root/$f" ] || continue   # one only the Linux package brings (DXVK's)
@@ -106,6 +108,7 @@ right-click menu):
                                                   game has bin\hiraku-<game>)
     bin\hiraku-sys573 --help                      (all options)
 EOF
+check_build_paths "$root" "$d/bin"
 # What the updater needs (tools/update.py): the release this is (HK_VERSION, the tag; none for a
 # build by hand, which the launcher then doesn't offer to update) and the package's own files
 [ -n "${HK_VERSION:-}" ] && printf '%s\n' "${HK_VERSION#v}" > "$d/VERSION"

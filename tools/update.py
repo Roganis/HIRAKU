@@ -6,7 +6,8 @@
                                            into FILE, with the time of the check, for the games)
     tools/update.py download DIR           its package for this system into DIR, checked against
                                            GitHub's SHA-256 and unpacked (DIR/new/hiraku);
-                                           prints "progress DONE TOTAL" lines, then "ready VERSION"
+                                           prints "progress DONE TOTAL" lines, then "ready VERSION".
+                                           A package GitHub gives no SHA-256 for isn't taken
     tools/update.py apply ROOT NEW [--wait PID] [--restart]
                                            NEW's files over ROOT's, after process PID has ended;
                                            --restart starts ROOT's launcher afterwards
@@ -106,6 +107,10 @@ def cmd_download(dest: str) -> int:
     rel = latest()
     if not rel.get("url"):
         sys.exit(f"the release {rel['latest']} has no {ASSET}")
+    if len(rel.get("sha256") or "") != 64:
+        # never installed unchecked: what is unpacked here replaces the programs this PC runs
+        sys.exit(f"GitHub gives no SHA-256 for {ASSET} of the release {rel['latest']}, so the download can't be "
+                 f"checked and isn't installed. The release's page has the package: {rel.get('page', '')}")
     os.makedirs(dest, exist_ok=True)
     total = rel.get("size") or 0
     if shutil.disk_usage(dest).free < 4 * total:
@@ -122,7 +127,7 @@ def cmd_download(dest: str) -> int:
                 print(f"progress {done} {total}", flush=True)
                 last = time.monotonic()
     print(f"progress {done} {total}", flush=True)
-    if rel.get("sha256") and h.hexdigest() != rel["sha256"]:
+    if h.hexdigest() != rel["sha256"].lower():
         os.remove(pkg)
         sys.exit("the download doesn't match its SHA-256 on GitHub: try again")
     new = os.path.join(dest, "new")

@@ -240,8 +240,9 @@ inline void mkdirs(const std::string &path) { hk::sys::make_dirs(path); }
 
 // The HIRAKU root (dumps/, games/, out/): $HIRAKU_ROOT (the launcher passes its own), else a
 // portable install holding the binary (shell/userdir.h; before the checkout, which a package
-// built on this PC would otherwise take), else the checkout the binary was built from, else the
-// folder holding the binary or its parent (a copied build).
+// built on this PC would otherwise take), else the checkout the binary was built from (HK_ROOT;
+// "" in a release's binaries, which know no checkout), else the folder holding the binary or its
+// parent (a copied build, a package).
 std::string find_root() {
     if (const char *r = getenv("HIRAKU_ROOT"); r && *r) return r;
     auto has_dumps = [](const std::string &d) { return hk::sys::is_dir(d + "/dumps"); };
@@ -253,10 +254,12 @@ std::string find_root() {
     }
     for (const std::string &d : {dir, up})
         if (!d.empty() && has_dumps(d) && hk::portable(d)) return d;
-    if (has_dumps(HK_ROOT)) return HK_ROOT;
+    const std::string built_in = HK_ROOT;
+    if (!built_in.empty() && has_dumps(built_in)) return built_in;
     for (const std::string &d : {dir, up})
         if (!d.empty() && has_dumps(d)) return d;
-    return HK_ROOT;
+    if (!built_in.empty()) return built_in;
+    return up.empty() ? "." : up;   // (a package whose dumps/ is gone: still the folder above bin/)
 }
 
 // A game.toml's `boot_seconds = N` (its top, before any [section]): the fast start-up's ready

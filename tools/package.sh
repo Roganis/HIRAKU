@@ -27,6 +27,7 @@ out=${2:?output .tar.xz}
 mode=${3:-}
 case $mode in ""|portable) ;; *) echo "the third argument is 'portable' or nothing" >&2; exit 2 ;; esac
 root=$(cd "$(dirname "$0")/.." && pwd)
+. "$root/tools/package-files.sh"
 stage=$(mktemp -d)
 trap 'rm -rf "$stage"' EXIT
 d=$stage/hiraku
@@ -162,12 +163,13 @@ for f in ${HK_PACKAGE_LIBS:-}; do
 done
 # HK_PYTHON_DIR: a Python for adding games, in python/ (the launcher looks there first)
 [ -n "${HK_PYTHON_DIR:-}" ] && cp -r "$HK_PYTHON_DIR" "$d/python"
-cp -r "$root/games" "$root/docs" "$root/shaders" "$d/"
-cp -r "$root/oracle/scripts" "$d/scripts"
+# the repo's folders: what git tracks in them, nothing a checkout holds besides (tools/package-files.sh)
+copy_tracked "$root" "$d" games docs shaders
+copy_tracked_as "$root" "$d/scripts" oracle/scripts
 mkdir -p "$d/tools"
 cp "$root"/tools/{ingest.py,checklist.py,chd.py,fbexe.py,pack-data.py,regress.py,unlock.py,pythonfs.py,chdread.py,mameset.py,catalogue.py,update.py} "$d/tools/"
 # MAME's BEMANI sets as data: ingest tells a set by its contents (tools/mameset.py)
-cp -r "$root/tools/data" "$d/tools/"
+copy_tracked "$root" "$d" tools/data
 # e-AMUSEMENT (Konami Python): the server checker and the game's calls (docs/EAMUSE3.md)
 mkdir -p "$d/tools/eamuse" && cp "$root"/tools/eamuse/{check.py,corpus.json} "$d/tools/eamuse/"
 mkdir -p "$d/tools/eamuse/bemaniutils" && cp "$root"/tools/eamuse/bemaniutils/{README.md,popn9-python.patch} "$d/tools/eamuse/bemaniutils/"
@@ -230,6 +232,7 @@ bin/hiraku-eamuse --port 8080 is the same server for several PCs, which then run
 --eamuse http://that-pc:8080/ (docs/EAMUSE3.md).
 EOF
 fi
+check_build_paths "$root" "$d/bin"
 # What the updater needs (tools/update.py): the release this is (HK_VERSION, the tag; none for a
 # build by hand, which the launcher then doesn't offer to update) and the package's own files
 [ -n "${HK_VERSION:-}" ] && printf '%s\n' "${HK_VERSION#v}" > "$d/VERSION"

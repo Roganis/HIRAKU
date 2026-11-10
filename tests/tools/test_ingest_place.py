@@ -56,6 +56,30 @@ try:
     check(os.path.exists(os.path.join(to, "data", "sd", "a.bin")), "move: its files in dumps/popn16/")
     check(m.get("program") == os.path.join(to, "prog", "20080101") and m.get("data") == os.path.join(to, "data"),
           "move: machine.txt reads it there")
+
+    # several games moved in one go: one that fails puts back its own files, not those of the games
+    # added before it (the adding itself stood in for here: what counts is whose moves are undone)
+    sys.path.insert(0, os.path.join(HERE, "..", "..", "tools"))
+    import ingest
+    a, b = os.path.join(T, "in", "a.chd"), os.path.join(T, "in", "b.chd")
+    for f in (a, b):
+        open(f, "wb").write(b"x")
+    out3 = os.path.join(T, "dumps3")
+
+    def add(args, inputs):
+        ingest.move_file(inputs[0], os.path.join(out3, os.path.basename(inputs[0])))
+        if inputs[0] != b:
+            return 0
+        ingest.undo_moves()
+        return 1
+
+    ingest.ingest_auto, ingest.split_by_game = add, lambda inputs: [[f] for f in inputs]
+    sys.argv = ["ingest.py", "--out", out3, "--place", "move", a, b]
+    rc = ingest.main()
+    check(rc == 1 and os.path.exists(b) and not os.path.exists(os.path.join(out3, "b.chd")),
+          "two games, the second fails: its file back where it was")
+    check(os.path.exists(os.path.join(out3, "a.chd")) and not os.path.exists(a),
+          "two games, the second fails: the first one's file stays moved")
 finally:
     shutil.rmtree(T, ignore_errors=True)
 

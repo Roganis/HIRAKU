@@ -27,6 +27,7 @@
 #include "../dev/ymz280b.h"
 #include "../spu/spu.h"
 #include "../shell/cabinet.h"
+#include "../shell/sys.h"
 #include "spectrum.h"
 #include "synth.h"
 
@@ -795,8 +796,10 @@ void init(const Config &cfg) {
     }
     for (int k = 0; k < 3; k++) {
         std::vector<uint8_t> f;
-        if (!cfg.nvram_dir.empty() && read_file(cfg.nvram_dir + "/flash" + std::to_string(k) + ".bin", f) && f.size() == 0x200000)
-            g_flash[k].data() = f;
+        const std::string path = cfg.nvram_dir + "/flash" + std::to_string(k) + ".bin";
+        if (cfg.nvram_dir.empty() || !read_file(path, f)) continue;
+        if (f.size() == 0x200000) g_flash[k].data() = f;
+        else fprintf(stderr, "board: %s is %zu bytes, not a flash chip's 2 MiB: left as it is, the chip starts as the dump has it\n", path.c_str(), f.size());
     }
 
     // JP, non-rental; ParaPara adds bit 3, Keyboardmania bit 1 (MAME init_*_jp)
@@ -833,12 +836,15 @@ void shutdown() {
     if (g_trace.f) fclose(g_trace.f);
     g_trace.f = nullptr;
     if (!g_cfg.nvram_dir.empty()) {
-        std::ofstream(g_cfg.nvram_dir + "/rtc.nv", std::ios::binary) << g_rtc->save_nvram();
+        // each whole or not at all (sys::write_file): a full or failing disk keeps the save from before
+        const auto save = [](const std::string &name, const void *d, size_t n) {
+            const std::string path = g_cfg.nvram_dir + "/" + name;
+            if (!sys::write_file(path, d, n)) fprintf(stderr, "board: cannot write %s: the one from before is kept\n", path.c_str());
+        };
+        const std::string rtc = g_rtc->save_nvram();
+        save("rtc.nv", rtc.data(), rtc.size());
         for (int k = 0; k < 3; k++)
-            if (g_flash[k].dirty) {
-                std::ofstream o(g_cfg.nvram_dir + "/flash" + std::to_string(k) + ".bin", std::ios::binary);
-                o.write((const char *)g_flash[k].data().data(), 0x200000);
-            }
+            if (g_flash[k].dirty) save("flash" + std::to_string(k) + ".bin", g_flash[k].data().data(), 0x200000);
     }
 }
 

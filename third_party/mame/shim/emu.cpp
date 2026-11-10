@@ -1052,10 +1052,9 @@ struct file_read_stream : util::read_stream {
     explicit file_read_stream(FILE *fp) : f(fp) {}
     size_t read_some(void *buf, size_t n) override { return fread(buf, 1, n, f); }
 };
-struct file_write_stream : util::write_stream {
-    FILE *f;
-    explicit file_write_stream(FILE *fp) : f(fp) {}
-    size_t write_some(const void *buf, size_t n) override { return fwrite(buf, 1, n, f); }
+struct memory_write_stream : util::write_stream {
+    std::string data;
+    size_t write_some(const void *buf, size_t n) override { return data.append(static_cast<const char *>(buf), n), n; }
 };
 }  // namespace
 
@@ -1088,11 +1087,11 @@ void running_machine::nvram_save() {
     for (device_t *d : m_devices) {
         auto *nv = dynamic_cast<device_nvram_interface *>(d);
         if (!nv || !nv->nvram_can_save()) continue;
+        // whole or not at all (hk::sys::write_file): a full or failing disk, or a kill half way, keeps
+        // the file from before (a 573's installed game is in these)
         std::string path = m_nvram_dir + "/" + nvram_filename(*d);
-        FILE *f = fopen(path.c_str(), "wb");
-        if (!f) { fprintf(stderr, "cannot write %s\n", path.c_str()); continue; }
-        file_write_stream st(f);
+        memory_write_stream st;
         nv->nvram_save(st);
-        fclose(f);
+        if (!hk::sys::write_file(path, st.data)) fprintf(stderr, "cannot write %s: the one from before is kept\n", path.c_str());
     }
 }

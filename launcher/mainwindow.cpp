@@ -790,13 +790,14 @@ static QString nvramSeed(const Game &g);
 // lead to: a PC game's saves link its data (prog/data -> the game's gigabytes), which the core makes
 // again each run; followed, the copy took minutes, and one cut short left a folder of part of the
 // data where the link belongs (EMPRESS's movies missing: "Could not create source filter")
-static void copyTree(const QString &from, const QString &to) {
-    QDir().mkpath(to);
+// false: a file couldn't be copied (a full disk), and `to` holds part of the saves
+static bool copyTree(const QString &from, const QString &to) {
+    if (!QDir().mkpath(to)) return false;
     for (const QFileInfo &f : QDir(from).entryInfoList(QDir::Files | QDir::Dirs | QDir::NoDotAndDotDot | QDir::Hidden | QDir::System)) {
         if (f.isSymLink() || f.isJunction()) continue;
-        if (f.isDir()) copyTree(f.filePath(), to + "/" + f.fileName());
-        else QFile::copy(f.filePath(), to + "/" + f.fileName());
+        if (f.isDir() ? !copyTree(f.filePath(), to + "/" + f.fileName()) : !QFile::copy(f.filePath(), to + "/" + f.fileName())) return false;
     }
+    return true;
 }
 
 void MainWindow::showDetails() {
@@ -1108,18 +1109,27 @@ void MainWindow::play(const QString &id) {
     m_runOutput.clear();
     openRunLog(g->id);
     // the first start of a game with saves to start from: they become its saves
+    // (a copy that fails, a full disk: the part made is taken away, so the next start makes it again,
+    // not kept as the game's saves for good; and the game isn't started on half its saves)
+    const auto copyFailed = [&](const QString &from, const QString &to) {
+        QDir(to).removeRecursively();
+        closeRunLog();
+        QMessageBox::warning(this, "HIRAKU", QString("%1's saves couldn't be copied from\n%2\nto\n%3\n\nIs the disk full?").arg(g->title, from, to));
+    };
     if (QString seed = nvramSeed(*g); !seed.isEmpty() && !QFileInfo::exists(cfg::nvramDir(g->id))) {
-        QDir().mkpath(cfg::nvramDir(g->id));
+        bool copied = QDir().mkpath(cfg::nvramDir(g->id));
         for (const QFileInfo &f : QDir(seed).entryInfoList(QDir::Files))
-            QFile::copy(f.filePath(), cfg::nvramDir(g->id) + "/" + f.fileName());
+            copied = copied && QFile::copy(f.filePath(), cfg::nvramDir(g->id) + "/" + f.fileName());
+        if (!copied) return copyFailed(seed, cfg::nvramDir(g->id));
         log("saves: started from " + seed + "\n");
     }
     // the first start with these mods: their saves start as a copy of the clean game's
     if (const QString mod_saves = cfg::saveDir(g->id); mod_saves != cfg::nvramDir(g->id) && !QFileInfo::exists(mod_saves)) {
-        QDir().mkpath(mod_saves);
         if (QFileInfo::exists(cfg::nvramDir(g->id))) {
-            copyTree(cfg::nvramDir(g->id), mod_saves);
+            if (!copyTree(cfg::nvramDir(g->id), mod_saves)) return copyFailed(cfg::nvramDir(g->id), mod_saves);
             log("saves: with mods, started from a copy of " + cfg::nvramDir(g->id) + "\n");
+        } else {
+            QDir().mkpath(mod_saves);
         }
     }
     QStringList args = arguments(*g);
@@ -1127,6 +1137,7 @@ void MainWindow::play(const QString &id) {
     if (g->core == "pc") nvidiaNotice(*g);
     m_running = g->id;
     m_stopping = false;
+    m_run++;
     m_proc.setWorkingDirectory(cfg::rootDir());
     {
         QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
@@ -1148,8 +1159,9 @@ void MainWindow::stop() {
     if (m_running.isEmpty()) return;
     m_stopping = true;
     m_proc.terminate();   // SIGTERM: the game saves its NVRAM and exits at the next frame
-    QTimer::singleShot(5000, this, [this] {
-        if (m_proc.state() != QProcess::NotRunning) m_killed = true, m_proc.kill();
+    // (this run only: a game started within those 5 s, after this one went, isn't the one asked to stop)
+    QTimer::singleShot(5000, this, [this, run = m_run] {
+        if (run == m_run && m_proc.state() != QProcess::NotRunning) m_killed = true, m_proc.kill();
     });
 }
 

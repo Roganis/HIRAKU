@@ -361,11 +361,7 @@ static void card_load(int u) {
 }
 
 static void card_save(int u) {
-    const char *f = card_file(u);
-    FILE *fh = f && *f ? fopen(f, "wb") : NULL;
-    if (!fh) return;
-    fwrite(g_cards[u].data, 1, 128, fh);
-    fclose(fh);
+    hk_write_file(card_file(u), g_cards[u].data, 128);
 }
 
 // a card offered since the last look goes in while the slot is open

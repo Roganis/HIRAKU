@@ -263,6 +263,23 @@ const char *hk_magnetic_card_file(int u) {
     return path[u & 1];
 }
 
+// A save (a magnetic card): n bytes as the file at `path`, whole or not at all. Written beside it,
+// sent to the disk and checked, then put in its place: a full or failing disk keeps the card from
+// before (opened "wb" it would be left empty, and the next read take it for a new card). 1: written
+int hk_write_file(const char *path, const void *data, size_t n) {
+    char tmp[MAX_PATH + 8];
+    if (!path || !*path || snprintf(tmp, sizeof tmp, "%s.tmp", path) >= (int)sizeof tmp) return 0;
+    HANDLE h = CreateFileA(tmp, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (h == INVALID_HANDLE_VALUE) return 0;
+    DWORD put = 0;
+    int ok = WriteFile(h, data, (DWORD)n, &put, NULL) && put == n && FlushFileBuffers(h);
+    ok = CloseHandle(h) && ok;
+    if (ok && MoveFileExA(tmp, path, MOVEFILE_REPLACE_EXISTING)) return 1;
+    DeleteFileA(tmp);
+    hk_log("hiraku-pc: cannot write %s: the one from before is kept", path);
+    return 0;
+}
+
 // --- the game's paths (HK_PC_MAP)
 
 static struct { char from[MAX_PATH], to[MAX_PATH]; size_t n; } g_map[8];

@@ -99,6 +99,12 @@ if(TARGET hiraku-pc-test-vsock AND HK_WINE AND NOT WIN32)
   set_tests_properties(pc_vsock PROPERTIES RESOURCE_LOCK relay_5740 TIMEOUT 120)
 endif()
 
+# Saves written whole or not at all (runtime/shell/sys.h, write_file): NVRAM, cards, the e-AMUSEMENT
+# server's files
+add_executable(test_write_file sys/test_write_file.cpp)
+target_link_libraries(test_write_file PRIVATE hiraku_sys)
+add_test(NAME save_write_file COMMAND test_write_file)
+
 # Mods' [[text]]: a string found in memory and its replacement (runtime/host/mods.h)
 add_executable(test_find_text mods/test_find_text.cpp)
 target_link_libraries(test_find_text PRIVATE hiraku_shell)

@@ -103,10 +103,8 @@ bool CardUnit::card_read(int player, const std::string &number) {
 
 void CardUnit::save() {
     for (const Reader &r : readers_)
-        if (FILE *f = r.file.empty() ? nullptr : fopen(r.file.c_str(), "wb")) {
-            fwrite(r.data, 1, sizeof r.data, f);
-            fclose(f);
-        }
+        if (!r.file.empty() && !sys::write_file(r.file, r.data, sizeof r.data))
+            fprintf(stderr, "card: cannot write %s: the one from before is kept\n", r.file.c_str());
 }
 
 bool CardUnit::set_input(const std::string &name, int value) {

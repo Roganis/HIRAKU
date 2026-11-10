@@ -489,8 +489,16 @@ def record_or_check(names, record):
         # the only case to start from its parent takes the parent's NVRAM directory (not when
         # caching: the parent's is kept to check and cache)
         take = not spec and bool(after_of(case)) and children[after_of(case)] == [case]
-        rc, stats, _, _, log = run(case, d, take=take, nice=0 if case in critical else 10, src=src)
-        if asked:
+        # record: the digest is made beside the baseline and becomes it only when the run ended well
+        # (a run that crashed half way would otherwise leave its cut digest as the baseline)
+        made = d + ".new" if asked and record else d
+        rc, stats, _, _, log = run(case, made, take=take, nice=0 if case in critical else 10, src=src)
+        if asked and record:
+            if rc == 0 and os.path.exists(made):
+                os.replace(made, d)
+            elif os.path.exists(made):
+                os.remove(made)
+        if asked and (rc == 0 or not record):
             with open(d.replace(".digest", ".stats"), "w") as f:
                 f.write("\n".join(stats) + "\n")
         h = nvram_hash(case) if children[case] and rc == 0 else None

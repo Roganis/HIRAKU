@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // GuitarFreaks and DrumMania V's card units on Konami Python 2 (gfdmcard.h).
 #include "python/gfdmcard.h"
+#include "shell/sys.h"
 
 #include <algorithm>
 #include <cstdio>
@@ -43,10 +44,7 @@ GfdmCardUnit::GfdmCardUnit(std::string file) : file_(std::move(file)) {
 
 void GfdmCardUnit::save() const {
     if (file_.empty()) return;
-    if (FILE *f = fopen(file_.c_str(), "wb")) {
-        fwrite(data_, 1, sizeof data_, f);
-        fclose(f);
-    }
+    if (!sys::write_file(file_, data_, sizeof data_)) fprintf(stderr, "card: cannot write %s: the one from before is kept\n", file_.c_str());
 }
 
 bool GfdmCardUnit::write(const uint8_t *data, uint32_t size, std::vector<uint8_t> &reply) {

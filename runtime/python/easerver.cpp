@@ -122,13 +122,9 @@ std::string EamuseServer::read_file(const std::string &name) const {
 void EamuseServer::write_file(const std::string &name, const std::string &data) const {
     if (dir_.empty()) return;
     sys::make_dir(dir_);
-    const std::string path = dir_ + "/" + name, tmp = path + ".tmp";
-    {
-        std::ofstream f(tmp, std::ios::binary | std::ios::trunc);
-        f << data;
-        if (!f) return;
-    }
-    sys::replace_file(tmp, path);
+    // whole or not at all: a full or failing disk keeps the player's file from before
+    const std::string path = dir_ + "/" + name;
+    if (!sys::write_file(path, data)) fprintf(stderr, "e-AMUSEMENT: cannot write %s: the one from before is kept\n", path.c_str());
 }
 
 std::string EamuseServer::answer(const Call &c, const Request &r, const std::string &host) {

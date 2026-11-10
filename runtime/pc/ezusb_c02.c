@@ -302,12 +302,7 @@ static void card_load(int u) {
 }
 
 static void card_save(int u) {
-    const char *f = card_file(u);
-    FILE *fh = f && *f ? fopen(f, "wb") : NULL;
-    if (fh) {
-        fwrite(g_cards[u].data, 1, 128, fh);
-        fclose(fh);
-    }
+    hk_write_file(card_file(u), g_cards[u].data, 128);
 }
 
 // The unit (1 or 2) as an index, or -1; a card offered since the last look goes in if the slot is open

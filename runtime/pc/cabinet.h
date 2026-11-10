@@ -31,6 +31,7 @@
 //   HK_PAD_SCRIPT for tests: a file of "SECONDS BITS MS" lines, the pad bits held MS milliseconds
 //                 that many seconds after the board started (bit 22: a coin)
 #pragma once
+#include <stddef.h>
 #include <stdint.h>
 
 #include "link.h"
@@ -67,6 +68,8 @@ uint32_t hk_card_seq2(void);
 // The file of the magnetic card held to player u's slot (0 or 1; the C02 cabinet's): each real card
 // its own (HK_PC_CARDS\<its number>.bin), else the one file of the slot's (HK_PC_CARD1, HK_PC_CARD2)
 const char *hk_magnetic_card_file(int u);
+// n bytes as the file at `path`, whole or not at all (the file from before kept when it can't be); 1: written
+int hk_write_file(const char *path, const void *data, size_t n);
 // The network's calls that lead to e-AMUSEMENT (net.c): the hook for a ws2_32 call, or NULL
 void *hk_net_hook(const char *fn);
 void *hk_net_card_hook(const char *fn);   // iphlpapi's

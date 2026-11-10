@@ -464,7 +464,40 @@ bool copy_file(const std::string &from, const std::string &to) {
     std::ofstream out(to + ".part", std::ios::binary | std::ios::trunc);
     out << in.rdbuf();
     out.close();
-    return out.good() && replace_file(to + ".part", to);
+    if (out.good() && replace_file(to + ".part", to)) return true;
+    std::remove((to + ".part").c_str());
+    return false;
+}
+
+bool write_file(const std::string &path, const void *data, size_t n) {
+    const std::string tmp = path + ".tmp";
+    const char *bytes = static_cast<const char *>(data);
+    bool ok = true;
+#ifdef _WIN32
+    HANDLE h = CreateFileA(tmp.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (h == INVALID_HANDLE_VALUE) return false;
+    for (size_t at = 0; ok && at < n;) {
+        DWORD put = 0;
+        ok = WriteFile(h, bytes + at, (DWORD)std::min<size_t>(n - at, 0x40000000), &put, nullptr) && put > 0;
+        at += put;
+    }
+    ok = ok && FlushFileBuffers(h);
+    ok = CloseHandle(h) && ok;
+#else
+    const int fd = open(tmp.c_str(), O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0666);
+    if (fd < 0) return false;
+    for (size_t at = 0; ok && at < n;) {
+        const ssize_t put = ::write(fd, bytes + at, n - at);
+        if (put < 0 && errno == EINTR) continue;
+        ok = put > 0;
+        if (ok) at += (size_t)put;
+    }
+    ok = ok && fsync(fd) == 0;   // (a full disk can show only here, or at close)
+    ok = close(fd) == 0 && ok;
+#endif
+    if (ok && replace_file(tmp, path)) return true;
+    std::remove(tmp.c_str());
+    return false;
 }
 
 }  // namespace hk::sys

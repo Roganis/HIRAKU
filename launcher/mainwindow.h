@@ -102,6 +102,7 @@ private:
     bool m_updateBegun = false;
     bool m_stopping = false;
     bool m_killed = false;   // stop() ended it: it hadn't gone 5 s after being asked
+    quint64 m_run = 0;       // counts the games started: stop()'s timer ends only the run it was set for
     QString m_unitInstall;      // the game whose run installs its network unit's data (hasNetworkUnit)
     bool m_echo = false;
 };

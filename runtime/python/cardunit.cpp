@@ -97,13 +97,7 @@ void CardUnit::given_back() {
 void CardUnit::save() {
     older_.clear();   // written: this game's own now
     if (file_.empty()) return;
-    const std::string tmp = file_ + ".tmp";
-    {
-        std::ofstream f(tmp, std::ios::binary | std::ios::trunc);
-        f.write(reinterpret_cast<const char *>(card_.data()), (std::streamsize)card_.size());
-        if (!f) { fprintf(stderr, "card: cannot write %s\n", tmp.c_str()); return; }
-    }
-    sys::replace_file(tmp, file_);
+    if (!sys::write_file(file_, card_.data(), card_.size())) fprintf(stderr, "card: cannot write %s: the one from before is kept\n", file_.c_str());
 }
 
 uint8_t CardUnit::status() const {

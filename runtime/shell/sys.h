@@ -56,6 +56,11 @@ bool exists(const std::string &path);     // a file or a folder
 bool copy_file(const std::string &from, const std::string &to);
 // rename(), and the file at `to` replaced if there is one (Windows' rename() fails then)
 bool replace_file(const std::string &from, const std::string &to);
+// A save: n bytes as the file at `path`, whole or not at all. Written beside it (path + ".tmp"), sent
+// to the disk and checked, then put in its place: a full disk, a disk gone read-only or a kill half
+// way leaves the file from before as it was. false then (and no .tmp left behind)
+bool write_file(const std::string &path, const void *data, size_t n);
+inline bool write_file(const std::string &path, const std::string &data) { return write_file(path, data.data(), data.size()); }
 std::string exe_path();   // this program's file, with / between folders; empty if unknown
 // Runs a program (argv[0]: its file) with no window of its own and its output thrown away, and
 // waits for it: its exit code, -1 if it couldn't be started

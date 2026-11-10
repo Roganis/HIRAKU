@@ -591,6 +591,7 @@ def move_file(src: str, dst: str, undo: bool = False) -> str:
     except OSError:
         pass
     if os.path.isdir(src):
+        shutil.rmtree(dst + ".part", ignore_errors=True)   # a move cut short before: its part copy
         shutil.copytree(src, dst + ".part")
         os.replace(dst + ".part", dst)
         shutil.rmtree(src)
@@ -1615,10 +1616,18 @@ def ingest_rest(args) -> int:
             rc = 0
             for g in groups:
                 print()
+                MOVED.clear()   # the games before are added, or have put their own files back: theirs stay
                 rc |= ingest_auto(copy.copy(args), g)
             return rc
     return ingest_auto(args, args.inputs)
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    try:
+        sys.exit(main())
+    except Exception as e:   # (not SystemExit) a fault half way: say so as a game that failed does, files back
+        import traceback
+        traceback.print_exc()
+        undo_moves()
+        print(f"ERROR    {type(e).__name__}: {e}")
+        sys.exit(1)

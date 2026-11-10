@@ -199,7 +199,9 @@ void merge_eamuse(const std::string &from, const std::string &to) {
         std::ifstream f(p, std::ios::binary);
         return std::string(std::istreambuf_iterator<char>(f), std::istreambuf_iterator<char>());
     };
-    auto write = [](const fs::path &p, const std::string &d) { std::ofstream(p, std::ios::binary | std::ios::trunc) << d; };
+    auto write = [](const fs::path &p, const std::string &d) {   // whole or not at all
+        if (!hk::sys::write_file(p.string(), d)) fprintf(stderr, "e-AMUSEMENT: cannot write %s: the one from before is kept\n", p.string().c_str());
+    };
     bool left = false;
     for (const fs::directory_entry &e : fs::directory_iterator(from, ec)) {
         const std::string name = e.path().filename().string();

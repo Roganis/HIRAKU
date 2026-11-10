@@ -421,7 +421,8 @@ static void waits_report(void);
 // (or, without original bytes, every time: a cheat), once if asked; at the program's own addresses
 
 // rate: 1 tied to a [[rate]] (in place only while it's on), 2 also only between the cabinet's ticks
-static struct patch { uint8_t *at, *original, *replace; size_t n; int once, done, rate; } *g_patches;
+// line: the patch's place in hiraku-pc's list (its patch_done), whichever lines were read
+static struct patch { uint8_t *at, *original, *replace; size_t n; int once, done, rate, line; } *g_patches;
 static int g_npatches;
 
 static int unhex(const char *h, uint8_t **out) {
@@ -435,23 +436,38 @@ static int unhex(const char *h, uint8_t **out) {
     return (int)n;
 }
 
+// A line's next word, cut out in place (a patch's bytes are as long as the mod made them: no
+// buffer of a fixed size to fit); NULL at the line's end
+static char *word(char **at) {
+    char *w = *at + strspn(*at, " \t");
+    if (!*w) return NULL;
+    char *end = w + strcspn(w, " \t");
+    if (*end) *end++ = 0;
+    *at = end;
+    return w;
+}
+
 static void read_patches(void) {
     char *t = read_text(getenv("HK_PC_PATCHES"));
-    for (char *line = t ? strtok(t, "\r\n") : NULL; line && g_npatches < 256; line = strtok(NULL, "\r\n")) {
-        unsigned long addr;
-        int once;
-        char orig[2048], repl[2048], kind[8] = "";
+    int line_no = -1, unread = 0;
+    for (char *line = t ? strtok(t, "\r\n") : NULL; line && line_no < 255; line = strtok(NULL, "\r\n")) {
+        line_no++;
         // "ADDRESS ONCE ORIGINAL REPLACE [rate|ticks]"
-        if (sscanf(line, "%lx %d %2047s %2047s %7s", &addr, &once, orig, repl, kind) < 4) continue;
-        struct patch p = {(uint8_t *)(uintptr_t)addr, NULL, NULL, 0, once, 0, !strcmp(kind, "rate") ? 1 : !strcmp(kind, "ticks") ? 2 : 0};
+        char *at = line;
+        const char *addr = word(&at), *once = word(&at), *orig = word(&at), *repl = word(&at), *kind = word(&at);
+        if (!repl) { unread++; continue; }
+        if (!kind) kind = "";
+        struct patch p = {(uint8_t *)(uintptr_t)strtoul(addr, NULL, 16), NULL, NULL, 0, atoi(once), 0,
+                          !strcmp(kind, "rate") ? 1 : !strcmp(kind, "ticks") ? 2 : 0, line_no};
         const int n = unhex(repl, &p.replace);
-        if (n <= 0 || (strcmp(orig, "-") && unhex(orig, &p.original) != n)) continue;
-        if (p.rate && (!p.original || once)) continue;   // (mods.cpp refuses these)
+        if (n <= 0 || (strcmp(orig, "-") && unhex(orig, &p.original) != n)) { unread++; continue; }
+        if (p.rate && (!p.original || p.once)) continue;   // (mods.cpp refuses these)
         p.n = (size_t)n;
         g_patches = realloc(g_patches, sizeof *g_patches * (size_t)(g_npatches + 1));
         g_patches[g_npatches++] = p;
     }
     if (g_npatches) hk_log("hiraku-pc: mods: %d memory patches", g_npatches);
+    if (unread) hk_log("hiraku-pc: mods: %d of the patches' lines couldn't be read: left out", unread);
 }
 
 // Whether [p, p + n) is all there to read (committed, not a guard or no-access page)
@@ -507,8 +523,8 @@ static void apply_patches(void) {
         if (p->done || !present(p->at, p->n) || !memcmp(p->at, p->replace, p->n)) continue;   // gone, not there, in place
         if (p->original && memcmp(p->at, p->original, p->n)) continue;   // not loaded (yet): wait
         put(p->at, p->replace, p->n);
-        if (!hk_link()->patch_done[i]) hk_log("hiraku-pc: mods: patch at %p (%u bytes) in place", (void *)p->at, (unsigned)p->n);
-        hk_link()->patch_done[i] = 1;
+        if (!hk_link()->patch_done[p->line]) hk_log("hiraku-pc: mods: patch at %p (%u bytes) in place", (void *)p->at, (unsigned)p->n);
+        hk_link()->patch_done[p->line] = 1;
         if (p->once) p->done = 1;
     }
 }

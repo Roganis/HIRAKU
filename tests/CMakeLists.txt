@@ -171,6 +171,10 @@ endif()
 # tools/ingest.py --place: a game's folder moved into dumps/ or read where it is
 if(Python3_Interpreter_FOUND AND Python3_VERSION VERSION_GREATER_EQUAL 3.11)
   add_test(NAME ingest_place COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/tools/test_ingest_place.py)
+  # ... and its walk of a dropped folder: links followed, but not up the tree or out through a Wine prefix's drives
+  if(NOT WIN32)
+    add_test(NAME ingest_walk COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/tools/test_ingest_walk.py)
+  endif()
 endif()
 # tools/update.py download: a package the release gives no SHA-256 for, or another's, isn't unpacked
 if(Python3_Interpreter_FOUND AND NOT WIN32)

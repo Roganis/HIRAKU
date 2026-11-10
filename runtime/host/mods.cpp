@@ -255,6 +255,8 @@ bool iso_file(const std::string &image, const std::string &name, std::vector<uin
             read_sector(lba + s, sec.data());
             for (size_t at = 0; at < 2048 && sec[at];) {
                 const uint8_t *r = &sec[at];
+                // (a record is in its sector whole, its name in the record: a damaged disc's isn't read past)
+                if (at + r[0] > 2048 || r[0] < 34 || 33u + r[32] > r[0]) break;
                 std::string id((const char *)r + 33, r[32]);
                 if (const size_t semi = id.find(';'); semi != std::string::npos) id.erase(semi);   // the version
                 if (!id.empty() && id.back() == '.') id.pop_back();

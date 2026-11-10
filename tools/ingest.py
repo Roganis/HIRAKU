@@ -999,6 +999,26 @@ def disk_name(c: str) -> str:
     return stem
 
 
+def walk_links(top: str):
+    """os.walk following links (a dump's folders are often links to another disk), each folder once.
+    Not followed: a link to a folder above the one walked or already walked (a loop), and a Wine
+    prefix's dosdevices (its z: is the whole disk, the others whole disks too)."""
+    root = os.path.realpath(top)
+    seen = {root}
+    for base, dirs, names in os.walk(top, followlinks=True):
+        keep = []
+        for d in dirs:
+            real = os.path.realpath(os.path.join(base, d))
+            above = root.startswith(real.rstrip(os.sep) + os.sep)
+            prefix = d == "dosdevices" and (os.path.exists(os.path.join(base, "system.reg")) or os.path.isdir(os.path.join(base, "drive_c")))
+            if real in seen or above or prefix:
+                continue
+            seen.add(real)
+            keep.append(d)
+        dirs[:] = keep
+        yield base, dirs, names
+
+
 def gather(paths: list[str], set_names: set[str]) -> list[str]:
     """The files to look at: folders expanded (a folder named after a MAME set is that
     set, as in a MAME rompath); a .bin a .cue names left to the .cue."""
@@ -1010,7 +1030,7 @@ def gather(paths: list[str], set_names: set[str]) -> list[str]:
                 files.append(os.path.normpath(p))   # loose ROM files: the set itself
             files += [os.path.join(p, n) for n in names if n.lower().endswith(IMAGES)]
         elif os.path.isdir(p):
-            for base, _, names in os.walk(p, followlinks=True):
+            for base, _, names in walk_links(p):
                 files += [os.path.join(base, n) for n in sorted(names)]
         else:
             files.append(p)

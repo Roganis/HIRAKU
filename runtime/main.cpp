@@ -6,105 +6,7 @@
 //
 //   hiraku-<game> [options]
 //   hiraku-<core> --game ID [options]   (a release's djmain, sys573, twinkle: one binary per core)
-//     --frames N        stop after N video frames (default: run until killed)
-//     --snap-every N    write every Nth frame as PPM into --out (default off)
-//     --snap-from F     ... from frame F on
-//     --snap-between N  with --smooth-motion, each snapshot's in-between pictures at 1/N, 2/N...
-//                       of a frame (default: halfway only)
-//     --out DIR         output directory for snapshots/trace (default out/run/<game>)
-//     --trace           write an oracle-format MMIO trace (out/mmio.bin), see oracle/
-//     --ata-log         log ATA/ATAPI commands
-//     --script FILE     run an oracle input script (.his): same inputs, same frames as in MAME
-//     --wav FILE        record the sound output (16-bit stereo, at the core's rate: 44.1 kHz, DJ Main 48 kHz)
-//     --digest FILE     write one line per frame: frame number, a hash of the picture and a running
-//                       hash of all sound so far (tools/regress.py checks runs are bit-identical with it)
-//     --debug-every N   print the CPU state every N frames
-//     --window [SCALE]  show the game in a window, in real time, with sound (SDL3 builds);
-//                       F2 test, 9 service, 5 coin, 1 start, Esc quits; controls per cabinet
-//     --fullscreen      start the window fullscreen (F11 toggles)
-//     --display-sync on|off  on (the default): on a fixed-refresh display, show every frame for a
-//                       whole number of refreshes, running the game at the display's rate (up to
-//                       3 % off: pop'n 2.6 % fast at 60 Hz); off: the game's exact speed, frames
-//                       shown as they come (for variable-refresh displays). runtime/host/pacing.h
-//     --smooth-motion   with display sync, on any display (60, 144, 240 Hz): the game at its own
-//                       speed, and every refresh shows what moves carried on to that refresh's
-//                       moment (the core's in-between pictures: DJ Main's sprites, the Firebeat
-//                       GCU's objects, the PlayStation GPU's primitives on Twinkle and System
-//                       573) instead of frames held for
-//                       uneven numbers of refreshes.
-//                       Needs the compositor's fifo-v1 (KWin 6.7), or Windows (DWM's vblank).
-//                       docs/SMOOTH.md
-//     --crt-beam        the Blur Busters CRT beam simulator over the picture, on a display faster
-//                       than the game (120 Hz and up; best at 240): each refresh lights the part of
-//                       the tube the beam sweeps then, for a CRT's motion clarity. Needs what
-//                       --smooth-motion does, and replaces its in-between pictures. docs/SMOOTH.md
-//     --crt-beam-gamma G  the display's gamma for it (2.2; a mismatch shows as bands, washed out)
-//     --crt-beam-gain X   its brightness against motion blur (0.7; 1 as bright as without it)
-//     --lights-overlay  the game's lights over its picture: every lamp the core decodes, lit or not
-//                       as the game drives it, and how often they change (F9 shows or hides it)
-//     --macro NAME[@F]  run one of the game's code macros (games/<game>/macros.txt) at frame F, or
-//                       at its own `at` frame (power-on codes); repeatable. In the window,
-//                       Ctrl+1..9 types the 1st..9th macro
-//     --picture MODE    off (sharp pixels, the default), light (CRT: crt-guest-advanced-fast),
-//                       full (CRT: crt-royale) or lola (CRT, the analog chain: Lola Retro); F10
-//                       cycles them. --crt is --picture light
-//     --picture-config DIR  read DIR/<shader>.params over the shader's settings (repeatable,
-//                       later ones win; `name = value` lines; read again when they change)
-//     --shader-key ACTION=BINDING  a control of the shader's settings in the game (F8: show, up,
-//                       down, less, more, saved, default, save, save_game), as --bindings spells it
-//                       ("key:F8", "joy[DAO FPS]:button3"); repeatable; host/shaderview.h
-//     --bindings FILE   controls (see runtime/host/input.h)
-//     --lights FILE     drive HID controller LEDs from the cabinet lamps (see runtime/host/lights.h)
-//     --lights-socket P publish the lamps on a UNIX socket at path P, or on TCP at HOST:PORT (docs/LIGHTS.md)
-//     --lights-log FILE every lamp change, a line each: the frame, the machine's time, the lamp (its
-//                       output number, as the F9 overlay shows it) and on or off; FILE "-" is the
-//                       console (stderr). Headless too
-//     --reader PATH, --scard, --cardio  real e-AMUSEMENT card readers, with --window (see
-//                       runtime/host/readers.h)
-//     --bio2 PATH       beatmania IIDX's BIO2 I/O board as the cabinet's controls and lamps, with
-//                       --window (runtime/host/bio2.h)
-//     --popn-io WHERE, --popn-io-dll FILE  a pop'n music cabinet's USB I/O board as its buttons
-//                       and lamps, with --window (runtime/host/popnio.h)
-//     --audio-ms N      the audio queue target (default 8), and its least: it tunes itself to the
-//                       lead that covers all but the two worst seconds of the last minute (not in
-//                       the first 10 s), up to 30 ms, and comes back down when late frames stop
-//     --audio-fixed     the audio queue stays at --audio-ms (no self-tuning)
-//     --normal-priority with --window, leave the game's threads at normal priority (by default they
-//                       go ahead of other programs: Linux nice -11 and timer slack 1 us, as far as
-//                       the limits or RealtimeKit allow; Windows above normal)
-//     --audio-device D  the sound card itself, through ALSA, with no sound server in between: an ALSA
-//                       device name such as hw:CARD=Generic,DEV=0 (aplay -l lists them; the launcher's
-//                       Settings > Audio too). If it's busy, the system's default output instead
-//                       Windows: an output device by the name Windows shows (shared, through the system
-//                       mixer), or with --audio-exclusive alone
-//     --split-screens   a machine with several monitors (Keyboardmania: one a player) shows each in
-//                       a window of its own: player 2's on the next display, both fullscreen with
-//                       --fullscreen (F11 toggles the window with the keyboard)
-//     --mod FOLDER      a mod (docs/MODS.md: the folder's mod.toml), several in order: patches
-//                       to the game's memory, replaced bytes or files on its media
-//     --fast-boot       with --window, the game's start-up as fast as the machine can go (no sound,
-//                       its pictures with a box over them) until its ready point (games/<id>/game.toml
-//                       boot_seconds: the machine's seconds to its title or attract), or until a
-//                       player presses one of its buttons. host/warp.h
-//     --fast-boot-seconds S  ... up to S seconds of the machine's time instead (implies --fast-boot)
-//     --volume DB       the sound out of the window, louder or quieter (e.g. 6 or -3; 0 by default):
-//                       what the speakers get, not what --wav and --digest record
-//     --audio-exclusive Windows: the output (--audio-device's, else the default one) in WASAPI exclusive
-//                       mode: no system mixer in between, other programs silent meanwhile
-//     --audio-asio NAME Windows: the sound card through its ASIO driver (the name its control panel and
-//                       the launcher show; the error lists the installed ones). Else Windows' audio
-//     --audio-buffer N  the device buffer in frames (default 128): the sound server's quantum, or with
-//                       --audio-device the ALSA period (a ring of four), or the WASAPI exclusive buffer,
-//                       or the ASIO buffer (default there: the driver's own). Smaller is sooner, until
-//                       it crackles
-//     --nvram DIR       keep the machine's NVRAM in DIR: loaded at start, saved on exit.
-//                       Default with --window: ~/.local/share/hiraku/<game> (a portable install's
-//                       user/data/<game>: shell/userdir.h); otherwise none (every run starts from
-//                       the ROM set's defaults, so scripted runs are reproducible)
-//     --save-every S    ... and saved while the game is played, every S seconds, when it changed
-//                       (shell/saves.h): a crash or a power cut costs seconds, not the session.
-//                       Default with --window: 15; otherwise 0, at exit only. The game's results
-//                       are the same either way
+//     (the options every core takes: COMMON_OPTIONS below, which --help prints)
 //   plus the core's own options (--help lists them).
 //
 // The machine is described by dumps/<game>/machine.txt and dumps/<game>/rom/,
@@ -142,6 +44,108 @@
 #include "host/warp.h"
 #include "host/window.h"
 #include "host/pacing.h"
+
+// The options every core takes (--help prints them: a release has no source to read them in)
+static const char COMMON_OPTIONS[] = R"HK(  --frames N        stop after N video frames (default: run until killed)
+  --snap-every N    write every Nth frame as PPM into --out (default off)
+  --snap-from F     ... from frame F on
+  --snap-between N  with --smooth-motion, each snapshot's in-between pictures at 1/N, 2/N...
+                    of a frame (default: halfway only)
+  --out DIR         output directory for snapshots/trace (default out/run/<game>)
+  --trace           write an oracle-format MMIO trace (out/mmio.bin), see oracle/
+  --ata-log         log ATA/ATAPI commands
+  --script FILE     run an oracle input script (.his): same inputs, same frames as in MAME
+  --wav FILE        record the sound output (16-bit stereo, at the core's rate: 44.1 kHz, DJ Main 48 kHz)
+  --digest FILE     write one line per frame: frame number, a hash of the picture and a running
+                    hash of all sound so far (tools/regress.py checks runs are bit-identical with it)
+  --debug-every N   print the CPU state every N frames
+  --window [SCALE]  show the game in a window, in real time, with sound (SDL3 builds);
+                    F2 test, 9 service, 5 coin, 1 start, Esc quits; controls per cabinet
+  --fullscreen      start the window fullscreen (F11 toggles)
+  --display-sync on|off  on (the default): on a fixed-refresh display, show every frame for a
+                    whole number of refreshes, running the game at the display's rate (up to
+                    3 % off: pop'n 2.6 % fast at 60 Hz); off: the game's exact speed, frames
+                    shown as they come (for variable-refresh displays). runtime/host/pacing.h
+  --smooth-motion   with display sync, on any display (60, 144, 240 Hz): the game at its own
+                    speed, and every refresh shows what moves carried on to that refresh's
+                    moment (the core's in-between pictures: DJ Main's sprites, the Firebeat
+                    GCU's objects, the PlayStation GPU's primitives on Twinkle and System
+                    573) instead of frames held for
+                    uneven numbers of refreshes.
+                    Needs the compositor's fifo-v1 (KWin 6.7), or Windows (DWM's vblank).
+                    docs/SMOOTH.md
+  --crt-beam        the Blur Busters CRT beam simulator over the picture, on a display faster
+                    than the game (120 Hz and up; best at 240): each refresh lights the part of
+                    the tube the beam sweeps then, for a CRT's motion clarity. Needs what
+                    --smooth-motion does, and replaces its in-between pictures. docs/SMOOTH.md
+  --crt-beam-gamma G  the display's gamma for it (2.2; a mismatch shows as bands, washed out)
+  --crt-beam-gain X   its brightness against motion blur (0.7; 1 as bright as without it)
+  --lights-overlay  the game's lights over its picture: every lamp the core decodes, lit or not
+                    as the game drives it, and how often they change (F9 shows or hides it)
+  --macro NAME[@F]  run one of the game's code macros (games/<game>/macros.txt) at frame F, or
+                    at its own `at` frame (power-on codes); repeatable. In the window,
+                    Ctrl+1..9 types the 1st..9th macro
+  --picture MODE    off (sharp pixels, the default), light (CRT: crt-guest-advanced-fast),
+                    full (CRT: crt-royale) or lola (CRT, the analog chain: Lola Retro); F10
+                    cycles them. --crt is --picture light
+  --picture-config DIR  read DIR/<shader>.params over the shader's settings (repeatable,
+                    later ones win; `name = value` lines; read again when they change)
+  --shader-key ACTION=BINDING  a control of the shader's settings in the game (F8: show, up,
+                    down, less, more, saved, default, save, save_game), as --bindings spells it
+                    ("key:F8", "joy[DAO FPS]:button3"); repeatable; host/shaderview.h
+  --bindings FILE   controls (see runtime/host/input.h)
+  --lights FILE     drive HID controller LEDs from the cabinet lamps (see runtime/host/lights.h)
+  --lights-socket P publish the lamps on a UNIX socket at path P, or on TCP at HOST:PORT (docs/LIGHTS.md)
+  --lights-log FILE every lamp change, a line each: the frame, the machine's time, the lamp (its
+                    output number, as the F9 overlay shows it) and on or off; FILE "-" is the
+                    console (stderr). Headless too
+  --reader PATH, --scard, --cardio  real e-AMUSEMENT card readers, with --window (see
+                    runtime/host/readers.h)
+  --bio2 PATH       beatmania IIDX's BIO2 I/O board as the cabinet's controls and lamps, with
+                    --window (runtime/host/bio2.h)
+  --popn-io WHERE, --popn-io-dll FILE  a pop'n music cabinet's USB I/O board as its buttons
+                    and lamps, with --window (runtime/host/popnio.h)
+  --audio-ms N      the audio queue target (default 8), and its least: it tunes itself to the
+                    lead that covers all but the two worst seconds of the last minute (not in
+                    the first 10 s), up to 30 ms, and comes back down when late frames stop
+  --audio-fixed     the audio queue stays at --audio-ms (no self-tuning)
+  --normal-priority with --window, leave the game's threads at normal priority (by default they
+                    go ahead of other programs: Linux nice -11 and timer slack 1 us, as far as
+                    the limits or RealtimeKit allow; Windows above normal)
+  --audio-device D  the sound card itself, through ALSA, with no sound server in between: an ALSA
+                    device name such as hw:CARD=Generic,DEV=0 (aplay -l lists them; the launcher's
+                    Settings > Audio too). If it's busy, the system's default output instead
+                    Windows: an output device by the name Windows shows (shared, through the system
+                    mixer), or with --audio-exclusive alone
+  --split-screens   a machine with several monitors (Keyboardmania: one a player) shows each in
+                    a window of its own: player 2's on the next display, both fullscreen with
+                    --fullscreen (F11 toggles the window with the keyboard)
+  --mod FOLDER      a mod (docs/MODS.md: the folder's mod.toml), several in order: patches
+                    to the game's memory, replaced bytes or files on its media
+  --fast-boot       with --window, the game's start-up as fast as the machine can go (no sound,
+                    its pictures with a box over them) until its ready point (games/<id>/game.toml
+                    boot_seconds: the machine's seconds to its title or attract), or until a
+                    player presses one of its buttons. host/warp.h
+  --fast-boot-seconds S  ... up to S seconds of the machine's time instead (implies --fast-boot)
+  --volume DB       the sound out of the window, louder or quieter (e.g. 6 or -3; 0 by default):
+                    what the speakers get, not what --wav and --digest record
+  --audio-exclusive Windows: the output (--audio-device's, else the default one) in WASAPI exclusive
+                    mode: no system mixer in between, other programs silent meanwhile
+  --audio-asio NAME Windows: the sound card through its ASIO driver (the name its control panel and
+                    the launcher show; the error lists the installed ones). Else Windows' audio
+  --audio-buffer N  the device buffer in frames (default 128): the sound server's quantum, or with
+                    --audio-device the ALSA period (a ring of four), or the WASAPI exclusive buffer,
+                    or the ASIO buffer (default there: the driver's own). Smaller is sooner, until
+                    it crackles
+  --nvram DIR       keep the machine's NVRAM in DIR: loaded at start, saved on exit.
+                    Default with --window: ~/.local/share/hiraku/<game> (a portable install's
+                    user/data/<game>: shell/userdir.h); otherwise none (every run starts from
+                    the ROM set's defaults, so scripted runs are reproducible)
+  --save-every S    ... and saved while the game is played, every S seconds, when it changed
+                    (shell/saves.h): a crash or a power cut costs seconds, not the session.
+                    Default with --window: 15; otherwise 0, at exit only. The game's results
+                    are the same either way
+)HK";
 #endif
 
 #ifndef HK_ROOT
@@ -378,8 +382,8 @@ int main(int argc, char **argv) {
         else if (a == "--audio-buffer") audio_buffer = std::stoi(val());
         else if (a == "--window") window_scale = (k + 1 < argc && argv[k + 1][0] != '-') ? std::stoi(val()) : 2;
         else if (a == "--help" || a == "-h") {
-            printf("hiraku-%s [options]: see runtime/main.cpp for the common options. This core also takes:\n%s%s",
-                   game.c_str(), machine.options_help().c_str(), (host::readers_help() + host::bio2_help() + host::popnio_help()).c_str());
+            printf("hiraku-%s [options]\n\nEvery core takes:\n%s\nThis core also takes:\n%s%s",
+                   game.c_str(), COMMON_OPTIONS, machine.options_help().c_str(), (host::readers_help() + host::bio2_help() + host::popnio_help()).c_str());
             return 0;
         }
         else if (host::bio2_option(a, val)) {}

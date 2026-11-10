@@ -158,6 +158,8 @@ copy_tracked "$root" "$d" games docs shaders
 copy_tracked_as "$root" "$d/scripts" oracle/scripts
 mkdir -p "$d/tools"
 cp "$root"/tools/{ingest.py,checklist.py,chd.py,fbexe.py,pack-data.py,regress.py,unlock.py,pythonfs.py,chdread.py,mameset.py,catalogue.py,update.py} "$d/tools/"
+# the mod makers' tools docs/MODS.md names
+cp "$root"/tools/{popnfs.py,popnsong.py,modtext.py,modimport.py} "$d/tools/"
 # MAME's BEMANI sets as data: ingest tells a set by its contents (tools/mameset.py)
 copy_tracked "$root" "$d" tools/data
 # e-AMUSEMENT (Konami Python): the server checker and the game's calls (docs/EAMUSE3.md)

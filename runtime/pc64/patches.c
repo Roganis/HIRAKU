@@ -56,13 +56,34 @@ void pc64_patches_install(void) {
     const char *list = getenv("HK_PC_PATCHES");
     FILE *f = list && *list ? fopen(list, "rb") : NULL;
     if (!f) return;
-    char line[8192];
-    int bad = 0, line_no = -1;
-    while (fgets(line, sizeof line, f) && line_no < 255) {
-        line_no++;
-        char where[300], orig[4096], repl[4096];
-        int once;
-        if (sscanf(line, "%299s %d %4095s %4095s", where, &once, orig, repl) != 4) continue;
+    // the whole list, cut into lines and words in place (a patch's bytes are as long as the mod
+    // made them: no buffer of a fixed size to fit)
+    fseek(f, 0, SEEK_END);
+    const long size = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    char *text = malloc((size_t)(size > 0 ? size : 0) + 1);
+    if (!text) { fclose(f); return; }
+    text[fread(text, 1, (size_t)(size > 0 ? size : 0), f)] = 0;
+    fclose(f);
+    int bad = 0, unread = 0, line_no = -1;
+    for (char *line = text, *next; *line && line_no < 255; line = next) {
+        next = line + strcspn(line, "\n");
+        if (*next) *next++ = 0;
+        line[strcspn(line, "\r")] = 0;
+        line_no++;   // (the line's place is the patch's in hiraku-pc's list, read or not)
+        char *words[4] = {NULL, NULL, NULL, NULL};
+        char *w = line;
+        for (int k = 0; k < 4; k++) {
+            w += strspn(w, " \t");
+            if (!*w) break;
+            words[k] = w;
+            w += strcspn(w, " \t");
+            if (*w) *w++ = 0;
+        }
+        if (!words[3]) { unread += words[0] != NULL; continue; }
+        char *where = words[0];
+        const char *orig = words[2], *repl = words[3];
+        const int once = atoi(words[1]);
         BYTE *at = NULL;
         char *plus = strrchr(where, '+');
         if (plus) {   // MODULE+OFFSET
@@ -75,14 +96,16 @@ void pc64_patches_install(void) {
         }
         struct patch p = {at, NULL, NULL, 0, once, 0, line_no};
         const int n = unhex(repl, &p.replace);
-        if (!at || n <= 0 || (strcmp(orig, "-") && unhex(orig, &p.original) != n)) continue;
+        if (!at) continue;   // (said above)
+        if (n <= 0 || (strcmp(orig, "-") && unhex(orig, &p.original) != n)) { unread++; continue; }
         p.n = (size_t)n;
         struct patch *more = realloc(g_patches, sizeof *g_patches * (size_t)(g_npatches + 1));
         if (!more) break;
         g_patches = more;
         g_patches[g_npatches++] = p;
     }
-    fclose(f);
+    free(text);
     if (g_npatches) pc64_log("mods: %d memory patches", g_npatches);
+    if (unread) pc64_log("mods: %d of the patches' lines couldn't be read: left out", unread);
     pc64_patches_apply();
 }

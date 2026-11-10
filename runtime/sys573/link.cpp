@@ -172,6 +172,9 @@ void SessionLink::sync(s32) {
     StepHeader th{};
     if (!recv_all(&th, sizeof th)) return lost("closed");
     if (th.step != m_step) return lost("out of step");
+    // (a step is a quantum's line changes and sound: a header asking for more than any cabinet sends
+    // isn't one, and isn't given the memory it names)
+    if (th.count > 0x10000 || th.audio_frames > 0x20000) return lost("not a step");
     std::vector<Event> got(th.count);
     if (th.count && !recv_all(got.data(), got.size() * sizeof(Event))) return lost("closed");
     if (th.audio_frames) {

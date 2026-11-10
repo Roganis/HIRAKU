@@ -150,6 +150,11 @@ endif()
 if(Python3_Interpreter_FOUND AND NOT WIN32)
   add_test(NAME update_download COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/tools/test_update.py)
 endif()
+# tools/runpath.py: a packaged program's run path keeps only the package's own folders
+find_program(HK_READELF readelf)
+if(Python3_Interpreter_FOUND AND HK_READELF AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+  add_test(NAME package_run_paths COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/tools/test_runpath.py ${CMAKE_C_COMPILER})
+endif()
 # tools/package-files.sh: a package takes what git tracks in the repo's folders, nothing else in a checkout
 find_program(HK_GIT git)
 find_program(HK_BASH bash)

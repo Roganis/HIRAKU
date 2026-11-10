@@ -47,12 +47,7 @@ for f in "$build"/hiraku "$build"/hiraku-*; do
     # (HK_PYTHON_LIBS: where a release's Reliquary libraries are, which the binary finds in bin/lib)
     LD_LIBRARY_PATH=${HK_PYTHON_LIBS:-}${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH} ldd "$real" |
       awk '$3 ~ /^\// && $3 !~ /^\/(usr\/)?lib(64)?\// {print $3}' | while read -r lib; do
-      cp -L "$lib" "$d/bin/lib/"
-      # a library built elsewhere may name its build folder as its run path (PCSX2's libwebp,
-      # libjpeg): its own libraries are beside it in the package
-      if command -v patchelf > /dev/null && readelf -d "$d/bin/lib/$(basename "$lib")" | grep -q RUNPATH; then
-        patchelf --set-rpath '$ORIGIN' "$d/bin/lib/$(basename "$lib")"
-      fi
+      cp -L "$lib" "$d/bin/lib/"   # (its run path: put right with the others', below)
     done
   fi
 done
@@ -155,12 +150,7 @@ if [ -n "${HK_PACKAGE_DXVK:-}" ] && [ -d "$d/bin/pc" ]; then
 fi
 # HK_PACKAGE_LIBS: libraries for bin/lib that the binaries load themselves (dlopen: ldd doesn't
 # see them), a release's PCSX2 shader compiler (libshaderc_shared.so.1)
-for f in ${HK_PACKAGE_LIBS:-}; do
-  cp -L "$f" "$d/bin/lib/"
-  if command -v patchelf > /dev/null && readelf -d "$d/bin/lib/$(basename "$f")" | grep -q RUNPATH; then
-    patchelf --set-rpath '$ORIGIN' "$d/bin/lib/$(basename "$f")"
-  fi
-done
+for f in ${HK_PACKAGE_LIBS:-}; do cp -L "$f" "$d/bin/lib/"; done
 # HK_PYTHON_DIR: a Python for adding games, in python/ (the launcher looks there first)
 [ -n "${HK_PYTHON_DIR:-}" ] && cp -r "$HK_PYTHON_DIR" "$d/python"
 # the repo's folders: what git tracks in them, nothing a checkout holds besides (tools/package-files.sh)
@@ -232,6 +222,14 @@ bin/hiraku-eamuse --port 8080 is the same server for several PCs, which then run
 --eamuse http://that-pc:8080/ (docs/EAMUSE3.md).
 EOF
 fi
+# Every program and library looks for its libraries in the package, then in the system's folders,
+# and nowhere else (tools/runpath.py). A build leaves the folders it linked against in each run
+# path after $ORIGIN/lib, where a player's PC would look before its own folders: taken out. A
+# library that named only the folder it was built in (PCSX2's libwebp, libjpeg) gets its own
+# folder, where its libraries are in the package. Then checked: a package with one left isn't made
+find "$d/bin" -maxdepth 1 -type f -exec python3 "$root/tools/runpath.py" fix {} +
+find "$d" -type f -exec python3 "$root/tools/runpath.py" fix --else '$ORIGIN' {} +   # (bin's own: done, nothing more to do)
+python3 "$root/tools/runpath.py" check "$d"
 check_build_paths "$root" "$d/bin"
 # What the updater needs (tools/update.py): the release this is (HK_VERSION, the tag; none for a
 # build by hand, which the launcher then doesn't offer to update) and the package's own files

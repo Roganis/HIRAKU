@@ -159,6 +159,9 @@ function(hiraku_python_game id)
 	target_include_directories(hiraku-${id} PRIVATE ${HK}/runtime)
 	target_link_libraries(hiraku-${id} PRIVATE hk_python_shell PCSX2_FLAGS PCSX2)
 	target_compile_options(hiraku-${id} PRIVATE ${HK_PY_FLAGS})
+	if(WIN32)   # paths as UTF-8, as HIRAKU's other programs (the linker merges it into the program's manifest)
+		target_sources(hiraku-${id} PRIVATE ${HK}/cmake/windows/utf8.manifest)
+	endif()
 endfunction()
 
 # hiraku-python: every Python game, as hiraku-djmain and the other cores' own binaries are

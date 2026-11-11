@@ -883,3 +883,21 @@ hiraku_game(kbm 0x80083000 0x80080000)
 hiraku_game(kbh 0x80083000 0x80080000)
 hiraku_game(kbm2nd 0x80002018)
 hiraku_game(kbm3rd 0x80002018)
+
+# --- Windows: paths are UTF-8 in every program of HIRAKU's own (cmake/windows/utf8.manifest) ---
+# Every executable made above gets the manifest; a new one gets it without being named here. The PC
+# games' loaders and DLLs and hiraku-ezusb.exe are made by custom commands, not targets, and stay
+# as they are: they run a game's own code, written for the PC's code page.
+if(WIN32 AND NOT MSVC)
+  enable_language(RC)
+  add_library(hiraku_utf8 OBJECT cmake/windows/utf8.rc)
+  target_include_directories(hiraku_utf8 PRIVATE cmake/windows)
+  set_source_files_properties(cmake/windows/utf8.rc PROPERTIES OBJECT_DEPENDS ${CMAKE_SOURCE_DIR}/cmake/windows/utf8.manifest)
+  get_property(HK_ALL_TARGETS DIRECTORY PROPERTY BUILDSYSTEM_TARGETS)
+  foreach(t ${HK_ALL_TARGETS})
+    get_target_property(HK_TARGET_TYPE ${t} TYPE)
+    if(HK_TARGET_TYPE STREQUAL "EXECUTABLE")
+      target_sources(${t} PRIVATE $<TARGET_OBJECTS:hiraku_utf8>)
+    endif()
+  endforeach()
+endif()

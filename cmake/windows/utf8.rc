@@ -1,0 +1,3 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// The application manifest (resource 1 of type 24) that makes a program's code page UTF-8: utf8.manifest
+1 24 "utf8.manifest"

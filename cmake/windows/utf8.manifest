@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<!-- SPDX-License-Identifier: GPL-3.0-or-later
+     Windows gives a program with this in it UTF-8 as its code page (Windows 10 1903 and later): its
+     arguments arrive as UTF-8, and the functions that take a path as plain chars (fopen, CreateFileA,
+     std::ifstream, std::filesystem with a std::string) read it as UTF-8, whatever the PC's own code
+     page. HIRAKU's paths are UTF-8 everywhere (shell/sys.h's exe_path, the launcher, the tools'
+     machine.txt), so without it a folder with a letter outside the PC's code page (a Japanese name
+     on a western Windows) could not be opened, and one with any letter outside ASCII ended the
+     program (the C++ library reads a path's chars as UTF-8, and the arguments weren't).
+     In every program of HIRAKU's own (CMakeLists.txt, runtime/python/CMakeLists.txt); not in the PC
+     games' loaders and DLLs, which run inside a game written for the PC's own code page. -->
+<assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0">
+  <assemblyIdentity type="win32" name="HIRAKU" version="1.0.0.0"/>
+  <application xmlns="urn:schemas-microsoft-com:asm.v3">
+    <windowsSettings>
+      <activeCodePage xmlns="http://schemas.microsoft.com/SMI/2019/WindowsSettings">UTF-8</activeCodePage>
+    </windowsSettings>
+  </application>
+</assembly>

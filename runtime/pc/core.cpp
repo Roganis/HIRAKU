@@ -221,6 +221,28 @@ std::string win_path(std::string p) {
     return p;
 }
 
+// Text the game's side reads as bytes from a file (a list of paths): in the PC's own code page,
+// which the game and HIRAKU's DLLs inside it open files by. hiraku-pc's own strings are UTF-8, on
+// Windows too (cmake/windows/utf8.manifest). What goes through the environment needs none of
+// this: Windows hands each process its variables in that process's code page.
+std::string game_side(const std::string &utf8) {
+#ifdef _WIN32
+    wchar_t number[8];
+    if (!GetLocaleInfoW(LOCALE_SYSTEM_DEFAULT, LOCALE_IDEFAULTANSICODEPAGE, number, 8)) return utf8;
+    const UINT page = (UINT)_wtoi(number);
+    if (page == CP_UTF8) return utf8;
+    const int wn = MultiByteToWideChar(CP_UTF8, 0, utf8.data(), (int)utf8.size(), nullptr, 0);
+    std::wstring wide((size_t)wn, L'\0');
+    MultiByteToWideChar(CP_UTF8, 0, utf8.data(), (int)utf8.size(), wide.data(), wn);
+    const int n = WideCharToMultiByte(page, 0, wide.data(), wn, nullptr, 0, nullptr, nullptr);
+    std::string out((size_t)n, '\0');
+    WideCharToMultiByte(page, 0, wide.data(), wn, out.data(), n, nullptr, nullptr);
+    return out;
+#else
+    return utf8;
+#endif
+}
+
 void set_env(const char *k, const std::string &v) {
 #ifdef _WIN32
     SetEnvironmentVariableA(k, v.c_str());
@@ -1423,7 +1445,7 @@ private:
             list += as + "\t" + win_path(mod_file) + "\n";
             md5_of[lower(as)] = md5_file(mod_file);
         }
-        std::ofstream(save_ + "/mods-files.txt", std::ios::trunc) << list;
+        std::ofstream(save_ + "/mods-files.txt", std::ios::trunc) << game_side(list);
         set_env("HK_PC_FILES", list.empty() ? "" : win_path(save_ + "/mods-files.txt"));
         // dat.bin: a count, then each file's MD5 (16 bytes) and its path (D:\..., ending in a zero);
         // the program's own each time (no mods: as it was)

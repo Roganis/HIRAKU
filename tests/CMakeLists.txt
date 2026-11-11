@@ -170,6 +170,12 @@ add_executable(test_file_lock sys/test_file_lock.cpp)
 target_include_directories(test_file_lock PRIVATE ${CMAKE_SOURCE_DIR}/runtime)
 target_link_libraries(test_file_lock PRIVATE hiraku_sys)
 add_test(NAME folder_file_lock COMMAND test_file_lock)
+# Paths with letters outside ASCII through the plain-char file functions, arguments and environment
+# (on Windows: what cmake/windows/utf8.manifest is for)
+add_executable(test_utf8_paths sys/test_utf8_paths.cpp)
+target_include_directories(test_utf8_paths PRIVATE ${CMAKE_SOURCE_DIR}/runtime)
+target_link_libraries(test_utf8_paths PRIVATE hiraku_sys)
+add_test(NAME utf8_paths COMMAND test_utf8_paths)
 
 # The problem report's cleaner (launcher/cleaner.h): names, folders, cards and servers gone from a log
 if(Qt6_FOUND)

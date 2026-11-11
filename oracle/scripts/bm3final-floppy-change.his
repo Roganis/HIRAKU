@@ -1,0 +1,15 @@
+# beatmania III The Final, the floppy disk taken out and put in while the machine runs (--floppy
+# FILE; HIRAKU only: "Floppy" is the drive's slot, not a MAME input). Out before the power-on FDD
+# check, in again before the credit: the disk-change line tells the game, which reads the disk
+# (NEW FD). Out once more on the options screen; a second credit then finds no disk and goes
+# straight on.
+game bm3final
+
+at 1500 press "Floppy" 2                   # out
+at 3000 press "Floppy" 2                   # in
+at 3600 press "Coin 1" 8
+at 3630 press "Coin 1" 8
+at 3700 press "1 Player Start" 12          # the options screen: FD LOADING
+at 4010 snap                               # NEW FD
+at 4100 press "Floppy" 2                   # out
+at 4400 quit

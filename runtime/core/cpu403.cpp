@@ -184,7 +184,13 @@ uint32_t read_pit() {
 
 void dcr_written(uint32_t n, uint32_t v) {
     switch (n) {
-    case dcr::EXISR: g_cpu.dcrs[n] &= ~v; break;      // write 1 to clear
+    case dcr::EXISR:                                  // write 1 to clear
+        g_cpu.dcrs[n] &= ~v;
+        // ... but a level-triggered line that is still asserted stays pending (MAME:
+        // ppc4xx_set_irq_line(0, 0) after the write): an interrupt asked for again between a
+        // handler's last look at its device and this acknowledge isn't lost
+        set_irq_line(0, false);
+        break;
     case dcr::EXIER: g_cpu.dcrs[n] = v; break;
     case dcr::IOCR: g_cpu.dcrs[n] = v; break;
     default:

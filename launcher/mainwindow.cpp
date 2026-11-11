@@ -1025,6 +1025,8 @@ QStringList MainWindow::arguments(const Game &g) const {
     for (const QString &m : mods) a << "--mod" << cfg::modPath(g.id, m);
     if (!mods.isEmpty()) a << "--nvram" << cfg::saveDir(g.id);
     else if (!cfg::nvramBase().isEmpty()) a << "--nvram" << cfg::nvramDir(g.id);
+    // beatmania III's floppy disk (Game menu): the game's own in its save folder, or a chosen image
+    if (QString f = s.value("floppy/" + g.id).toString(); g.family == "bm3" && !f.isEmpty()) a << "--floppy" << f;
     if (installCassette(g)) a << "--cassette" << "install";
     if (installCd(g)) a << "--cd" << "install";
     // the network unit (Game menu): its data installed from its CD, or fitted, with the e-AMUSEMENT
@@ -1209,6 +1211,44 @@ void MainWindow::fillGameMenu(QMenu *menu, const Game &g) {
             UnlocksDialog d(id, title, m_running == id, this);
             d.exec();
         });
+    if (g.family == "bm3") {   // beatmania III's floppy drive (runtime/dev/fdc.h): where a player's disk goes
+        auto *floppy = menu->addMenu(QIcon::fromTheme("media-floppy"), "Floppy disk");
+        floppy->setToolTipsVisible(true);
+        auto *group = new QActionGroup(floppy);
+        const QString now = cfg::settings().value("floppy/" + id).toString();
+        auto choice = [&](const QString &label, bool checked, const QString &tip, std::function<void()> chosen) {
+            auto *a = floppy->addAction(label, this, std::move(chosen));
+            a->setCheckable(true);
+            a->setChecked(checked);
+            a->setToolTip(tip);
+            group->addAction(a);
+        };
+        choice("No disk", now.isEmpty(), "The drive stays empty, as on a cabinet nobody brought a disk to", [this, id] {
+            cfg::settings().remove("floppy/" + id);
+            gameChanged();
+        });
+        choice("The game's own disk", now == "default",
+               "A disk kept in the game's save folder (floppy.img), made blank and formatted the first time: the game "
+               "keeps the player's name, options and scores on it at the end of a credit, and reads them at the next",
+               [this, id] {
+                   cfg::settings().setValue("floppy/" + id, "default");
+                   gameChanged();
+               });
+        const bool file = !now.isEmpty() && now != "default";
+        choice(file ? "A disk image: " + QFileInfo(now).fileName() + "…" : "A disk image…", file,
+               "A 1.44 MB disk image of your own (made blank and formatted if the file isn't there). One file can be "
+               "given to all five games: a disk went from one beatmania III to the next",
+               [this, id, now, file] {
+                   const QString f = QFileDialog::getSaveFileName(this, "A 1.44 MB floppy disk image (made if it isn't there)",
+                                                                  file ? now : QDir::homePath() + "/beatmania III.img",
+                                                                  "Disk images (*.img *.ima *.flp *.dsk);;All files (*)", nullptr,
+                                                                  QFileDialog::DontConfirmOverwrite);
+                   if (!f.isEmpty()) cfg::settings().setValue("floppy/" + id, f);
+                   gameChanged();
+               });
+        floppy->addSeparator();
+        floppy->addAction("In the game, Insert takes the disk out and puts it in (Controls)")->setEnabled(false);
+    }
     if (g.installCassette) {
         auto *inst = menu->addAction("Boot once with the install cassette", this, [this, id](bool on) {
             if (on) cfg::settings().setValue("cassette/" + id, "install");
@@ -1286,7 +1326,10 @@ void MainWindow::fillGameMenu(QMenu *menu, const Game &g) {
         }
         auto r = QMessageBox::question(this, title,
                                        "Move " + title + "'s save data (operator settings, rankings, sound flash) to the trash?\n\n" + nv +
-                                           "\n\nThe next start is a first boot, as on a new cabinet.");
+                                           "\n\nThe next start is a first boot, as on a new cabinet." +
+                                           (QFileInfo::exists(nv + "/floppy.img")
+                                                ? "\n\nThe game's own floppy disk (floppy.img, a player's name and scores) is in that folder and goes with it."
+                                                : ""));
         if (r != QMessageBox::Yes) return;
         if (!QFile::moveToTrash(nv)) QMessageBox::warning(this, title, "Could not move " + nv + " to the trash.");
         gameChanged();

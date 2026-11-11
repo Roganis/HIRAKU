@@ -1,0 +1,33 @@
+# beatmania III The Final with a floppy disk in the drive (--floppy FILE; MAME: -flop FILE), a
+# blank formatted one: two credits. The first finds a new disk (FD LOADING, NEW FD), fails a song
+# without a key pressed, enters the name AAAA and saves (FD WRITING, FD OK: BM35.DAT and
+# BASIC1P.TXT on the disk); the second loads it (FD LOADING, FD OK). From a blank NVRAM.
+game bm3final
+
+at 3600 press "Coin 1" 8
+at 3630 press "Coin 1" 8
+at 3700 press "1 Player Start" 12          # the options screen: the disk is read
+at 3900 snap                               # FD LOADING
+at 4010 snap                               # NEW FD
+at 4400 press "P1 Button 1" 8              # mode select: kobako
+at 4900 set TURNTABLE_P1/Turntable 1000    # sound select: one down from the practice stage, BODY
+at 5110 press "P1 Button 1" 8
+at 5400 press "P1 Button 1" 8
+# no key is pressed: the stage fails, CONTINUE? runs out, then the name entry (from about 12050)
+at 12200 press "P1 Button 1" 8             # A
+at 12300 press "P1 Button 1" 8             # A
+at 12400 press "P1 Button 1" 8             # A
+at 12500 press "P1 Button 1" 8             # A
+at 12600 press "P1 Button 1" 8             # END: the disk is written
+at 12700 press "P1 Button 1" 8
+at 12900 snap                              # FD WRITING
+at 13110 snap                              # FD OK: the disk can be taken out
+at 13400 press "P1 Button 1" 8             # the score list
+at 13700 press "P1 Button 1" 8
+# the second credit: the disk is the player's now
+at 15400 press "Coin 1" 8
+at 15430 press "Coin 1" 8
+at 15500 press "1 Player Start" 12
+at 15700 snap                              # FD LOADING
+at 15900 snap                              # FD OK
+at 16200 quit

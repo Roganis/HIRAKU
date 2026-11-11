@@ -68,6 +68,12 @@ if(WIN32 AND TARGET hiraku-ezusb)
   add_test(NAME popn_io_ezusb_helper COMMAND test_ezusb_helper ${CMAKE_BINARY_DIR}/fake_ezusb.dll)
 endif()
 
+# beatmania III's floppy controller and drive (runtime/dev/fdc.h) against a made-up disk: an empty
+# drive as before, a cylinder read, written and read back, disk change, write protect
+add_executable(test_fdc fdc/test_fdc.cpp)
+target_link_libraries(test_fdc PRIVATE hiraku_rt)
+add_test(NAME floppy_controller COMMAND test_fdc)
+
 # ATA security (SECURITY UNLOCK) on a hard disk, as MAME does it (DJ Main complete MIX on)
 add_executable(test_ata_security ata/test_ata_security.cpp)
 target_link_libraries(test_ata_security PRIVATE hiraku_ata)

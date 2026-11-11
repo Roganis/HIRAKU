@@ -132,6 +132,7 @@ The machine boots like a cabinet. The skipped BIOS time passes instantly. Then t
 | 5 | coin (the game wants 2 for one player) |
 | 1 | P1 start |
 | F2 | test mode, 9 service |
+| Insert | the floppy disk: take it out, put it in (when the game was given one, below) |
 | Tab (hold) | fast-forward |
 | F11, Alt+Enter | fullscreen |
 | F10 | picture: off, CRT light, CRT full, CRT analog |
@@ -150,6 +151,26 @@ P2 uses M K Comma L Period, Up/Down and 2.
 
 The title screen then shows the alien icon. The floppy-disk unlocks (RETROFUTURE via SIMON,
 CLOUDY MUSIC, sozai mode) are earned per player and listed there too.
+
+**Floppy disk:** the cabinet's 3.5" drive is where a player's data lives (name, options, each
+mode's scores, what the disk has earned), as a card does on later games. Right-click the game >
+**Floppy disk** gives it a disk: the game's own (`floppy.img` in its save folder) or a 1.44 MB
+disk image of yours; from a terminal, `--floppy FILE` (`--floppy default`: the save folder's).
+- A file that isn't there is made, blank and DOS-formatted: the games never format a disk
+  themselves (an unformatted one is FORMAT ERROR). Raw sector images only (1,474,560 bytes).
+- The disk is in the drive from power-on. After Start the options screen reads it (FD LOADING,
+  then NEW FD or FD OK); at the end of the credit, after the name entry, the game writes it (FD
+  WRITING, then FD OK). The file is written back whole whenever the game has changed the disk.
+- **Insert** takes the disk out and puts it in again. The game looks for a disk once, when Start
+  is pressed: have it in by then (one put in later waits for the next credit; one taken out
+  while FD LOADING shows is a DISK ERROR, and the game says not to while it writes). The file is read again when the disk
+  goes in, so another disk can be put under the same name meanwhile. A file that can't be
+  written is a write-protected disk (FD WRITE PROTECTED: the game plays on without it).
+- All five beatmania III use the drive alike (each keeps its own file on the disk, `BM31.DAT` to
+  `BM35.DAT`, and The Final reads the older games'): the same image can be given to each.
+- `--mame-fdc`: the floppy controller's FIFO as MAME has it, for comparing with MAME. The
+  games' reads then fail and are tried again now and then, as they do in MAME (after ten tries a
+  game says DISK ERROR); by default it is as the chip's data sheet has it, and they don't.
 
 **Codes, typed for you:** the button codes players typed on the cabinet (hidden songs, modes),
 for the games that have a `games/<id>/macros.txt`.

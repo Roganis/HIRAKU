@@ -29,6 +29,8 @@ std::vector<Control> make_bm3() {
     // the service panel's A and B (MAME's IN0 bits 2 and 3): the test mode's buttons
     c.push_back({"A", "Test mode A", "Cabinet", false, "key:F3"});
     c.push_back({"B", "Test mode B", "Cabinet", false, "key:F4"});
+    // the floppy drive's slot (--floppy): a press takes the player's disk out, or puts it in
+    c.push_back({"Floppy", "Floppy disk (take out / put in)", "Cabinet", false, "key:Insert"});
     return c;
 }
 

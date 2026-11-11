@@ -21,6 +21,8 @@ struct Config {
     std::string dongle_file;           // file name inside rom_dir (e.g. gcc01-jc)
     std::string cd_master, cd_slave;   // main ATA bus disc images ("" = drive with no disc)
     std::string nvram_dir;             // persistent RTC/flash images ("" = none)
+    std::string floppy;                // beatmania III: the floppy disk's image file ("" = the drive stays empty)
+    bool mame_fdc = false;             // ... its controller's FIFO as MAME has it, not as the chip's data sheet (dev/fdc.h)
     std::string trace_dir;             // write an oracle-format MMIO trace here ("" = off)
     bool ata_log = false;
 };
@@ -46,6 +48,14 @@ void turntable_add(int player, int delta);
 // Latency instrumentation: the virtual time of the last change to a player key.
 void note_input_change();
 uint64_t last_input_change();
+// beatmania III's floppy disk (Config::floppy), as the player would at the cabinet's drive: taken
+// out if it is in (written back to its file first, if the game changed it), else put in (read
+// again from its file, so another disk can be given under the same name meanwhile). Also what the
+// "Floppy" input does when pressed. What happened, in a few words; "" without the drive or a file.
+std::string floppy_toggle();
+bool floppy_in();
+// ... and told to `f` each time (the window's notice)
+void set_floppy_said(std::function<void(const std::string &)> f);
 void shutdown();                       // flush NVRAM and traces
 void save_now();                       // while playing: the saved memories that changed, to the writer thread (shell/saves.h)
 Inputs &inputs();

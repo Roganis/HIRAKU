@@ -128,5 +128,40 @@ going past the point where stock MAME differs. The patches apply to MAME at HIRA
   `git worktree add ../mame-tw5 58f90f43 && cd ../mame-tw5 && git apply .../twinkle-sio1-cts.patch`,
   then `make SUBTARGET=twinkle SOURCES=src/mame/konami/twinkle.cpp` (as for the stock Twinkle oracle).
 
+- `mame-patches/firebeat-fdc.patch` (beatmania III's floppy drive, `runtime/dev/fdc.h`): the
+  floppy controller's FIFO as the chip's data sheet has it (a read asks for service at
+  16 - threshold bytes, the non-DMA status bit stays set through the execution phase, the result
+  comes once the FIFO is empty), and its interrupt passed on by the extend board as a level.
+  Stock MAME is what `--mame-fdc` matches. Build the `firebeat` subtarget of the pin:
+  `make SUBTARGET=firebeat SOURCES=src/mame/konami/firebeat.cpp` (the FDC of 0.289 is the same
+  for these games; the flatpak works for the stock comparison).
+
+## The floppy controller's traffic (beatmania III)
+
+`lua/fdc.lua` logs every access to the controller under MAME, and the runtime writes the same
+log with `HK_FDC_LOG=FILE`; `fdc.py` reads a log as commands and compares two.
+
+```bash
+cp blank.img out/oracle/disk-mame.img        # a blank formatted disk (the runtime makes one: --floppy NEW.img)
+HIRAKU_LUA=oracle/lua/fdc.lua MAME_BIN=<patched firebeat> MAME_ARGS="-flop $PWD/out/oracle/disk-mame.img" \
+    HIRAKU_TAPS=none oracle/mame.sh bm3final oracle/scripts/bm3final-floppy.his
+head -1 out/oracle/bm3final/bm3final-floppy/fdc.txt        # "rtc 2026-11-11 12:52:52": MAME's clock chip at the start
+cp blank.img out/oracle/disk-hiraku.img
+HK_RTC="2026-11-11 12:52:52" HK_FDC_LOG=out/oracle/hiraku-fdc.txt build/cmake/hiraku-bm3final --frames 16200 \
+    --script oracle/scripts/bm3final-floppy.his --floppy out/oracle/disk-hiraku.img
+oracle/fdc.py compare out/oracle/bm3final/bm3final-floppy/fdc.txt out/oracle/hiraku-fdc.txt
+```
+
+- The disk image must be outside the folder of `HIRAKU_LUA` (the flatpak gets that one read-only).
+- With the patch and HIRAKU's default, the two send the same commands and get the same results
+  (2026-11-11: 315 lines each, none different). Stock MAME against `--mame-fdc`: the same
+  commands, but the tries that fail (FIFO data taken for a result, overruns) fall elsewhere.
+- What a game writes depends on the clock: the volume's serial number and the files' times
+  (the same in both with `HK_RTC` set to MAME's clock, the log's first line: the chip's own
+  reading, which can be a second or two before the host's time when the script starts), and
+  the scrambling of its `BM3x.DAT`, which differs between any two runs that aren't
+  cycle-identical. The two disks then differ in that file's bytes alone (2026-11-11); beyond
+  that they compare by each machine loading the other's disk (FD OK).
+
 MAME runs the autoboot script again after every machine reset (a game resetting itself through
 its watchdog, as the 1st style does after test mode); `lua/hiraku.lua` arms only once.

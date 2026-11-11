@@ -1,0 +1,105 @@
+diff --git a/src/devices/machine/upd765.cpp b/src/devices/machine/upd765.cpp
+index dffb3eb5..8db2a07f 100644
+--- a/src/devices/machine/upd765.cpp
++++ b/src/devices/machine/upd765.cpp
+@@ -399,6 +399,7 @@ void upd765_family_device::soft_reset()
+ 	tc_done = false;
+ 	st1 = st2 = st3 = 0x00;
+ 	xfer_in_progress = false;
++	result_waits = nullptr;
+ 
+ 	set_ds(select_multiplexed ? 0 : -1);
+ 
+@@ -589,7 +590,8 @@ uint8_t upd765_family_device::msr_r()
+ 		break;
+ 	case PHASE_EXEC:
+ 		msr |= MSR_CB;
+-		if((spec & SPEC_ND) && xfer_in_progress) {
++		// HIRAKU: as the chip's data sheet, the non-DMA bit is set for the whole execution phase
++		if(spec & SPEC_ND) {
+ 			msr |= MSR_EXM;
+ 			if(!fifo_write)
+ 				msr |= MSR_DIO;
+@@ -791,7 +793,8 @@ void upd765_family_device::fifo_push(uint8_t data, bool internal)
+ 	fifo[fifo_pos++] = data;
+ 	fifo_expected--;
+ 
+-	int thr = (fifocfg & FIF_THR)+1;
++	// HIRAKU: as the chip's data sheet, a read asks for service when the FIFO holds 16 - <threshold> bytes
++	int thr = std::max(16 - ((fifocfg & FIF_THR)+1), 1);
+ 	if(!fifo_write && (!fifo_expected || fifo_pos >= thr || (fifocfg & FIF_DIS)))
+ 		enable_transfer();
+ 	if(fifo_write && (fifo_pos == 16 || !fifo_expected || (fifocfg & FIF_DIS)))
+@@ -816,6 +819,12 @@ uint8_t upd765_family_device::fifo_pop(bool internal)
+ 	int thr = fifocfg & FIF_THR;
+ 	if(fifo_write && fifo_expected && (fifo_pos <= thr || (fifocfg & FIF_DIS)) && !tc_done)
+ 		enable_transfer();
++	// HIRAKU: a read's result phase, held back until its last bytes were taken (read_data_continue)
++	if(result_waits && !fifo_pos) {
++		floppy_info *fi = result_waits;
++		result_waits = nullptr;
++		read_data_continue(*fi);
++	}
+ 	return r;
+ }
+ 
+@@ -2120,6 +2129,12 @@ void upd765_family_device::read_data_continue(floppy_info &fi)
+ 
+ 		case COMMAND_DONE:
+ 			LOGSTATE("COMMAND_DONE\n");
++			// HIRAKU: as the chip's data sheet, "reads require the host to remove the remaining
++			// data so that the result phase may be entered"
++			if(fi.main_state == READ_DATA && fifo_pos && internal_drq) {
++				result_waits = &fi;
++				return;
++			}
+ 			main_phase = PHASE_RESULT;
+ 			result[0] = fi.st0;
+ 			result[1] = st1;
+diff --git a/src/devices/machine/upd765.h b/src/devices/machine/upd765.h
+index 5182943c..e5e6fda9 100644
+--- a/src/devices/machine/upd765.h
++++ b/src/devices/machine/upd765.h
+@@ -259,6 +259,7 @@ protected:
+ 	int selected_drive;
+ 	u8 drive_busy;
+ 	bool xfer_in_progress;
++	floppy_info *result_waits = nullptr; // HIRAKU: a read is over, its last bytes still in the FIFO
+ 
+ 	emu_timer *poll_timer;
+ 
+diff --git a/src/mame/konami/firebeat.cpp b/src/mame/konami/firebeat.cpp
+index 402b95f3..a79918e3 100644
+--- a/src/mame/konami/firebeat.cpp
++++ b/src/mame/konami/firebeat.cpp
+@@ -436,6 +436,7 @@ protected:
+ 
+ 	uint8_t m_extend_board_irq_enable = 0;
+ 	uint8_t m_extend_board_irq_active = 0;
++	bool m_fdc_irq = false; // HIRAKU: the floppy controller's interrupt pin
+ 
+ 	required_device<ppc4xx_device> m_maincpu;
+ 	required_shared_ptr<uint32_t> m_work_ram;
+@@ -1010,6 +1011,14 @@ void firebeat_state::extend_board_irq_w(offs_t offset, uint8_t data)
+ 		// Clearing the FDD IRQ here helps fix some issues with the FDD getting stuck
+ 		m_maincpu->set_input_line(INPUT_LINE_IRQ1, CLEAR_LINE);
+ 	}
++
++	// HIRAKU: the floppy controller's interrupt is a level: still asked for when the game lets
++	// it through again, it comes again
++	if (m_fdc_irq && BIT(m_extend_board_irq_enable, 2) == 0)
++	{
++		m_extend_board_irq_active |= 0x04;
++		m_maincpu->set_input_line(INPUT_LINE_IRQ1, ASSERT_LINE);
++	}
+ }
+ 
+ /*****************************************************************************/
+@@ -1400,6 +1409,7 @@ static void pc_hd_floppies(device_slot_interface &device)
+ 
+ void firebeat_bm3_state::floppy_irq_callback(int state)
+ {
++	m_fdc_irq = state;
+ 	if (BIT(m_extend_board_irq_enable, 2) == 0 && state)
+ 	{
+ 		m_extend_board_irq_active |= 0x04;

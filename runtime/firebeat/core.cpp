@@ -18,6 +18,7 @@
 #include <vector>
 
 #include "shell/kvfile.h"
+#include "host/notice.h"
 #include "../core/exec.h"
 #include "ppc/analyze.h"   // the executor's functions, and any build's for code a mod changes
 #include "ppc/spec.h"
@@ -89,6 +90,8 @@ public:
         else if (a == "--bios-seconds") bios_seconds_ = std::stod(val());
         else if (a == "--soundfont") soundfont_ = val(), synth_stand_in_ = true;
         else if (a == "--synth-stand-in") synth_stand_in_ = true;
+        else if (a == "--floppy") floppy_ = val();
+        else if (a == "--mame-fdc") mame_fdc_ = true;
         else return false;
         return true;
     }
@@ -102,6 +105,12 @@ public:
                "  --itrace          print every interpreted instruction\n"
                "  --bios-seconds S  time the skipped BIOS would have taken (default 21.65, as measured in\n"
                "                    MAME for beatmania III); boards like the SPU boot during it\n"
+               "  --floppy FILE     beatmania III: a floppy disk in the cabinet's drive, where the game keeps a player's\n"
+               "                    name, options and scores: a 1.44 MB disk image (made, blank and formatted, if it isn't\n"
+               "                    there; a file that can't be written is a write-protected disk). \"default\": floppy.img\n"
+               "                    in the game's save folder. The Floppy control (Insert) takes the disk out and puts it in\n"
+               "  --mame-fdc        ... with the floppy controller's FIFO as MAME has it (the oracle's answers), not as the\n"
+               "                    chip's data sheet: the games' reads then fail and are tried again about every second time\n"
                "  --synth-stand-in  Keyboardmania: play the MIDI through FluidSynth even when the XT446 ROMs are there\n"
                "  --soundfont FILE  ... with this SoundFont (implies --synth-stand-in)\n";
     }
@@ -158,6 +167,16 @@ public:
         cfg.cd_master = o.data_path(machine["cd_master"]);
         cfg.cd_slave = o.data_path(machine["cd_slave"]);
         cfg.nvram_dir = o.nvram_dir;
+        if (floppy_ == "default") {   // the game's own disk, beside its saved memories
+            if (o.nvram_dir.empty()) {
+                fprintf(stderr, "--floppy default: the disk is kept in the game's save folder, and this run has none (--nvram DIR, or a file: --floppy FILE)\n");
+                return false;
+            }
+            floppy_ = o.nvram_dir + "/floppy.img";
+        }
+        cfg.floppy = floppy_;
+        cfg.mame_fdc = mame_fdc_;
+        fb::set_floppy_said([](const std::string &said) { hk::host::notice::hint({said}, 4); });
         if (o.trace) cfg.trace_dir = o.out;
         cfg.ata_log = o.ata_log;
         fb::init(cfg);
@@ -329,10 +348,10 @@ private:
     std::unique_ptr<spec::Program> own_;
     bool own_failed_ = false;
     std::string root_, game_;
-    std::string image_, soundfont_, spec_;
+    std::string image_, soundfont_, spec_, floppy_;
     uint32_t load_ = HK_LOAD, entry_ = HK_ENTRY;   // the executor build's, from game.toml
     size_t program_bytes_ = 0;   // the program image's size (code_changed)
-    bool synth_stand_in_ = false;
+    bool synth_stand_in_ = false, mame_fdc_ = false;
     double bios_seconds_ = 21.65;
     AudioSink sink_;
     hk_ctx ctx_{};

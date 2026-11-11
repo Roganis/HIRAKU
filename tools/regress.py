@@ -50,6 +50,16 @@ CASES = {
     "bm3core-play": ("bm3core", 9600, ["--script", "oracle/scripts/bm3core-play.his"]),
     "bm36th-play": ("bm36th", 9600, ["--script", "oracle/scripts/bm36th-play.his"]),
     "bm37th-play": ("bm37th", 9600, ["--script", "oracle/scripts/bm37th-play.his"]),
+    # beatmania III's floppy drive (runtime/dev/fdc.h), a blank disk made in the case's folder at every
+    # run: two credits, the first finds a new disk and saves a player at its end, the second loads it
+    "bm3final-floppy": ("bm3final", 16200, ["--script", "oracle/scripts/bm3final-floppy.his",
+                                            "--floppy", "out/regress/work/bm3final-floppy/floppy.img"]),
+    # ... the same with the controller's FIFO as MAME has it (reads that fail and are tried again)
+    "bm3final-floppy-mame": ("bm3final", 16200, ["--script", "oracle/scripts/bm3final-floppy.his", "--mame-fdc",
+                                                 "--floppy", "out/regress/work/bm3final-floppy-mame/floppy.img"]),
+    # ... and the disk taken out and put in while the machine runs
+    "bm3final-floppy-change": ("bm3final", 4400, ["--script", "oracle/scripts/bm3final-floppy-change.his",
+                                                  "--floppy", "out/regress/work/bm3final-floppy-change/floppy.img"]),
     "popn7-attract": ("popn7", 3600, []),
     # pop'n music Mickey Tunes! from a blank NVRAM: the boot checks, the warm-up, attract to How to Play
     "popnmt2-attract": ("popnmt2", 9000, ["--script", "oracle/scripts/popnmt2-attract.his"]),
@@ -386,6 +396,10 @@ def run(case, digest_path, take=False, nice=0, src=None):
     exe, pre = game_binary(game)
     work = os.path.join(OUT, "work", case)
     os.makedirs(work, exist_ok=True)
+    # a floppy disk of the case's own: none at the start of a run (the runtime makes a blank one)
+    for flag, path in zip(extra, extra[1:]):
+        if flag == "--floppy" and os.path.dirname(os.path.abspath(path)) == os.path.abspath(work) and os.path.exists(path):
+            os.remove(path)
     cmd = [exe] + pre + ["--frames", str(frames), "--out", work] + extra
     if game_core(game) in ("sys573", "twinkle"):
         cmd += ["--mame-sound"]   # MAME's 50 Hz sound updates, as the baselines (the cores' default: every ms)

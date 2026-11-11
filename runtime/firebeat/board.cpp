@@ -9,6 +9,8 @@
 #include <cstdio>
 #include <cstring>
 #include <deque>
+#include <filesystem>
+#include <functional>
 #include <fstream>
 #include <memory>
 #include <set>
@@ -230,6 +232,14 @@ void kbd_scan_fire() {
 uint8_t g_wheel[2] = {0x80, 0x80};
 uint64_t g_midi_out_bytes = 0;
 
+// HK_FDC_LOG=FILE: every access to the floppy controller, a line each ("seconds frame R|W port
+// value"), as a MAME tap on 0x70001000-0x70001fff prints it: the two are compared command by command
+FILE *g_fdc_log = nullptr;
+void fdc_log(char kind, uint32_t p, uint8_t v) {
+    fprintf(g_fdc_log, "%.6f f%llu %c %x %02x\n", (double)now() / CPU_HZ, (unsigned long long)g_frame + 1, kind,
+            0x3f0 + (((p - 0x70001000) >> 2) & 7), v);
+}
+
 // ---- extend board interrupt latch -------------------------------------------
 // As in MAME: device callbacks drive the CPU's EXT1 line; the active bits are
 // sticky until the game acknowledges them by writing 0x70006000.
@@ -446,8 +456,12 @@ uint32_t bus_read(uint32_t p, int size) {
         }
         if (p >= 0x70000000 && p <= 0x70000fff)                      // MIDI UART, lane 0 only
             return (p & 3) == 0 ? (uint32_t)g_midi[((p - 0x70000000) >> 8) >> 3 & 1].read(((p - 0x70000000) >> 8) & 7) << (8 * (size - 1)) : 0;
-        if (p >= 0x70001000 && p <= 0x70001fff)                      // FDC37C665GT, lane 0: ISA port = offset / 4
-            return (p & 3) == 0 ? (uint32_t)g_fdc->read((int)((p - 0x70001000) >> 2)) << (8 * (size - 1)) : 0;
+        if (p >= 0x70001000 && p <= 0x70001fff) {                    // FDC37C665GT, lane 0: ISA port = offset / 4
+            if (p & 3) return 0;
+            const uint8_t b = g_fdc->read((int)((p - 0x70001000) >> 2));
+            if (g_fdc_log) fdc_log('R', p, b);
+            return (uint32_t)b << (8 * (size - 1));
+        }
         if (p >= 0x70008000 && p <= 0x7000807f)                      // spectrum analyser (fed by the SPU's output)
             return bytes_read(p, size, 0x70008000, [](uint32_t o) { return spectrum::read(o); });
     }
@@ -509,6 +523,14 @@ void bus_write(uint32_t p, uint32_t v, int size) {
         g_ext_irq_active &= ~(uint8_t)v;
         g_ext_irq_enable = (uint8_t)v;
         if (bool(g_ext_irq_enable & 0x04) != fdd_was) ext1_line(false);   // MAME: helps the FDD not get stuck
+        // The floppy controller's interrupt is a level: still asked for when the game lets it through
+        // again, it comes again. MAME's board keeps only its rising edges, and one that comes between
+        // the handler's last look at the controller and its acknowledge here is lost; with the
+        // chip's FIFO, which asks again at the next byte, a read would stop there (dev/fdc.h).
+        if (!g_cfg.mame_fdc && g_fdc && g_fdc->irq_line() && !(g_ext_irq_enable & 0x04)) {
+            g_ext_irq_active |= 0x04;
+            ext1_line(true);
+        }
         return;
     }
     if (g_cfg.family == "ppp" && p >= 0x7d000300 && p <= 0x7d00033f) return;   // written at boot; unmapped in MAME too
@@ -523,7 +545,9 @@ void bus_write(uint32_t p, uint32_t v, int size) {
             return;
         }
         if (p >= 0x70001000 && p <= 0x70001fff) {
-            if ((p & 3) == 0) g_fdc->write((int)((p - 0x70001000) >> 2), (uint8_t)(v >> (8 * (size - 1))));
+            if (p & 3) return;
+            if (g_fdc_log) fdc_log('W', p, (uint8_t)(v >> (8 * (size - 1))));
+            g_fdc->write((int)((p - 0x70001000) >> 2), (uint8_t)(v >> (8 * (size - 1))));
             return;
         }
     }
@@ -684,6 +708,73 @@ bool read_file(const std::string &path, std::vector<uint8_t> &out) {
     return true;
 }
 
+// ---- beatmania III's floppy disk (--floppy) -----------------------------------------------------
+// The image file is the disk. It is read whole when the disk goes in and written back whole
+// (shell/saves.h) when the game has changed it: while playing once the drive's motor has stopped
+// (the game's writing is over then, so the file is a disk as the game left it, never half a
+// cylinder), when the disk is taken out, and at the end.
+uint64_t g_floppy_kept = 0;          // the disk's disk_writes() as its file has it
+bool g_floppy_known = false;         // ... (false: nothing is known of the file)
+unsigned g_floppy_failed = 0;        // the writer's failed sets when last looked at
+std::function<void(const std::string &)> g_floppy_said;
+
+std::pair<std::string, std::string> floppy_place() {   // the file's folder and its name there
+    const std::string &f = g_cfg.floppy;
+    const size_t slash = f.find_last_of("/\\");
+    return slash == std::string::npos ? std::make_pair(std::string("."), f) : std::make_pair(f.substr(0, slash), f.substr(slash + 1));
+}
+
+// The file's disk into the drive: a new file is a blank formatted disk, a file that can't be
+// written a write-protected one. false (and why): not a 1.44 MB disk's image
+bool floppy_insert(bool at_power_on, std::string &why) {
+    saves::writer().drain();   // (the file may still be on its way from when the disk came out)
+    saves::recover(floppy_place().first);
+    std::vector<uint8_t> image;
+    bool is_new = false, read_only = false;
+    bool on_file = true;
+    if (!sys::exists(g_cfg.floppy)) {
+        image = Fdc37c665::blank_disk();
+        is_new = true;
+        sys::make_dirs(floppy_place().first);
+        on_file = sys::write_file(g_cfg.floppy, image.data(), image.size());
+        if (!on_file) fprintf(stderr, "floppy: cannot write %s: what the game saves on this disk may not be kept\n", g_cfg.floppy.c_str());
+    } else if (!read_file(g_cfg.floppy, image) || image.size() != Fdc37c665::kDiskBytes) {
+        why = g_cfg.floppy + " is not a 1.44 MB disk's image (" + std::to_string(Fdc37c665::kDiskBytes) + " bytes of sectors)";
+        return false;
+    } else {
+        std::error_code ec;
+        const auto perms = std::filesystem::status(g_cfg.floppy, ec).permissions();
+        read_only = !ec && (perms & std::filesystem::perms::owner_write) == std::filesystem::perms::none;
+    }
+    g_fdc->insert(std::move(image), read_only, at_power_on);
+    g_floppy_kept = g_fdc->disk_writes(), g_floppy_known = on_file;
+    // (the file's name on stderr: stdout's lines are a run's statistics, the same wherever its files are)
+    printf("floppy: %s%s in the drive\n", is_new ? "a new blank disk" : "the disk", read_only ? ", write-protected," : "");
+    fprintf(stderr, "floppy: %s\n", g_cfg.floppy.c_str());
+    return true;
+}
+
+// The disk to its file if the game has changed it. now: before returning (else on the writer's thread)
+void floppy_keep(bool now_) {
+    if (!g_fdc || !g_fdc->has_disk() || g_cfg.floppy.empty()) return;
+    if (now_) saves::writer().drain();
+    // a set the writer couldn't write: the file may not be what it was thought to be
+    if (const unsigned failed = saves::writer().failed(); failed != g_floppy_failed) g_floppy_failed = failed, g_floppy_known = false;
+    if (g_floppy_known && g_fdc->disk_writes() == g_floppy_kept) return;
+    const auto [dir, name] = floppy_place();
+    const auto &d = g_fdc->disk();
+    std::vector<saves::File> set{{name, std::string(d.begin(), d.end())}};
+    g_floppy_kept = g_fdc->disk_writes(), g_floppy_known = true;
+    if (!now_) {
+        saves::writer().write(dir, std::move(set));
+        return;
+    }
+    if (!saves::write_set(dir, set)) {
+        g_floppy_known = false;
+        fprintf(stderr, "floppy: cannot write %s: the disk as it was before is kept\n", g_cfg.floppy.c_str());
+    }
+}
+
 }  // namespace
 
 void init(const Config &cfg) {
@@ -709,6 +800,8 @@ void init(const Config &cfg) {
     g_fdc = new Fdc37c665;
     // FDC interrupt -> extend board bit 0x04 (if enabled: bit clear) -> EXT1 (MAME floppy_irq_callback)
     g_fdc->irq = [](bool on) {
+        if (g_fdc_log)   // (six words: not an access)
+            fprintf(g_fdc_log, "%.6f f%llu irq %d enable %02x\n", (double)now() / CPU_HZ, (unsigned long long)g_frame + 1, on, g_ext_irq_enable);
         if (on && !(g_ext_irq_enable & 0x04)) {
             g_ext_irq_active |= 0x04;
             ext1_line(true);
@@ -804,6 +897,14 @@ void init(const Config &cfg) {
         else fprintf(stderr, "board: %s is %zu bytes, not a flash chip's 2 MiB: left as it is, the chip starts as the dump has it\n", path.c_str(), f.size());
     }
 
+    g_fdc->set_mame_fifo(cfg.mame_fdc);
+    if (!cfg.floppy.empty()) {   // the disk is in the drive when the machine is turned on
+        std::string why;
+        if (cfg.family != "bm3") fprintf(stderr, "board: --floppy: only beatmania III has a floppy drive\n"), g_cfg.floppy.clear();
+        else if (!floppy_insert(true, why)) fatal(nullptr, "--floppy: %s", why.c_str());
+    }
+    if (const char *e = getenv("HK_FDC_LOG"); e && *e && cfg.family == "bm3") g_fdc_log = fopen(e, "w");
+
     // JP, non-rental; ParaPara adds bit 3, Keyboardmania bit 1 (MAME init_*_jp)
     g_cabinet_info = cfg.cabinet >= 0 ? (uint32_t)cfg.cabinet : cfg.family == "ppp" ? 0x8 : cfg.family == "kbm" ? 0x2 : 0;
     g_ext_irq_enable = 0x3f;
@@ -866,6 +967,9 @@ void shutdown() {
     g_trace.emit();
     if (g_trace.f) fclose(g_trace.f);
     g_trace.f = nullptr;
+    if (g_fdc_log) fclose(g_fdc_log);
+    g_fdc_log = nullptr;
+    floppy_keep(true);
     if (!g_cfg.nvram_dir.empty()) {
         // all whole or none (saves::write_set): a full or failing disk, or a kill half way, keeps the
         // save from before
@@ -879,7 +983,28 @@ void shutdown() {
 
 void save_now() {
     if (!g_cfg.nvram_dir.empty() && g_rtc) saves::writer().write(g_cfg.nvram_dir, changed_saves());
+    if (g_fdc && !g_fdc->motor_on()) floppy_keep(false);   // (the motor on: the game may be in the middle of a write)
 }
+
+std::string floppy_toggle() {
+    if (!g_fdc || g_cfg.floppy.empty()) return {};
+    std::string said;
+    if (g_fdc->has_disk()) {
+        const bool cut = g_fdc->writing();
+        floppy_keep(false);   // (on the writer's thread: the game doesn't wait for the file)
+        g_fdc->eject();
+        said = cut ? "Floppy disk taken out while the game was writing it" : "Floppy disk taken out";
+    } else {
+        std::string why;
+        said = floppy_insert(false, why) ? std::string("Floppy disk in the drive") + (g_fdc->write_protected() ? " (write-protected)" : "")
+                                         : "No floppy disk: " + why;
+    }
+    printf("floppy: %s\n", said.c_str());
+    if (g_floppy_said) g_floppy_said(said);
+    return said;
+}
+bool floppy_in() { return g_fdc && g_fdc->has_disk(); }
+void set_floppy_said(std::function<void(const std::string &)> f) { g_floppy_said = std::move(f); }
 
 void note_input_change() { g_last_input = now(); }
 uint64_t last_input_change() { return g_last_input; }
@@ -970,6 +1095,10 @@ bool set_input(const std::string &name0, int value) try {
     }
     else if (name == "Test") low8(g_in.in[0], 0x01);
     else if (name == "Service") low8(g_in.in[0], 0x02);
+    else if (name == "Floppy") {                         // the drive's slot: a press takes the disk out or puts it in
+        if (g_cfg.floppy.empty()) return true;           // (bound, but no disk was given: nothing to move)
+        if (value) floppy_toggle();
+    }
     else if (name == "A") low8(g_in.in[0], 0x04);
     else if (name == "B") low8(g_in.in[0], 0x08);
     else if (name == "P1 Foot") high8(g_in.in[0], 0x10);

@@ -15,7 +15,47 @@ sudo=""
 [ "$(id -u)" = 0 ] || sudo=sudo
 export DEBIAN_FRONTEND=noninteractive
 LLVM=21
-$sudo apt-get update -q
+
+# Ubuntu's package index. A GitHub runner takes Ubuntu's packages from a list of servers
+# (/etc/apt/apt-mirrors.txt), Azure's own mirror first, and now and then a runner can't reach it:
+# on 2026-11-11 the name couldn't be looked up in five attempts in a row over an hour, and the job
+# ended here each time. So a download is tried three times, and where the index still can't be
+# had, the first of the servers below that answers is used in place of the list. Any of them will
+# do: apt checks every index against Ubuntu's own signature, whichever server hands it over.
+echo 'Acquire::Retries "3";' | $sudo tee /etc/apt/apt.conf.d/80-hiraku-retries >/dev/null
+apt_update() {
+  local log st=0; log=$(mktemp)
+  $sudo apt-get update -q 2>&1 | tee "$log" || st=$?
+  # apt-get update ends with 0 when a server couldn't be reached ("W: Failed to fetch"): read what it said
+  if grep -qE "(Failed to fetch|Temporary failure resolving|Could not resolve|Could not connect|Connection timed out).*(ubuntu|apt-mirrors)" "$log"; then
+    st=1
+  fi
+  rm -f "$log"
+  return $st
+}
+answers() {   # an Ubuntu mirror's address: its name is found, and it hands over the release's index
+  local host=${1#*://}; host=${host%%/*}
+  getent hosts "$host" >/dev/null || return 1
+  if command -v curl >/dev/null; then curl -fsS --max-time 20 -o /dev/null "$1/dists/$2/InRelease"; fi
+}
+if ! apt_update; then
+  codename=$(. /etc/os-release && echo "$VERSION_CODENAME")
+  for m in http://archive.ubuntu.com/ubuntu http://us.archive.ubuntu.com/ubuntu \
+           http://mirrors.kernel.org/ubuntu http://mirror.math.princeton.edu/pub/ubuntu; do
+    if answers $m "$codename"; then
+      echo "release-setup-ubuntu: the package servers set here can't be reached; using $m"
+      if [ -f /etc/apt/apt-mirrors.txt ]; then   # the runner's list: this one server
+        printf '%s/\tpriority:1\n' $m | $sudo tee /etc/apt/apt-mirrors.txt >/dev/null
+      fi
+      for f in /etc/apt/sources.list /etc/apt/sources.list.d/ubuntu.sources; do   # a plain Ubuntu's
+        if [ -f $f ]; then $sudo sed -i -E "s#https?://[a-z0-9.-]*\.ubuntu\.com/ubuntu/?#$m/#g" $f; fi
+      done
+      break
+    fi
+    echo "release-setup-ubuntu: $m doesn't answer either"
+  done
+  apt_update || echo "release-setup-ubuntu: part of the package index is still missing; going on with what there is"
+fi
 $sudo apt-get install -y -q --no-install-recommends ca-certificates curl wget gnupg lsb-release software-properties-common \
   build-essential git make ninja-build nasm pkg-config python3 python3-venv python3-pip xz-utils p7zip-full file binutils patch
 # clang and lld from LLVM's own packages

@@ -104,7 +104,67 @@
  #include "Host.h"
  #include "GS/GSCapture.h"
  #include "MTGS.h"
-@@ -530,6 +531,9 @@
+@@ -14,6 +15,9 @@
+ 
+ #include "common/Error.h"
+ 
++#include <cmath>
++#include <cstring>
++
+ const StereoOut32 StereoOut32::Empty(0, 0);
+ 
+ namespace SPU2
+@@ -502,13 +506,47 @@
+ 	return 0;
+ }
+ 
++// HIRAKU: a * b + c rounded once (a fused multiply-add), the same on every build: the instruction
++// where the build's target has it, and elsewhere the same result from double arithmetic (checked
++// against the instruction in every rounding mode, with and without the EE's denormal flags).
++static inline float FusedMulAdd(float a, float b, float c)
++{
++#if defined(__FMA__) || defined(__aarch64__) || defined(_M_ARM64)
++	return std::fma(a, b, c);
++#else
++	// The product of two floats is exact as a double (24 x 24 bits). The sum is then rounded twice,
++	// to double and to float: rounding the double "to odd" makes the second rounding the only one.
++	const double p = static_cast<double>(a) * static_cast<double>(b);
++	const double cd = static_cast<double>(c);
++	double s = p + cd;
++	const double t = s - p;
++	const double err = (p - (s - t)) + (cd - t); // what the sum's rounding dropped
++	if (err != 0.0 && err == err)
++	{
++		u64 bits;
++		std::memcpy(&bits, &s, sizeof(bits));
++		if (!(bits & 1))
++		{
++			// one step toward the true sum (a double's bits grow with its magnitude)
++			bits += ((err > 0.0) == (s > 0.0)) ? 1 : static_cast<u64>(-1);
++			std::memcpy(&s, &bits, sizeof(bits));
++		}
++	}
++	return static_cast<float>(s);
++#endif
++}
++
+ static void DCFilter(float *input)
+ {
+ 	// A simple DC blocking high-pass filter
+ 	// Implementation from http://peabody.sapp.org/class/dmp2/lab/dcblock/
++	// HIRAKU: the feedback product and the sum are one fused multiply-add, said outright. As
++	// "input - in + 0.995f * out" the compiler fused them or not (-ffp-contract=fast): it did in a
++	// build for a CPU with FMA (-march=native) and could not in a release's (SSE4.1), and the two
++	// sounds differed in their last bit. Every build now makes what the fused one made.
+ 	float output[2];
+-	output[0] = (input[0] - DCFilterIn[0] + ((0.995f * DCFilterOut[0])));
+-	output[1] = (input[1] - DCFilterIn[1] + ((0.995f * DCFilterOut[1])));
++	output[0] = FusedMulAdd(0.995f, DCFilterOut[0], input[0] - DCFilterIn[0]);
++	output[1] = FusedMulAdd(0.995f, DCFilterOut[1], input[1] - DCFilterIn[1]);
+ 
+ 	DCFilterIn[0] = input[0];
+ 	DCFilterIn[1] = input[1];
+@@ -530,6 +568,9 @@
       * significant DC offset, so we filter it out (e.x. SSX 3)*/
  	DCFilter(conv);
  
@@ -340,6 +400,22 @@
  if(ENABLE_GSRUNNER)
  	add_subdirectory(pcsx2-gsrunner)
  else()
+--- a/pcsx2/CMakeLists.txt
++++ b/pcsx2/CMakeLists.txt
+@@ -24,6 +24,13 @@
+ 	if (NOT USE_CLANG_CL AND MSVC_VERSION GREATER_EQUAL 1930)
+ 		target_compile_options(PCSX2_FLAGS INTERFACE /fp:contract)
+ 	endif()
++	# HIRAKU: clang-cl fuses multiply-adds as the other platforms' compilers do below (its default
++	# fuses only within one expression). Where a file is built for FMA (the GS's AVX2 copy), the
++	# software renderer's pictures differed between Windows and Linux in some frames otherwise.
++	# The plain spelling is ignored by clang-cl: it takes the option through /clang:.
++	if(USE_CLANG_CL)
++		target_compile_options(PCSX2_FLAGS INTERFACE /clang:-ffp-contract=fast)
++	endif()
+ 	target_compile_options(PCSX2_FLAGS INTERFACE /GS-)
+ else()
+ 	target_compile_options(PCSX2_FLAGS INTERFACE
 --- a/pcsx2/DEV9/net.cpp
 +++ b/pcsx2/DEV9/net.cpp
 @@ -15,6 +15,7 @@

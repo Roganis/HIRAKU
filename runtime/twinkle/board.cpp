@@ -670,6 +670,7 @@ struct Board {
     std::vector<u32> present_rgb;
     AudioSink audio_sink;
     u64 frames = 0;
+    bool frame_picture = true;   // the frame hook's picture is composed (frame_picture_unused)
     float sound_peak = 0;
     u64 sound_over = 0, sound_samples = 0;
     std::vector<u32> frame_rgb;
@@ -773,6 +774,10 @@ bool init(const Config &cfg) {
         g.frames++;
         if (!g.frame_hook) return;
         int w, h;
+        if (!g.frame_picture) {   // nobody looks at it: the present hook's is the one shown
+            g.frame_hook(g.frames, nullptr, screen.visible_area().width(), screen.visible_area().height());
+            return;
+        }
         picture(screen, screen.m_bitmap, g.frame_rgb, w, h, true);
         g.frame_hook(g.frames, g.frame_rgb.data(), w, h);
     };
@@ -852,6 +857,7 @@ void set_present_hook(PresentHook h) {
         g.present_hook(g.present_rgb.data(), w, h);
     };
 }
+void frame_picture_unused() { g.frame_picture = false; }
 void set_audio_sink(AudioSink s) { g.audio_sink = std::move(s); }
 
 // The GPU draws the frame on show again with what moves carried on (psxgpu_device::hk_between),

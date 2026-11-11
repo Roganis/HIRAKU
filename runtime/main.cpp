@@ -180,7 +180,8 @@ struct FrameTimes {
     uint64_t last_cat[prof::NCAT] = {}, worst_cat[prof::NCAT] = {};
     uint64_t first_cat[prof::NCAT] = {}, sum_cat[prof::NCAT] = {};   // each part's time over the frames counted
     double sum_ms = 0, max_ms = 0;
-    FILE *log = nullptr;   // HK_FRAMETIMES=file: every frame's host work, "frame ms cpu_ms major_faults"
+    FILE *log = nullptr;   // HK_FRAMETIMES=file: every frame's host work, "frame ms cpu_ms major_faults", then
+                           // the frame's milliseconds in each part (core/prof.h's, in its order)
     double last_cpu = 0;   // the emulation thread's CPU time and the process's major page faults
     long last_faults = 0;  // (a long frame with little CPU waited: on the disk, or for the CPU)
 
@@ -194,7 +195,12 @@ struct FrameTimes {
         }
         if (last) {
             double ms = (double)((t - last) - (w - last_wait)) * prof::ns_per_tick() / 1e6;
-            if (log) fprintf(log, "%llu %.3f %.3f %ld\n", (unsigned long long)f, ms, cpu - last_cpu, faults - last_faults);
+            if (log) {
+                fprintf(log, "%llu %.3f %.3f %ld", (unsigned long long)f, ms, cpu - last_cpu, faults - last_faults);
+                for (int c = 0; c < prof::NCAT; c++)
+                    fprintf(log, " %.3f", (double)(prof::g_total[c] - last_cat[c]) * prof::ns_per_tick() / 1e6);
+                fputc('\n', log);
+            }
             hist[std::min(BINS, (int)(ms / 0.05))]++;
             n++;
             for (int c = 0; c < prof::NCAT; c++) sum_cat[c] = prof::g_total[c] - first_cat[c];
@@ -478,8 +484,19 @@ int main(int argc, char **argv) {
 
     static FrameTimes frame_times;
     if (const char *ft = getenv("HK_FRAMETIMES"); ft && *ft) frame_times.log = fopen(ft, "w");
+    // HK_BETWEEN_BENCH=K: what --smooth-motion's in-between pictures cost the core, without a display:
+    // every frame, the K - 1 a display at K times the game's rate asks for (2: 120 Hz, 4: 240 Hz).
+    // Their time counts in the frame's (the frametime lines), and has a line of its own at exit
+    static int between_bench = 0;
+    static uint64_t between_n = 0, between_ticks = 0, between_max = 0, between_hash = 0xcbf29ce484222325ull;
+    if (const char *bb = getenv("HK_BETWEEN_BENCH"); bb && atoi(bb) >= 2) between_bench = atoi(bb);
     auto report = [&]() {
         frame_times.print();
+        if (between_n)
+            printf("in-between pictures (HK_BETWEEN_BENCH=%d): %llu drawn, mean %.2f ms each, max %.2f; their pixels' hash %016llx\n",
+                   between_bench, (unsigned long long)between_n,
+                   (double)between_ticks * prof::ns_per_tick() / 1e6 / (double)between_n,
+                   (double)between_max * prof::ns_per_tick() / 1e6, (unsigned long long)between_hash);
         machine.report();
         close_wav();
         if (digest) { fclose(digest); digest = nullptr; }
@@ -579,6 +596,27 @@ int main(int argc, char **argv) {
             host::window_present(rgb, w, h, machine.seconds());
         });
 #endif
+    // HK_BETWEEN_BENCH: the in-between pictures where a window asks for them (with the picture at
+    // the end of vertical blank, for a core that has one; else with the frame's)
+    auto between_draw = [&](int w, int h) {
+        for (int i = 1; i < between_bench; i++) {
+            int bw = w, bh = h;
+            const uint64_t t0 = prof::ticks();
+            const uint32_t *b = machine.render_between((double)i / between_bench, bw, bh);
+            const uint64_t dt = prof::ticks() - t0;
+            if (b) {
+                between_n++, between_ticks += dt, between_max = std::max(between_max, dt);
+                between_hash = hash_words(between_hash, b, (size_t)bw * bh);
+            }
+        }
+    };
+    const bool between_at_frame =
+        between_bench && !window_scale && !machine.set_present_hook([&](const uint32_t *, int w, int h) { between_draw(w, h); });
+#ifdef HK_WITH_SDL
+    // the frame hook's picture, when nothing below reads it (the window shows the present hook's):
+    // the core needn't compose it
+    if (present_at_vblank_end && !digest && script_path.empty() && !snap_every) machine.frame_picture_unused();
+#endif
     auto last_save = std::chrono::steady_clock::now();
     machine.set_frame_hook([&](uint64_t f, const uint32_t *rgb, int w, int h) {
         frame_times.frame(f);
@@ -628,6 +666,7 @@ int main(int argc, char **argv) {
         }
 #endif
         if (debug_every && f % debug_every == 0) machine.debug_line(f);
+        if (between_at_frame) between_draw(w, h);
         if (prof::g_sample_frame) prof::g_sample_frame(f);   // HK_PROFILE_FRAMES
         if (lights_log) lights_log(f);
 #ifdef HK_WITH_SDL

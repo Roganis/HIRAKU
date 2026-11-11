@@ -16,6 +16,7 @@
 //                        summed over runs; tools/mipsgen.py reads it)
 //   HK_573_BLOCKS=0      interpret everything, even with recompiled blocks built in
 //   HK_573_MIPS_STATS=1  print what the blocks covered at exit
+//   HK_573_IDLE=0        run waiting loops turn by turn (below)
 #pragma once
 
 #include <string>
@@ -27,5 +28,12 @@ namespace hk::k573::mips {
 void init(psxcpu_device &cpu);
 void finish();            // writes the recording (HK_573_RECORD)
 std::string report();     // "" unless HK_573_MIPS_STATS is set
+
+// Waiting loops (runtime/sys573/idle.cpp): a loop that only waits (the library's VSync(): a
+// timeout counted down, a counter in RAM compared) is found as the interpreter runs it, and the
+// rest of a timeslice's turns of it are counted instead of run, to the same state. For every
+// game, with or without recorded blocks; HK_573_IDLE=0 turns it off. init() starts it.
+void idle_init(psxcpu_device &cpu);
+std::string idle_report();   // "" unless HK_573_MIPS_STATS is set
 
 }  // namespace hk::k573::mips

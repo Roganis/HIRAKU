@@ -3959,11 +3959,33 @@ void psxgpu_device::hk_keep_undo( const uint32_t *item, uint64_t at )
 	while( !m_hk_undo.empty() && m_hk_undo.front().at < from )
 		m_hk_undo.pop_front();
 	hk_undo u{ at, hk_item_area( item ), {} };
-	u.pixels.reserve( size_t( u.a.w ) * u.a.h );
-	for( int32_t y = 0; y < u.a.h; y++ )
-		for( int32_t x = 0; x < u.a.w; x++ )
-			u.pixels.push_back( m_hk_raster.p_p_vram[ ( u.a.y + y ) & 1023 ][ ( u.a.x + x ) & 1023 ] );
+	if( u.a.w > 0 && u.a.h > 0 )
+	{
+		u.pixels.resize( size_t( u.a.w ) * u.a.h );
+		hk_area_copy( m_hk_raster.p_p_vram, u.a, u.pixels.data(), false );
+	}
 	m_hk_undo.push_back( std::move( u ) );
+}
+
+// An area's pixels out of VRAM (into: back into it), in the order the per-pixel loops took them
+// (rows, then columns, both wrapping at 1024), a stretch of a row at a time: a frame's clear is
+// 640x240 pixels, kept by the drawing thread and swapped twice by every in-between picture.
+void psxgpu_device::hk_area_copy( uint16_t **p_p_vram, const hk_area &a, uint16_t *pixels, bool into )
+{
+	for( int32_t y = 0; y < a.h; y++ )
+	{
+		uint16_t *row = p_p_vram[ ( a.y + y ) & 1023 ];
+		for( int32_t x = 0; x < a.w; )
+		{
+			const int32_t c = ( a.x + x ) & 1023, n = std::min( a.w - x, 1024 - c );
+			if( into )
+				std::copy_n( pixels, n, row + c );
+			else
+				std::copy_n( row + c, n, pixels );
+			pixels += n;
+			x += n;
+		}
+	}
 }
 
 bool psxgpu_device::hk_between( double t, screen_device &screen, bitmap_rgb32 &bitmap )
@@ -4182,15 +4204,26 @@ bool psxgpu_device::hk_between( double t, screen_device &screen, bitmap_rgb32 &b
 	for( auto u = m_hk_undo.rbegin(); u != m_hk_undo.rend() && u->at >= from; ++u )
 	{
 		std::vector<uint16_t> now;
-		now.reserve( u->pixels.size() );
-		size_t k = 0;
-		for( int32_t y = 0; y < u->a.h; y++ )
-			for( int32_t x = 0; x < u->a.w; x++ )
-			{
-				uint16_t &px = p_p_vram[ ( u->a.y + y ) & 1023 ][ ( u->a.x + x ) & 1023 ];
-				now.push_back( px );
-				px = u->pixels[ k++ ];
-			}
+		if( u->a.w > 0 && u->a.h > 0 && u->a.h <= m_hk_rows )
+		{
+			// no pixel twice (the area is at most 1024 columns, and no taller than VRAM): its
+			// pixels as they are kept, then the kept ones put back, as the loop below does one by one
+			now.resize( u->pixels.size() );
+			hk_area_copy( p_p_vram, u->a, now.data(), false );
+			hk_area_copy( p_p_vram, u->a, const_cast<uint16_t *>( u->pixels.data() ), true );
+		}
+		else
+		{
+			now.reserve( u->pixels.size() );
+			size_t k = 0;
+			for( int32_t y = 0; y < u->a.h; y++ )
+				for( int32_t x = 0; x < u->a.w; x++ )
+				{
+					uint16_t &px = p_p_vram[ ( u->a.y + y ) & 1023 ][ ( u->a.x + x ) & 1023 ];
+					now.push_back( px );
+					px = u->pixels[ k++ ];
+				}
+		}
 		redo.emplace_back( u->a, std::move( now ) );
 	}
 
@@ -4222,10 +4255,8 @@ bool psxgpu_device::hk_between( double t, screen_device &screen, bitmap_rgb32 &b
 		std::copy_n( &pixels[ i * 1024 ], 1024, p_p_vram[ rows[ i ] ] );
 	for( auto r = redo.rbegin(); r != redo.rend(); ++r ) // oldest first
 	{
-		size_t k = 0;
-		for( int32_t y = 0; y < r->first.h; y++ )
-			for( int32_t x = 0; x < r->first.w; x++ )
-				p_p_vram[ ( r->first.y + y ) & 1023 ][ ( r->first.x + x ) & 1023 ] = r->second[ k++ ];
+		if( r->first.w > 0 && r->first.h > 0 )
+			hk_area_copy( p_p_vram, r->first, r->second.data(), true );
 	}
 	return true;
 }

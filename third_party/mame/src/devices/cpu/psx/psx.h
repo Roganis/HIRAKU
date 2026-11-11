@@ -188,6 +188,7 @@ protected:
 	virtual uint64_t execute_cycles_to_clocks(uint64_t cycles) const noexcept override { return cycles * 4; }
 	virtual void execute_run() override;
 	void execute_one(); // HIRAKU
+	void hk_one(); // HIRAKU: its body, inlined into execute_run()
 	virtual void execute_set_input(int inputnum, int state) override;
 
 	// device_memory_interface overrides
@@ -315,6 +316,9 @@ public:
 	const void *const *m_hk_tab = nullptr;
 	bool ( *m_hk_run )( psxcpu_device &, const void * ) = nullptr;
 	void ( *m_hk_rec )( psxcpu_device & ) = nullptr;
+	// waiting loops counted instead of run (runtime/sys573/idle.cpp), at the start of a
+	// timeslice: true when it used the timeslice up
+	bool ( *m_hk_idle )( psxcpu_device & ) = nullptr;
 protected:
 
 	devcb_read32 m_gpu_read_handler;

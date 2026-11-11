@@ -51,6 +51,9 @@ struct hk_psx {
     static HK_INLINE uint32_t delayr(D &d) { return d.m_delayr; }
     static HK_INLINE uint32_t delayv(D &d) { return d.m_delayv; }
     static HK_INLINE int icount(D &d) { return d.m_icount; }
+    static HK_INLINE int &icount_ref(D &d) { return d.m_icount; }
+    // one instruction by MAME's interpreter, as execute_run()'s loop runs it
+    static HK_INLINE void step(D &d) { d.execute_one(); d.m_icount--; }
     static HK_INLINE const page_t *pages(D &d) { return d.m_program->pages(); }
     static HK_INLINE uint32_t sr(D &d) { return d.m_cp0r[12]; }
     static HK_INLINE uint32_t cp0(D &d, int reg) { return d.m_cp0r[reg]; }

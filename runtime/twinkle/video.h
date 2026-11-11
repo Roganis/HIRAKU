@@ -66,7 +66,12 @@ private:
     struct Frame {
         unsigned w = 0, h = 0, cw = 0;   // display size; chroma plane width
         std::vector<uint8_t> y, cb, cr;
+        // the frame in RGB through the Bt812's settings rgb_pic, when the worker made it (to_rgb)
+        std::vector<uint32_t> rgb;
+        Picture rgb_pic;
     };
+    // a frame's pixels in RGB (0xffRRGGBB) through the Bt812's settings
+    static void to_rgb(const Frame &f, const Picture &pic, std::vector<uint32_t> &rgb);
     bool open_dvd();
     static int read(void *self, uint8_t *buf, int size);   // the disc's MPEG data, sector by sector
     bool open_decoder(uint32_t sector);   // on the worker
@@ -98,8 +103,12 @@ private:
     double m_period = 1.0 / 29.97;     // the stream's frame period
     int64_t m_index = -1;              // the frame on screen, m_cur (-1: none yet)
     Frame m_cur;
-    // m_cur in RGB through the Bt812's settings, made once per frame or settings change
+    // m_cur in RGB through the Bt812's settings, once per frame or settings change: the worker's
+    // (it converts each frame it decodes with the settings the last picture shown had: m_want_pic,
+    // under m_mu), or made here when the game has changed the settings since (a fade)
     std::vector<uint32_t> m_rgb;
+    bool m_want_rgb = false;
+    Picture m_want_pic;
     int64_t m_rgb_index = -1;
     Picture m_rgb_pic;
     std::vector<uint32_t> m_col;       // each screen column's source column (for the last width)

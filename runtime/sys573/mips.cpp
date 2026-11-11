@@ -348,8 +348,9 @@ void init(psxcpu_device &cpu) {
         cpu.m_hk_rec = record;
         return;   // a recording run interprets everything
     }
-    if (const char *b = getenv("HK_573_BLOCKS"); b && strcmp(b, "0") == 0) return;
     if (cpu.m_hk_trace) return;   // HK_573_ITRACE: every instruction, so all interpreted
+    idle_init(cpu);               // waiting loops counted, with blocks or without (idle.cpp)
+    if (const char *b = getenv("HK_573_BLOCKS"); b && strcmp(b, "0") == 0) return;
     size_t total = 0;
     for (uint32_t i = 0; i < hk573_nparts; i++) total += hk573_part_sizes[i];
     if (!total) return;
@@ -402,7 +403,7 @@ void finish() {
 }
 
 std::string report() {
-    if (!g.stats_on) return {};
+    if (!g.stats_on) return idle_report();
     char b[400];
     const uint64_t total = g.cpu ? static_cast<cpu_device *>(g.cpu)->total_cycles() : 0;
     snprintf(b, sizeof b,
@@ -434,6 +435,7 @@ std::string report() {
         snprintf(b, sizeof b, "\nmips: slow accesses at %08x-%08x: %" PRIu64, top[i].second, top[i].second + 15, top[i].first);
         out += b;
     }
+    if (std::string s = idle_report(); !s.empty()) out += "\n" + s;
     return out;
 }
 

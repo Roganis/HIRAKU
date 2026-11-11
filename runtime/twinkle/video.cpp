@@ -265,6 +265,15 @@ void PlayerVideo::worker(uint32_t sector) {
         }
         Frame f;
         const bool got = decode_next(f);
+        if (got) {   // in RGB too, off the emulation's thread, while the video is on show
+            bool want;
+            Picture pic;
+            {
+                std::lock_guard<std::mutex> lk(m_mu);
+                want = m_want_rgb, pic = m_want_pic;
+            }
+            if (want) to_rgb(f, pic, f.rgb), f.rgb_pic = pic;
+        }
         {
             std::lock_guard<std::mutex> lk(m_mu);
             if (got) m_queue.push_back(std::move(f));
@@ -373,6 +382,32 @@ bool PlayerVideo::advance_to(double v) {
     return m_index >= 0 && !m_cur.y.empty();
 }
 
+// BT.601 limited range in, full range out
+void PlayerVideo::to_rgb(const Frame &c, const Picture &pic, std::vector<uint32_t> &rgb) {
+    rgb.resize((size_t)c.w * c.h);
+    const double con = pic.contrast / 128.0, sat = pic.saturation / 128.0;
+    const double th = pic.hue * (45.0 / 128.0) * M_PI / 180.0, hc = std::cos(th) * sat, hs = std::sin(th) * sat;
+    // in 16.16 fixed point: luma by table, the chroma terms once per chroma sample
+    int ytab[256];
+    for (int k = 0; k < 256; k++) ytab[k] = (int)std::lround(65536.0 * 1.164 * ((k - 16) * con + pic.brightness));
+    const int kr = (int)std::lround(65536 * 1.596), kgb = (int)std::lround(65536 * 0.392),
+              kgr = (int)std::lround(65536 * 0.813), kb = (int)std::lround(65536 * 2.017);
+    const int ihc = (int)std::lround(hc * 1024), ihs = (int)std::lround(hs * 1024);   // 10-bit fractions
+    auto clamp8 = [](int x) { return (uint32_t)std::clamp((x + 32768) >> 16, 0, 255); };
+    const unsigned ch = (c.h + 1) / 2;
+    for (unsigned cy = 0; cy < ch; cy++)
+        for (unsigned cx = 0; cx < c.cw; cx++) {
+            const int cb0 = c.cb[(size_t)cy * c.cw + cx] - 128, cr0 = c.cr[(size_t)cy * c.cw + cx] - 128;
+            const int cb = (cb0 * ihc - cr0 * ihs) / 1024, cr = (cr0 * ihc + cb0 * ihs) / 1024;
+            const int dr = kr * cr, dg = -kgb * cb - kgr * cr, db = kb * cb;
+            for (unsigned y = cy * 2; y < std::min(c.h, cy * 2 + 2); y++)
+                for (unsigned x = cx * 2; x < std::min(c.w, cx * 2 + 2); x++) {
+                    const int yy = ytab[c.y[(size_t)y * c.w + x]];
+                    rgb[(size_t)y * c.w + x] = 0xff000000u | clamp8(yy + dr) << 16 | clamp8(yy + dg) << 8 | clamp8(yy + db);
+                }
+        }
+}
+
 void PlayerVideo::composite(double t, uint32_t *rgb, int w, int h, const Picture &pic) {
     if (!m_thread.joinable() || !m_powered || m_status == 0) return;
     const double v = m_status == 1 ? t - m_t0 : m_pos;
@@ -390,34 +425,20 @@ void PlayerVideo::composite(double t, uint32_t *rgb, int w, int h, const Picture
         }
     }
 
-    // the Bt812's adjustments (BT.601 limited range in, full range out), on the video's own pixels
-    // once per frame (or settings change)
-    const Frame &c = m_cur;
+    // the Bt812's adjustments on the video's own pixels, once per frame (or settings change): the
+    // worker's when it made them with these settings, else made here, and the worker told
+    Frame &c = m_cur;
     if (m_rgb_index != m_index || memcmp(&m_rgb_pic, &pic, sizeof pic) != 0) {
         m_rgb_index = m_index;
         m_rgb_pic = pic;
-        m_rgb.resize((size_t)c.w * c.h);
-        const double con = pic.contrast / 128.0, sat = pic.saturation / 128.0;
-        const double th = pic.hue * (45.0 / 128.0) * M_PI / 180.0, hc = std::cos(th) * sat, hs = std::sin(th) * sat;
-        // in 16.16 fixed point: luma by table, the chroma terms once per chroma sample
-        int ytab[256];
-        for (int k = 0; k < 256; k++) ytab[k] = (int)std::lround(65536.0 * 1.164 * ((k - 16) * con + pic.brightness));
-        const int kr = (int)std::lround(65536 * 1.596), kgb = (int)std::lround(65536 * 0.392),
-                  kgr = (int)std::lround(65536 * 0.813), kb = (int)std::lround(65536 * 2.017);
-        const int ihc = (int)std::lround(hc * 1024), ihs = (int)std::lround(hs * 1024);   // 10-bit fractions
-        auto clamp8 = [](int x) { return (uint32_t)std::clamp((x + 32768) >> 16, 0, 255); };
-        const unsigned ch = (c.h + 1) / 2;
-        for (unsigned cy = 0; cy < ch; cy++)
-            for (unsigned cx = 0; cx < c.cw; cx++) {
-                const int cb0 = c.cb[(size_t)cy * c.cw + cx] - 128, cr0 = c.cr[(size_t)cy * c.cw + cx] - 128;
-                const int cb = (cb0 * ihc - cr0 * ihs) / 1024, cr = (cr0 * ihc + cb0 * ihs) / 1024;
-                const int dr = kr * cr, dg = -kgb * cb - kgr * cr, db = kb * cb;
-                for (unsigned y = cy * 2; y < std::min(c.h, cy * 2 + 2); y++)
-                    for (unsigned x = cx * 2; x < std::min(c.w, cx * 2 + 2); x++) {
-                        const int yy = ytab[c.y[(size_t)y * c.w + x]];
-                        m_rgb[(size_t)y * c.w + x] = 0xff000000u | clamp8(yy + dr) << 16 | clamp8(yy + dg) << 8 | clamp8(yy + db);
-                    }
-            }
+        if (c.rgb.size() == (size_t)c.w * c.h && memcmp(&c.rgb_pic, &pic, sizeof pic) == 0) m_rgb.swap(c.rgb);
+        else to_rgb(c, pic, m_rgb);
+        c.rgb.clear();
+        if (!m_want_rgb || memcmp(&m_want_pic, &pic, sizeof pic) != 0) {
+            std::lock_guard<std::mutex> lk(m_mu);
+            m_want_rgb = true;
+            m_want_pic = pic;
+        }
     }
     if (m_col.size() != (size_t)w || (w && m_col.back() != (uint32_t)((uint64_t)(w - 1) * c.w / w))) {
         m_col.resize((size_t)w);

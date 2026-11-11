@@ -26,6 +26,7 @@
 #define NOMINMAX
 #endif
 #include <windows.h>
+#include <powrprof.h>
 #endif
 
 #include "../shell/core.h"
@@ -841,7 +842,64 @@ static void present_second(const uint32_t *rgb, int w, int h, double aspect, uin
     SDL_RenderPresent(g_ren2);
 }
 
+#ifdef _WIN32
+// How fast Windows lets the CPU run, for the exit report: each processor's speed as the power
+// manager has it (its performance state, of the nominal speed: a plan that holds the CPU back, or
+// lets it fall asleep between a frame's short bursts of work, shows here; a turbo above nominal
+// doesn't), read about once a second while the game runs, and the plan's name.
+struct ProcessorPower {   // PROCESSOR_POWER_INFORMATION (no SDK header declares it)
+    ULONG number, max_mhz, current_mhz, mhz_limit, max_idle_state, current_idle_state;
+};
+struct CpuSpeed {
+    uint64_t n = 0, sum = 0, next_ns = 0;
+    ULONG lowest = ~0ul, nominal = 0, limit = 0;
+} g_cpu_speed;
+void cpu_speed_sample() {
+    const uint64_t t = prof::now_ns();
+    if (t < g_cpu_speed.next_ns) return;
+    g_cpu_speed.next_ns = t + 1'000'000'000ull;
+    static ProcessorPower p[256];
+    SYSTEM_INFO si;
+    GetSystemInfo(&si);
+    const ULONG n = std::min<ULONG>(si.dwNumberOfProcessors, 256);
+    if (!n || CallNtPowerInformation(ProcessorInformation, nullptr, 0, p, n * (ULONG)sizeof p[0]) != 0) return;
+    ULONG fastest = 0;   // the game's own threads are on the busiest, so the fastest, processors
+    for (ULONG i = 0; i < n; i++) {
+        fastest = std::max(fastest, p[i].current_mhz);
+        g_cpu_speed.nominal = std::max(g_cpu_speed.nominal, p[i].max_mhz);
+        g_cpu_speed.limit = std::max(g_cpu_speed.limit, p[i].mhz_limit);
+    }
+    if (!fastest) return;
+    g_cpu_speed.n++;
+    g_cpu_speed.sum += fastest;
+    g_cpu_speed.lowest = std::min(g_cpu_speed.lowest, fastest);
+}
+std::string cpu_speed_describe() {
+    if (!g_cpu_speed.n) return {};
+    char b[400];
+    int n = snprintf(b, sizeof b, "system: the CPU at %lu MHz on average over the run (its fastest processor each second; lowest %lu), "
+                     "of its nominal %lu MHz", (unsigned long)(g_cpu_speed.sum / g_cpu_speed.n), (unsigned long)g_cpu_speed.lowest,
+                     (unsigned long)g_cpu_speed.nominal);
+    if (g_cpu_speed.limit && g_cpu_speed.limit < g_cpu_speed.nominal)
+        n += snprintf(b + n, sizeof b - n, " (the power plan holds it to %lu MHz)", (unsigned long)g_cpu_speed.limit);
+    GUID *scheme = nullptr;
+    if (PowerGetActiveScheme(nullptr, &scheme) == ERROR_SUCCESS && scheme) {
+        wchar_t name[128] = {};
+        DWORD size = sizeof name - sizeof name[0];
+        char utf8[256] = {};
+        if (PowerReadFriendlyName(nullptr, scheme, nullptr, nullptr, (UCHAR *)name, &size) == ERROR_SUCCESS &&
+            WideCharToMultiByte(CP_UTF8, 0, name, -1, utf8, sizeof utf8 - 1, nullptr, nullptr) > 0)
+            snprintf(b + n, sizeof b - n, "; Windows' power plan: %s", utf8);
+        LocalFree(scheme);
+    }
+    return b;
+}
+#endif
+
 void window_present(const uint32_t *rgb, int w, int h, double vsec) {
+#ifdef _WIN32
+    cpu_speed_sample();
+#endif
     // split: each half (one monitor) in its own window, at half the frame's shape
     double frame_aspect = display_aspect(w, h);
     const int full_w = w;
@@ -1329,6 +1387,9 @@ std::string audio_describe() {
                                          : " (GameMode on, but it didn't change the governor: its gamemoded log says why; "
                                            "on most distributions the user must be in the gamemode group)");
     }
+#endif
+#ifdef _WIN32
+    if (std::string cs = cpu_speed_describe(); !cs.empty()) out += "\n" + cs;
 #endif
     if (g_smooth_motion && !g_beam) out += "\nvideo: smooth motion: " + std::to_string(g_in_between) + " in-between pictures shown";
     if (g_beam)

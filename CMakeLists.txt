@@ -497,7 +497,7 @@ if(SDL3_FOUND)
   endif()
   if(WIN32)   # WASAPI exclusive mode and ASIO (--audio-exclusive, --audio-asio: runtime/host/wasapi.h, asio.h)
     target_sources(hiraku_host PRIVATE runtime/host/wasapi.cpp runtime/host/asio.cpp runtime/host/dwm.cpp runtime/host/swapchain.cpp)
-    target_link_libraries(hiraku_host PRIVATE ole32 avrt uuid d3d11 dxgi)
+    target_link_libraries(hiraku_host PRIVATE ole32 avrt uuid d3d11 dxgi powrprof)
   endif()
   # Wayland: the compositor's presentation times and fifo, for display pacing (runtime/host/pacing.h).
   # Found without pkg-config (the laptop package turns it off); libwayland-client is on any system
@@ -670,7 +670,7 @@ target_link_libraries(hiraku_mame573 PUBLIC hiraku_image)   # CHDs read in place
 target_compile_options(hiraku_mame573 PRIVATE -w ${HK_573_OPT_LIST})
 target_link_libraries(hiraku_mame573 PUBLIC hk_softfloat3)
 
-add_library(hiraku_sys573 STATIC runtime/sys573/board.cpp runtime/sys573/core.cpp runtime/sys573/mips.cpp runtime/sys573/npu.cpp runtime/sys573/link.cpp
+add_library(hiraku_sys573 STATIC runtime/sys573/board.cpp runtime/sys573/core.cpp runtime/sys573/mips.cpp runtime/sys573/idle.cpp runtime/sys573/npu.cpp runtime/sys573/link.cpp
   runtime/sys573/cardunit.cpp runtime/sys573/rental.cpp runtime/sys573/mcal.cpp)
 target_include_directories(hiraku_sys573 PUBLIC runtime)
 target_link_libraries(hiraku_sys573 PUBLIC hiraku_mame573 hiraku_cabinet hiraku_eamuse)
@@ -742,7 +742,7 @@ target_compile_options(hiraku_mametw PRIVATE -w -O2)
 # the PS1's R3000 recompiled as on the 573 (runtime/sys573/mips.h: the same code, built in here too)
 # and the 573's session cable (runtime/sys573/link.h), which joins a club kit's IIDX cabinet to its DDR one
 add_library(hiraku_twinkle STATIC runtime/twinkle/board.cpp runtime/twinkle/core.cpp runtime/sys573/mips.cpp
-  runtime/sys573/link.cpp)
+  runtime/sys573/idle.cpp runtime/sys573/link.cpp)
 target_include_directories(hiraku_twinkle PUBLIC runtime)
 # the background video (runtime/twinkle/video.h): the Video CD decoded with FFmpeg's libraries,
 # when there are any (without them, Twinkle runs with MAME's picture)

@@ -65,6 +65,9 @@ void set_frame_hook(FrameHook h);
 // The picture at the end of vertical blank (Core::set_present_hook), every frame; after init().
 using PresentHook = std::function<void(const uint32_t *rgb, int w, int h)>;
 void set_present_hook(PresentHook h);
+// the frame hook's picture isn't looked at (shell/core.h): the hook gets no pixels, and the frame's
+// picture (and the video keyed into it) isn't composed a second time for nothing
+void frame_picture_unused();
 // The picture on show with what moves carried on `t` of a frame (Core::render_between); nullptr
 // while the GPU has nothing to draw it from yet
 const uint32_t *render_between(double t, int &w, int &h);

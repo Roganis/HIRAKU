@@ -106,6 +106,7 @@ public:
     double display_aspect() const override { return 16.0 / 9.0; }
     void set_frame_hook(FrameHook h) override { twinkle::set_frame_hook(std::move(h)); }
     bool set_present_hook(PresentHook h) override { twinkle::set_present_hook(std::move(h)); return true; }
+    void frame_picture_unused() override { twinkle::frame_picture_unused(); }
     void set_audio_sink(AudioSink s) override { twinkle::set_audio_sink(std::move(s)); }
     void set_on_fatal(std::function<void()> f) override { on_fatal_ = std::move(f); }
     [[noreturn]] void run() override { twinkle::run(); }

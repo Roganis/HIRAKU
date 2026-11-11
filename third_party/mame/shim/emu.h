@@ -901,8 +901,8 @@ public:
     u64 read_interruptible(offs_t a, u64 mask);
     void write_interruptible(offs_t a, u64 d, u64 mask);
     bool m_waits = false;   // an entry with wait states is mapped
-    template <class C> void cache(C &c) { c.m_space = this; }
-    template <class C> void specific(C &c) { c.m_space = this; }
+    template <class C> void cache(C &c) { c.m_space = this; c.hk_bind(); }
+    template <class C> void specific(C &c) { c.m_space = this; c.hk_bind(); }
 
     // run-time changes to the map (MAME's install_*), in byte addresses; a later
     // install wins over what was there
@@ -944,6 +944,9 @@ public:
     // (runtime/sys573/mips_ops.h): pages of 1 << page_bits() bytes, indexed by byte address
     const page_t *pages() const { return m_pages.data(); }
     int page_bits() const { return m_pbits; }
+    int bus_bytes() const { return m_bus_bytes; }
+    int addr_shift() const { return m_shift; }
+    u64 byte_mask() const { return m_byte_mask; }
     u32 version() const { return m_version; }   // changes whenever the map does
     // the host memory behind byte address ba, if a memory entry covers it (nullptr otherwise)
     u8 *mem_ptr(offs_t ba, bool write) const;
@@ -1044,15 +1047,62 @@ template <int A, int D, int S, endianness_t E> struct memory_access {
     class cache {
     public:
         address_space *m_space = nullptr;
-        u8 read_byte(offs_t a) { return m_space->read_byte(a); }
-        u16 read_word(offs_t a) { return m_space->read_word(a); }
-        u32 read_dword(offs_t a) { return m_space->read_dword(a); }
-        u32 read_dword(offs_t a, u32 mask) { return m_space->read_dword(a, mask); }
-        void write_dword(offs_t a, u32 d, u32 mask) { m_space->write_dword(a, d, mask); }
+        // A CPU's accesses to memory pages, with what the type says known when compiled (the bus
+        // 1 << D bytes wide, byte addresses of A bits, so the page size too): address_space works
+        // all of that out again from its members on every access, which is most of the cost of
+        // an interpreted instruction's fetch. m_pages is the space's page table when the space is
+        // laid out as the type says (hk_bind), else null; a page that isn't plain memory, and
+        // every other access, goes to address_space as before, and the results are its own.
+        static constexpr int PBITS = A - 16 > 8 ? A - 16 : 8;
+        static constexpr offs_t PMASK = (offs_t(1) << PBITS) - 1;
+        static constexpr offs_t AMASK = A >= 32 ? ~offs_t(0) : (offs_t(1) << A) - 1;
+        const address_space::page_t *m_pages = nullptr;
+        static constexpr bool TYPED = S == 0 && D == 2;   // (32-bit buses so far: the PlayStation's CPU)
+        void hk_bind() {
+            const bool as_typed = TYPED && m_space->addr_shift() == 0 && m_space->bus_bytes() == 4 &&
+                                  m_space->page_bits() == PBITS && m_space->byte_mask() == u64(AMASK);
+            m_pages = as_typed ? m_space->pages() : nullptr;
+        }
+        // the bus word holding byte address a, if its page is memory
+        [[gnu::always_inline]] bool hk_word(offs_t a, u32 &v) const {
+            if (!TYPED || !m_pages) return false;
+            a &= AMASK;
+            const u8 *p = m_pages[a >> PBITS].direct_r;
+            if (!p) [[unlikely]] return false;
+            std::memcpy(&v, p + (a & PMASK & ~offs_t(3)), 4);
+            return true;
+        }
+        [[gnu::always_inline]] u8 read_byte(offs_t a) {
+            if (u32 v; E == ENDIANNESS_LITTLE && hk_word(a, v)) [[likely]] return u8(v >> ((a & 3) * 8));
+            return m_space->read_byte(a);
+        }
+        [[gnu::always_inline]] u16 read_word(offs_t a) {
+            if (u32 v; E == ENDIANNESS_LITTLE && hk_word(a, v)) [[likely]] return u16(v >> ((a & 3) * 8));
+            return m_space->read_word(a);
+        }
+        [[gnu::always_inline]] u32 read_dword(offs_t a) {
+            if (u32 v; hk_word(a, v)) [[likely]] return v;
+            return m_space->read_dword(a);
+        }
+        [[gnu::always_inline]] u32 read_dword(offs_t a, u32 mask) {
+            if (u32 v; hk_word(a, v)) [[likely]] return v & mask;
+            return m_space->read_dword(a, mask);
+        }
+        void write_dword(offs_t a, u32 d, u32 mask) {
+            if (mask == 0xffffffffu) write_dword(a, d);
+            else m_space->write_dword(a, d, mask);
+        }
         u64 read_qword(offs_t a) { return m_space->read_qword(a); }
         void write_byte(offs_t a, u8 d) { m_space->write_byte(a, d); }
         void write_word(offs_t a, u16 d) { m_space->write_word(a, d); }
-        void write_dword(offs_t a, u32 d) { m_space->write_dword(a, d); }
+        [[gnu::always_inline]] void write_dword(offs_t a, u32 d) {
+            if (TYPED && m_pages) [[likely]]
+                if (u8 *p = m_pages[(a & AMASK) >> PBITS].direct_w) [[likely]] {
+                    std::memcpy(p + (a & AMASK & PMASK), &d, 4);
+                    return;
+                }
+            m_space->write_dword(a, d);
+        }
         void write_qword(offs_t a, u64 d) { m_space->write_qword(a, d); }
     };
     using specific = cache;
@@ -1061,14 +1111,38 @@ template <int A, int D, int S, endianness_t E> struct memory_access {
 template <> class memory_access<24, 1, 0, ENDIANNESS_BIG>::cache {
 public:
     address_space *m_space = nullptr;
+    // the 68000's bus cycles in memory pages, as the generic class above has the PlayStation's:
+    // 256-byte pages of a 24-bit space, 16-bit bus words. A space with wait states mapped (the
+    // autovectors') and whatever isn't a whole word of memory stay address_space's
+    const address_space::page_t *m_pages = nullptr;
+    void hk_bind() {
+        const bool as_typed = m_space->addr_shift() == 0 && m_space->bus_bytes() == 2 && m_space->page_bits() == 8 &&
+                              m_space->byte_mask() == 0xffffff;
+        m_pages = as_typed ? m_space->pages() : nullptr;
+    }
     u8 read_byte(offs_t a) { return m_space->read_byte(a); }
     u16 read_word(offs_t a) { return m_space->read_word(a); }
     u16 read_word(offs_t a, u16 mask) { return m_space->read_word(a, mask); }
     void write_byte(offs_t a, u8 d) { m_space->write_byte(a, d); }
     void write_word(offs_t a, u16 d) { m_space->write_word(a, d); }
     void write_word(offs_t a, u16 d, u16 mask) { m_space->write_word(a, d, mask); }
-    u16 read_interruptible(offs_t a, u16 mask = 0xffff) { return (u16)m_space->read_interruptible(a, mask); }
-    void write_interruptible(offs_t a, u16 d, u16 mask = 0xffff) { m_space->write_interruptible(a, d, mask); }
+    u16 read_interruptible(offs_t a, u16 mask = 0xffff) {
+        if (m_pages && !m_space->m_waits) [[likely]]
+            if (const u8 *p = m_pages[(a & 0xffffff) >> 8].direct_r) [[likely]] {
+                u16 v;
+                std::memcpy(&v, p + (a & 0xfe), 2);
+                return v & mask;
+            }
+        return (u16)m_space->read_interruptible(a, mask);
+    }
+    void write_interruptible(offs_t a, u16 d, u16 mask = 0xffff) {
+        if (mask == 0xffff && m_pages) [[likely]]
+            if (u8 *p = m_pages[(a & 0xffffff) >> 8].direct_w) [[likely]] {
+                std::memcpy(p + (a & 0xff), &d, 2);
+                return;
+            }
+        m_space->write_interruptible(a, d, mask);
+    }
 };
 
 // ---- shared pointers / region pointers ---------------------------------------------------

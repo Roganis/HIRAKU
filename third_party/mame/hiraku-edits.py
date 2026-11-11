@@ -597,6 +597,92 @@ protected:''', 'hook member')
     return s
 
 
+# the interpreter's small steps compiled into each instruction's case (psx_cpp, below): the edits
+# to MAME's psx.cpp after the ones above, as (what is there, what it becomes, a name)
+PSX_HOT = [
+    ('#include "emu.h"\n#include "psx.h"\n',
+     '''#include "emu.h"
+#include "psx.h"
+
+// HIRAKU: the interpreter's small steps (the pipeline, the bus) compiled into each instruction's
+// case, and the instruction's body into execute_run()'s loop: MAME calls them, a dozen host
+// instructions each time for the call alone. The same code in the same order.
+#define HK_HOT __attribute__((always_inline)) inline
+''', 'HK_HOT'),
+    ('\nuint8_t psxcpu_device::readbyte( uint32_t address )\n{',
+     '\nHK_HOT uint8_t psxcpu_device::readbyte( uint32_t address )\n{', 'hot readbyte'),
+    ('\nuint16_t psxcpu_device::readhalf( uint32_t address )\n{',
+     '\nHK_HOT uint16_t psxcpu_device::readhalf( uint32_t address )\n{', 'hot readhalf'),
+    ('\nuint32_t psxcpu_device::readword( uint32_t address )\n{',
+     '\nHK_HOT uint32_t psxcpu_device::readword( uint32_t address )\n{', 'hot readword'),
+    ('\nuint32_t psxcpu_device::readword_masked( uint32_t address, uint32_t mask )\n{',
+     '\nHK_HOT uint32_t psxcpu_device::readword_masked( uint32_t address, uint32_t mask )\n{', 'hot readword_masked'),
+    ('\nvoid psxcpu_device::writeword( uint32_t address, uint32_t data )\n{',
+     '\nHK_HOT void psxcpu_device::writeword( uint32_t address, uint32_t data )\n{', 'hot writeword'),
+    ('\nvoid psxcpu_device::writeword_masked( uint32_t address, uint32_t data, uint32_t mask )\n{',
+     '\nHK_HOT void psxcpu_device::writeword_masked( uint32_t address, uint32_t data, uint32_t mask )\n{', 'hot writeword_masked'),
+    ('\nvoid psxcpu_device::commit_delayed_load()\n{',
+     '\nHK_HOT void psxcpu_device::commit_delayed_load()\n{', 'hot commit_delayed_load'),
+    ('\nvoid psxcpu_device::advance_pc()\n{',
+     '\nHK_HOT void psxcpu_device::advance_pc()\n{', 'hot advance_pc'),
+    ('\nvoid psxcpu_device::load( uint32_t reg, uint32_t value )\n{',
+     '\nHK_HOT void psxcpu_device::load( uint32_t reg, uint32_t value )\n{', 'hot load'),
+    ('\nvoid psxcpu_device::delayed_load( uint32_t reg, uint32_t value )\n{',
+     '\nHK_HOT void psxcpu_device::delayed_load( uint32_t reg, uint32_t value )\n{', 'hot delayed_load'),
+    ('\nvoid psxcpu_device::branch( uint32_t address )\n{',
+     '\nHK_HOT void psxcpu_device::branch( uint32_t address )\n{', 'hot branch'),
+    ('\nvoid psxcpu_device::conditional_branch( int takeBranch )\n{',
+     '\nHK_HOT void psxcpu_device::conditional_branch( int takeBranch )\n{', 'hot conditional_branch'),
+    ('\nvoid psxcpu_device::unconditional_branch()\n{',
+     '\nHK_HOT void psxcpu_device::unconditional_branch()\n{', 'hot unconditional_branch'),
+    ('\nint psxcpu_device::data_address_breakpoint( int dcic_rw, int dcic_status, uint32_t address )\n{',
+     '\nHK_HOT int psxcpu_device::data_address_breakpoint( int dcic_rw, int dcic_status, uint32_t address )\n{', 'hot data_address_breakpoint'),
+    ('\nint psxcpu_device::program_counter_breakpoint()\n{',
+     '\nHK_HOT int psxcpu_device::program_counter_breakpoint()\n{', 'hot program_counter_breakpoint'),
+    ('\nint psxcpu_device::load_data_address_breakpoint( uint32_t address )\n{',
+     '\nHK_HOT int psxcpu_device::load_data_address_breakpoint( uint32_t address )\n{', 'hot load_data_address_breakpoint'),
+    ('\nint psxcpu_device::store_data_address_breakpoint( uint32_t address )\n{',
+     '\nHK_HOT int psxcpu_device::store_data_address_breakpoint( uint32_t address )\n{', 'hot store_data_address_breakpoint'),
+    ('''// HIRAKU: one instruction, the body of MAME's execute_run() loop (without the m_icount--)
+void psxcpu_device::execute_one()
+{
+''',
+     '''// HIRAKU: one instruction, the body of MAME's execute_run() loop (without the m_icount--)
+HK_HOT void psxcpu_device::hk_one()
+{
+''', 'hk_one head'),
+    ('''	}
+}
+
+void psxcpu_device::execute_run()
+{
+	// HIRAKU: a waiting loop's turns taken at once (runtime/sys573/idle.cpp)
+''',
+     '''	}
+}
+
+void psxcpu_device::execute_one()
+{
+	hk_one();
+}
+
+void psxcpu_device::execute_run()
+{
+	// HIRAKU: a waiting loop's turns taken at once (runtime/sys573/idle.cpp)
+''', 'execute_one wrapper'),
+    ('''		execute_one();
+		m_icount--;
+	} while( m_icount > 0 );
+}
+''',
+     '''		hk_one();
+		m_icount--;
+	} while( m_icount > 0 );
+}
+''', 'hk_one in the loop'),
+]
+
+
 def psx_cpp(s):
     # the loop body becomes execute_one(), so a recompiled block can hand one instruction back to
     # the interpreter; execute_run() runs blocks where it has them (runtime/sys573/mips.cpp)
@@ -619,6 +705,10 @@ void psxcpu_device::execute_one()
 
 void psxcpu_device::execute_run()
 {
+	// HIRAKU: a waiting loop's turns taken at once (runtime/sys573/idle.cpp)
+	if( m_hk_idle && m_hk_idle( *this ) )
+		return;
+
 	do
 	{
 		// HIRAKU: recompiled blocks (runtime/sys573/mips.cpp). Outside a branch delay slot, a
@@ -662,6 +752,10 @@ void psxcpu_device::execute_run()
 // HIRAKU: set before the machine is configured (runtime/sys573/board.cpp)
 bool hk_psx_sio1_uart = false;
 ''', 'sio1 config')
+    # the interpreter's small steps inlined into each instruction's case, and the instruction's
+    # body into execute_run()'s loop (execute_one() stays, for the blocks and the waiting loops)
+    for old, new, name in PSX_HOT:
+        s = edit(s, old, new, name)
     return s
 
 
@@ -669,6 +763,7 @@ def psx_h(s):
     s = edit(s, '''	virtual void execute_run() override;
 ''', '''	virtual void execute_run() override;
 	void execute_one(); // HIRAKU
+	void hk_one(); // HIRAKU: its body, inlined into execute_run()
 ''', 'execute_one decl')
     s = edit(s, '''#include "sio.h"
 ''', '''#include "sio.h"
@@ -688,6 +783,9 @@ public:
 	const void *const *m_hk_tab = nullptr;
 	bool ( *m_hk_run )( psxcpu_device &, const void * ) = nullptr;
 	void ( *m_hk_rec )( psxcpu_device & ) = nullptr;
+	// waiting loops counted instead of run (runtime/sys573/idle.cpp), at the start of a
+	// timeslice: true when it used the timeslice up
+	bool ( *m_hk_idle )( psxcpu_device & ) = nullptr;
 protected:
 ''', 'hk members')
     return s
@@ -1368,6 +1466,7 @@ private:
 	// frame changes (the game prepares it while this one shows) put back while this one is drawn again
 	struct hk_undo { uint64_t at; hk_area a; std::vector<uint16_t> pixels; };
 	void hk_keep_undo( const uint32_t *item, uint64_t at );
+	static void hk_area_copy( uint16_t **p_p_vram, const hk_area &a, uint16_t *pixels, bool into );
 	std::atomic<bool> m_hk_undo_on{ false };
 	std::atomic<uint64_t> m_hk_frame_at{ 0 };
 	std::deque<hk_undo> m_hk_undo;
@@ -1454,11 +1553,33 @@ void psxgpu_device::hk_keep_undo( const uint32_t *item, uint64_t at )
 	while( !m_hk_undo.empty() && m_hk_undo.front().at < from )
 		m_hk_undo.pop_front();
 	hk_undo u{ at, hk_item_area( item ), {} };
-	u.pixels.reserve( size_t( u.a.w ) * u.a.h );
-	for( int32_t y = 0; y < u.a.h; y++ )
-		for( int32_t x = 0; x < u.a.w; x++ )
-			u.pixels.push_back( m_hk_raster.p_p_vram[ ( u.a.y + y ) & 1023 ][ ( u.a.x + x ) & 1023 ] );
+	if( u.a.w > 0 && u.a.h > 0 )
+	{
+		u.pixels.resize( size_t( u.a.w ) * u.a.h );
+		hk_area_copy( m_hk_raster.p_p_vram, u.a, u.pixels.data(), false );
+	}
 	m_hk_undo.push_back( std::move( u ) );
+}
+
+// An area's pixels out of VRAM (into: back into it), in the order the per-pixel loops took them
+// (rows, then columns, both wrapping at 1024), a stretch of a row at a time: a frame's clear is
+// 640x240 pixels, kept by the drawing thread and swapped twice by every in-between picture.
+void psxgpu_device::hk_area_copy( uint16_t **p_p_vram, const hk_area &a, uint16_t *pixels, bool into )
+{
+	for( int32_t y = 0; y < a.h; y++ )
+	{
+		uint16_t *row = p_p_vram[ ( a.y + y ) & 1023 ];
+		for( int32_t x = 0; x < a.w; )
+		{
+			const int32_t c = ( a.x + x ) & 1023, n = std::min( a.w - x, 1024 - c );
+			if( into )
+				std::copy_n( pixels, n, row + c );
+			else
+				std::copy_n( row + c, n, pixels );
+			pixels += n;
+			x += n;
+		}
+	}
 }
 
 bool psxgpu_device::hk_between( double t, screen_device &screen, bitmap_rgb32 &bitmap )
@@ -1677,15 +1798,26 @@ bool psxgpu_device::hk_between( double t, screen_device &screen, bitmap_rgb32 &b
 	for( auto u = m_hk_undo.rbegin(); u != m_hk_undo.rend() && u->at >= from; ++u )
 	{
 		std::vector<uint16_t> now;
-		now.reserve( u->pixels.size() );
-		size_t k = 0;
-		for( int32_t y = 0; y < u->a.h; y++ )
-			for( int32_t x = 0; x < u->a.w; x++ )
-			{
-				uint16_t &px = p_p_vram[ ( u->a.y + y ) & 1023 ][ ( u->a.x + x ) & 1023 ];
-				now.push_back( px );
-				px = u->pixels[ k++ ];
-			}
+		if( u->a.w > 0 && u->a.h > 0 && u->a.h <= m_hk_rows )
+		{
+			// no pixel twice (the area is at most 1024 columns, and no taller than VRAM): its
+			// pixels as they are kept, then the kept ones put back, as the loop below does one by one
+			now.resize( u->pixels.size() );
+			hk_area_copy( p_p_vram, u->a, now.data(), false );
+			hk_area_copy( p_p_vram, u->a, const_cast<uint16_t *>( u->pixels.data() ), true );
+		}
+		else
+		{
+			now.reserve( u->pixels.size() );
+			size_t k = 0;
+			for( int32_t y = 0; y < u->a.h; y++ )
+				for( int32_t x = 0; x < u->a.w; x++ )
+				{
+					uint16_t &px = p_p_vram[ ( u->a.y + y ) & 1023 ][ ( u->a.x + x ) & 1023 ];
+					now.push_back( px );
+					px = u->pixels[ k++ ];
+				}
+		}
 		redo.emplace_back( u->a, std::move( now ) );
 	}
 
@@ -1717,10 +1849,8 @@ bool psxgpu_device::hk_between( double t, screen_device &screen, bitmap_rgb32 &b
 		std::copy_n( &pixels[ i * 1024 ], 1024, p_p_vram[ rows[ i ] ] );
 	for( auto r = redo.rbegin(); r != redo.rend(); ++r ) // oldest first
 	{
-		size_t k = 0;
-		for( int32_t y = 0; y < r->first.h; y++ )
-			for( int32_t x = 0; x < r->first.w; x++ )
-				p_p_vram[ ( r->first.y + y ) & 1023 ][ ( r->first.x + x ) & 1023 ] = r->second[ k++ ];
+		if( r->first.w > 0 && r->first.h > 0 )
+			hk_area_copy( p_p_vram, r->first, r->second.data(), true );
 	}
 	return true;
 }

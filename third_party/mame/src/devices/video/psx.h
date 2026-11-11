@@ -335,6 +335,7 @@ private:
 	// frame changes (the game prepares it while this one shows) put back while this one is drawn again
 	struct hk_undo { uint64_t at; hk_area a; std::vector<uint16_t> pixels; };
 	void hk_keep_undo( const uint32_t *item, uint64_t at );
+	static void hk_area_copy( uint16_t **p_p_vram, const hk_area &a, uint16_t *pixels, bool into );
 	std::atomic<bool> m_hk_undo_on{ false };
 	std::atomic<uint64_t> m_hk_frame_at{ 0 };
 	std::deque<hk_undo> m_hk_undo;

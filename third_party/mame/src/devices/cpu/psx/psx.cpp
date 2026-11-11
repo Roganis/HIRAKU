@@ -67,6 +67,11 @@
 
 #include "emu.h"
 #include "psx.h"
+
+// HIRAKU: the interpreter's small steps (the pipeline, the bus) compiled into each instruction's
+// case, and the instruction's body into execute_run()'s loop: MAME calls them, a dozen host
+// instructions each time for the call alone. The same code in the same order.
+#define HK_HOT __attribute__((always_inline)) inline
 #include "mdec.h"
 #include "rcnt.h"
 #include "sound/spu.h"
@@ -381,7 +386,7 @@ void psxcpu_device::cache_writeword( uint32_t offset, uint32_t data )
 	}
 }
 
-uint8_t psxcpu_device::readbyte( uint32_t address )
+HK_HOT uint8_t psxcpu_device::readbyte( uint32_t address )
 {
 	if( m_bus_attached )
 	{
@@ -391,7 +396,7 @@ uint8_t psxcpu_device::readbyte( uint32_t address )
 	return cache_readword( address ) >> ( ( address & 3 ) * 8 );
 }
 
-uint16_t psxcpu_device::readhalf( uint32_t address )
+HK_HOT uint16_t psxcpu_device::readhalf( uint32_t address )
 {
 	if( m_bus_attached )
 	{
@@ -401,7 +406,7 @@ uint16_t psxcpu_device::readhalf( uint32_t address )
 	return cache_readword( address ) >> ( ( address & 2 ) * 8 );
 }
 
-uint32_t psxcpu_device::readword( uint32_t address )
+HK_HOT uint32_t psxcpu_device::readword( uint32_t address )
 {
 	if( m_bus_attached )
 	{
@@ -411,7 +416,7 @@ uint32_t psxcpu_device::readword( uint32_t address )
 	return cache_readword( address );
 }
 
-uint32_t psxcpu_device::readword_masked( uint32_t address, uint32_t mask )
+HK_HOT uint32_t psxcpu_device::readword_masked( uint32_t address, uint32_t mask )
 {
 	if( m_bus_attached )
 	{
@@ -421,7 +426,7 @@ uint32_t psxcpu_device::readword_masked( uint32_t address, uint32_t mask )
 	return cache_readword( address );
 }
 
-void psxcpu_device::writeword( uint32_t address, uint32_t data )
+HK_HOT void psxcpu_device::writeword( uint32_t address, uint32_t data )
 {
 	if( m_bus_attached )
 	{
@@ -433,7 +438,7 @@ void psxcpu_device::writeword( uint32_t address, uint32_t data )
 	}
 }
 
-void psxcpu_device::writeword_masked( uint32_t address, uint32_t data, uint32_t mask )
+HK_HOT void psxcpu_device::writeword_masked( uint32_t address, uint32_t data, uint32_t mask )
 {
 	if( m_bus_attached )
 	{
@@ -1480,7 +1485,7 @@ void psxcpu_device::update_cop0(int reg)
 	}
 }
 
-void psxcpu_device::commit_delayed_load()
+HK_HOT void psxcpu_device::commit_delayed_load()
 {
 	if( m_delayr != 0 )
 	{
@@ -1509,7 +1514,7 @@ void psxcpu_device::fetch_next_op()
 	}
 }
 
-void psxcpu_device::advance_pc()
+HK_HOT void psxcpu_device::advance_pc()
 {
 	if( m_delayr == PSXCPU_DELAYR_PC )
 	{
@@ -1530,7 +1535,7 @@ void psxcpu_device::advance_pc()
 	}
 }
 
-void psxcpu_device::load( uint32_t reg, uint32_t value )
+HK_HOT void psxcpu_device::load( uint32_t reg, uint32_t value )
 {
 	advance_pc();
 
@@ -1540,7 +1545,7 @@ void psxcpu_device::load( uint32_t reg, uint32_t value )
 	}
 }
 
-void psxcpu_device::delayed_load( uint32_t reg, uint32_t value )
+HK_HOT void psxcpu_device::delayed_load( uint32_t reg, uint32_t value )
 {
 	if( m_delayr == reg )
 	{
@@ -1554,7 +1559,7 @@ void psxcpu_device::delayed_load( uint32_t reg, uint32_t value )
 	m_delayv = value;
 }
 
-void psxcpu_device::branch( uint32_t address )
+HK_HOT void psxcpu_device::branch( uint32_t address )
 {
 	advance_pc();
 
@@ -1562,7 +1567,7 @@ void psxcpu_device::branch( uint32_t address )
 	m_delayv = address;
 }
 
-void psxcpu_device::conditional_branch( int takeBranch )
+HK_HOT void psxcpu_device::conditional_branch( int takeBranch )
 {
 	advance_pc();
 
@@ -1578,7 +1583,7 @@ void psxcpu_device::conditional_branch( int takeBranch )
 	}
 }
 
-void psxcpu_device::unconditional_branch()
+HK_HOT void psxcpu_device::unconditional_branch()
 {
 	advance_pc();
 
@@ -1697,7 +1702,7 @@ void psxcpu_device::store_bad_address( uint32_t address )
 	exception( EXC_ADES );
 }
 
-int psxcpu_device::data_address_breakpoint( int dcic_rw, int dcic_status, uint32_t address )
+HK_HOT int psxcpu_device::data_address_breakpoint( int dcic_rw, int dcic_status, uint32_t address )
 {
 	if( address < 0x1f000000 || address > 0x1fffffff )
 	{
@@ -1721,7 +1726,7 @@ int psxcpu_device::data_address_breakpoint( int dcic_rw, int dcic_status, uint32
 	return 0;
 }
 
-int psxcpu_device::program_counter_breakpoint()
+HK_HOT int psxcpu_device::program_counter_breakpoint()
 {
 	if( ( m_cp0r[ CP0_DCIC ] & DCIC_DE ) != 0 &&
 		( m_cp0r[ CP0_DCIC ] & DCIC_PCE ) != 0 &&
@@ -1742,12 +1747,12 @@ int psxcpu_device::program_counter_breakpoint()
 	return 0;
 }
 
-int psxcpu_device::load_data_address_breakpoint( uint32_t address )
+HK_HOT int psxcpu_device::load_data_address_breakpoint( uint32_t address )
 {
 	return data_address_breakpoint( DCIC_DR | DCIC_DAE, DCIC_DB | DCIC_DA | DCIC_R, address );
 }
 
-int psxcpu_device::store_data_address_breakpoint( uint32_t address )
+HK_HOT int psxcpu_device::store_data_address_breakpoint( uint32_t address )
 {
 	return data_address_breakpoint( DCIC_DW | DCIC_DAE, DCIC_DB | DCIC_DA | DCIC_W, address );
 }
@@ -2346,7 +2351,7 @@ void psxcpu_device::execute_set_input( int inputnum, int state )
 
 
 // HIRAKU: one instruction, the body of MAME's execute_run() loop (without the m_icount--)
-void psxcpu_device::execute_one()
+HK_HOT void psxcpu_device::hk_one()
 {
 	{
 		if( LOG_BIOSCALL ) log_bioscall();
@@ -3367,8 +3372,17 @@ void psxcpu_device::execute_one()
 	}
 }
 
+void psxcpu_device::execute_one()
+{
+	hk_one();
+}
+
 void psxcpu_device::execute_run()
 {
+	// HIRAKU: a waiting loop's turns taken at once (runtime/sys573/idle.cpp)
+	if( m_hk_idle && m_hk_idle( *this ) )
+		return;
+
 	do
 	{
 		// HIRAKU: recompiled blocks (runtime/sys573/mips.cpp). Outside a branch delay slot, a
@@ -3382,7 +3396,7 @@ void psxcpu_device::execute_run()
 				continue;
 		}
 
-		execute_one();
+		hk_one();
 		m_icount--;
 	} while( m_icount > 0 );
 }

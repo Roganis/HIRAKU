@@ -58,6 +58,11 @@ public:
     // frame hook stays at vblank start for everything else (digests, scripts, snapshots).
     using PresentHook = std::function<void(const uint32_t *rgb, int w, int h)>;
     virtual bool set_present_hook(PresentHook) { return false; }
+    // The shell won't look at the frame hook's picture (a window shows the present hook's, and no
+    // digest, script or snapshot reads the frame's): a core that composes the frame's picture apart
+    // from the present hook's may then pass the frame hook no pixels (rgb null, w and h still the
+    // picture's size). Cores that don't know of it compose it as before.
+    virtual void frame_picture_unused() {}
     virtual void set_audio_sink(AudioSink s) = 0;
     // Called by the core when it cannot continue, before it exits.
     virtual void set_on_fatal(std::function<void()> f) = 0;

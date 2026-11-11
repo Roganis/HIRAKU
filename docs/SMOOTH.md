@@ -17,7 +17,10 @@ rate. If the demo song takes the same number of frames (it plays twice as fast, 
 its music), the game counts frames. If it takes twice the frames, it follows a clock. pop'n music
 4 (Firebeat) and pop'n music 1 (DJ Main) count frames; pop'n music 9-14 follow a clock. The
 beatmania games were checked as they draw (below): beatmania (DJ Main), beatmania III (Firebeat)
-and beatmania IIDX (Twinkle) all move their notes a fixed step a frame.
+and beatmania IIDX (Twinkle) all move their notes a fixed step a frame. beatmania IIDX 3rd style
+was also run that way (2026-11-11, the play case's song with the PlayStation's vertical blank
+twice as often from the stage's start): the stage's result came at the same frame number, in half
+the time, the background video (which the player times) out of step. It counts frames.
 
 ## In-between pictures (`--smooth-motion`)
 
@@ -249,6 +252,15 @@ frame, kicked from its vblank interrupt: fill (clear) the sprite layers, then th
 
 To see how a Twinkle game draws: log each queued item (`hk_draw`: its op and packet words) and the
 display start and drawing area at each VBLANK.
+
+What the in-between pictures cost a core, without a display: `HK_BETWEEN_BENCH=K` (runtime/main.cpp)
+draws, every frame of a headless run, the K - 1 pictures a display at K times the game's rate asks
+for (2: 120 Hz, 4: 240 Hz), where a window would (with the picture at the end of vertical blank on
+the cores that have one), and the exit report says how many, the mean time of one, and a hash of
+their pixels (two builds that draw the same in-between pictures print the same hash). beatmania
+IIDX 3rd style's stage: about 0.8 ms a picture on the PC it was written on, where a frame's
+emulation is about 1.5 ms; the frame's clear (640x240) kept and put back around each one was most
+of the rest until it was copied a row at a time.
 
 Python (the PS2's GS) could have in-between pictures the same way, not done. For its
 clock-following games the `[[rate]]` way is better: the pictures are the game's own.

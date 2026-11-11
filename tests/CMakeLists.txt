@@ -233,3 +233,9 @@ endif()
 if(Python3_Interpreter_FOUND AND Python3_VERSION VERSION_GREATER_EQUAL 3.11)
   add_test(NAME ingest_disks COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/tools/test_ingest_disks.py $<TARGET_FILE:hiraku-chdcat>)
 endif()
+
+# The PlayStation cores' waiting loops (runtime/sys573/idle.cpp): for how many turns a comparison
+# keeps its result, against every turn worked out
+add_executable(test_idle_model sys573/test_idle_model.cpp)
+target_include_directories(test_idle_model PRIVATE ${CMAKE_SOURCE_DIR}/runtime)
+add_test(NAME sys573_waiting_loops COMMAND test_idle_model)

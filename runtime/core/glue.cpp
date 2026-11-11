@@ -33,6 +33,7 @@
 #include "shell/sys.h"
 #else
 #include <sys/mman.h>
+#include <unistd.h>
 #if (defined(__x86_64__) || defined(__aarch64__)) && defined(__ELF__)
 #define HK_FIBER_ASM 1
 #else
@@ -157,11 +158,31 @@ std::vector<Fiber *> g_graveyard;                  // fibers whose thread died (
 int g_next_id = 1;
 bool g_fibers_enabled = false;
 
+#if !HK_FIBER_WIN32
+// A fiber's stack, with a page under it that nothing may touch. A stack that runs out (guest code
+// that calls itself without end, in a build that doesn't turn its tail calls into jumps) stops the
+// program there, with the crash report, where it used to write over whatever memory came next.
+// (Windows' own fibers have such a page.)
+size_t stack_guard() {
+    static const size_t page = (size_t)sysconf(_SC_PAGESIZE);
+    return page;
+}
+
+void *stack_new() {
+    void *base = mmap(nullptr, stack_guard() + FIBER_STACK, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_STACK, -1, 0);
+    if (base == MAP_FAILED) return MAP_FAILED;
+    mprotect(base, stack_guard(), PROT_NONE);   // (the stack grows down, towards it)
+    return static_cast<char *>(base) + stack_guard();
+}
+
+void stack_free(void *stack) { munmap(static_cast<char *>(stack) - stack_guard(), stack_guard() + FIBER_STACK); }
+#endif
+
 void free_fiber(Fiber *f) {
 #if HK_FIBER_WIN32
     sys::fiber_delete(f->handle);
 #else
-    munmap(f->stack, FIBER_STACK);
+    stack_free(f->stack);
 #endif
     delete f;
 }
@@ -227,7 +248,7 @@ Fiber *new_thread_fiber() {
     f->handle = sys::fiber_new(FIBER_STACK, thread_main);
     if (!f->handle) fatal(g_c, "cannot make a fiber");
 #else
-    f->stack = mmap(nullptr, FIBER_STACK, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_STACK, -1, 0);
+    f->stack = stack_new();
     if (f->stack == MAP_FAILED) fatal(g_c, "cannot allocate a fiber stack");
 #if HK_FIBER_ASM
     f->sp = fiber_stack_init(f->stack);

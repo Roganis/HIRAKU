@@ -524,6 +524,10 @@ bool sys573_state::jvs_is_valid_packet() {
 void sys573_state::jvs_input_w(offs_t, u16 data, u16) {
     static const bool jvs_raw = getenv("HK_573_JVS_LOG") && atoi(getenv("HK_573_JVS_LOG")) >= 2;
     if (jvs_raw) fprintf(stderr, "jvs %.6f w %04x\n", machine().time().as_double(), data);
+    // (MAME's buffer has no end: bytes after a sync that never make a packet are written on past
+    // it, and no packet is heard again until a reset. Here the same, but for the writing past it: a
+    // packet is 258 bytes at most, so the bytes a full buffer turns away were never going to be one)
+    if (m_jvs_input_idx_w + 2 > (int)sizeof(m_jvs_input_buffer)) return;
     m_jvs_input_buffer[m_jvs_input_idx_w++] = data & 0xff;
     m_jvs_input_buffer[m_jvs_input_idx_w++] = data >> 8;
     if (m_jvs_input_buffer[0] != 0xe0) m_jvs_input_idx_w = 0;
@@ -555,6 +559,7 @@ void sys573_state::jvs_input_w(offs_t, u16 data, u16) {
 }
 
 u16 sys573_state::jvs_input_r(offs_t, u16) {
+    if (m_jvs_input_idx_r + 2 > (int)sizeof(m_jvs_input_buffer)) return 0;   // (read past the buffer's end: MAME reads on)
     u16 data = m_jvs_input_buffer[m_jvs_input_idx_r++];
     data |= m_jvs_input_buffer[m_jvs_input_idx_r++] << 8;
     return data;
@@ -664,10 +669,13 @@ void sys573_state::atapi_xfer_end(s32) {
     m_atapi_timer->adjust(attotime::never);
     m_hk_in_xfer = true;
     m_hk_block_raised = false;
+    // (a transfer the game sized past the end of RAM: MAME writes on past it. Here those words
+    // are taken from the drive and go nowhere)
+    const u32 ram_words = m_ram->size() / 4;
     for (int i = 0; i < m_atapi_xfersize; i++) {
         u32 d = m_ata->cs0_r(0) << 0;
         d |= m_ata->cs0_r(0) << 16;
-        m_p_n_psxram[m_atapi_xferbase / 4] = d;
+        if (m_atapi_xferbase / 4 < ram_words) m_p_n_psxram[m_atapi_xferbase / 4] = d;
         m_atapi_xferbase += 4;
     }
     m_hk_in_xfer = false;

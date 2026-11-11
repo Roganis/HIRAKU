@@ -26,6 +26,11 @@ enum : uint32_t { O_READ = 0x01, O_WRITE = 0x02, O_CREATE = 0x200 };
 
 constexpr uint32_t DIRENT_SIZE = 32;   // a directory record on the unit's disk (name[20], size, ?, offset)
 
+// The most an answer can carry: its size is a 16-bit word, and the FIFO out holds 0x8000 words less
+// one, three of them the header. A call asking for more (a read, a devctl) gets this much: what
+// the game names as a length is never the size of something made here
+constexpr uint32_t ANSWER_MAX = 0xfff0;
+
 void put32(std::vector<uint8_t> &v, size_t at, uint32_t x) {
     if (v.size() < at + 4) v.resize(at + 4);
     for (int i = 0; i < 4; i++) v[at + i] = uint8_t(x >> (8 * i));
@@ -150,6 +155,7 @@ public:
         File *f = file(fd);
         if (!f || f->is_dir || f->listing) return FAIL;
         if (!(f->flags & O_READ)) return 0;
+        len = std::min(len, ANSWER_MAX - 4);
         out.resize(len);
         fseek(f->fp, (long)f->pos, SEEK_SET);
         size_t n = fread(out.data(), 1, len, f->fp);
@@ -326,6 +332,7 @@ private:
 
 std::string k573npu_hle_device::Args::bytes(size_t n) {
     std::string s;
+    n = std::min(n, (w.size() - pos) * 2);   // (no more than the call's words hold, whatever length it names)
     if ((n & 1) && w.size() - pos >= n) {
         // windyfairy's unit: an odd count comes one byte a word
         for (size_t i = 0; i < n; i++) s += char(u16() & 0xff);
@@ -469,7 +476,13 @@ k573npu_hle_device::Disk *k573npu_hle_device::disk_for_fd(int32_t fd) {
 
 void k573npu_hle_device::call() {
     // one call: its opcode, its id, its arguments' length in bytes, the arguments
-    const size_t words = 3 + (m_in.at(2) + 1) / 2;
+    // (no more words than the FIFO holds: the length is the game's)
+    const size_t held = m_in.length() / 2;
+    if (held < 3) {   // not a call: taken, as the game counts its words taken
+        while (!m_in.empty()) m_in.pop();
+        return;
+    }
+    const size_t words = std::min<size_t>(3 + (m_in.at(2) + 1) / 2, held);
     Args a;
     for (size_t i = 0; i < words; i++) a.w.push_back(m_in.pop());
     const int op = a.u16() & 0xff;
@@ -593,7 +606,7 @@ void k573npu_hle_device::call() {
         const std::string dev = a.str(0x40);
         const uint32_t type = a.u32();
         a.u32();
-        const uint32_t len = a.u32();
+        const uint32_t len = std::min(a.u32(), ANSWER_MAX - 4);
         std::vector<uint8_t> data(len);
         const int32_t r = path_call(dev, [&](Disk &d) { return d.devctl(type, data); });
         data.resize(len);
@@ -729,8 +742,8 @@ void k573npu_hle_device::socket_call(int op, Args &a) {
     auto ip_of = [](uint32_t raw) { return __builtin_bswap32(raw); };
     auto port_of = [](uint16_t raw) { return uint16_t(raw >> 8 | raw << 8); };
     auto payload = [&](uint32_t n) {
-        std::string d = a.bytes((n + 1) & ~1u);   // two bytes a word
-        d.resize(n);
+        std::string d = a.bytes(((size_t)n + 1) & ~(size_t)1);   // two bytes a word
+        if (d.size() > n) d.resize(n);
         return d;
     };
     if (!m_lan) {   // no network: every call fails, as with the cable out

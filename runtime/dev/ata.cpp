@@ -258,6 +258,12 @@ enum : uint8_t { IR_COD = 0x01, IR_IO = 0x02 };
 // sets the CD audio volume per channel.
 void AtaBus::data_out_done() {
     AtaDevice *d = cur();
+    if (!d) {   // the host chose the unit with nothing on it while its data was going out
+        data_out_cmd_ = 0;
+        phase_ = Phase::idle;
+        data_.clear();
+        return;
+    }
     const std::vector<uint8_t> &p = data_;
     if (data_out_cmd_ == 0xf2) {                         // SECURITY UNLOCK (MAME process_buffer)
         const bool master = p[0] & 0x01;
@@ -440,6 +446,10 @@ void AtaBus::write(int cs, int reg, uint16_t v) {
                 for (auto &dr : drives_)
                     if (dr && !dr->atapi_) dr->lock();   // MAME soft_reset(): the passwords apply again
                 phase_ = Phase::idle;
+                data_.clear();   // (and nothing of the command it cut is left to read on from)
+                data_out_cmd_ = 0;
+                lazy_disc_ = nullptr;
+                lazy_disk_ = nullptr;
                 error_ = 1;
                 nsector_ = 1;
                 sector_ = 1;
@@ -583,6 +593,8 @@ void AtaBus::disk_command(uint8_t cmd) {
         w(60, (uint16_t)n);
         w(61, (uint16_t)(n >> 16));
         w(63, 0x0007);                                   // multiword DMA 0-2
+        lazy_disc_ = nullptr;                            // (a read cut before its first word would
+        lazy_disk_ = nullptr;                            // fill this block with its sectors)
         data_ = std::move(id);
         data_pos_ = 0;
         chunk_end_ = 512;
@@ -710,6 +722,10 @@ void AtaBus::command(uint8_t cmd) {
 
 void AtaBus::packet_done() {
     AtaDevice *d = cur();
+    if (!d) {   // the host chose the unit with nothing on it while the packet was going out
+        phase_ = Phase::idle;
+        return;
+    }
     const uint8_t *p = packet_;
     int u = (device_ >> 4) & 1;
     if (log) {

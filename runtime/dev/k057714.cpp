@@ -479,16 +479,24 @@ void K057714::fb_config(const uint32_t *cmd) {
     m_fb_origin_y = cmd[3] & 0x3fff;
 }
 
-void K057714::execute_display_list(uint32_t addr) {
+// A list's command 1 runs another list and comes back. MAME sets no limit to how deep that goes:
+// a list that runs itself (bad video RAM) never comes back there, and takes the stack with it.
+// Here a list LIST_DEPTH deep runs no further one (in the regress runs no game's list runs another at all).
+// A command is four words: one that starts in video RAM's last three isn't run (MAME reads past
+// the end for the rest of it).
+void K057714::execute_display_list(uint32_t addr, int depth) {
+    static constexpr int LIST_DEPTH = 256;
     bool end = false;
     int counter = 0;
     addr /= 2;
-    while (!end && counter < 0x1000 && addr < VRAM_SIZE / 4) {
+    while (!end && counter < 0x1000 && addr + 4 <= VRAM_SIZE / 4) {
         const uint32_t *cmd = &m_vram[addr];
         addr += 4;
         switch ((cmd[0] >> 29) & 7) {
         case 0: break;
-        case 1: execute_display_list(cmd[0] & 0xffffff); break;
+        case 1:
+            if (depth + 1 < LIST_DEPTH) execute_display_list(cmd[0] & 0xffffff, depth + 1);
+            break;
         case 2: end = true; break;
         default: run(cmd); break;   // 3-7
         }

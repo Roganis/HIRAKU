@@ -176,10 +176,17 @@ public:
     void spu_ctrl_w(u16 data);
     void spu_ata_dma_low_w(u16 data) { m_spu_ata_dma = (m_spu_ata_dma & ~0xffff) | data; }
     void spu_ata_dma_high_w(u16 data) { m_spu_ata_dma = (m_spu_ata_dma & 0xffff) | ((u32)data << 16); }
-    u16 waveram_r(offs_t offset) { return m_waveram[offset + m_wave_bank]; }
-    void waveram_w(offs_t offset, u16 data, u16 mem_mask) { COMBINE_DATA(&m_waveram[offset + m_wave_bank]); }
+    // (a bank past wave RAM's 32 MiB, which the register's 16 bits can name: MAME reads and writes
+    // whatever memory is there. Here it reads 0 and keeps nothing; the same for the drive's DMA below)
+    bool in_waveram(u64 word) { return word < m_waveram.length(); }
+    u16 waveram_r(offs_t offset) { return in_waveram((u64)offset + m_wave_bank) ? m_waveram[offset + m_wave_bank] : 0; }
+    void waveram_w(offs_t offset, u16 data, u16 mem_mask) {
+        if (in_waveram((u64)offset + m_wave_bank)) COMBINE_DATA(&m_waveram[offset + m_wave_bank]);
+    }
     void spu_led_w(u16) {}
-    void spu_wavebank_w(offs_t, u16 data, u16) { m_wave_bank = data * 0x400000; }
+    void spu_wavebank_w(offs_t, u16 data, u16) {   // (a bank past wave RAM: one no word is in, below)
+        m_wave_bank = (u64)data * 0x400000 < m_waveram.length() ? data * 0x400000 : 0xffffffffu;
+    }
     u16 spu_dsw_r() { return 0xff; }   // MAME: eight unknown DIP switches, off (active low)
     void spu_ata_irq(int state);
     void spu_ata_dmarq(int state);
@@ -523,13 +530,13 @@ void twinkle_state::spu_ata_dmarq(int state) {
     m_ata->write_dmack(ASSERT_LINE);
     while (m_spu_ata_dmarq) {
         const size_t at = (size_t)m_wave_bank + m_spu_ata_dma, words = m_waveram.length();
-        if (at < words) {   // past wave RAM's end: a word at a time, as MAME
+        if (at < words) {
             const int n = m_ata->hk_read_dma_burst(m_waveram.target() + at, (int)std::min<size_t>(words - at, 1 << 16));
             m_spu_ata_dma += n;
             if (n) continue;
         }
-        const u16 data = m_ata->read_dma();
-        m_waveram[m_wave_bank + m_spu_ata_dma] = data;
+        const u16 data = m_ata->read_dma();   // (a word at a time, as MAME; past wave RAM's end it is taken and dropped)
+        if (at < words) m_waveram[at] = data;
         m_spu_ata_dma++;
     }
     m_ata->write_dmack(CLEAR_LINE);
@@ -554,9 +561,10 @@ void twinkle_state::scsi_dma_write(u32 *ram, u32 n_address, s32 n_size) {
 
 void twinkle_state::scsi_dma_transfer(s32) {
     u8 *ram = reinterpret_cast<u8 *>(m_dma_data_ptr);   // MAME: little_endian_cast (the host is little-endian)
+    const u32 ram_bytes = m_ram->size();   // (a transfer sized past the end of RAM: 0 goes out, nothing is kept)
     while (m_dma_requested && m_dma_data_ptr != nullptr && m_dma_size > 0) {
-        if (m_dma_is_write) m_ncr53cf96->dma_w(ram[m_dma_offset]);
-        else ram[m_dma_offset] = m_ncr53cf96->dma_r();
+        if (m_dma_is_write) m_ncr53cf96->dma_w(m_dma_offset < ram_bytes ? ram[m_dma_offset] : 0);
+        else if (const u8 v = m_ncr53cf96->dma_r(); m_dma_offset < ram_bytes) ram[m_dma_offset] = v;
         m_dma_offset++;
         m_dma_size--;
     }

@@ -63,7 +63,7 @@ private:
     void fill_rect(const uint32_t *cmd);
     void draw_character(const uint32_t *cmd);
     void fb_config(const uint32_t *cmd);
-    void execute_display_list(uint32_t addr);
+    void execute_display_list(uint32_t addr, int depth = 0);
     void execute_command(const uint32_t *cmd);
     void run(const uint32_t *cmd);                          // fb config, fill, object, character
     void touch(int y0, int y1, int x0, int x1);             // rows y0..y1, columns x0..x1, about to be drawn on

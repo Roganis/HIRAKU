@@ -18,6 +18,13 @@ add_custom_target(ppc_cases DEPENDS ${HK_PPC_CASES}/cases.bin)
 add_dependencies(test_ppc ppc_cases)
 add_test(NAME ppc_semantics COMMAND test_ppc ${HK_PPC_CASES})
 endif()
+# hiraku-recomp: a nopoll function still asks at its entry whether a mod changed it, and files that
+# didn't change aren't written again (a made-up program)
+find_package(Python3 COMPONENTS Interpreter QUIET)
+if(Python3_Interpreter_FOUND)
+  add_test(NAME recomp_nopoll COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/ppc/test_recomp_nopoll.py
+           $<TARGET_FILE:hiraku-recomp> ${CMAKE_C_COMPILER} ${CMAKE_SOURCE_DIR}/include)
+endif()
 
 # GCU renderer vs MAME: replay a MAME trace's GCU writes (oracle, not a ctest).
 add_executable(gcu_replay gcu/gcu_replay.cpp)
@@ -66,6 +73,12 @@ add_executable(test_ata_security ata/test_ata_security.cpp)
 target_link_libraries(test_ata_security PRIVATE hiraku_ata)
 target_include_directories(test_ata_security PRIVATE ${CMAKE_SOURCE_DIR}/runtime)
 add_test(NAME ata_security COMMAND test_ata_security)
+# ... and the bus's state across commands a host cuts short (IDENTIFY after an untaken read, a soft
+# reset mid-read, the empty unit chosen while data is going out)
+add_executable(test_ata_state ata/test_ata_state.cpp)
+target_link_libraries(test_ata_state PRIVATE hiraku_ata)
+target_include_directories(test_ata_state PRIVATE ${CMAKE_SOURCE_DIR}/runtime)
+add_test(NAME ata_state COMMAND test_ata_state)
 
 # The picture's shader engine: FrameCount, frame history, feedback (needs a display and OpenGL
 # 3.3; skipped without them)

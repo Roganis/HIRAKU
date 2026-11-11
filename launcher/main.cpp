@@ -32,6 +32,12 @@
 #include "modsdialog.h"
 #include "updater.h"
 
+#ifdef Q_OS_WIN
+#include <cstdio>
+#define NOMINMAX
+#include <windows.h>   // (last: its macros mustn't reach the launcher's headers)
+#endif
+
 // A package with its own Qt (tools/package.sh) starts the launcher through bin/hiraku, a script
 // that points LD_LIBRARY_PATH at bin/qt/lib and clears QT_PLUGIN_PATH, keeping the values it found
 // in HK_SAVED_<name> (absent: it was unset). The loader read LD_LIBRARY_PATH when this process
@@ -62,7 +68,25 @@ static void python_utf8() {
 #endif
 }
 
+// On Windows the launcher is a window program: no console window opens with it (CMakeLists.txt,
+// WIN32_EXECUTABLE). Started from a console (hiraku --add FILE, --shot), what it prints still goes
+// to that console, unless its output was sent to a file or a pipe, which it then keeps.
+static void use_parent_console() {
+#ifdef Q_OS_WIN
+    auto sent_elsewhere = [](DWORD which) {
+        const HANDLE h = GetStdHandle(which);
+        const DWORD type = h && h != INVALID_HANDLE_VALUE ? GetFileType(h) : FILE_TYPE_UNKNOWN;
+        return type == FILE_TYPE_DISK || type == FILE_TYPE_PIPE;
+    };
+    const bool out = sent_elsewhere(STD_OUTPUT_HANDLE), err = sent_elsewhere(STD_ERROR_HANDLE);
+    if ((out && err) || !AttachConsole(ATTACH_PARENT_PROCESS)) return;
+    if (!out) freopen("CONOUT$", "w", stdout);
+    if (!err) freopen("CONOUT$", "w", stderr);
+#endif
+}
+
 int main(int argc, char **argv) {
+    use_parent_console();
     QApplication app(argc, argv);
     restore_environment();
     python_utf8();

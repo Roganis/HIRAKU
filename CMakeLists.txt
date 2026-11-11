@@ -556,6 +556,10 @@ if(Qt6_FOUND AND TARGET hiraku_hidout)
     FILES launcher/res/icon.png launcher/res/logo.png)
   target_compile_definitions(hiraku PRIVATE ${HK_ROOT_DEFINE})
   target_link_libraries(hiraku PRIVATE Qt6::Widgets Qt6::Network hiraku_cabinet hiraku_hidout)
+  # Windows: a window program, so that no console window opens behind the launcher (what it prints
+  # when started from a console still goes there: launcher/main.cpp, use_parent_console). The games
+  # stay console programs: the launcher reads what they print, and gives them no console window.
+  set_target_properties(hiraku PROPERTIES WIN32_EXECUTABLE TRUE)
   set(CMAKE_AUTOMOC OFF)
   message(STATUS "hiraku: Qt ${Qt6_VERSION} launcher enabled")
 endif()

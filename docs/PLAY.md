@@ -486,7 +486,12 @@ system this is, cleaned first: HIRAKU's folder shows as `<hiraku>`, any other fo
 `<folder>` and its last part, your home folder, user and computer names as `<home>`, `<user>`,
 `<computer>`, e-AMUSEMENT card numbers as `#1`, `#2`..., PCB ids and network addresses blanked.
 The window shows the whole file before you save it; then **Open a GitHub issue** opens a new issue
-with the system and game filled in, to attach the file to. Nothing is sent anywhere by HIRAKU.
+with the system and game filled in, to attach the file to. Without a GitHub account, **Send it by
+mail** saves the file and opens your mail program with a message to HIRAKU's report address, the
+system and game filled in: say what happened, attach the file if your mail program hasn't already
+(on Linux most do), and send it. With no mail program set up, send the file to the address the
+window shows from your webmail. A mail shows its reader your mail address, as any mail does.
+Nothing is sent anywhere by HIRAKU itself.
 
 ## Recording and testing
 

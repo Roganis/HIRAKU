@@ -15,6 +15,7 @@
 #include <QLabel>
 #include <QMessageBox>
 #include <QPlainTextEdit>
+#include <QProcess>
 #include <QPushButton>
 #include <QRegularExpression>
 #include <QStandardPaths>
@@ -25,6 +26,9 @@
 
 #include "config.h"
 #include "shell/sys.h"
+
+// Where a report can be mailed, by who has no GitHub account ("": nowhere, and the dialog has no mail button)
+static const char kMail[] = "mrroganis@gmail.com";
 
 namespace report {
 
@@ -76,8 +80,10 @@ ReportDialog::ReportDialog(QWidget *parent, const QString &runLog) : QDialog(par
     auto *intro = new QLabel(
         "A report of one run: its log, the game's own log and what system this is, cleaned of your "
         "folders' and names, card numbers and network addresses. Read it below before you share it: "
-        "what it shows is all that goes in. Save it, then attach the file to an issue on GitHub.");
+        "what it shows is all that goes in. Save it, then attach the file to an issue on GitHub" +
+        (*kMail ? QString(", or to a mail to %1 (no account needed).").arg(kMail) : QString(".")));
     intro->setWordWrap(true);
+    intro->setTextInteractionFlags(Qt::TextSelectableByMouse);   // (the address, to copy into a webmail)
     lay->addWidget(intro);
     auto *row = new QHBoxLayout;
     row->addWidget(new QLabel("The run:"));
@@ -91,6 +97,7 @@ ReportDialog::ReportDialog(QWidget *parent, const QString &runLog) : QDialog(par
     lay->addWidget(m_text, 1);
     auto *buttons = new QDialogButtonBox;
     auto *saveBtn = buttons->addButton("Save the report…", QDialogButtonBox::AcceptRole);
+    QPushButton *mailBtn = *kMail ? buttons->addButton("Send it by mail", QDialogButtonBox::ActionRole) : nullptr;
     auto *issueBtn = buttons->addButton("Open a GitHub issue", QDialogButtonBox::ActionRole);
     buttons->addButton(QDialogButtonBox::Close);
     issueBtn->setToolTip("Opens GitHub's new issue page in your browser, with the system and the game filled in: "
@@ -100,6 +107,13 @@ ReportDialog::ReportDialog(QWidget *parent, const QString &runLog) : QDialog(par
     disconnect(saveBtn, nullptr, this, nullptr);
     connect(saveBtn, &QPushButton::clicked, this, [this] { save(); });
     connect(issueBtn, &QPushButton::clicked, this, [this] { openIssue(); });
+    if (mailBtn) {
+        mailBtn->setToolTip(QString("Saves the report, then opens your mail program with a message to %1, the system and "
+                                    "the game filled in: describe what happened, and attach the saved report if it "
+                                    "isn't attached already. With no mail program set up, send the file to that "
+                                    "address from your webmail").arg(kMail));
+        connect(mailBtn, &QPushButton::clicked, this, [this] { mail(); });
+    }
 
     // the runs, newest first ("20261108-183240-iidx16.log")
     const QDir dir(cfg::logsDir());
@@ -115,6 +129,7 @@ ReportDialog::ReportDialog(QWidget *parent, const QString &runLog) : QDialog(par
     if (logs.isEmpty()) {
         m_text->setPlainText("No game has been run yet: run the game that has the problem, then come back here.");
         saveBtn->setEnabled(false);
+        if (mailBtn) mailBtn->setEnabled(false);
     } else {
         fill();
     }
@@ -133,6 +148,7 @@ void ReportDialog::fill() {
     }
     report::Cleaner c = report::Cleaner::forThisComputer();
     m_text->setPlainText(report::make(log, game, title, c));
+    m_saved.clear();   // (a file saved before is another run's report)
 }
 
 void ReportDialog::save() {
@@ -163,4 +179,22 @@ void ReportDialog::openIssue() {
     QUrl url("https://github.com/Roganis/HIRAKU/issues/new");
     url.setQuery(q);
     QDesktopServices::openUrl(url);
+}
+
+void ReportDialog::mail() {
+    if (m_saved.isEmpty()) save();   // the file to attach
+    if (m_saved.isEmpty()) return;
+    const QStringList head = m_text->toPlainText().section("\n=== ", 0, 0).split('\n', Qt::SkipEmptyParts);
+    const QString game = head.size() > 3 ? head[3].mid(6) : QString();
+    const QString subject = "HIRAKU problem report" + (game.isEmpty() ? QString() : ": " + game);
+    QString body = "What happened, and what you did just before:\n\n\n\n"
+                   "(The report is " + QFileInfo(m_saved).fileName() + ": please attach it if it isn't attached already.)\n\n";
+    for (const QString &l : head.mid(1)) body += l + "\n";   // HIRAKU, the system, the game
+#ifdef Q_OS_LINUX
+    // xdg-email hands the file itself to the mail programs that take one (Thunderbird, KMail, Evolution...)
+    if (QProcess::startDetached("xdg-email", {"--utf8", "--subject", subject, "--body", body, "--attach", m_saved, kMail})) return;
+#endif
+    // a mailto: address can't carry a file: the folder save() opened has it, to drag into the message
+    QDesktopServices::openUrl(QUrl::fromEncoded("mailto:" + QByteArray(kMail) + "?subject=" + QUrl::toPercentEncoding(subject) +
+                                                "&body=" + QUrl::toPercentEncoding(body.replace("\n", "\r\n"))));
 }

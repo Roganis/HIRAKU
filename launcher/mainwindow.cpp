@@ -410,7 +410,7 @@ MainWindow::MainWindow() {
     })->setToolTip(QString("A file for each of the last %1 games run: what the log pane showed").arg(cfg::kRunLogs));
     help->addAction("Report a problem…", this, [this] { ReportDialog(this).exec(); })
         ->setToolTip("A run's logs and what system this is, cleaned of your folders, names and card numbers, "
-                     "to attach to an issue on GitHub");
+                     "to attach to an issue on GitHub or to a mail");
     help->addSeparator();
     auto *updAct = help->addAction("Check for updates…", this, [this] { checkForUpdate(true); });
     if (!upd::available()) {

@@ -2,6 +2,11 @@
 // Updates a release package to GitHub's latest release, through tools/update.py: the check, the
 // dialog that shows what's new and downloads it, and the hand-over to the script, which puts the
 // new files in once the launcher has closed and starts it again.
+//
+// The script keeps a journal while it puts them in (update-journal in the package's folder) and
+// holds a lock (update-lock). A launcher started meanwhile steps aside; one that finds the journal
+// with nobody at work (a kill, a power cut) starts the script again, which finishes the update or
+// undoes it; and nothing of an update is removed while either is there.
 #pragma once
 
 #include <QDialog>
@@ -16,7 +21,19 @@ namespace upd {
 QString packageRoot();      // the folder above the launcher's bin/
 QString currentVersion();   // its VERSION file: "" in a checkout or a build by hand
 bool available();           // a release package, which can update itself
-void cleanUp();             // what the last update left: update/ (the download), update-old/
+void cleanUp();             // what the last update left: update/ (the download), update-old/;
+                            // nothing while an update is going on or was cut short
+bool applying();            // the script is putting an update in right now
+bool cutShort();            // an update was cut short: its journal is in the folder
+// The script, started on its own to put the downloaded package in once this launcher has ended:
+// false if it couldn't start
+bool startApply(QString *error);
+// ... or to put right an update that was cut short. once: only if it wasn't already tried on the
+// folder as it is (a journal that the script can't deal with must not end every launcher started)
+bool resume(bool once, QString *error);
+// Tells that an update was cut short and couldn't be put right (why: the script's own words, if
+// any), and offers to try again: true if the script was started, and the launcher must end
+bool offerResume(QWidget *parent, const QString &why);
 }
 
 // One look at the latest release (tools/update.py check)
@@ -32,13 +49,11 @@ private:
     QProcess m_proc;
 };
 
-// What's new, then the download; accepted = ready: the launcher closes and startInstall() runs
+// What's new, then the download; accepted = ready: the launcher closes and upd::startApply() runs
 class UpdateDialog : public QDialog {
     Q_OBJECT
 public:
     UpdateDialog(const QJsonObject &rel, QWidget *parent = nullptr);
-    // the script that puts the new files in, started on its own: false if it couldn't start
-    bool startInstall(QString *error) const;
     void reject() override;
 private:
     void download();

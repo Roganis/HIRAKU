@@ -30,6 +30,7 @@
 #include "nvidia.h"
 #include "dipsdialog.h"
 #include "modsdialog.h"
+#include "updater.h"
 
 // A package with its own Qt (tools/package.sh) starts the launcher through bin/hiraku, a script
 // that points LD_LIBRARY_PATH at bin/qt/lib and clears QT_PLUGIN_PATH, keeping the values it found
@@ -71,9 +72,22 @@ int main(int argc, char **argv) {
     QApplication::setWindowIcon(QIcon(":/icon.png"));
     cfg::mergeControls();
     app.installEventFilter(new ScreenFit(&app));   // every window inside a small screen too (fit.h)
+    QStringList args = app.arguments().mid(1);
+    // An update's script starts the launcher itself when it's done (--updated, --update-failed).
+    // Started any other way while it works, the launcher would be in its way; and one that finds an
+    // update cut short hands over to the script, which starts it again (once: see upd::resume)
+    const bool fromUpdate = !args.isEmpty() && (args.first() == "--updated" || args.first() == "--update-failed");
+    if (!fromUpdate && upd::applying()) {
+        QMessageBox::information(nullptr, "HIRAKU", "An update is being put in. HIRAKU starts by itself when it's done.");
+        return 0;
+    }
+    if (!fromUpdate && upd::cutShort() && upd::resume(true, nullptr)) return 0;
     MainWindow w;
     w.show();
-    QStringList args = app.arguments().mid(1);
+    if (upd::cutShort() && (args.isEmpty() || fromUpdate))   // still there: the script couldn't put it right
+        QTimer::singleShot(0, &w, [&w, why = args.value(1)] {
+            if (upd::offerResume(&w, why)) w.close();
+        });
     if (args.size() >= 2 && args.first() == "--show") {
         QWidget *win = &w;
         const QString what = args[1];
@@ -104,9 +118,10 @@ int main(int argc, char **argv) {
     } else if (args.size() >= 2 && args.first() == "--updated") {   // tools/update.py, once the new files are in
         QTimer::singleShot(0, &w, [&w, v = args[1]] { QMessageBox::information(&w, "HIRAKU", "HIRAKU is now " + v + "."); });
     } else if (args.size() >= 2 && args.first() == "--update-failed") {
-        QTimer::singleShot(0, &w, [&w, why = args[1]] {
-            QMessageBox::warning(&w, "HIRAKU", "The update could not be put in; this is still the version you had.\n\n" + why);
-        });
+        if (!upd::cutShort())   // (cut short: said above)
+            QTimer::singleShot(0, &w, [&w, why = args[1]] {
+                QMessageBox::warning(&w, "HIRAKU", "The update could not be put in; this is still the version you had.\n\n" + why);
+            });
     } else if (!args.isEmpty()) {
         QTimer::singleShot(0, &w, [&w, id = args.first()] { w.play(id); });
     }

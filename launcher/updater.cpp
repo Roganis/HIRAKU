@@ -2,9 +2,11 @@
 #include "updater.h"
 
 #include <QCoreApplication>
+#include <QDateTime>
 #include <QDesktopServices>
 #include <QDialogButtonBox>
 #include <QDir>
+#include <QFile>
 #include <QFileInfo>
 #include <QJsonDocument>
 #include <QLabel>
@@ -12,12 +14,14 @@
 #include <QMessageBox>
 #include <QProgressBar>
 #include <QPushButton>
+#include <QSettings>
 #include <QStandardPaths>
 #include <QTextBrowser>
 #include <QUrl>
 #include <QVBoxLayout>
 
 #include "config.h"
+#include "shell/sys.h"
 
 namespace upd {
 
@@ -30,11 +34,92 @@ QString currentVersion() {
 
 bool available() { return !currentVersion().isEmpty() && QFileInfo::exists(packageRoot() + "/tools/update.py"); }
 
+bool applying() { return hk::sys::file_lock_held((packageRoot() + "/update-lock").toLocal8Bit().toStdString()); }
+
+bool cutShort() { return QFileInfo::exists(packageRoot() + "/update-journal"); }
+
 void cleanUp() {
-    for (const char *d : {"/update", "/update-old"}) {
+    // an update going on, or one cut short: update-old/ may hold the only copy of the old files,
+    // update-new/ the only one of the new, and update/ the script that sorts them out
+    if (applying() || cutShort()) return;
+    for (const char *d : {"/update", "/update-old", "/update-new"}) {
         QDir dir(packageRoot() + d);
         if (dir.exists()) dir.removeRecursively();   // what is still in use stays, for next time
     }
+    QFile::remove(packageRoot() + "/update-lock");
+}
+
+namespace {
+
+// (a script from before the journal has no "recover", and would end without starting the launcher again)
+bool knowsRecover(const QString &script) {
+    QFile f(script);
+    return f.open(QIODevice::ReadOnly) && f.readAll().contains("def cmd_recover(");
+}
+
+bool startScript(const QString &ownPython, const QStringList &args, const QString &root) {
+    if (QFileInfo::exists(ownPython) && QProcess::startDetached(ownPython, args, root)) return true;
+    const QStringList sys = cfg::python();   // a package without its own Python
+    return !sys.isEmpty() && QProcess::startDetached(sys[0], sys.mid(1) + args, root);
+}
+
+}  // namespace
+
+bool startApply(QString *error) {
+    // the new package's own Python and update.py do it, so nothing they run from is replaced
+    const QString root = packageRoot(), neu = root + "/update/new/hiraku";
+#ifdef Q_OS_WIN
+    const QString py = neu + "/python/python.exe";
+#else
+    const QString py = neu + "/python/bin/python3";
+#endif
+    const QStringList args{neu + "/tools/update.py", "apply", root, neu, "--wait",
+                           QString::number(QCoreApplication::applicationPid()), "--restart"};
+    if (startScript(py, args, root)) return true;
+    if (error) *error = "Python could not be started to put the new files in.";
+    return false;
+}
+
+bool resume(bool once, QString *error) {
+    const QString root = packageRoot(), neu = root + "/update/new/hiraku";
+    if (once) {
+        // the journal's time changes with every step the script gets through
+        const QString now = QString::number(QFileInfo(root + "/update-journal").lastModified().toMSecsSinceEpoch());
+        if (cfg::settings().value("updates/resumed").toString() == now) return false;
+        cfg::settings().setValue("updates/resumed", now);
+        cfg::settings().sync();
+    }
+    // The download is still there: the update started again finishes the one cut short, or does
+    // it over, whichever it needs
+    if (QFileInfo::exists(neu + "/VERSION") && knowsRecover(neu + "/tools/update.py")) return startApply(error);
+    // Else the newest script the folder has: the new one where it waits to go in, or the folder's own
+    QString script = root + "/update-new/tools/update.py";
+    if (!knowsRecover(script)) script = root + "/tools/update.py";
+    if (!knowsRecover(script)) {
+        if (error) *error = "This copy has no script that can put the update right.";
+        return false;
+    }
+    const QStringList args{script, "recover", root, "--wait", QString::number(QCoreApplication::applicationPid()), "--restart"};
+    if (startScript(QString(), args, root)) return true;
+    if (error) *error = "Python could not be started to put the update right.";
+    return false;
+}
+
+bool offerResume(QWidget *parent, const QString &why) {
+    QMessageBox box(QMessageBox::Warning, "HIRAKU",
+                    "An update was cut short and hasn't been put right: this folder may be part the old "
+                    "version, part the new, and some games may not start.", QMessageBox::NoButton, parent);
+    box.setInformativeText((why.isEmpty() ? QString() : why + "\n\n") +
+                           "Try again closes the launcher and has another go. If that keeps failing, unpack the "
+                           "release's package over this folder: your games, saves and settings stay as they are.");
+    QPushButton *again = box.addButton("Try again", QMessageBox::AcceptRole);
+    box.addButton("Not now", QMessageBox::RejectRole);
+    box.exec();
+    if (box.clickedButton() != again) return false;
+    QString err;
+    if (resume(false, &err)) return true;
+    QMessageBox::warning(parent, "HIRAKU", err);
+    return false;
 }
 
 }  // namespace upd
@@ -162,19 +247,3 @@ void UpdateDialog::reject() {
     QDialog::reject();
 }
 
-bool UpdateDialog::startInstall(QString *error) const {
-    // the new package's own Python and update.py do it, so nothing they run from is replaced
-    const QString root = upd::packageRoot(), neu = root + "/update/new/hiraku";
-#ifdef Q_OS_WIN
-    const QString py = neu + "/python/python.exe";
-#else
-    const QString py = neu + "/python/bin/python3";
-#endif
-    const QStringList args{neu + "/tools/update.py", "apply", root, neu, "--wait",
-                           QString::number(QCoreApplication::applicationPid()), "--restart"};
-    if (QFileInfo::exists(py) && QProcess::startDetached(py, args, root)) return true;
-    const QStringList sys = cfg::python();   // a package without its own Python
-    if (QProcess::startDetached(sys[0], sys.mid(1) + args, root)) return true;
-    if (error) *error = "Python could not be started to put the new files in.";
-    return false;
-}

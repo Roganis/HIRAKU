@@ -190,6 +190,8 @@ endif()
 # tools/update.py download: a package the release gives no SHA-256 for, or another's, isn't unpacked
 if(Python3_Interpreter_FOUND AND NOT WIN32)
   add_test(NAME update_download COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/tools/test_update.py)
+  # ... apply and recover: killed at any file, the folder is put right as the old version or the new, never a mix
+  add_test(NAME update_apply COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/tools/test_update_apply.py $<TARGET_FILE:test_file_lock>)
 endif()
 # tools/runpath.py: a packaged program's run path keeps only the package's own folders
 find_program(HK_READELF readelf)

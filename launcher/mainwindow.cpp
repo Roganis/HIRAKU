@@ -419,7 +419,8 @@ MainWindow::MainWindow() {
     }
     if (upd::available()) {
         // the last update's download, once its script (which starts this launcher) is done; not
-        // once an update of this session has begun: update/ is then the new download
+        // once an update of this session has begun: update/ is then the new download (nor while
+        // one is going on or was cut short: cleanUp itself looks)
         QTimer::singleShot(5000, this, [this] { if (!m_updateBegun) upd::cleanUp(); });
         if (cfg::settings().value("updates/check", true).toBool())
             QTimer::singleShot(2000, this, [this] { checkForUpdate(false); });
@@ -1486,7 +1487,7 @@ void MainWindow::offerUpdate() {
     UpdateDialog d(m_release, this);
     if (d.exec() != QDialog::Accepted) return;
     QString err;
-    if (!d.startInstall(&err)) {
+    if (!upd::startApply(&err)) {
         QMessageBox::warning(this, "HIRAKU", err);
         return;
     }

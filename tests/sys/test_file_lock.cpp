@@ -2,7 +2,9 @@
 // hk::sys::FileLock (runtime/shell/sys.h): a file held by one holder at a time, over threads and
 // processes, each waiting its turn: a count read, changed and written back by many is never lost.
 //
-//   test_file_lock      exit 0 when all hold
+//   test_file_lock              exit 0 when all hold
+//   test_file_lock held FILE    exit 0 if FILE is held right now, 1 if not (file_lock_held: for
+//                               tests/tools/test_update_apply.py, whose lock is tools/update.py's)
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
@@ -47,7 +49,8 @@ void count_up(const std::string &file, const std::string &lock, int times) {
 
 }  // namespace
 
-int main() {
+int main(int argc, char **argv) {
+    if (argc == 3 && std::string(argv[1]) == "held") return hk::sys::file_lock_held(argv[2]) ? 0 : 1;
     const fs::path top = fs::temp_directory_path() / ("hk-filelock-" + std::to_string(std::hash<std::thread::id>{}(std::this_thread::get_id())));
     fs::create_directories(top);
     const std::string file = (top / "count").string(), lock = (top / ".lock").string();
@@ -59,6 +62,14 @@ int main() {
         check(!none.held(), "no file: nothing held, and no wait");
         const hk::sys::FileLock bad((top / "no-such-folder" / "lock").string());
         check(!bad.held(), "a file that can't be made: nothing held, and no wait");
+        check(hk::sys::file_lock_held(lock), "asked while it is held: held");
+    }
+    check(!hk::sys::file_lock_held(lock), "... and once let go: not held");
+    check(!hk::sys::file_lock_held((top / "no-such-file").string()) && !fs::exists(top / "no-such-file"),
+          "... a file that isn't there: not held, and not made");
+    {
+        const hk::sys::FileLock again(lock);
+        check(again.held(), "... asking took nothing: the lock is there to take");
     }
     // threads of one process
     std::ofstream(file) << "0\n";

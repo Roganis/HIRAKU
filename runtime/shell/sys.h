@@ -82,6 +82,10 @@ public:
 private:
     intptr_t h_ = -1;
 };
+// Whether someone holds the file at `path` that way right now (a FileLock, or another program's lock
+// of the same kind: tools/update.py's on a package while it puts an update in). Takes nothing, makes
+// nothing; false when there is no such file
+bool file_lock_held(const std::string &path);
 std::string exe_path();   // this program's file, with / between folders; empty if unknown
 // Runs a program (argv[0]: its file) with no window of its own and its output thrown away, and
 // waits for it: its exit code, -1 if it couldn't be started

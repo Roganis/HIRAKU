@@ -63,10 +63,23 @@ release notes; **Update and restart** downloads the package for your system, che
 GitHub's SHA-256 (a package that doesn't match, or that GitHub gives no SHA-256 for, isn't
 installed: the release's page still has it), and closes the launcher. `tools/update.py`, run from the new package, then puts
 the new files in and starts the launcher again. It never touches `dumps/`, `user/` or `out/`.
-The files it replaces go to `update-old/`, and back if anything fails; the launcher removes the
-leftovers on its next start. **Help > Check for updates** looks again at any time.
-`user/update.log` keeps a line per update. A checkout or a build by hand has no `VERSION` file
-and doesn't offer updates: use git.
+**Help > Check for updates** looks again at any time. `user/update.log` keeps a line per update.
+A checkout or a build by hand has no `VERSION` file and doesn't offer updates: use git.
+
+The new files are first copied into `update-new/`, beside the old ones. Then each old file goes
+to `update-old/` and the new one into its place, which takes a moment; a file that can't be
+moved (still in use) sends everything back, and the launcher says the update didn't go in. The
+launcher removes `update-old/` and the download a few seconds after it next starts.
+
+An update that is cut short (the PC switched off, the script closed) is put right the next time
+the launcher starts: `update-journal` in HIRAKU's folder says how far it was, and the launcher
+hands over to the script again before it shows its window. Cut while the files were copied, the
+copies are dropped and the version you had is whole. Cut while they were moved, the moves are
+finished and you have the new one. Nothing of an update is removed while its journal is there.
+If that doesn't work, the launcher says so and offers to try again; unpacking the release's
+package over HIRAKU's folder always does (your games, saves and settings stay as they are).
+A launcher started while the script is at work says so and closes: the script starts it when
+it's done.
 
 A game started without the launcher (from a shortcut or the command line) says so too: for six
 seconds after it starts, a banner at the bottom of its window names the new release

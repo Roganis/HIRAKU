@@ -2,6 +2,7 @@
 // The lobby pop'n music 12-14's NET TAISEN finds its opponents through (lobby.h).
 #include "python/lobby.h"
 
+#include <algorithm>
 #include <cstring>
 
 namespace hk::py {
@@ -11,6 +12,11 @@ namespace {
 constexpr size_t HEADER = 12;
 constexpr size_t ENTRY = 0x1c;
 constexpr size_t MAX_ANSWER = 0x1bf0;   // the game's buffer (0x199aa8)
+// What anyone who reaches the lobby can make it hold: an entry asks to be kept up to 65535 s, and
+// each address and port is one. An hour at most (a cabinet enters again each time it waits), and
+// 1024 entries (an answer lists 270 at most)
+constexpr int MAX_SECONDS = 3600;
+constexpr size_t MAX_ENTRIES = 1024;
 
 uint16_t be16(const uint8_t *p) { return (uint16_t)(p[0] << 8 | p[1]); }
 uint32_t be32(const uint8_t *p) { return (uint32_t)p[0] << 24 | p[1] << 16 | p[2] << 8 | p[3]; }
@@ -45,9 +51,12 @@ std::vector<uint8_t> Lobby::handle(const uint8_t *d, size_t n, double now) {
         e.rooms = be32(body);
         std::memcpy(e.addr, body + 4, 4);
         e.port = be16(body + 8);
-        e.until = now + be16(body + 10);
+        e.until = now + std::min<int>(be16(body + 10), MAX_SECONDS);
         std::memcpy(e.own, body + 12, 16);
         std::erase_if(entries_, [&](const Entry &o) { return same(o, e.addr, e.port); });
+        // (no more than MAX_ENTRIES at once: the one that would go first goes now)
+        if (entries_.size() >= MAX_ENTRIES)
+            entries_.erase(std::min_element(entries_.begin(), entries_.end(), [](const Entry &a, const Entry &b) { return a.until < b.until; }));
         entries_.push_back(e);
     };
     // the cabinets in a room of the mask, then a zero entry (pop'n 15: counted in the header's byte

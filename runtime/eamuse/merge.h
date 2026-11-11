@@ -156,6 +156,7 @@ inline void merge_folder(const std::string &from, const std::string &to) {
     std::sort(files.begin(), files.end());
     for (const fs::path &file : files) {
         const std::string name = file.filename().string();
+        if (name == ".lock") continue;   // (the servers' hold on the folder, protocol.h: nothing to move)
         if (name == "cards") {   // (the folder's own stays in it, as it was)
             if (!have.empty() && have.back() != '\n') have += "\n";
             if (!write(dst / "cards", have + text(gained))) left = true;

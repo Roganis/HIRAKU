@@ -132,6 +132,14 @@ private:
     uint32_t serial_ = 0;   // for the answers' X-Eamuse-Info: deterministic
     std::string src_;       // the asking cabinet (the call's srcid)
     std::string self_;      // this server, among those sharing its data folder (a random number)
+    // What a server others can reach keeps is bounded (a call registers a card, writes a card's file):
+    // the data folder's files (limit-files, default 200000) and cards (limit-cards, 65536), each a
+    // number in a file of the folder for an owner who wants another; a card's userdata, 128 KiB
+    long limit(const char *what, long by_default) const;
+    bool room_for_file() const;         // a new file may be made (counted from the folder, once)
+    static constexpr size_t USERDATA_MAX = 0x20000;
+    mutable long files_ = -1;           // the folder's files, as counted and made since
+    mutable bool files_full_said_ = false, cards_full_said_ = false;
 };
 
 }  // namespace hk::py

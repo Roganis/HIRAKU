@@ -99,6 +99,8 @@ if(Python3_Interpreter_FOUND AND NOT WIN32)
   add_test(NAME eamuse_one_card COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/eamuse/test_onecard.py $<TARGET_FILE:hiraku-eamuse>)
   add_test(NAME eamuse_pc_records COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/eamuse/test_pcrecords.py $<TARGET_FILE:hiraku-eamuse>)
   add_test(NAME eamuse_players_kept COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/eamuse/test_players_kept.py $<TARGET_FILE:hiraku-eamuse>)
+  # ... several servers on one data folder, and the bounds on what a server keeps
+  add_test(NAME eamuse_shared_folder COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/eamuse/test_shared_folder.py $<TARGET_FILE:hiraku-eamuse>)
   add_test(NAME eamuse_iidx_records COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/eamuse/test_iidxrecords.py $<TARGET_FILE:hiraku-eamuse>)
   # ... and calls no game would send (it listens on a network): answered or dropped, the server goes on
   add_test(NAME eamuse_malformed COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/eamuse/test_malformed.py $<TARGET_FILE:hiraku-eamuse>)
@@ -116,6 +118,10 @@ add_executable(test_merge eamuse/test_merge.cpp)
 target_include_directories(test_merge PRIVATE ${CMAKE_SOURCE_DIR}/runtime)
 target_link_libraries(test_merge PRIVATE hiraku_sys)
 add_test(NAME eamuse_folder_merge COMMAND test_merge)
+# NET TAISEN's lobby (runtime/python/lobby.h): what it holds is bounded
+add_executable(test_lobby eamuse/test_lobby.cpp ${CMAKE_SOURCE_DIR}/runtime/python/lobby.cpp)
+target_include_directories(test_lobby PRIVATE ${CMAKE_SOURCE_DIR}/runtime)
+add_test(NAME eamuse_lobby_bounds COMMAND test_lobby)
 # The PC games' NET TAISEN (runtime/pc/vsock.c) between two processes on one relay, under Wine
 find_program(HK_WINE wine)
 if(TARGET hiraku-pc-test-vsock AND HK_WINE AND NOT WIN32)
@@ -146,6 +152,11 @@ add_executable(test_lock_file sys/test_lock_file.cpp)
 target_include_directories(test_lock_file PRIVATE ${CMAKE_SOURCE_DIR}/runtime)
 target_link_libraries(test_lock_file PRIVATE hiraku_sys)
 add_test(NAME save_folder_lock COMMAND test_lock_file)
+# A file held by one holder at a time, each waiting its turn (runtime/shell/sys.h, FileLock): the servers' data folder
+add_executable(test_file_lock sys/test_file_lock.cpp)
+target_include_directories(test_file_lock PRIVATE ${CMAKE_SOURCE_DIR}/runtime)
+target_link_libraries(test_file_lock PRIVATE hiraku_sys)
+add_test(NAME folder_file_lock COMMAND test_file_lock)
 
 # The problem report's cleaner (launcher/cleaner.h): names, folders, cards and servers gone from a log
 if(Qt6_FOUND)

@@ -269,6 +269,11 @@ std::string Store::read(const std::string &name) const {
     return std::string(std::istreambuf_iterator<char>(f), std::istreambuf_iterator<char>());
 }
 
+sys::FileLock Store::lock() const {
+    if (!dir_.empty()) sys::make_dir(dir_);
+    return sys::FileLock(dir_.empty() ? "" : dir_ + "/" + FOLDER_LOCK);
+}
+
 void Store::write(const std::string &name, const std::string &data) const {
     if (dir_.empty()) return;
     if (!safe_file(name)) {

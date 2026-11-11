@@ -13,6 +13,8 @@
 #include <string>
 #include <vector>
 
+#include "shell/sys.h"
+
 namespace hk::ea {
 
 std::vector<uint8_t> md5(const std::vector<uint8_t> &msg);
@@ -66,11 +68,18 @@ using Record = std::map<std::string, std::string>;
 std::string to_line(const Record &r);
 std::vector<Record> from_lines(const std::string &text);
 
+// The file of a data folder its servers hold while they answer a call (a name no call's field can
+// make: safe_file refuses a leading dot)
+constexpr const char *FOLDER_LOCK = ".lock";
+
 class Store {
 public:
     explicit Store(std::string dir) : dir_(std::move(dir)) {}   // "" keeps nothing
     std::string read(const std::string &name) const;
     void write(const std::string &name, const std::string &data) const;   // whole, atomically
+    // The folder held for a call (several servers on one folder change the same files): until the
+    // object returned is gone
+    sys::FileLock lock() const;
 private:
     std::string dir_;
 };

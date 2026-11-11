@@ -16,6 +16,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <exception>
+#include <filesystem>
 #include <iterator>
 #include <set>
 #include <ctime>
@@ -129,7 +130,31 @@ void EamuseServer::write_file(const std::string &name, const std::string &data) 
     sys::make_dir(dir_);
     // whole or not at all: a full or failing disk keeps the player's file from before
     const std::string path = dir_ + "/" + name;
+    if (!sys::exists(path) && !room_for_file()) return;
     if (!sys::write_file(path, data)) fprintf(stderr, "e-AMUSEMENT: cannot write %s: the one from before is kept\n", path.c_str());
+}
+
+long EamuseServer::limit(const char *what, long by_default) const {
+    const std::string set = read_file(std::string("limit-") + what);
+    char *end = nullptr;
+    const long n = std::strtol(set.c_str(), &end, 10);
+    return end != set.c_str() && n >= 0 ? n : by_default;
+}
+
+bool EamuseServer::room_for_file() const {
+    if (files_ < 0) {
+        files_ = 0;
+        std::error_code ec;
+        for (const auto &e : std::filesystem::directory_iterator(dir_, ec)) (void)e, files_++;
+    }
+    const long most = limit("files", 200000);
+    if (files_ >= most) {
+        if (!files_full_said_) fprintf(stderr, "e-AMUSEMENT: %s holds %ld files, as many as it may (the file limit-files there sets another number): nothing new is kept\n", dir_.c_str(), files_);
+        files_full_said_ = true;
+        return false;
+    }
+    files_++;
+    return true;
 }
 
 void EamuseServer::say_kept(const std::string &name) const {
@@ -178,7 +203,7 @@ std::string EamuseServer::answer(const Call &c, const Request &r, const std::str
             return data.empty() ? "<userdata status=\"109\"/>" : data;   // 109: none
         }
         if (m == "userdata" && f == "write") {
-            if (!safe_name(card)) return "<userdata status=\"1\"/>";
+            if (!safe_name(card) || r.inner.size() > USERDATA_MAX) return "<userdata status=\"1\"/>";
             write_file("userdata-" + game + "-" + card, "<userdata status=\"0\" time=\"" + esc(attr(r.attrs, "time")) + "\">" + r.inner + "</userdata>");
             return "<userdata status=\"0\"/>";
         }
@@ -195,7 +220,7 @@ std::string EamuseServer::answer(const Call &c, const Request &r, const std::str
     }
     if (m == "userdata" && f == "write") {
         const std::string card = attr(r.attrs, "card");
-        if (!safe_name(card)) return "<userdata status=\"1\"/>";
+        if (!safe_name(card) || r.inner.size() > USERDATA_MAX) return "<userdata status=\"1\"/>";   // (a card's record is a few KiB)
         write_file("userdata-" + card, "<userdata status=\"0\" time=\"" + esc(attr(r.attrs, "time")) + "\">" + r.inner + "</userdata>");
         return "<userdata status=\"0\"/>";
     }
@@ -349,6 +374,11 @@ std::string EamuseServer::handle(const std::string &req) try {
         // a cabinet the server wasn't told to take: no answer to read anything from
         if (admit && !admit(c.srcid)) return "HTTP/1.0 403 Forbidden\r\nContent-Length: 0\r\n\r\n";
         xml = "<response>";
+        // The data folder is this call's from here to its answer: servers that share a folder (each
+        // cabinet's own on one PC, hiraku-eamuse's threads) read, change and write back the same
+        // files, and one's write would undo another's
+        if (!dir_.empty()) sys::make_dir(dir_);
+        const sys::FileLock folder(dir_.empty() ? "" : dir_ + "/" + ea::FOLDER_LOCK);
         for (const Request &r : c.requests) {
             if (on_call) on_call(r.module + "." + (r.method.empty() ? attr(r.attrs, "type") : r.method));
             // module elements written out as <x ...></x> (the game's parser also takes <x .../>)

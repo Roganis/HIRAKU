@@ -114,7 +114,12 @@ std::string EamuseServer::answer_later(const std::string &game, const Request &r
     if (m == "cardmng") {   // pop'n 13: a card has an id (written on it) and its player a ref id, in "cards"
         const std::string cardtype = attr(r.attrs, "cardtype");
         std::vector<Record> cards = from_lines(read_file("cards"));
-        auto add = [&](const std::string &id) {   // a new card and its player
+        auto add = [&](const std::string &id) {   // a new card and its player ("": the server keeps no more cards)
+            if ((long)cards.size() >= limit("cards", 65536)) {
+                if (!cards_full_said_) fprintf(stderr, "e-AMUSEMENT: %zu cards are kept, as many as may be (the file limit-cards in the data folder sets another number): no new card is taken\n", cards.size());
+                cards_full_said_ = true;
+                return std::string();
+            }
             uint64_t n = 1;
             if (std::string c = read_file("refid"); !c.empty()) n = std::strtoull(c.c_str(), nullptr, 10);
             write_file("refid", std::to_string(n + 1) + "\n");
@@ -132,8 +137,9 @@ std::string EamuseServer::answer_later(const std::string &game, const Request &r
             return std::string();
         };
         if (f == "getnewid") {   // cardtype newflag: a new card's id and ref id
-            const std::string id = next_number();
-            return "<cardmng status=\"0\" cardid=\"" + id + "\" refid=\"" + add(id) + "\"/>";
+            const std::string id = next_number(), ref = add(id);
+            if (ref.empty()) return "<cardmng status=\"1\"/>";
+            return "<cardmng status=\"0\" cardid=\"" + id + "\" refid=\"" + ref + "\"/>";
         }
         if (f == "inquire") {   // cardtype cardid update: the card's ref id; newflag 1 when the server didn't
             // know it. pop'n 14 also wants binded (the card has its player, 0x17d51b0) and expired.
@@ -151,6 +157,7 @@ std::string EamuseServer::answer_later(const std::string &game, const Request &r
                 return "<cardmng status=\"0\" refid=\"" + ref + "\" binded=\"" + (binded ? "1" : "0") + "\" expired=\"0\" newflag=\"0\"/>";
             }
             if (fresh) ref = add(id);
+            if (ref.empty()) return "<cardmng status=\"1\"/>";
             // Only at the card's first reading: not when the game asks for an older game's player of the
             // card (model="I17"), nor at the credit's end (pop'n 15-18's update="1"; pop'n 14 reads a
             // card with update="1" from the start): no PIN asked then
@@ -197,6 +204,7 @@ std::string EamuseServer::answer_later(const std::string &game, const Request &r
             if (!safe_name(id)) return "<cardmng status=\"1\"/>";
             std::string ref = refid_of(id);
             if (ref.empty()) ref = add(id);
+            if (ref.empty()) return "<cardmng status=\"1\"/>";
             if (Record *c = card_of_ref(ref); c && attr(*c, "pass").empty()) {
                 (*c)["pass"] = attr(r.attrs, "passwd");
                 save();
@@ -236,6 +244,7 @@ std::string EamuseServer::answer_later(const std::string &game, const Request &r
             return data.empty() ? "<userdata status=\"109\"/>" : data;
         }
         if (f == "write") {
+            if (r.inner.size() > USERDATA_MAX) return "<userdata status=\"1\"/>";
             write_file("userdata-" + game + "-" + card, "<userdata status=\"0\" time=\"" + esc(attr(r.attrs, "time")) + "\">" + r.inner + "</userdata>");
             return "<userdata status=\"0\"/>";
         }

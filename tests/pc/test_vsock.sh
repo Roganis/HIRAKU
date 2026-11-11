@@ -20,6 +20,16 @@ wine "$B/pc/test_vsock.exe" client > "$T/client.log" 2>&1
 C=$?
 wait $H
 HR=$?
+# a relay address where something takes the connection and says nothing: the game's call comes back
+python3 -c 'import socket, time
+s = socket.socket(); s.bind(("127.0.0.1", 0)); s.listen(1); print(s.getsockname()[1], flush=True)
+c, _ = s.accept(); time.sleep(60)' > "$T/silent.port" &
+S=$!
+sleep 1
+HK_PC_RELAY=127.0.0.1:$(cat "$T/silent.port") timeout 60 wine "$B/pc/test_vsock.exe" silent > "$T/silent.log" 2>&1
+SR=$?
+kill $S 2>/dev/null
 echo "-- host"; grep -E "^(ok|FAIL)" "$T/host.log"
 echo "-- client"; grep -E "^(ok|FAIL)" "$T/client.log"
-[ $C -eq 0 ] && [ $HR -eq 0 ] && echo "test_vsock: all passed" || { echo "test_vsock: FAILED"; cat "$T/server.log"; exit 1; }
+echo "-- a silent relay"; grep -E "^(ok|FAIL)" "$T/silent.log"
+[ $C -eq 0 ] && [ $HR -eq 0 ] && [ $SR -eq 0 ] && echo "test_vsock: all passed" || { echo "test_vsock: FAILED"; cat "$T/server.log"; exit 1; }

@@ -67,6 +67,21 @@ inline bool write_file(const std::string &path, const std::string &data) { retur
 // locks: nothing is known, and the caller goes on as before there were any
 enum class Lock { Taken, Held, None };
 Lock lock_file(const std::string &path);
+// The file at `path` (made if it isn't there) held for as long as this object lives, by one holder
+// at a time over every process and thread: the constructor waits for it. For a folder several
+// programs read, change and write back (the e-AMUSEMENT servers on one data folder). A holder that
+// dies lets go. "" or a file that can't be made: nothing is held, and the caller goes on as before
+class FileLock {
+public:
+    explicit FileLock(const std::string &path);
+    ~FileLock();
+    FileLock(const FileLock &) = delete;
+    FileLock &operator=(const FileLock &) = delete;
+    bool held() const { return h_ != -1; }
+
+private:
+    intptr_t h_ = -1;
+};
 std::string exe_path();   // this program's file, with / between folders; empty if unknown
 // Runs a program (argv[0]: its file) with no window of its own and its output thrown away, and
 // waits for it: its exit code, -1 if it couldn't be started

@@ -110,6 +110,8 @@ std::string Server::handle(const std::string &req) try {
         // a cabinet the server wasn't told to take: no answer to read anything from
         if (admit && !admit(c.srcid)) return "HTTP/1.0 403 Forbidden\r\nContent-Length: 0\r\n\r\n";
         xml = "<response>";
+        // (the data folder is this call's to its answer: the servers sharing it, python/easerver.cpp)
+        const sys::FileLock folder = store_.lock();
         for (const Request &r : c.requests) {
             std::string a = game_ ? game_(*this, c, r, header(head, "Host")) : "";
             if (a.empty()) a = common(c, r);

@@ -229,6 +229,32 @@ static DWORD WINAPI reader(void *arg) {
     return 0;
 }
 
+// connect() that gives up after `ms` (a relay's address that drops what it is sent would hold the
+// game, which calls this from its own thread with the lock held, for Windows' 21 s and more)
+static int connect_within(SOCKET s, const struct sockaddr_in *sa, int ms) {
+    u_long on = 1, off = 0;
+    ioctlsocket(s, FIONBIO, &on);
+    int ok = connect(s, (const struct sockaddr *)sa, sizeof *sa) == 0;
+    if (!ok && WSAGetLastError() == WSAEWOULDBLOCK) {
+        fd_set done, failed;
+        FD_ZERO(&done);
+        FD_ZERO(&failed);
+        FD_SET(s, &done);
+        FD_SET(s, &failed);
+        const struct timeval wait = {ms / 1000, (ms % 1000) * 1000};
+        const int n = select(0, NULL, &done, &failed, &wait);
+        ok = n > 0 && FD_ISSET(s, &done);
+        if (n == 0) WSASetLastError(WSAETIMEDOUT);
+        else if (!ok) {
+            int why = 0, len = sizeof why;
+            getsockopt(s, SOL_SOCKET, SO_ERROR, (char *)&why, &len);
+            WSASetLastError(why);
+        }
+    }
+    ioctlsocket(s, FIONBIO, &off);
+    return ok;
+}
+
 // The relay, at the first call that needs it (not in DllMain: Winsock there could deadlock)
 static int relay(void) {
     init_once();
@@ -250,8 +276,15 @@ static int relay(void) {
             setsockopt(s, IPPROTO_TCP, TCP_NODELAY, (const char *)&on, sizeof on);
             struct hello mine = {MAGIC, VERSION, 0}, theirs;
             g_relay = s;
-            if (s != INVALID_SOCKET && !connect(s, (struct sockaddr *)&sa, sizeof sa) && send_all(&mine, sizeof mine) &&
+            // 3 s for the connection and 3 s for its greeting: something else at that address, or
+            // nothing, and the game goes on without NET TAISEN rather than stand still
+            const DWORD greeting = 3000, none = 0;
+            setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, (const char *)&greeting, sizeof greeting);
+            setsockopt(s, SOL_SOCKET, SO_SNDTIMEO, (const char *)&greeting, sizeof greeting);
+            if (s != INVALID_SOCKET && connect_within(s, &sa, 3000) && send_all(&mine, sizeof mine) &&
                 recv_all(&theirs, sizeof theirs) && theirs.magic == MAGIC && theirs.version == VERSION) {
+                setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, (const char *)&none, sizeof none);   // (the reader waits as long as it takes)
+                setsockopt(s, SOL_SOCKET, SO_SNDTIMEO, (const char *)&none, sizeof none);
                 g_addr = theirs.address;
                 g_state = 1;
                 CloseHandle(CreateThread(NULL, 0, reader, NULL, 0, NULL));

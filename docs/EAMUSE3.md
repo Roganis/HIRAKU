@@ -1429,6 +1429,16 @@ What the server does so that a call, a cut file or another HIRAKU never costs a 
   field of which reads (zeros) is treated the same.
 - **Every file is written whole or not at all** (beside it, flushed, checked, then renamed): a full
   disk or a kill keeps the file from before.
+- **One call at a time on a data folder.** A call reads, changes and writes back the folder's files
+  (a new card's line and the count of ref ids, a ranking's entry). Servers that share a folder, as
+  each cabinet's own does on one PC, or `hiraku-eamuse` run more than once, hold the folder (its
+  file `.lock`) from a call to its answer, so no server's write undoes another's
+  (`tests/eamuse/test_shared_folder.py`: 300 new cards read at two servers at once).
+- **What a server keeps is bounded**, for one that others can reach: 65536 cards, 200000 files in
+  the folder, 128 KiB of `userdata` a card. Past them a new card or file is refused (`status="1"`)
+  and the server says so; what is already kept goes on being read and written. A number in the
+  folder's `limit-cards` or `limit-files` sets another. NET TAISEN's lobby keeps an entry an hour
+  at most, whatever it asks, and 1024 entries.
 
 ## Not known yet
 

@@ -72,6 +72,20 @@ static int lobby_packet(unsigned char *p, int kind, uint16_t seq, const unsigned
 int main(int argc, char **argv) {
     setvbuf(stdout, NULL, _IONBF, 0);
     const int host = argc > 1 && !strcmp(argv[1], "host");
+    if (argc > 1 && !strcmp(argv[1], "silent")) {
+        // HK_PC_RELAY is something that takes the connection and says nothing: the game's first call
+        // (it is the game's own thread) must come back, without a relay
+        const DWORD t0 = GetTickCount();
+        ((init_t)call("?SockInit@@YAXXZ"))();
+        const DWORD took = GetTickCount() - t0;
+        CHECK(took >= 2000 && took < 8000, "a relay that takes the connection and says nothing: given up after %lu ms", (unsigned long)took);
+        const DWORD t1 = GetTickCount();
+        unsigned char me[4] = {0};
+        const int r = ((net_ctrl_t)call("avs_net_ctrl"))(0, me, 4);
+        const int s = ((open_t)call("?SockOpen@@YAHH@Z"))(0);
+        CHECK(GetTickCount() - t1 < 500 && r != 4, "... and not tried again at every call (the address call gave %d, a socket %d)", r, s);
+        return g_fail;
+    }
     ((init_t)call("?SockInit@@YAXXZ"))();
     open_t s_open = (open_t)call("?SockOpen@@YAHH@Z");
     bind_t s_bind = (bind_t)call("?SockBind@@YAHHG@Z");

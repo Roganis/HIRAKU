@@ -6,6 +6,7 @@
 // pix()/set_pix() instead of an endian-swizzled uint16_t view; output is
 // composed into a 32-bit RGB buffer.
 #include "k057714.h"
+#include "k057714_rows.h"
 
 #include <algorithm>
 #include <cmath>
@@ -30,74 +31,7 @@ static_assert(__BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__, "the VRAM pixel view as
 inline uint16_t K057714::pix(uint32_t n) const { return V16[VIDX(n)]; }
 inline void K057714::set_pix(uint32_t n, uint16_t v) { V16[VIDX(n)] = v; }
 
-// Row helpers for the hot paths. Each covers a run of pixels that neither wraps
-// around VRAM nor needs clipping (the callers check), and gives exactly the
-// result of the per-pixel loop it replaces.
-//
-// Pixel n lives at 16-bit index n ^ 1. For an even n and an even count, pixels
-// n..n+count-1 occupy indices n..n+count-1 in some order; two such runs with
-// the same parity therefore map index for index, and can be processed as
-// plain arrays (which the compiler vectorises).
-namespace {
-
-// Copy pixels s.. to d.. (n of them), skipping those whose bit 15 is not `want`
-// when `trans` is set.
-void blit_row(uint16_t *v, uint32_t s, uint32_t d, int n, bool trans, uint16_t want) {
-    auto one = [&](uint32_t si, uint32_t di) {
-        uint16_t p = v[si ^ 1u];
-        if (!trans || (p & 0x8000) == want) v[di ^ 1u] = p;
-    };
-    // Source and destination overlapping (the copy order matters): pixel by
-    // pixel, in the original order.
-    if (s <= d + n + 1 && d <= s + n + 1) {
-        for (int k = 0; k < n; k++) one(s + k, d + k);
-        return;
-    }
-    int k = 0;
-    if ((s ^ d) & 1) {
-        // Opposite parity. Align the destination: then destination pixels D, D+1
-        // (indices D+1, D) come from source pixels S, S+1 (indices S-1, S+2).
-        if (d & 1) one(s, d), k = 1;
-        const int m = (n - k) & ~1;
-        const uint16_t *__restrict src = v + s + k;
-        uint16_t *__restrict dst = v + d + k;
-        for (int i = 0; i < m; i += 2) {
-            uint16_t p0 = src[i - 1], p1 = src[i + 2];
-            if (!trans || (p0 & 0x8000) == want) dst[i + 1] = p0;
-            if (!trans || (p1 & 0x8000) == want) dst[i] = p1;
-        }
-        if (k + m < n) one(s + k + m, d + k + m);
-        return;
-    }
-    if (s & 1) one(s, d), k = 1;
-    const int m = (n - k) & ~1;
-    const uint16_t *__restrict src = v + s + k;
-    uint16_t *__restrict dst = v + d + k;
-    if (!trans) {
-        memcpy(dst, src, (size_t)m * 2);
-    } else {
-        for (int i = 0; i < m; i++) {
-            uint16_t p = src[i];
-            dst[i] = (p & 0x8000) == want ? p : dst[i];
-        }
-    }
-    if (k + m < n) one(s + k + m, d + k + m);
-}
-
-// Fill pixels d.. (n of them) with the 4-pixel pattern color[pixel & 3].
-void fill_row(uint16_t *v, uint32_t d, int n, const uint16_t color[4]) {
-    int k = 0;
-    if (d & 1) v[d ^ 1u] = color[d & 3], k = 1;
-    const int m = (n - k) & ~1;
-    // index i holds pixel i ^ 1
-    const uint16_t pat[4] = {color[1], color[0], color[3], color[2]};
-    uint16_t *dst = v + d + k;
-    const uint32_t i0 = d + k;
-    for (int i = 0; i < m; i++) dst[i] = pat[(i0 + i) & 3];
-    if (k + m < n) v[(d + k + m) ^ 1u] = color[(d + k + m) & 3];
-}
-
-}  // namespace
+using namespace gcu_rows;   // blit_row, blend_row, fill_row (k057714_rows.h)
 
 void K057714::reset() {
     // beatmania III relies on the 640x480 default (it never programs the CRTC)
@@ -383,6 +317,25 @@ void K057714::draw_object(const uint32_t *cmd) {
         const uint32_t lo = xflip ? fbaddr - (uint32_t)(width - 1) : fbaddr;
         const int64_t last_src = (int64_t)index + (((int64_t)(width - 1) * xscale) >> 6);
         if (index >= 0 && last_src <= 0xffffff && lo <= fbaddr && (uint64_t)lo + (uint64_t)width <= VRAM_SIZE_HALF) {
+            // the two commonest of these rows, with exactly the result of the loop below
+            if (xscale == 64 && !xflip && (blend_mode == 1 || blend_mode == 2)) {   // blended, not scaled across
+                blend_row(vram, (uint32_t)index, fbaddr, width, trans_enable, trans_value,
+                          blend_mode == 1 ? alpha1_2 : alpha1_1, blend_mode == 1 ? alpha2_2 : alpha2_1);
+                v += yscale;
+                continue;
+            }
+            if (!blend_mode) {   // scaled or flipped, not blended: a pixel kept or left, without a branch
+                const uint16_t all = trans_enable ? 0 : 0xffff;
+                int u = 0;
+                for (int i = 0; i < width; i++, fbaddr += xinc, u += xscale) {
+                    const uint16_t p = vram[(uint32_t)(index + (u >> 6)) ^ 1u];
+                    uint16_t &o = vram[fbaddr ^ 1u];
+                    const uint16_t keep = (uint16_t)(all | (uint16_t)-(uint16_t)((p & 0x8000) == trans_value));
+                    o = (uint16_t)((p & keep) | (o & ~keep));
+                }
+                v += yscale;
+                continue;
+            }
             int u = 0;
             for (int i = 0; i < width; i++, fbaddr += xinc, u += xscale) {
                 uint16_t p = vram[(uint32_t)(index + (u >> 6)) ^ 1u];

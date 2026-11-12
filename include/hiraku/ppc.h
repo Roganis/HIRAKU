@@ -60,6 +60,16 @@ void hk_mmio_write(hk_ctx *c, uint32_t phys, uint32_t value, int size);
 static inline uint32_t hk_bswap32(uint32_t v) { return __builtin_bswap32(v); }
 static inline uint16_t hk_bswap16(uint16_t v) { return __builtin_bswap16(v); }
 
+#ifdef HK_MEM_HOOKS
+/* A file with accessors of its own, defined after this header (runtime/core/exec_rec.cpp: the
+ * executor's, which note what a run reads and writes). */
+static inline uint32_t hk_r8(hk_ctx *c, uint32_t ea);
+static inline uint32_t hk_r16(hk_ctx *c, uint32_t ea);
+static inline uint32_t hk_r32(hk_ctx *c, uint32_t ea);
+static inline void hk_w8(hk_ctx *c, uint32_t ea, uint32_t v);
+static inline void hk_w16(hk_ctx *c, uint32_t ea, uint32_t v);
+static inline void hk_w32(hk_ctx *c, uint32_t ea, uint32_t v);
+#else
 static inline uint32_t hk_r8(hk_ctx *c, uint32_t ea) {
     uint32_t p = HK_PHYS(ea);
     if (__builtin_expect(p < HK_RAM_SIZE, 1)) return hk_ram[p];
@@ -90,6 +100,7 @@ static inline void hk_w32(hk_ctx *c, uint32_t ea, uint32_t v) {
     if (__builtin_expect(p <= HK_RAM_SIZE - 4, 1)) { uint32_t s = hk_bswap32(v); memcpy(hk_ram + p, &s, 4); return; }
     hk_mmio_write(c, p, v, 4);
 }
+#endif
 
 /* ------------------------------------------------------------------------ */
 /* Runtime services the semantics call out to                                */

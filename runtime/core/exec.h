@@ -30,5 +30,8 @@ bool has(uint32_t addr);                 // a function (or secondary entry) star
 // the functions loaded (their ranges: core/patched.cpp), nullptr before load()
 const spec::Program *program();
 bool call(hk_ctx *c, uint32_t addr);     // run it, as a recompiled function is run; false: none there
+// ... an exception's handler: run, or what its run did the last time it started from this state
+// done in its place (exec.cpp, "runs remembered"). False: none there, or not this way (call())
+bool call_memo(hk_ctx *c, uint32_t addr);
 
 }  // namespace hk::exec

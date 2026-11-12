@@ -46,6 +46,7 @@
 #include <vector>
 
 #include "cpu403.h"
+#include "exec.h"
 #include "prof.h"
 #include "runtime.h"
 #include "sched.h"
@@ -309,7 +310,8 @@ void run_vector(hk_ctx *c) {
     if (g_interp.lle) return;
     if (has_guest(c->pc)) {
         g_stats.native_vectors++;
-        call_guest(c, c->pc);
+        // (the executor's: the same run as the last one from this state isn't run again, exec.cpp)
+        if (!exec::call_memo(c, c->pc)) call_guest(c, c->pc);
         // its rfi returned here: as the interpreter's rfi does, an interrupt already pending is
         // taken at once, not at the next poll that finds the budget spent (up to the next event)
         if (cpu403::irq_pending()) sched_kick();

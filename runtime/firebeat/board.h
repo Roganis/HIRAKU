@@ -66,6 +66,9 @@ void set_frame_hook(FrameHook h);
 // The picture at the end of vertical blank (Core::set_present_hook), every frame.
 using PresentHook = std::function<void(const uint32_t *rgb, int w, int h)>;
 void set_present_hook(PresentHook h);
+// The frame hook's picture won't be looked at (the window shows the present hook's, and nothing
+// hashes or saves frames): the hook is then given no picture, only its size (Core::frame_picture_unused)
+void frame_picture_unused();
 // The GCU's refresh rate (its CRTC's timing), Hz
 double frame_rate();
 // The picture on show with what moves carried on `t` of a frame (Core::render_between); nullptr

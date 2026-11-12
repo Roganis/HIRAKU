@@ -234,6 +234,18 @@ if(Python3_Interpreter_FOUND AND Python3_VERSION VERSION_GREATER_EQUAL 3.11)
   add_test(NAME ingest_disks COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/tools/test_ingest_disks.py $<TARGET_FILE:hiraku-chdcat>)
 endif()
 
+# The GCU's rows (runtime/dev/k057714_rows.h): copied, blended and filled eight pixels at a time,
+# against the pixel-by-pixel loops, on runs drawn at random
+add_executable(test_gcu_rows gcu/test_gcu_rows.cpp)
+target_include_directories(test_gcu_rows PRIVATE ${CMAKE_SOURCE_DIR}/runtime)
+add_test(NAME gcu_rows COMMAND test_gcu_rows)
+
+# The Firebeat executor's recorder (runtime/core/exec_rec.cpp): which registers an instruction
+# names and which it only sets, against the semantics with registers changed at random
+add_executable(test_exec_names core/test_exec_names.cpp)
+target_link_libraries(test_exec_names PRIVATE hiraku_rt)
+add_test(NAME exec_names COMMAND test_exec_names)
+
 # The PlayStation cores' waiting loops (runtime/sys573/idle.cpp): for how many turns a comparison
 # keeps its result, against every turn worked out
 add_executable(test_idle_model sys573/test_idle_model.cpp)

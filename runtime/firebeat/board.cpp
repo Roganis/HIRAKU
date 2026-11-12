@@ -55,6 +55,7 @@ uint8_t g_control = 0;
 uint32_t g_cabinet_info = 0;
 FrameHook g_frame_hook;
 PresentHook g_present_hook;
+bool g_frame_picture = true;   // the frame hook's picture is composed (frame_picture_unused)
 uint64_t g_frame = 0;
 std::vector<uint32_t> g_fb;
 
@@ -696,6 +697,12 @@ void vblank_fire() {
     g_gcu->vblank(true);
     if (g_frame_hook) {
         int w, h;
+        if (!g_frame_picture) {   // nobody looks at it (frame_picture_unused): only its size
+            w = g_gcu->hvisible(), h = g_gcu->vvisible();
+            if (g_gcu2) std::swap(w, h), w *= 2;   // (draw_picture's two turned screens side by side)
+            g_frame_hook(g_frame, nullptr, w, h);
+            return;
+        }
         draw_picture(g_fb, w, h);
         g_frame_hook(g_frame, g_fb.data(), w, h);
     }
@@ -1122,6 +1129,7 @@ void turntable_add(int player, int delta) {
 
 void set_frame_hook(FrameHook h) { g_frame_hook = std::move(h); }
 void set_present_hook(PresentHook h) { g_present_hook = std::move(h); }
+void frame_picture_unused() { g_frame_picture = false; }
 
 double frame_rate() { return g_gcu->pixclock() / ((double)g_gcu->htotal() * g_gcu->vtotal()); }
 

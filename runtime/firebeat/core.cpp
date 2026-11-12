@@ -225,6 +225,7 @@ public:
     const std::string &family() const override { return fb::family(); }
     void set_frame_hook(FrameHook h) override { fb::set_frame_hook(std::move(h)); }
     bool set_present_hook(PresentHook h) override { fb::set_present_hook(std::move(h)); return true; }
+    void frame_picture_unused() override { fb::frame_picture_unused(); }
     // Before init(): init routes it to the SPU or the board, before the BIOS time runs.
     void set_audio_sink(AudioSink s) override { sink_ = std::move(s); }
     void set_on_fatal(std::function<void()> f) override { g_on_fatal = std::move(f); }

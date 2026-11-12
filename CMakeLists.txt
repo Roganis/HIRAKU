@@ -444,6 +444,7 @@ add_library(hiraku_rt STATIC
   runtime/core/cpu403.cpp
   runtime/core/glue.cpp
   runtime/core/exec.cpp
+  runtime/core/exec_rec.cpp
   runtime/dev/k057714.cpp
   runtime/dev/rtc65271.cpp
   runtime/dev/flash29f016a.cpp
@@ -454,6 +455,12 @@ add_library(hiraku_rt STATIC
   runtime/firebeat/board.cpp
   runtime/firebeat/spectrum.cpp
   runtime/firebeat/synth.cpp)
+# The executor's dispatcher (runtime/core/exec_run.inc): each step's handler ends in its own jump to
+# the next one's. Left alone, LLVM folds most of those endings into one shared jump, which the CPU
+# then has to predict for every kind of step at once (3 % of a run's cycles, measured).
+if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+  set_source_files_properties(runtime/core/exec.cpp PROPERTIES COMPILE_OPTIONS "-mllvm;-enable-tail-merge=false")
+endif()
 target_include_directories(hiraku_rt PUBLIC runtime)
 target_link_libraries(hiraku_rt PUBLIC hiraku_ppc musashi hiraku_ata hiraku_cabinet hiraku_xt446)
 hk_pgo(firebeat hiraku_rt musashi hiraku_xt446)   # not the game code: see hk_pgo above

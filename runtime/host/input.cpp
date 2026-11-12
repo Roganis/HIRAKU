@@ -395,6 +395,15 @@ void input_event(const SDL_Event &e) {
 }
 
 int input_binding_event(const std::string &binding, const SDL_Event &e) {
+    switch (e.type) {   // (a mouse's motion, a window's events: no binding is read for those)
+    case SDL_EVENT_KEY_DOWN:
+    case SDL_EVENT_KEY_UP:
+    case SDL_EVENT_JOYSTICK_BUTTON_DOWN:
+    case SDL_EVENT_JOYSTICK_BUTTON_UP:
+    case SDL_EVENT_JOYSTICK_HAT_MOTION:
+    case SDL_EVENT_JOYSTICK_AXIS_MOTION: break;
+    default: return 0;
+    }
     Binding b;
     if (!parse_binding(binding, b)) return 0;
     switch (e.type) {

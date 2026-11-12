@@ -67,6 +67,7 @@ uint64_t g_frame_cycles = FRAME_CYCLES;   // its length (set_frame_rate)
 uint64_t g_want_frame_cycles = FRAME_CYCLES;
 FrameHook g_frame_hook;
 PresentHook g_present_hook;
+bool g_frame_picture = true;   // the frame hook's picture is composed (frame_picture_unused)
 AudioSink g_audio;
 Stats g_stats;
 std::vector<uint8_t> g_lamps;
@@ -775,6 +776,7 @@ bool init(const Config &cfg) {
 
 void set_frame_hook(FrameHook h) { g_frame_hook = std::move(h); }
 void set_present_hook(PresentHook h) { g_present_hook = std::move(h); }
+void frame_picture_unused() { g_frame_picture = false; }
 void set_audio_sink(AudioSink s) { g_audio = std::move(s); }
 
 void run() {
@@ -802,10 +804,14 @@ void run() {
         g_frame_cycles = g_want_frame_cycles;   // a new rate from this frame on
         g_frame++;
         vb_interrupt();
-        screen_update();
+        // the picture as vertical blank starts, for the frame hook: not composed when nobody looks
+        // at it (frame_picture_unused: the window shows the one below; a quarter of a millisecond
+        // a frame for nothing), the hook then given its size only
+        const bool picture = g_frame_picture || !g_present_hook;
+        if (picture) screen_update();
         if (!g_present_hook) keep_shown_sprites();
         sound_flush();
-        if (g_frame_hook) g_frame_hook(g_frame, g_screen.data(), SCREEN_W, SCREEN_H);
+        if (g_frame_hook) g_frame_hook(g_frame, picture ? g_screen.data() : nullptr, SCREEN_W, SCREEN_H);
         hk_dj_itrace_frame(g_frame);
         run_until(g_frame_start + VBLANK_CYCLES);
         if (g_present_hook) {

@@ -39,6 +39,9 @@ void set_frame_hook(FrameHook h);
 // The picture at the end of vertical blank (Core::set_present_hook), every frame.
 using PresentHook = std::function<void(const uint32_t *rgb, int w, int h)>;
 void set_present_hook(PresentHook h);
+// Nobody looks at the frame hook's picture (a window shows the present hook's, and nothing hashes or
+// saves frames): the hook is then given no picture, only its size (Core::frame_picture_unused)
+void frame_picture_unused();
 void set_audio_sink(AudioSink s);
 [[noreturn]] void run();
 

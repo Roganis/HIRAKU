@@ -838,8 +838,12 @@ public:
             if (std::none_of(ts.begin(), ts.end(), [&](double x) { return std::fabs(x - t) < 1e-9; })) ts.push_back(t);
             for (const double bt : ts) {
                 Between b{bt, {}};
+                const uint64_t late = between_late_;
                 draw_between(bt, b.pixels);
                 batch_.push_back(std::move(b));
+                // the game didn't draw it in time (it isn't waiting any more): the frame's others
+                // would each be waited for as long, for nothing
+                if (between_late_ != late) break;
             }
         }
         const Between *best = nullptr;

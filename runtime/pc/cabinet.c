@@ -701,16 +701,24 @@ static void wait_for_go(void) {
     struct hk_pc_link *l = hk_link();
     const uint32_t seq = l->frame_seq;
     const DWORD t0 = GetTickCount();
+    DWORD drawn = t0 - 2;   // when the last in-between picture was drawn (none yet)
     for (int spins = 0; l->frame_go != seq; spins++) {
-        if (GetTickCount() - t0 > 250) break;
-        // an in-between picture asked for (smooth motion): drawn at once, and the next soon after
+        const DWORD now = GetTickCount();
+        if (now - t0 > 250) break;
+        // an in-between picture asked for (smooth motion): drawn at once
         if (hk_between && l->between_req != l->between_done) {
             hk_between();
+            drawn = GetTickCount();
             spins = 0;
             continue;
         }
+        // Looked for without a pause only while something is likely to come: right after the
+        // frame, and for a millisecond or two after an in-between picture (a frame's are asked
+        // for one after the other). Then in naps: with smooth motion on, this loop used to keep a
+        // processor busy for the whole wait, most of every frame (RED in a stage: the game's
+        // thread at 99 % of a core, 21 % now; an in-between picture 0.39 ms from 0.35)
         if (spins < 200) YieldProcessor();
-        else if (spins < 400 || l->smooth) SwitchToThread();
+        else if (spins < 400 || now - drawn < 2) SwitchToThread();
         else nap();
     }
     LARGE_INTEGER t;

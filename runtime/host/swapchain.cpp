@@ -5,8 +5,9 @@
 #define NOMINMAX
 #endif
 #include <windows.h>
-#include <d3d10.h>   // ID3D10Multithread
+// (in this order: Microsoft's d3d11.h brings d3d10_1.h, which refuses to come after d3d10.h)
 #include <d3d11.h>
+#include <d3d10.h>   // ID3D10Multithread (mingw's d3d11.h doesn't bring it)
 #include <dxgi1_3.h>
 
 #include <SDL3/SDL.h>

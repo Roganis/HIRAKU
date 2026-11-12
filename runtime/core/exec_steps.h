@@ -3,6 +3,7 @@
 // without running it (exec.cpp, "runs remembered"). For exec.cpp and exec_rec.cpp only.
 #pragma once
 
+#include <cstddef>   // offsetof
 #include <cstdint>
 #include <utility>
 #include <vector>

@@ -491,7 +491,9 @@ void run_helper() {
     for (int tries = 0; g_running && tries < 3; tries++) {
         memset((void *)link, 0, sizeof *link);
         link->magic = HK_EZUSB_MAGIC;
-        std::string cmd = "\"" + helper + "\" " + name + " \"" + g_dll + "\" " + std::to_string(GetCurrentProcessId());
+        // (the DLL by a name the helper can write in its code page: it isn't a Unicode program, and
+        // neither is the DLL it loads)
+        std::string cmd = "\"" + helper + "\" " + name + " \"" + hk::sys::plain_path(g_dll) + "\" " + std::to_string(GetCurrentProcessId());
         STARTUPINFOA si{};
         si.cb = sizeof si;
         si.dwFlags = STARTF_USESTDHANDLES;   // its messages go where HIRAKU's go

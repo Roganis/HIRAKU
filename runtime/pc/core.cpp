@@ -44,6 +44,7 @@
 #include <filesystem>
 #include <map>
 #include <memory>
+#include <set>
 #include <string>
 #include <thread>
 #include <vector>
@@ -84,6 +85,7 @@ extern char **environ;
 #include "python/easerver.h"
 #include "python/lobby.h"
 #include "python/netrelay.h"
+#include "pc/gamepath.h"
 #include "shell/cabinet.h"
 #include "shell/core.h"
 #include "eamuse/remote.h"
@@ -213,14 +215,33 @@ std::string md5_file(const std::string &path) {
     return true;
 }
 
-// Windows' name for a path of this machine: Wine's Z: is the root
-std::string win_path(std::string p) {
+// Windows' name for a path of this machine, which the game's side can write whatever its code
+// page is (the game and HIRAKU's DLLs in it open files by names in that page: a folder it can't
+// write, "ゲーム" on a western PC, left the game at an empty screen). Wine: Z: is the root, and a
+// folder with letters outside ASCII is reached through a link in Wine's own folder (gamepath.h;
+// start_game makes them). Windows: such a folder's short name, or a link (hk::sys::plain_path).
 #ifndef _WIN32
-    p = "Z:" + p;
+hk::pc::WinePaths g_wine_paths;
 #endif
+bool g_plain_letters = false;   // the games under HIRAKU's loaders (AVS2 reads names its own way): ASCII names
+std::string win_path(std::string p) {
+#ifdef _WIN32
+    bool ok = true;
+    if (g_plain_letters) p = hk::sys::plain_path(p, &ok, 7);
+    if (!g_plain_letters || !ok) p = hk::sys::plain_path(p, &ok);   // (at least one the code page can write, as before)
+    static std::set<std::string> said;
+    if (!ok && said.insert(p).second)
+        fprintf(stderr, "hiraku-pc: the game can't be given %s: this PC's code page for programs that aren't Unicode ones (%u) "
+                        "can't write that name, Windows keeps no short name for it on that drive, and no link to it could be made. "
+                        "The game won't find what is there: move it to a folder named in plain letters\n", p.c_str(),
+                hk::sys::ansi_code_page());
     for (char &c : p)
         if (c == '/') c = '\\';
     return p;
+#else
+    (void)g_plain_letters;   // (every such folder gets plain letters there, whatever the game)
+    return g_wine_paths.name(p);
+#endif
 }
 
 // Text the game's side reads as bytes from a file (a list of paths): in the PC's own code page,
@@ -229,9 +250,7 @@ std::string win_path(std::string p) {
 // this: Windows hands each process its variables in that process's code page.
 std::string game_side(const std::string &utf8) {
 #ifdef _WIN32
-    wchar_t number[8];
-    if (!GetLocaleInfoW(LOCALE_SYSTEM_DEFAULT, LOCALE_IDEFAULTANSICODEPAGE, number, 8)) return utf8;
-    const UINT page = (UINT)_wtoi(number);
+    const UINT page = hk::sys::ansi_code_page();
     if (page == CP_UTF8) return utf8;
     const int wn = MultiByteToWideChar(CP_UTF8, 0, utf8.data(), (int)utf8.size(), nullptr, 0);
     std::wstring wide((size_t)wn, L'\0');
@@ -482,7 +501,7 @@ public:
     // link; Windows: a junction (no rights needed)
     static bool link_folder(const std::string &at, const std::string &to, const std::string &what) {
 #ifdef _WIN32
-        make_junction(at, to);
+        hk::sys::make_junction(at, to);   // (made again each time; never over a real folder)
 #else
         std::error_code ec;
         if (std::filesystem::is_symlink(at, ec)) std::filesystem::remove(at, ec);
@@ -497,51 +516,6 @@ public:
         }
         return true;
     }
-
-#ifdef _WIN32
-    // A junction at `at` to the folder `to` (made again each time: the data may have moved): the
-    // folder made, then a mount point set on it (no rights needed, unlike a symbolic link). Never
-    // over a real folder
-    static std::wstring wide(const std::string &utf8) {
-        std::string p = utf8;
-        for (char &c : p)
-            if (c == '/') c = '\\';
-        const int n = MultiByteToWideChar(CP_UTF8, 0, p.c_str(), (int)p.size(), nullptr, 0);
-        std::wstring w((size_t)n, L'\0');
-        MultiByteToWideChar(CP_UTF8, 0, p.c_str(), (int)p.size(), w.data(), n);
-        return w;
-    }
-    static void make_junction(const std::string &at, const std::string &to) {
-        const std::wstring a = wide(at), t = wide(to);
-        const DWORD attr = GetFileAttributesW(a.c_str());
-        if (attr != INVALID_FILE_ATTRIBUTES) {
-            if (!(attr & FILE_ATTRIBUTE_REPARSE_POINT)) return;   // a folder of the player's own
-            RemoveDirectoryW(a.c_str());                          // the junction, not what it leads to
-        }
-        if (!CreateDirectoryW(a.c_str(), nullptr)) return;
-        wchar_t full[MAX_PATH];
-        if (!GetFullPathNameW(t.c_str(), MAX_PATH, full, nullptr)) return;
-        const std::wstring print = full, subst = L"\\??\\" + print;
-        struct {
-            DWORD tag;
-            WORD data_length, reserved, subst_offset, subst_length, print_offset, print_length;
-            wchar_t path[2 * MAX_PATH + 8];
-        } rp{};
-        rp.tag = IO_REPARSE_TAG_MOUNT_POINT;
-        rp.subst_length = (WORD)(subst.size() * 2);
-        rp.print_offset = (WORD)(rp.subst_length + 2);
-        rp.print_length = (WORD)(print.size() * 2);
-        memcpy(rp.path, subst.c_str(), rp.subst_length);
-        memcpy((char *)rp.path + rp.print_offset, print.c_str(), rp.print_length);
-        rp.data_length = (WORD)(8 + rp.print_offset + rp.print_length + 2);
-        HANDLE h = CreateFileW(a.c_str(), GENERIC_WRITE, 0, nullptr, OPEN_EXISTING,
-                               FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT, nullptr);
-        DWORD got = 0;
-        const bool ok = h != INVALID_HANDLE_VALUE && DeviceIoControl(h, FSCTL_SET_REPARSE_POINT, &rp, 8 + rp.data_length, nullptr, 0, &got, nullptr);
-        if (h != INVALID_HANDLE_VALUE) CloseHandle(h);
-        if (!ok) RemoveDirectoryW(a.c_str());
-    }
-#endif
 
     // The save folder is one game's at a time: Konami's program writes its backup there as it runs, and
     // hiraku-pc its copy of the program, so a second start of the same game on the same folder (by
@@ -616,6 +590,7 @@ public:
     // folder's run/; the same link. machine.txt: core=pc, loader=pc64, contents=PATH, family=pcpopnhc
     bool init_pc64(const Options &o, std::map<std::string, std::string> &m, const std::string &contents) {
         pc64_ = true;
+        g_plain_letters = true;   // (win_path)
         contents_ = contents;
         if (contents_.empty() || !hk::sys::is_dir(contents_ + "/modules")) {
             fprintf(stderr, "hiraku-pc: %s isn't the game's folder (modules/, prop/, its data)\n", contents_.c_str());
@@ -694,6 +669,7 @@ public:
     // dev/ the cabinet's NVRAM. machine.txt: core=pc, loader=pc32, contents=PATH, family=pcpopn
     bool init_pc32(const Options &o, std::map<std::string, std::string> &m, const std::string &contents) {
         pc32_ = true;
+        g_plain_letters = true;   // (win_path)
         contents_ = contents;
         if (contents_.empty() || !hk::sys::is_dir(contents_ + "/modules") || !hk::sys::is_dir(contents_ + "/data")) {
             fprintf(stderr, "hiraku-pc: %s isn't the game's folder (modules/, prop/, data/)\n", contents_.c_str());
@@ -2014,9 +1990,22 @@ private:
             if (r != 0) fprintf(stderr, "hiraku-pc: wineboot said %d\n", r);
         }
         const std::string exe_path = pc64_ ? loader_ : run_prog_ + "/" + exe_, game_dir = pc32_ ? "." : win_path(contents_);
-        const std::string dir = pc64_ || pc32_ ? save_ + "/run" : run_prog_;
-        std::vector<std::string> args = {wine_, exe_path};
+        // The program and the folder it starts in are given to Wine by this machine's names, which Wine
+        // reads in the locale's letters: where they have letters outside ASCII they go through the links
+        // too (gamepath.h), the program by its Windows name and the folder by its path under Wine's own
+        // folder, with PWD saying so (Wine takes PWD's word for the folder when it is the same one)
+        bool exe_plain = true;
+        for (unsigned char c : exe_path) exe_plain = exe_plain && c < 0x80;
+        const std::string dir = g_wine_paths.through(prefix, pc64_ || pc32_ ? save_ + "/run" : run_prog_);
+        std::vector<std::string> args = {wine_, exe_plain ? exe_path : win_path(exe_path)};
         if (pc64_ || pc32_) args.push_back(game_dir);
+        // the folders the game is given by a link (win_path: those with letters outside ASCII), now that
+        // Wine's folder is there
+        if (std::string why; !g_wine_paths.make(prefix, &why)) {
+            fprintf(stderr, "hiraku-pc: can't make the link %s: the game's code page may not be able to write that folder's "
+                            "name, and it wouldn't find what is there\n", why.c_str());
+            return false;
+        }
         // The AVS2 pop'n's environment: Japanese (its text is Shift-JIS: Wine's code page 932), and for
         // the 64-bit one DXVK's Direct3D 9 when it is beside the loader (bin/pc/d3d9.dll: Wine's own
         // misplaces its pictures, PLAN.md section 32)
@@ -2036,7 +2025,10 @@ private:
         const bool iidx_ja = family_ == "iidx" && !(pc64_ || pc32_);
         const bool own_lc = pc64_ || pc32_ || iidx_ja, own_dlls = pc64_ || pc32_ || d3dx_own;
         for (char **e = environ; *e; e++)
-            if (!(own_lc && !strncmp(*e, "LC_ALL=", 7)) && !(own_dlls && !strncmp(*e, "WINEDLLOVERRIDES=", 17))) env.push_back(*e);
+            if (!(own_lc && !strncmp(*e, "LC_ALL=", 7)) && !(own_dlls && !strncmp(*e, "WINEDLLOVERRIDES=", 17)) && strncmp(*e, "PWD=", 4))
+                env.push_back(*e);
+        std::string pwd = "PWD=" + dir;
+        env.push_back(pwd.data());
         if (iidx_ja) env_own.push_back("LC_ALL=ja_JP.UTF-8");
         if (d3dx_own) {
             const char *more = getenv("WINEDLLOVERRIDES");

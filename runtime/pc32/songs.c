@@ -554,7 +554,7 @@ void pc32_songs_install(HMODULE game) {
         const char *end = strchr(d, ';');
         char dir[MAX_PATH];
         snprintf(dir, sizeof dir, "%.*s", (int)(end ? end - d : (int)strlen(d)), d);
-        if (MultiByteToWideChar(CP_UTF8, 0, dir, -1, g_mods[g_nmods], MAX_PATH)) g_nmods++;
+        if (MultiByteToWideChar(CP_ACP, 0, dir, -1, g_mods[g_nmods], MAX_PATH)) g_nmods++;
         d = end ? end + 1 : d + strlen(d);
     }
     BYTE *base = (BYTE *)game;

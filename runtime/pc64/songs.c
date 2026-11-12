@@ -365,8 +365,8 @@ static int data_path(const char *rel, WCHAR *path) {   // rel: under the game's 
         if (i < g_nmods) _snwprintf(path, MAX_PATH * 2, L"%ls\\%ls", g_mods[i], w);
         else {
             WCHAR game[MAX_PATH] = L"", folder[32];
-            MultiByteToWideChar(CP_UTF8, 0, pc64_game_folder(), -1, game, MAX_PATH);
-            MultiByteToWideChar(CP_UTF8, 0, pc64_data_folder(), -1, folder, 32);
+            MultiByteToWideChar(CP_ACP, 0, pc64_game_folder(), -1, game, MAX_PATH);
+            MultiByteToWideChar(CP_ACP, 0, pc64_data_folder(), -1, folder, 32);
             _snwprintf(path, MAX_PATH * 2, L"%ls%ls%ls\\%ls", game, game[0] ? L"\\" : L"", folder, w);
         }
         const DWORD a = GetFileAttributesW(path);
@@ -546,8 +546,8 @@ static int chart_tempos(const struct chart *c, int16_t t[6], unsigned short *low
 static unsigned char *g_banner;   // by id
 static void game_banners(void) {
     WCHAR game[MAX_PATH] = L"", folder[32], pattern[MAX_PATH * 2];
-    MultiByteToWideChar(CP_UTF8, 0, pc64_game_folder(), -1, game, MAX_PATH);
-    MultiByteToWideChar(CP_UTF8, 0, pc64_data_folder(), -1, folder, 32);
+    MultiByteToWideChar(CP_ACP, 0, pc64_game_folder(), -1, game, MAX_PATH);
+    MultiByteToWideChar(CP_ACP, 0, pc64_data_folder(), -1, folder, 32);
     _snwprintf(pattern, MAX_PATH * 2, L"%ls%ls%ls\\tex\\system\\kc*.ifs", game, game[0] ? L"\\" : L"", folder);
     WIN32_FIND_DATAW d;
     HANDLE h = FindFirstFileW(pattern, &d);
@@ -807,7 +807,7 @@ void pc64_songs_install(HMODULE game) {
         const char *end = strchr(d, ';');
         char dir[MAX_PATH];
         snprintf(dir, sizeof dir, "%.*s", (int)(end ? end - d : (int)strlen(d)), d);
-        if (MultiByteToWideChar(CP_UTF8, 0, dir, -1, g_mods[g_nmods], MAX_PATH)) g_nmods++;
+        if (MultiByteToWideChar(CP_ACP, 0, dir, -1, g_mods[g_nmods], MAX_PATH)) g_nmods++;
         d = end ? end + 1 : d + strlen(d);
     }
     IMAGE_NT_HEADERS *nt = (IMAGE_NT_HEADERS *)(base + ((IMAGE_DOS_HEADER *)base)->e_lfanew);

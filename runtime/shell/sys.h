@@ -108,6 +108,22 @@ template <class Clock, class Duration>
 void sleep_until(std::chrono::time_point<Clock, Duration> t) {
     sleep_for(t - Clock::now());
 }
+// Windows: the code page of the PC's programs that aren't Unicode ones (a PC game, and what HIRAKU
+// puts inside or beside it), whatever this program's own is (UTF-8, by its manifest). 0 elsewhere.
+unsigned ansi_code_page();
+// A name for this file or folder (UTF-8, as every path of HIRAKU's) that such a program can write
+// in its code page. Windows: the path itself when it can be written; else with the short names
+// Windows keeps for the parts that can't (C:\Users\0E0F~1\...); else, on a drive that keeps
+// none, through a link to the folder (a junction) made under ProgramData\hiraku\paths. `ok`
+// false when no such name could be made (the path comes back as it was). `ways`: 1 short names,
+// 2 links (tests take one away), 4 a name in plain letters only (ASCII), whatever the code page
+// can write: for a program whose libraries read names their own way (AVS2). Elsewhere: the path
+// itself.
+std::string plain_path(const std::string &path, bool *ok = nullptr, unsigned ways = 3);
+// Windows: a junction at `at` to the folder `to` (no rights needed, unlike a symbolic link); one
+// already there is made again (`to` may have moved), a real folder there is left alone. True if
+// `at` now leads to `to`. Elsewhere: false.
+bool make_junction(const std::string &at, const std::string &to);
 
 // One thread woken by another: wait() comes back when signal() has been called since the last
 // wait came back (true), or after `ns` (false: a wait for nothing or less doesn't wait). signal()

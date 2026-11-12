@@ -202,6 +202,13 @@ if(TARGET hiraku-pc-test-vsock AND HK_WINE AND NOT WIN32)
   set_tests_properties(pc_vsock PROPERTIES RESOURCE_LOCK relay_5740 TIMEOUT 120)
 endif()
 
+# The names a PC game is given for folders its code page can't write (runtime/pc/gamepath.h under
+# Wine; on Windows hk::sys::plain_path, which this checks when run there)
+add_executable(test_gamepath pc/test_gamepath.cpp)
+target_include_directories(test_gamepath PRIVATE ${CMAKE_SOURCE_DIR}/runtime)
+target_link_libraries(test_gamepath PRIVATE hiraku_sys)
+add_test(NAME pc_game_paths COMMAND test_gamepath)
+
 # The PC game's process (runtime/pc/process.h): ended with hiraku-pc however hiraku-pc ends, stopped alone
 add_executable(test_game_process pc/test_game_process.cpp ${CMAKE_SOURCE_DIR}/runtime/pc/process.cpp)
 target_include_directories(test_game_process PRIVATE ${CMAKE_SOURCE_DIR}/runtime)

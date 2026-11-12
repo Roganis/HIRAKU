@@ -7,6 +7,8 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <cwchar>
+#include <cwctype>
 #include <chrono>
 #include <condition_variable>
 #include <fstream>
@@ -22,6 +24,7 @@
 #define NOMINMAX
 #endif
 #include <windows.h>
+#include <winioctl.h>
 #include <direct.h>
 
 #include "shell/wintimer.h"
@@ -239,6 +242,160 @@ bool exists(const std::string &path) {
 
 bool replace_file(const std::string &from, const std::string &to) {
     return MoveFileExA(from.c_str(), to.c_str(), MOVEFILE_REPLACE_EXISTING) != 0;
+}
+
+namespace {
+std::wstring widen(const std::string &utf8) {
+    const int n = MultiByteToWideChar(CP_UTF8, 0, utf8.data(), (int)utf8.size(), nullptr, 0);
+    std::wstring w((size_t)std::max(n, 0), L'\0');
+    if (n > 0) MultiByteToWideChar(CP_UTF8, 0, utf8.data(), (int)utf8.size(), w.data(), n);
+    return w;
+}
+std::string narrow(const std::wstring &w) {
+    const int n = WideCharToMultiByte(CP_UTF8, 0, w.data(), (int)w.size(), nullptr, 0, nullptr, nullptr);
+    std::string s((size_t)std::max(n, 0), '\0');
+    if (n > 0) WideCharToMultiByte(CP_UTF8, 0, w.data(), (int)w.size(), s.data(), n, nullptr, nullptr);
+    return s;
+}
+// Can the code page write this, letter for letter?
+bool fits(const std::wstring &w, UINT page) {
+    bool ascii = true;
+    for (wchar_t c : w) ascii = ascii && c < 0x80;
+    if (ascii || page == CP_UTF8) return true;
+    if (page == 20127) return false;   // (US-ASCII: plain letters only)
+    BOOL lost = FALSE;
+    return WideCharToMultiByte(page, WC_NO_BEST_FIT_CHARS, w.data(), (int)w.size(), nullptr, 0, nullptr, &lost) > 0 && !lost;
+}
+}  // namespace
+
+unsigned ansi_code_page() {
+    wchar_t number[8];
+    if (!GetLocaleInfoW(LOCALE_SYSTEM_DEFAULT, LOCALE_IDEFAULTANSICODEPAGE, number, 8)) return GetACP();
+    return (unsigned)_wtoi(number);
+}
+
+bool make_junction(const std::string &at, const std::string &to) {
+    std::wstring a = widen(at), t = widen(to);
+    for (wchar_t &c : a)
+        if (c == L'/') c = L'\\';
+    for (wchar_t &c : t)
+        if (c == L'/') c = L'\\';
+    const DWORD attr = GetFileAttributesW(a.c_str());
+    if (attr != INVALID_FILE_ATTRIBUTES) {
+        if (!(attr & FILE_ATTRIBUTE_REPARSE_POINT)) return false;   // a folder of someone's own
+        RemoveDirectoryW(a.c_str());                                // the junction, not what it leads to
+    }
+    if (!CreateDirectoryW(a.c_str(), nullptr)) return false;
+    wchar_t full[MAX_PATH];
+    const DWORD len = GetFullPathNameW(t.c_str(), MAX_PATH, full, nullptr);
+    if (!len || len >= MAX_PATH) return RemoveDirectoryW(a.c_str()), false;
+    const std::wstring print = full, subst = L"\\??\\" + print;
+    struct {
+        DWORD tag;
+        WORD data_length, reserved, subst_offset, subst_length, print_offset, print_length;
+        wchar_t path[2 * MAX_PATH + 8];
+    } rp{};
+    rp.tag = IO_REPARSE_TAG_MOUNT_POINT;
+    rp.subst_length = (WORD)(subst.size() * 2);
+    rp.print_offset = (WORD)(rp.subst_length + 2);
+    rp.print_length = (WORD)(print.size() * 2);
+    memcpy(rp.path, subst.c_str(), rp.subst_length);
+    memcpy((char *)rp.path + rp.print_offset, print.c_str(), rp.print_length);
+    rp.data_length = (WORD)(8 + rp.print_offset + rp.print_length + 2);
+    HANDLE h = CreateFileW(a.c_str(), GENERIC_WRITE, 0, nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT,
+                           nullptr);
+    DWORD got = 0;
+    const bool ok = h != INVALID_HANDLE_VALUE && DeviceIoControl(h, FSCTL_SET_REPARSE_POINT, &rp, 8 + rp.data_length, nullptr, 0, &got, nullptr);
+    if (h != INVALID_HANDLE_VALUE) CloseHandle(h);
+    if (!ok) RemoveDirectoryW(a.c_str());
+    return ok;
+}
+
+std::string plain_path(const std::string &path, bool *ok, unsigned ways) {
+    if (ok) *ok = true;
+    // (4: plain letters only, for a program whose own libraries read names in yet another way)
+    const UINT page = ways & 4 ? 20127 : ansi_code_page();
+    std::wstring w = widen(path);
+    for (wchar_t &c : w)
+        if (c == L'/') c = L'\\';
+    if (fits(w, page)) return path;
+    const auto failed = [&] {
+        if (ok) *ok = false;
+        return path;
+    };
+    if (!(w.size() >= 3 && w[1] == L':' && w[2] == L'\\') && w.rfind(L"\\\\", 0) != 0) {   // from the current folder: whole first
+        wchar_t full[1024];
+        const DWORD n = GetFullPathNameW(w.c_str(), 1024, full, nullptr);
+        if (!n || n >= 1024) return failed();
+        w = full;
+    }
+    // its parts, after the drive (C:\) or the share (\\server\share\), which stay as they are
+    size_t root = 0;
+    if (w.size() >= 3 && w[1] == L':' && w[2] == L'\\') root = 3;
+    else if (w.rfind(L"\\\\", 0) == 0) {
+        const size_t server = w.find(L'\\', 2), share = server == std::wstring::npos ? server : w.find(L'\\', server + 1);
+        if (share == std::wstring::npos) return failed();
+        root = share + 1;
+    } else return failed();   // (not a whole path: nothing to look its parts up in)
+    if (!fits(w.substr(0, root), page)) return failed();
+    struct Part {
+        std::wstring real, plain;   // its name, and one the code page can write ("" if there is none)
+    };
+    std::vector<Part> parts;
+    std::wstring so_far = w.substr(0, root);
+    int last_without = -1;   // the last part with no such name
+    for (size_t at = root; at < w.size();) {
+        size_t end = w.find(L'\\', at);
+        if (end == std::wstring::npos) end = w.size();
+        if (end > at) {
+            Part p{w.substr(at, end - at), {}};
+            so_far += p.real;
+            if (fits(p.real, page)) p.plain = p.real;
+            else if (ways & 1) {
+                WIN32_FIND_DATAW d;
+                const HANDLE h = FindFirstFileW(so_far.c_str(), &d);
+                if (h != INVALID_HANDLE_VALUE) {
+                    FindClose(h);
+                    if (d.cAlternateFileName[0] && fits(d.cAlternateFileName, page)) p.plain = d.cAlternateFileName;
+                }
+            }
+            if (p.plain.empty()) last_without = (int)parts.size();
+            parts.push_back(p);
+            so_far += L'\\';
+        }
+        at = end + 1;
+    }
+    std::wstring out = w.substr(0, root);
+    size_t from = 0;
+    if (last_without >= 0) {
+        // a link to the last folder that has no such name, and the rest from there
+        if (!(ways & 2)) return failed();
+        std::wstring folder = w.substr(0, root);
+        for (int i = 0; i <= last_without; i++) folder += parts[(size_t)i].real + (i < last_without ? L"\\" : L"");
+        const DWORD attr = GetFileAttributesW(folder.c_str());
+        if (attr == INVALID_FILE_ATTRIBUTES || !(attr & FILE_ATTRIBUTE_DIRECTORY)) return failed();   // a file's own name: nothing to link
+        wchar_t data[MAX_PATH];
+        const DWORD n = GetEnvironmentVariableW(L"ProgramData", data, MAX_PATH);
+        if (!n || n >= MAX_PATH || !fits(data, page)) return failed();
+        uint64_t h = 0xcbf29ce484222325ull;   // FNV-1a of the folder's name, small letters: the same folder, the same link
+        for (wchar_t c : folder) h = (h ^ (uint64_t)towlower(c)) * 0x100000001b3ull;
+        wchar_t number[20];
+        swprintf(number, 20, L"%016llx", (unsigned long long)h);
+        const std::wstring links = std::wstring(data) + L"\\hiraku\\paths";
+        CreateDirectoryW((std::wstring(data) + L"\\hiraku").c_str(), nullptr);
+        CreateDirectoryW(links.c_str(), nullptr);
+        const std::wstring link = links + L"\\" + number;
+        if (!make_junction(narrow(link), narrow(folder))) return failed();
+        out = link + L"\\";
+        from = (size_t)last_without + 1;
+    }
+    for (size_t i = from; i < parts.size(); i++) out += parts[i].plain + (i + 1 < parts.size() ? L"\\" : L"");
+    if (from == parts.size() && !out.empty() && out.back() == L'\\' && out.size() > 3) out.pop_back();
+    std::string s = narrow(out);
+    if (path.find('\\') == std::string::npos)   // as it came: with / between folders
+        for (char &c : s)
+            if (c == '\\') c = '/';
+    return s;
 }
 
 std::string exe_path() {
@@ -472,6 +629,13 @@ bool exists(const std::string &path) {
 }
 
 bool replace_file(const std::string &from, const std::string &to) { return std::rename(from.c_str(), to.c_str()) == 0; }
+
+unsigned ansi_code_page() { return 0; }
+std::string plain_path(const std::string &path, bool *ok, unsigned) {
+    if (ok) *ok = true;
+    return path;
+}
+bool make_junction(const std::string &, const std::string &) { return false; }
 
 std::string exe_path() {
     char exe[4096];

@@ -17,6 +17,7 @@
 
 #include "../shell/cabinet.h"
 #include "../shell/core.h"
+#include "../shell/sys.h"
 #include "warp.h"
 
 #ifdef _WIN32
@@ -26,7 +27,6 @@
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 
-#include "../shell/sys.h"
 #include "ezusb/link.h"
 #endif
 
@@ -274,7 +274,7 @@ bool g_have_in = false;
 const bool g_log = getenv("HK_POPNIO_LOG") != nullptr;
 
 void sleep_ms(int ms) {
-    for (int t = 0; t < ms && g_running; t += 50) std::this_thread::sleep_for(std::chrono::milliseconds(std::min(50, ms - t)));
+    for (int t = 0; t < ms && g_running; t += 50) hk::sys::sleep_for(std::chrono::milliseconds(std::min(50, ms - t)));
 }
 
 uint32_t lamps_now() {
@@ -327,9 +327,9 @@ bool load_firmware(const std::vector<Chunk> &image) {
     if (!send_control(0xa0, CPUCS, &hold, 1)) return false;
     for (auto &c : image) {
         if (!send_control(0xa0, c.addr, c.data.data(), c.data.size())) return false;
-        std::this_thread::sleep_for(std::chrono::milliseconds(16));
+        hk::sys::sleep_for(std::chrono::milliseconds(16));
     }
-    std::this_thread::sleep_for(std::chrono::milliseconds(16));
+    hk::sys::sleep_for(std::chrono::milliseconds(16));
     return send_control(0xa0, CPUCS, &run, 1);
 }
 
@@ -458,7 +458,7 @@ void run() {
                 if (r == 64) sent = lamps, last_out = now;
             }
             // at most a poll a millisecond (a high-speed board answers every 125 µs)
-            if (std::chrono::steady_clock::now() - t0 < std::chrono::milliseconds(1)) std::this_thread::sleep_until(t0 + std::chrono::milliseconds(1));
+            if (std::chrono::steady_clock::now() - t0 < std::chrono::milliseconds(1)) hk::sys::sleep_until(t0 + std::chrono::milliseconds(1));
         }
         if (g_running) fprintf(stderr, "popn-io: lost the board; looking for it again\n");
         g_usb->close();
@@ -504,6 +504,7 @@ void run_helper() {
         }
         int shown = 99;
         while (g_running) {
+            const auto t0 = std::chrono::steady_clock::now();
             const int state = link->state;
             if (state != shown) {
                 shown = state;
@@ -513,7 +514,9 @@ void run_helper() {
             }
             if (state == HK_EZUSB_RUNNING) have(link->pad, link->coins);
             link->lamps = lamps_now();
-            if (WaitForSingleObject(pi.hProcess, 1) == WAIT_OBJECT_0) break;   // also the 1 ms between polls
+            if (WaitForSingleObject(pi.hProcess, 0) == WAIT_OBJECT_0) break;
+            // a millisecond between polls (waiting it on the process itself lasts two: a tick more)
+            hk::sys::sleep_until(t0 + std::chrono::milliseconds(1));
         }
         lost();
         if (!g_running) {

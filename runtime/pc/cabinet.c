@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "cabinet.h"
+#include "../shell/wintimer.h"
 
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
@@ -688,27 +689,9 @@ static int capture(IDirect3DDevice9 *d) {
 }
 
 // A fifth of a millisecond's nap. Sleep(1) is a millisecond under Wine and more on Windows, all of
-// it between hiraku-pc starting a frame and the game reading its controls; ntdll's NtDelayExecution
-// takes 100 ns units (Wine sleeps that long; Windows to its timer's resolution, asked for at 0.5 ms)
-typedef LONG(NTAPI *NtDelayExecution_t)(BOOLEAN, PLARGE_INTEGER);
-typedef LONG(NTAPI *NtSetTimerResolution_t)(ULONG, BOOLEAN, PULONG);
-
-static void nap(void) {
-    static NtDelayExecution_t delay;
-    static int looked;
-    if (!looked) {
-        looked = 1;
-        HMODULE nt = GetModuleHandleA("ntdll.dll");
-        delay = nt ? (NtDelayExecution_t)(void *)GetProcAddress(nt, "NtDelayExecution") : NULL;
-        NtSetTimerResolution_t res = nt ? (NtSetTimerResolution_t)(void *)GetProcAddress(nt, "NtSetTimerResolution") : NULL;
-        ULONG cur;
-        if (res) res(5000, TRUE, &cur);
-    }
-    LARGE_INTEGER t;
-    t.QuadPart = -2000;   // relative, 200 us
-    if (delay) delay(FALSE, &t);
-    else Sleep(1);
-}
+// it between hiraku-pc starting a frame and the game reading its controls; this one lasts as long
+// under Wine and, on Windows, to the timer's next tick: half a millisecond (hk_cabinet_start asks)
+static void nap(void) { hk_win_nap(2000); }
 
 // Until hiraku-pc has shown the picture and its pacing lets the next frame start (or a quarter of
 // a second, if it has stopped answering)
@@ -1814,6 +1797,11 @@ void hk_cabinet_start(void) {
     // a fault: the first few in pc.log (on Windows a game that stops leaves nothing else; one the
     // game handles itself is told too)
     AddVectoredExceptionHandler(1, crash_log);
+    // The timer at its finest from the start, and kept though no window of the game's shows
+    // (shell/wintimer.h): the waits here and the game's own (its Sleep(1) between frames, its
+    // sound's thread) would else end on 15.6 ms ticks until the game asked, if it does
+    const int full = hk_win_full_speed();
+    const unsigned long timer = hk_win_timer(5000);
     // HK_PC_STDOUT=1 (bring-up): the game's own printf (its network library's messages, beatmania
     // IIDX's), which a window program has nowhere to write: the NUL device as its output, made before
     // its C library starts (a character device: written at each printf), each write put in pc.log
@@ -1852,4 +1840,6 @@ void hk_cabinet_start(void) {
                 patch_slot((void **)&addrs->u1.Function, (void *)my_LoadLibraryA);
     }
     hk_log("hiraku-pc: the cabinet is HIRAKU's (%s)", g_link == &g_alone ? "keyboard only" : "linked to hiraku-pc");
+    hk_log("hiraku-pc: the game's timer: %.1f ms%s", timer / 1e4,
+           full == 2 ? ", kept whatever its windows show" : full ? ", its speed kept whatever its windows show" : "");
 }

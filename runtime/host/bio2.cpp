@@ -15,6 +15,7 @@
 
 #include "../shell/cabinet.h"
 #include "../shell/core.h"
+#include "../shell/sys.h"
 #include "acio.h"
 #include "warp.h"
 
@@ -33,7 +34,7 @@ uint8_t g_in[IN] = {};     // the controls, as the board last sent them
 bool g_have_in = false;
 
 void sleep_ms(int ms) {
-    for (int t = 0; t < ms && g_running; t += 50) std::this_thread::sleep_for(std::chrono::milliseconds(std::min(50, ms - t)));
+    for (int t = 0; t < ms && g_running; t += 50) hk::sys::sleep_for(std::chrono::milliseconds(std::min(50, ms - t)));
 }
 
 void run() {
@@ -85,7 +86,7 @@ void run() {
                 memcpy(g_in, m.payload.data(), IN);
                 g_have_in = true;
             }
-            std::this_thread::sleep_for(std::chrono::milliseconds(2));
+            hk::sys::sleep_for(std::chrono::milliseconds(2));
         }
         if (g_running) fprintf(stderr, "bio2 %s: lost; connecting again\n", g_path.c_str());
         port.close();

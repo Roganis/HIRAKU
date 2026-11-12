@@ -2,6 +2,7 @@
 // After spice2x's reader/ (reader.cpp, message.cpp: GPLv3, the sp2xdev team and the SpiceTools
 // contributors), on POSIX serial ports.
 #include "acio.h"
+#include "../shell/sys.h"
 
 #ifdef _WIN32
 #ifndef WIN32_LEAN_AND_MEAN
@@ -107,7 +108,7 @@ std::vector<uint8_t> AcioPort::read_chunk(int wait_ms) {
 
 void AcioPort::line_break(int ms) {
     SetCommBreak(handle(fd_));
-    std::this_thread::sleep_for(std::chrono::milliseconds(ms));
+    hk::sys::sleep_for(std::chrono::milliseconds(ms));
     ClearCommBreak(handle(fd_));
 }
 
@@ -189,7 +190,7 @@ std::vector<uint8_t> AcioPort::read_chunk(int wait_ms) {
 
 void AcioPort::line_break(int ms) {
     ioctl((int)fd_, TIOCSBRK);
-    std::this_thread::sleep_for(std::chrono::milliseconds(ms));
+    hk::sys::sleep_for(std::chrono::milliseconds(ms));
     ioctl((int)fd_, TIOCCBRK);
 }
 
@@ -226,7 +227,7 @@ int AcioPort::handshake(const std::vector<int> &rates, const std::function<bool(
             if (!write_all(hello.data(), hello.size())) return 0;
             auto in = read_some(300, 565);
             if (!in.empty() && in.back() == 0xaa) return rate;
-            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+            hk::sys::sleep_for(std::chrono::milliseconds(50));
         }
     }
     return 0;
@@ -235,7 +236,7 @@ int AcioPort::handshake(const std::vector<int> &rates, const std::function<bool(
 bool AcioPort::handshake_bio2(const std::function<bool()> &keep_going) {
     if (!set_rate(115200)) return false;
     line_break(250);
-    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    hk::sys::sleep_for(std::chrono::milliseconds(200));
     const std::vector<uint8_t> sync(10, 0xaa);
     for (int n = 0; n < 100 && keep_going(); n++) {
         if (!write_all(sync.data(), sync.size())) return false;

@@ -7,6 +7,7 @@
 #include <fcntl.h>
 #include <sys/types.h>
 
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <ctime>
@@ -92,6 +93,24 @@ std::string exe_path();   // this program's file, with / between folders; empty 
 int run_quiet(const std::vector<std::string> &argv);
 double thread_cpu_ms();   // the calling thread's CPU time
 long major_faults();      // the process's page faults that read the disk (0 where unknown)
+// A wait, in place of std::this_thread's: the Windows build's (mingw's winpthreads) counts in whole
+// milliseconds of a clock that moves every 15.6 ms, so sleep_for(100 us) doesn't wait at all (the
+// loop around it spins) and sleep_for(2 ms) lasts 15.6 ms, whatever timer the process asked for
+// (measured on Windows 11, 2026-11-12). Here Windows waits on a timer of its own that ends when
+// asked, to half a millisecond (Windows 10 1803 on; before: Sleep, whole milliseconds and a tick);
+// elsewhere it is the standard wait.
+void sleep_ns(int64_t ns);
+template <class Rep, class Period>
+void sleep_for(std::chrono::duration<Rep, Period> d) {
+    sleep_ns(std::chrono::duration_cast<std::chrono::nanoseconds>(d).count());
+}
+template <class Clock, class Duration>
+void sleep_until(std::chrono::time_point<Clock, Duration> t) {
+    sleep_for(t - Clock::now());
+}
+// Windows isn't to slow this process down, nor make its timer coarse, while its window is covered
+// or minimized (Windows 11 may: shell/wintimer.h). True: told; nothing to tell elsewhere
+bool full_speed();
 std::tm utc(std::time_t t);
 std::tm local(std::time_t t);
 std::time_t from_utc(const std::tm &t);   // utc() backwards (timegm)

@@ -30,6 +30,7 @@
 #endif
 
 #include "../shell/core.h"
+#include "../shell/sys.h"
 #include "macro.h"
 #include "pacing.h"
 #include "alsa.h"
@@ -512,7 +513,8 @@ std::string raise_priority() {
     return "priority: nice " + std::to_string(got) + " for the game's threads (through " + via + "); timer slack 1 us";
 #elif defined(_WIN32)
     SetPriorityClass(GetCurrentProcess(), ABOVE_NORMAL_PRIORITY_CLASS);
-    return "priority: above normal";
+    // (two cabinets on one PC: the one whose window the other covers keeps its speed and its timer)
+    return sys::full_speed() ? "priority: above normal, and not slowed down while its window is covered" : "priority: above normal";
 #else
     return "priority: normal";
 #endif
@@ -1271,7 +1273,7 @@ bool window_next(double vsec) {
     auto due = g_t0 + std::chrono::duration_cast<std::chrono::steady_clock::duration>(std::chrono::duration<double>(vsec));
     if (due > now) {
         const uint64_t w0 = prof::ticks();
-        std::this_thread::sleep_until(due);
+        hk::sys::sleep_until(due);
         prof::g_wait_ticks += prof::ticks() - w0;
     }
     else if (now - due > std::chrono::milliseconds(250)) g_t0 += now - due;   // fell behind: don't try to catch up

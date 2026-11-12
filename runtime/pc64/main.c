@@ -12,6 +12,7 @@
 // HK_PC64_SAVE: the folder the game runs in (its settings, backup data, logs), the game's own
 // folder only read; without it the game runs in its own folder
 #include "pc64.h"
+#include "../shell/wintimer.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -127,6 +128,13 @@ int main(int argc, char **argv) {
         fprintf(stderr, "usage: hiraku-pc64 CONTENTS [GAME.dll]\n");
         return 2;
     }
+    // The timer at its finest from the start, and kept though the game's main window is hidden
+    // (shell/wintimer.h): the sound's device clock and the wait between frames (pc64_nap) would
+    // else end on 15.6 ms ticks until the game asked for finer itself
+    const int full = hk_win_full_speed();
+    const unsigned long timer = hk_win_timer(5000);
+    pc64_log("the timer: %.1f ms%s", timer / 1e4,
+             full == 2 ? ", kept whatever the windows show" : full ? ", the speed kept whatever the windows show" : "");
     const char *game_dll = argc > 2 ? argv[2] : "popn.dll";
     char contents[MAX_PATH], modules[MAX_PATH + 16];
     GetFullPathNameA(argv[1], sizeof contents, contents, NULL);

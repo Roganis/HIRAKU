@@ -8,6 +8,7 @@
 #include <thread>
 
 #include "shell/net.h"
+#include "shell/sys.h"
 
 namespace hk::py {
 
@@ -151,7 +152,7 @@ bool LanCable::open(const std::string &where, bool host, int cabinets) {
         int fd = -1;
         for (int tries = 0; tries < 6000 && fd < 0; tries++) {   // ten minutes (the host may still be starting)
             fd = tcp ? tcp_socket(where, false) : unix_socket(where, false);
-            if (fd < 0) std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            if (fd < 0) hk::sys::sleep_for(std::chrono::milliseconds(100));
         }
         if (fd < 0) {
             fprintf(stderr, "lan: no host cabinet at %s\n", where.c_str());

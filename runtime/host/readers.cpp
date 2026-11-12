@@ -5,6 +5,7 @@
 #include "readers.h"
 
 #include "acio.h"
+#include "../shell/sys.h"
 
 #ifndef _WIN32
 #include <dirent.h>
@@ -84,7 +85,7 @@ void card_read(int player, const uint8_t uid[8]) {
 }
 
 void sleep_ms(int ms) {
-    for (int t = 0; t < ms && g_running; t += 50) std::this_thread::sleep_for(std::chrono::milliseconds(std::min(50, ms - t)));
+    for (int t = 0; t < ms && g_running; t += 50) hk::sys::sleep_for(std::chrono::milliseconds(std::min(50, ms - t)));
 }
 
 // ---- the serial reader (ICCA/ICCB/ICCC), after spice2x's reader/ ----

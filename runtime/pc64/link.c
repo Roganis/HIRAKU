@@ -5,6 +5,7 @@
 // in step with hiraku-pc's pacing. Without it the loader runs alone (the game's own windows).
 #include "pc64.h"
 #include "../pc/link.h"
+#include "../shell/wintimer.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -141,21 +142,9 @@ uint32_t pc64_card(uint8_t uid[8]) {
     return (l ? l->card_seq : 0) + keys + pc64_card_presses;
 }
 
-// A fifth of a millisecond's nap (NtDelayExecution: 100 ns units), as cabinet.c's
-void pc64_nap(void) {
-    typedef LONG(NTAPI * delay_t)(BOOLEAN, PLARGE_INTEGER);
-    static delay_t delay;
-    static int looked;
-    if (!looked) {
-        looked = 1;
-        HMODULE nt = GetModuleHandleA("ntdll.dll");
-        delay = nt ? (delay_t)(void *)GetProcAddress(nt, "NtDelayExecution") : NULL;
-    }
-    LARGE_INTEGER t;
-    t.QuadPart = -2000;
-    if (delay) delay(FALSE, &t);
-    else Sleep(1);
-}
+// A fifth of a millisecond's nap, as cabinet.c's: to the timer's next tick on Windows, half a
+// millisecond (main asks for that)
+void pc64_nap(void) { hk_win_nap(2000); }
 
 // The main screen's picture is in the link's pixels (pc64_link_pixels): counted, then the game
 // waits until hiraku-pc has shown it and its pacing starts the next frame (a quarter of a second

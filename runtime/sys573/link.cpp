@@ -11,6 +11,7 @@
 #include <thread>
 
 #include "shell/net.h"
+#include "shell/sys.h"
 
 namespace hk::k573 {
 
@@ -98,7 +99,7 @@ bool SessionLink::open(const std::string &where, bool host, attotime quantum, bo
     } else {
         for (int tries = 0; tries < 6000 && m_fd < 0; tries++) {   // ten minutes (regress: the host may still be booting)
             m_fd = tcp ? tcp_socket(where, false) : unix_socket(where, false);
-            if (m_fd < 0) std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            if (m_fd < 0) hk::sys::sleep_for(std::chrono::milliseconds(100));
         }
     }
     if (m_fd < 0) {

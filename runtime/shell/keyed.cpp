@@ -11,6 +11,7 @@
 
 #include "shell/crypt.h"
 #include "shell/net.h"
+#include "shell/sys.h"
 
 namespace hk::net {
 
@@ -293,7 +294,7 @@ bool KeyForward::start(const std::string &host, uint16_t port, const Key &key, s
         for (;;) {
             const int here = net::accept(ls);
             if (here < 0) {
-                std::this_thread::sleep_for(std::chrono::milliseconds(10));
+                hk::sys::sleep_for(std::chrono::milliseconds(10));
                 continue;
             }
             // One connection: two threads, one each way; either's end closes both sockets' traffic,

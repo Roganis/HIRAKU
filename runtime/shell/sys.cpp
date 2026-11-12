@@ -19,6 +19,8 @@
 #endif
 #include <windows.h>
 #include <direct.h>
+
+#include "shell/wintimer.h"
 #include <io.h>
 #include <sys/stat.h>
 #else
@@ -42,6 +44,41 @@ namespace hk::sys {
 
 namespace {
 bool (*g_write_fault)(void *) = nullptr;
+}
+
+#ifdef _WIN32
+// Each thread its timer (CREATE_WAITABLE_TIMER_HIGH_RESOLUTION: 2), made at its first wait and set
+// here to end `ns` from now; null where Windows has none (before Windows 10 1803) or it can't be set
+static HANDLE fine_timer(int64_t ns) {
+    struct Fine {
+        HANDLE h = CreateWaitableTimerExW(nullptr, nullptr, 2, TIMER_ALL_ACCESS);
+        ~Fine() {
+            if (h) CloseHandle(h);
+        }
+    };
+    static thread_local Fine fine;
+    LARGE_INTEGER due;
+    due.QuadPart = -std::max<int64_t>(1, (ns + 99) / 100);   // from now, 100 ns units
+    return fine.h && SetWaitableTimer(fine.h, &due, 0, nullptr, nullptr, FALSE) ? fine.h : nullptr;
+}
+#endif
+
+void sleep_ns(int64_t ns) {
+    if (ns <= 0) return;
+#ifdef _WIN32
+    if (HANDLE t = fine_timer(ns); t && WaitForSingleObject(t, INFINITE) == WAIT_OBJECT_0) return;
+    Sleep((DWORD)std::min<int64_t>((ns + 999'999) / 1'000'000, 0x7fffffff));
+#else
+    std::this_thread::sleep_for(std::chrono::nanoseconds(ns));
+#endif
+}
+
+bool full_speed() {
+#ifdef _WIN32
+    return hk_win_full_speed() != 0;
+#else
+    return false;
+#endif
 }
 
 #ifdef _WIN32

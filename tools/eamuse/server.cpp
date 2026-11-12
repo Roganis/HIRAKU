@@ -336,7 +336,7 @@ int main(int argc, char **argv) {
         sockaddr_in peer{};
         const int fd = hk::net::accept(ls, &peer);
         if (fd < 0) {   // (no descriptors left, say: not a loop that spins)
-            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            hk::sys::sleep_for(std::chrono::milliseconds(10));
             continue;
         }
         const uint32_t ip = ntohl(peer.sin_addr.s_addr);

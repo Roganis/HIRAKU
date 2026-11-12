@@ -1063,7 +1063,7 @@ public:
                     const auto period = std::chrono::nanoseconds((long long)(1e9 * per_frame_ / ghz()));
                     const auto t = std::chrono::steady_clock::now();
                     due_ = due_ == std::chrono::steady_clock::time_point{} || t - due_ > std::chrono::milliseconds(100) ? t : due_ + period;
-                    if (due_ > t) std::this_thread::sleep_until(due_);
+                    if (due_ > t) hk::sys::sleep_until(due_);
                 }
                 per_frame_ = pictures_per_frame();
                 // the shell's next frame starts: the game's too (it reads its controls, draws)
@@ -1093,7 +1093,7 @@ public:
                 sound_until(sound_for(tick_ + per_frame_));
                 take_sound();
             } else if (!take_sound()) {
-                std::this_thread::sleep_for(std::chrono::microseconds(100));
+                hk::sys::sleep_for(std::chrono::microseconds(100));
             }
             if (!patches_.empty()) patches_said();
             if (getenv("HK_PC_RATE") && now - rate_from > std::chrono::seconds(10)) {   // how the game keeps up
@@ -1573,7 +1573,7 @@ private:
             if (__atomic_compare_exchange_n(&link_->audio_want, &want, end, false, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST)) break;
         const auto until = std::chrono::steady_clock::now() + std::chrono::milliseconds(3);
         while ((int32_t)(end - link_->audio_made) > 0 && std::chrono::steady_clock::now() < until)
-            std::this_thread::sleep_for(std::chrono::microseconds(100));
+            hk::sys::sleep_for(std::chrono::microseconds(100));
     }
 
     // A picture came at `now`: its frame's times (the DLL's, and since go() here)

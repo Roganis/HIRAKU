@@ -1102,7 +1102,7 @@ private:
         if (pace > 0) {
             static auto next = std::chrono::steady_clock::now();
             next += std::chrono::nanoseconds((int64_t)(1e9 / (59.94 * pace)));
-            std::this_thread::sleep_until(next);
+            hk::sys::sleep_until(next);
         }
         if (net_) net_->poll();   // online answers that arrived
         if (autoplay_) apply_autoplay();

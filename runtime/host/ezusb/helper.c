@@ -15,6 +15,7 @@
 #include <string.h>
 
 #include "link.h"
+#include "../../shell/wintimer.h"
 
 typedef int(__cdecl *int_fn)(int);
 typedef int(__cdecl *void_fn)(void);
@@ -66,7 +67,9 @@ int main(int argc, char **argv) {
     }
     parent = OpenProcess(SYNCHRONIZE, FALSE, (DWORD)strtoul(argv[3], NULL, 10));
     if (!parent) return fail(HK_EZUSB_FAILED, (int)GetLastError(), "HIRAKU's process isn't there");
-    timeBeginPeriod(1);
+    /* (no window, no sound: what Windows 11 may slow down and give 15.6 ms ticks, shell/wintimer.h) */
+    hk_win_full_speed();
+    hk_win_timer(5000);
     SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_ABOVE_NORMAL);
 
     /* the DLL, with its folder first for what it loads in turn. LOAD_WITH_ALTERED_SEARCH_PATH
@@ -127,10 +130,11 @@ int main(int argc, char **argv) {
             sent = lamps;
             last_lamp = now;
         }
-        Sleep(1);
+        /* to the timer's tick a millisecond after the last one: 1000 reads a second (Sleep(1) goes a
+         * tick further: 2 ms with the timer at 1 ms, as it was, 504 reads a second on Windows 11) */
+        hk_win_nap(8000);
     }
     lamp(0);
     if (end) end();
-    timeEndPeriod(1);
     return 0;
 }

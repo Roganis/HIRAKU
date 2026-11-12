@@ -240,7 +240,7 @@ if(WIN32 AND CMAKE_C_COMPILER_ID MATCHES "Clang" AND NOT MSVC)
   add_custom_command(OUTPUT ${CMAKE_BINARY_DIR}/hiraku-ezusb.exe
     COMMAND ${CMAKE_C_COMPILER} --target=i686-w64-mingw32 -O2 -Wall -Wextra -fuse-ld=lld -static
             -o ${CMAKE_BINARY_DIR}/hiraku-ezusb.exe ${CMAKE_SOURCE_DIR}/runtime/host/ezusb/helper.c -lwinmm
-    DEPENDS runtime/host/ezusb/helper.c runtime/host/ezusb/link.h
+    DEPENDS runtime/host/ezusb/helper.c runtime/host/ezusb/link.h runtime/shell/wintimer.h
     COMMENT "hiraku-ezusb.exe (32-bit)")
   add_custom_target(hiraku-ezusb ALL DEPENDS ${CMAKE_BINARY_DIR}/hiraku-ezusb.exe)
   add_dependencies(hiraku_shell hiraku-ezusb)
@@ -275,7 +275,7 @@ if(HK_PC_DLL_CC)
               ${CMAKE_SOURCE_DIR}/runtime/pc/d3d8.c ${CMAKE_SOURCE_DIR}/runtime/pc/d3d9_smooth.c
               ${CMAKE_SOURCE_DIR}/runtime/pc/${dll}.def
               -lpsapi -lgdi32 -ldxguid -lws2_32 -liphlpapi -lsetupapi
-      DEPENDS runtime/pc/${dll}.c runtime/pc/${dll}.def runtime/pc/ezusb_dev.c runtime/pc/ezusb_dev.h runtime/pc/c02_setup.c runtime/pc/c02_setup.h runtime/pc/cabinet.c runtime/pc/cabinet.h runtime/pc/link.h
+      DEPENDS runtime/pc/${dll}.c runtime/pc/${dll}.def runtime/pc/ezusb_dev.c runtime/pc/ezusb_dev.h runtime/pc/c02_setup.c runtime/pc/c02_setup.h runtime/pc/cabinet.c runtime/pc/cabinet.h runtime/pc/link.h runtime/shell/wintimer.h
               runtime/pc/dsound.c runtime/pc/effector.c runtime/pc/net.c runtime/pc/vsock.c runtime/pc/press.c runtime/pc/d3d8.c runtime/pc/d3d9_smooth.c
       COMMENT "pc/${dll}.dll (32-bit)")
     list(APPEND HK_PC_DLLS ${CMAKE_BINARY_DIR}/pc/${dll}.dll)
@@ -289,7 +289,7 @@ if(HK_PC_DLL_CC)
             ${CMAKE_SOURCE_DIR}/runtime/pc/net.c ${CMAKE_SOURCE_DIR}/runtime/pc/vsock.c ${CMAKE_SOURCE_DIR}/runtime/pc/press.c
             ${CMAKE_SOURCE_DIR}/runtime/pc/d3d8.c ${CMAKE_SOURCE_DIR}/runtime/pc/d3d9_smooth.c ${CMAKE_SOURCE_DIR}/runtime/pc/ezusb_c02.def
             -lpsapi -lgdi32 -ldxguid -lws2_32 -liphlpapi
-    DEPENDS runtime/pc/ezusb_c02.c runtime/pc/ezusb_c02.def runtime/pc/cabinet.c runtime/pc/cabinet.h runtime/pc/link.h
+    DEPENDS runtime/pc/ezusb_c02.c runtime/pc/ezusb_c02.def runtime/pc/cabinet.c runtime/pc/cabinet.h runtime/pc/link.h runtime/shell/wintimer.h
             runtime/pc/dsound.c runtime/pc/effector.c runtime/pc/net.c runtime/pc/vsock.c runtime/pc/press.c runtime/pc/d3d8.c runtime/pc/d3d9_smooth.c
     COMMENT "pc/c02/ezusb.dll (32-bit)")
   list(APPEND HK_PC_DLLS ${CMAKE_BINARY_DIR}/pc/c02/ezusb.dll)
@@ -305,7 +305,7 @@ if(HK_PC_DLL_CC)
             ${CMAKE_SOURCE_DIR}/runtime/pc/d3d8.c ${CMAKE_SOURCE_DIR}/runtime/pc/d3d9_smooth.c ${CMAKE_SOURCE_DIR}/runtime/pc/rteffect.def
             -lpsapi -lgdi32 -ldxguid -lws2_32 -liphlpapi -lsetupapi
     DEPENDS runtime/pc/rteffect.c runtime/pc/rteffect.def runtime/pc/ezusb_dev.c runtime/pc/ezusb_dev.h runtime/pc/c02_setup.c runtime/pc/c02_setup.h
-            runtime/pc/cabinet.c runtime/pc/cabinet.h runtime/pc/link.h
+            runtime/pc/cabinet.c runtime/pc/cabinet.h runtime/pc/link.h runtime/shell/wintimer.h
             runtime/pc/dsound.c runtime/pc/effector.c runtime/pc/net.c runtime/pc/vsock.c runtime/pc/press.c runtime/pc/d3d8.c runtime/pc/d3d9_smooth.c
     COMMENT "pc/c02/RtEffect.dll (32-bit)")
   list(APPEND HK_PC_DLLS ${CMAKE_BINARY_DIR}/pc/c02/RtEffect.dll)
@@ -355,7 +355,7 @@ if(HK_PC64_CC)
     COMMAND ${HK_PC64_CC} --target=x86_64-w64-mingw32 ${HK_PC64_SYS} -O2 -Wall -Wextra -fuse-ld=lld -static
             -o ${CMAKE_BINARY_DIR}/pc/hiraku-pc64.exe ${HK_PC64_PATHS}
             -ld3d9 -lsetupapi -lws2_32 -liphlpapi -lole32 -luuid
-    DEPENDS ${HK_PC64_PATHS} runtime/pc64/pc64.h runtime/pc/link.h runtime/pc32/x86.h
+    DEPENDS ${HK_PC64_PATHS} runtime/pc64/pc64.h runtime/pc/link.h runtime/pc32/x86.h runtime/shell/wintimer.h
     COMMENT "pc/hiraku-pc64.exe (64-bit)")
   add_custom_target(hiraku-pc64 ALL DEPENDS ${CMAKE_BINARY_DIR}/pc/hiraku-pc64.exe)
 else()

@@ -330,24 +330,27 @@ void wayland_shutdown() {
 // when. Each picture is noted with its present number as it goes; the statistics, read before each
 // present (the last picture's refresh has come by then) and each frame, name the latest shown, whose
 // time goes to presented() as Wayland's feedback does. Those shown between two readings are counted
-// without a time (the cadence check then starts again)
+// without a time (the cadence check then starts again).
+// A picture queued for the swap chain's own thread (commit_extra) has a ticket, and its present
+// number once that thread has presented it (dxgi::went); the thread reads the statistics before each
+// of its presents, where this thread did when it waited there itself (dxgi::seen)
 struct Sent {
-    uint32_t id;
+    uint32_t id;       // 0: queued, not presented yet
+    uint32_t ticket;   // (queued ones)
     int64_t target, committed;
     bool overrun;
     int k;   // the frame's refreshes; -1: one of its other refreshes' pictures (commit_extra)
 };
-std::vector<Sent> g_sent;
-uint32_t g_seen_id = 0;
+std::vector<Sent> g_sent;   // in the order presented
+uint32_t g_seen_id = 0, g_ticket = 0;
 
-void dxgi_feedback() {
-    dxgi::Shown s;
-    if (!dxgi::shown(s) || s.id == g_seen_id) return;
+void dxgi_shown(const dxgi::Shown &s) {
+    if (s.id == g_seen_id || (int32_t)(s.id - g_seen_id) < 0) return;
     g_seen_id = s.id;
     n_shown++;
     if (s.direct) n_zero_copy++;
     size_t used = 0;
-    for (; used < g_sent.size() && g_sent[used].id <= s.id; used++) {
+    for (; used < g_sent.size() && g_sent[used].id && g_sent[used].id <= s.id; used++) {
         const Sent &p = g_sent[used];
         if (p.id < s.id) {   // shown, when not read
             if (p.k < 0) n_extra_shown++;
@@ -365,12 +368,45 @@ void dxgi_feedback() {
     g_sent.erase(g_sent.begin(), g_sent.begin() + (long)used);
 }
 
-// A picture about to be presented (k as Sent's): its present number the next one
+void dxgi_feedback() {
+    dxgi::Went w[32];
+    for (size_t n; (n = dxgi::went(w, 32)) > 0;)   // the queued ones' present numbers
+        for (size_t i = 0; i < n; i++) {
+            const auto e = std::find_if(g_sent.begin(), g_sent.end(), [&](const Sent &p) { return !p.id && p.ticket == w[i].ticket; });
+            if (e == g_sent.end()) continue;
+            if (w[i].id) e->id = w[i].id;
+            else g_sent.erase(e);   // left out
+        }
+    dxgi::Shown s[32];
+    for (size_t n; (n = dxgi::seen(s, 32)) > 0;)   // what the queue's thread read, then now
+        for (size_t i = 0; i < n; i++) dxgi_shown(s[i]);
+    if (dxgi::shown(s[0])) dxgi_shown(s[0]);
+}
+
+// A picture about to be presented by this thread (k as Sent's): its present number the next one
+// (the queued ones presented first)
 void dxgi_sent(int64_t target, int k) {
-    const Sent e{dxgi::last_present() + 1, target, (int64_t)prof::now_ns(), k >= 0 && g_overrun, k};
+    dxgi::settle();
+    dxgi_feedback();
+    const Sent e{dxgi::last_present() + 1, 0, target, (int64_t)prof::now_ns(), k >= 0 && g_overrun, k};
     if (!g_sent.empty() && g_sent.back().id == e.id) g_sent.back() = e;   // the one before was left out (dxgi::present)
     else g_sent.push_back(e);
     if (g_sent.size() > 64) g_sent.erase(g_sent.begin());
+}
+
+// One of a frame's other refreshes' pictures, for the swap chain's own thread to present at `at`:
+// false if it can't be queued (commit_extra then waits for its time itself)
+bool dxgi_queue(int64_t target, int64_t at) {
+    if (!dxgi::queues()) return false;
+    if (!++g_ticket) ++g_ticket;
+    if (dxgi::queue(at, g_ticket)) {
+        g_sent.push_back({0, g_ticket, target, at, false, -1});
+        if (g_sent.size() > 64) g_sent.erase(g_sent.begin());
+    } else if (!dxgi::queues()) {
+        return false;
+    }   // (else left out: no texture free)
+    dxgi_feedback();
+    return true;
 }
 #endif
 
@@ -584,7 +620,7 @@ void wait_commit() {
 
 void commit() {
 #ifdef _WIN32
-    if (g_dxgi) dxgi_feedback(), dxgi_sent(g_target, g_k);
+    if (g_dxgi) dxgi_sent(g_target, g_k);
 #endif
 #ifdef HK_WITH_WAYLAND
     if (g_pres) {
@@ -637,8 +673,10 @@ bool can_fill_refreshes() {
 
 // before a picture of the frame's own for its refresh i (1 to k - 1): shown no sooner than the
 // refresh after the last one's (the swap that follows commits it). With fifo-v1 the compositor
-// holds it; with DWM's vblank (Windows) this waits for that refresh's commit time
-void commit_extra(int i) {
+// holds it. With DWM's vblank (Windows) the DXGI swap chain's own thread presents it at that
+// refresh's commit time (no swap follows: true), and this thread goes on; through OpenGL's own swap
+// this waits for that time
+bool commit_extra(int i) {
     n_extra++;
 #ifdef HK_WITH_WAYLAND
     if (g_pres) {   // whether it reaches the screen, at its refresh (the exit report)
@@ -649,13 +687,17 @@ void commit_extra(int i) {
     if (g_fifo) {
         wp_fifo_v1_set_barrier(g_fifo);
         wp_fifo_v1_wait_barrier(g_fifo);
-        return;
+        return false;
     }
+#endif
+#ifdef _WIN32
+    if (g_dxgi && g_dwm && dxgi_queue(g_target + (int64_t)i * g_T, g_target + (int64_t)i * g_T - g_lead)) return true;
 #endif
     if (g_dwm) sleep_until(g_target + (int64_t)i * g_T - g_lead);
 #ifdef _WIN32
-    if (g_dxgi) dxgi_feedback(), dxgi_sent(g_target + (int64_t)i * g_T, -1);
+    if (g_dxgi) dxgi_sent(g_target + (int64_t)i * g_T, -1);
 #endif
+    return false;
 }
 
 void wait_next() {

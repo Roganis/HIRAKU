@@ -16,6 +16,16 @@
 // and presents it at the next refresh after the last one's. Where any of it isn't there (the
 // driver has no WGL_NV_DX_interop2: Wine; HK_NO_DXGI set), start() says why and the window keeps
 // OpenGL's swap. Windows only.
+//
+// A frame's other refreshes' pictures (smooth motion's in-between ones, the CRT beam's) don't wait
+// for their times on the game's thread: all are drawn right after the frame's own, and queue() keeps
+// each in a shared texture of its own with the time to present it. A thread of the swap chain's
+// presents them then, in order (Direct3D only on it: a copy to the back buffer and the present; the
+// device has its multithread protection on). The game's thread is back at the machine at once, as
+// with Wayland's fifo, where the compositor holds them: waiting there, a frame's emulation had one
+// refresh to fit in whatever the frame's length (7 ms at 120 Hz, 3 at 240). The thread reads the
+// frame statistics before each of its presents and keeps them for display pacing (seen(), went()).
+// HK_DXGI_NO_QUEUE: the old way, each picture waited for on the game's thread (to compare).
 #pragma once
 
 #include <cstdint>
@@ -39,6 +49,21 @@ bool present(bool in_turn, bool extra = false);
 // The swap chain's present number of the last picture presented (0 before any)
 uint32_t last_present();
 
+// The picture drawn into fbo(), kept and presented at `at_ns` (prof::now_ns()'s clock) by the swap
+// chain's own thread, in turn, after those queued before it; left out there when two are already
+// waiting, as present()'s extra ones. false: not taken (no texture free: its thread is far behind;
+// or queues() is false). present() and settle() wait for the queued ones first, so a frame's own
+// picture never goes before the in-between ones of the frame before
+bool queue(int64_t at_ns, uint32_t ticket);
+bool queues();   // queue() is of use (on, not HK_DXGI_NO_QUEUE, the driver shares the textures)
+void settle();   // wait until every queued picture has been presented (or left out)
+// The queued pictures dealt with since the last call, oldest first: each one's ticket and its
+// present number (0: left out, or given up at a resize)
+struct Went {
+    uint32_t ticket, id;
+};
+size_t went(Went *out, size_t max);
+
 // The latest picture that reached the screen (frame statistics)
 struct Shown {
     uint32_t id;          // its present number (last_present()'s)
@@ -48,6 +73,9 @@ struct Shown {
     bool direct;          // not composed by DWM (independent flip, or an overlay plane)
 };
 bool shown(Shown &s);
+// The statistics the queue's thread read before each of its presents since the last call, oldest
+// first (each a different picture's): what shown() would have said then
+size_t seen(Shown *out, size_t max);
 
 void stop();
 std::string describe();   // "" when off

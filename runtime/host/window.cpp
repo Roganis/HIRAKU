@@ -1006,8 +1006,7 @@ void window_present(const uint32_t *rgb, int w, int h, double vsec) {
             if (beam) {   // the same frame, the beam further down
                 picture::draw(rgb, w, h, (ww - vw) / 2, (wh - vh) / 2, vw, vh, ww, wh, g_mode, 0, number, pacing::phase(i), beam_fph);
                 draw_overlays(ww, wh);
-                pacing::commit_extra(i);
-                swap_window(true, true);
+                if (!pacing::commit_extra(i)) swap_window(true, true);
                 continue;
             }
             if (i > 1) bw = w, bh = h, between = core().render_between(pacing::phase(i), bw, bh);
@@ -1015,8 +1014,7 @@ void window_present(const uint32_t *rgb, int w, int h, double vsec) {
             else between = rgb, bw = w, bh = h;
             picture::draw(between, bw, bh, (ww - vw) / 2, (wh - vh) / 2, vw, vh, ww, wh, g_mode, 0, number);
             draw_overlays(ww, wh);
-            pacing::commit_extra(i);
-            swap_window(true, true);
+            if (!pacing::commit_extra(i)) swap_window(true, true);
         }
         if (g_split) present_second(g_half[1].data(), w, h, frame_aspect, number);
         if (shown != g_shown) {

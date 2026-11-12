@@ -27,8 +27,10 @@
 // refresh period and the grid's phase each frame; smooth motion commits each refresh's picture at
 // its own commit time. Presented through a DXGI flip-model swap chain (swapchain.h), each picture keeps
 // its turn (none replaced by the next) and its frame statistics say when it reached the screen: the
-// lead is found from that, as on Wayland. Through OpenGL's own swap there's no such feedback, and
-// the lead stays half a refresh.
+// lead is found from that, as on Wayland; a frame's other refreshes' pictures are queued there with
+// their commit times and a thread of the swap chain's presents them, so the machine's thread doesn't
+// wait for them. Through OpenGL's own swap there's no such feedback, the lead stays half a refresh,
+// and the machine's thread waits for each of those commit times itself.
 // Elsewhere (X11) the grid runs on the display mode's refresh rate, with an unknown phase.
 //
 // Off when the display doesn't fit (144 Hz for 58.49 Hz games), with fast-forward, or with
@@ -62,8 +64,8 @@ void wait_commit();
 void commit();
 void committed(bool hold = true);   // hold: the frame's other refreshes empty (it stays up)
 // Display pacing: refreshes per frame (k), and whether each refresh can be given a picture of
-// its own (fifo-v1, or DWM's vblank on Windows: commit_extra(i) before each of the frame's k - 1
-// others, then committed(false))
+// its own (fifo-v1, or DWM's vblank on Windows: committed(false), then for each of the frame's
+// k - 1 others its picture drawn, commit_extra(i), and the swap unless that said true)
 int refreshes_per_frame();
 bool can_fill_refreshes();
 // --smooth-motion: with fifo-v1 (or DWM's vblank on Windows), display pacing keeps the game at its own speed on any display and
@@ -79,7 +81,9 @@ double phase(int i);
 // The display's refreshes in a frame of the game: at its own speed (exact_speed) the frame period
 // over the refresh period (2.4 for a 60 Hz game at 144 Hz), else refreshes_per_frame()
 double refreshes_in_frame();
-void commit_extra(int i);
+// true: the picture just drawn has been taken, to be presented at its time (Windows, the DXGI swap
+// chain's own thread): no swap for it
+bool commit_extra(int i);
 // Display pacing, after the swap: wait until the next frame's burst should start.
 void wait_next();
 // Read the compositor's presentation events (after SDL's event pump).

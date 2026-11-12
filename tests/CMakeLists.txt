@@ -68,6 +68,21 @@ if(WIN32 AND TARGET hiraku-ezusb)
   add_test(NAME popn_io_ezusb_helper COMMAND test_ezusb_helper ${CMAKE_BINARY_DIR}/fake_ezusb.dll)
 endif()
 
+# Windows: the DXGI swap chain's queue of a frame's other pictures (runtime/host/swapchain.h: smooth
+# motion's in-between ones, presented by a thread of its own at their times) and display pacing's
+# accounting of them, run as the window runs them against a pretend Direct3D device, swap chain,
+# display and OpenGL (under Wine here: no graphics card needed); and the old way, each picture
+# waited for on the game's thread
+if(WIN32 AND TARGET hiraku_host)
+  add_executable(test_swapchain swapchain/test_swapchain.cpp swapchain/fake_d3d.c
+                 ${CMAKE_SOURCE_DIR}/runtime/host/swapchain.cpp ${CMAKE_SOURCE_DIR}/runtime/host/pacing.cpp)
+  target_include_directories(test_swapchain PRIVATE ${CMAKE_SOURCE_DIR}/runtime)
+  target_link_libraries(test_swapchain PRIVATE SDL3::SDL3)
+  set_target_properties(test_swapchain PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})   # (beside SDL3.dll)
+  add_test(NAME swapchain_queue COMMAND test_swapchain queue)
+  add_test(NAME swapchain_wait COMMAND test_swapchain wait)
+endif()
+
 # beatmania III's floppy controller and drive (runtime/dev/fdc.h) against a made-up disk: an empty
 # drive as before, a cylinder read, written and read back, disk change, write protect
 add_executable(test_fdc fdc/test_fdc.cpp)

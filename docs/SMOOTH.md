@@ -44,9 +44,17 @@ refresh):
   committed at its own commit time. The pictures go through a DXGI flip-model swap chain
   (runtime/host/swapchain.cpp: OpenGL draws into a Direct3D texture, WGL_NV_DX_interop2), which keeps
   each picture's turn as fifo does and says when it reached the screen: the lead is tuned from that
-  as on Wayland. Where the driver can't share OpenGL's pictures (Wine), OpenGL's own swap through
-  DWM, the lead half a refresh. Elsewhere (X11, or Wayland without fifo-v1), or with display sync
-  off, nothing changes;
+  as on Wayland. A frame's other pictures are all drawn right after its own, each kept in a
+  Direct3D texture of its own with its commit time, and a thread of the swap chain's presents them
+  then (Direct3D only on it), so the machine's thread goes on at once, as with fifo. Waiting for
+  each on the machine's thread, as it first did, left a frame's emulation one refresh to fit in
+  whatever the frame's length (7 ms at 120 Hz, 3 at 240): `HK_DXGI_NO_QUEUE=1` brings that back, to
+  compare. The exit report says how near their times the thread's pictures went (`video: of them N
+  in-between pictures presented at their times by the swap chain's own thread`). Checked against a
+  pretend Direct3D device and display (tests/swapchain, under Wine); on a real Windows graphics
+  card it is still to be run. Where the driver can't share OpenGL's pictures (Wine), OpenGL's own
+  swap through DWM, the lead half a refresh, each picture waited for on the machine's thread.
+  Elsewhere (X11, or Wayland without fifo-v1), or with display sync off, nothing changes;
 - the exit report says how many it showed (`video: smooth motion: N in-between pictures shown`).
 
 Use it: `--smooth-motion` (display sync on, the default), or the launcher's Settings > Display > "Smooth

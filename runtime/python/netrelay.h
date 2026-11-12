@@ -17,17 +17,20 @@
 // the reproducible way, for cabinets on one PC or a LAN.)
 //
 // Over the connection: a hello each way, then datagrams, each a header (sender, receiver, their
-// ports, the size) and its bytes.
+// ports, the size) and its bytes. With a key (shell/keyed.h) all of that goes behind it, and a relay
+// that has one takes nothing else: who hasn't the key puts no datagram into a cabinet's netcode.
 #pragma once
 
 #include <cstdint>
 #include <functional>
+#include <memory>
 #include <mutex>
 #include <string>
 #include <thread>
 #include <vector>
 
 #include "python/lancable.h"
+#include "shell/keyed.h"
 
 namespace hk::py {
 
@@ -35,8 +38,8 @@ namespace hk::py {
 class RelayClient {
 public:
     ~RelayClient();
-    // Connect to the relay at host:port within `seconds`; false: *error says why
-    bool open(const std::string &host, uint16_t port, int seconds, std::string *error);
+    // Connect to the relay at host:port within `seconds`, behind `key` if it is one; false: *error says why
+    bool open(const std::string &host, uint16_t port, int seconds, std::string *error, const net::Key &key = {});
     bool is_open() const { return fd_ >= 0; }
     // the address the relay gave this cabinet (192.168.50.2 = 0xc0a83202 style)
     uint32_t address() const { return address_; }
@@ -45,7 +48,10 @@ public:
 
 private:
     void reader();
+    bool put(const void *p, size_t n);   // through the key, if there is one
+    bool take(void *p, size_t n);
     int fd_ = -1;
+    std::unique_ptr<net::Keyed> keyed_;
     uint32_t address_ = 0;
     std::thread thread_;
     std::mutex mutex_;
@@ -63,6 +69,10 @@ public:
     // Whether a connection from this address (host byte order) is taken (eamuse/access.h); unset: any.
     // Set before start()
     std::function<bool(uint32_t ip)> admit;
+    // The server's key: with one, only connections behind it are cabinets. Set before start()
+    net::Key key;
+    // A connection let go for the key's sake, and why ("without the key", "with another key")
+    std::function<void(uint32_t ip, const char *why)> turned_away;
 
 private:
     void run();

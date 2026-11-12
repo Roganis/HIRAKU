@@ -81,6 +81,9 @@ QString Cleaner::clean(const QString &text) {
     });
     static const QRegularExpression pcbid(R"(\b[0-9A-Fa-f]{20}\b)");
     s.replace(pcbid, "<pcbid>");
+    // a server's key, where one was typed as an option or set by hand (the launcher gives it neither way)
+    static const QRegularExpression key(R"((--?eakey[ =]|HK_EA_KEY=)("[^"\n]*"|'[^'\n]*'|\S+))");
+    s.replace(key, "\\1<key>");
     static const QRegularExpression mac(R"(\b(?:[0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}\b)");
     s.replace(mac, "<mac>");
     // addresses on the network: this computer's own (127.x), HIRAKU's NET TAISEN ones (10.57.x) kept

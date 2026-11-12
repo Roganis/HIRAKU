@@ -13,14 +13,16 @@
 namespace hk::k573 {
 
 bool Eamuse::open(const std::string &where, const std::string &dir, const std::string &log, std::function<int64_t()> now,
-                  const std::string &pcbid) {
+                  const std::string &pcbid, const std::string &key) {
     pcbid_ = pcbid;
     if (where != "local") {
-        remote_ = std::make_unique<ea::Remote>(where);
+        remote_ = std::make_unique<ea::Remote>(where, net::Key(key));
         if (!remote_->ok()) {
             fprintf(stderr, "--eamuse: %s is not http://host[:port][/path]\n", where.c_str());
             return false;
         }
+        // with a key: said now if the server's is another (the game would only show a network error)
+        if (std::string why; remote_->key().set() && !remote_->reachable(&why)) fprintf(stderr, "e-AMUSEMENT: %s\n", why.c_str());
     }
     if (!log.empty() && !(log_ = fopen(log.c_str(), "w"))) {
         fprintf(stderr, "HK_573_NET_LOG: cannot write %s\n", log.c_str());
@@ -49,7 +51,9 @@ bool Eamuse::open(const std::string &where, const std::string &dir, const std::s
     });
     lan_->now = server_->now;
     if (log_) lan_->log = server_->log = [this](const std::string &s) { fprintf(log_, "%s\n", s.c_str()); fflush(log_); };
-    if (remote_) printf("e-AMUSEMENT: online, %s%s%s\n", where.c_str(), pcbid_.empty() ? "" : ", as cabinet ", pcbid_.c_str());
+    if (remote_)
+        printf("e-AMUSEMENT: online, %s%s%s%s\n", where.c_str(), remote_->key().set() ? ", behind the server's key" : "",
+               pcbid_.empty() ? "" : ", as cabinet ", pcbid_.c_str());
     return true;
 }
 

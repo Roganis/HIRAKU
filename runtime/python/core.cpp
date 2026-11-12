@@ -539,13 +539,18 @@ public:
                 }).detach();
             });
             if (ea_.online()) {   // -url (-ea is ignored with it, as in spice2x)
-                remote_ = std::make_unique<hk::ea::Remote>(ea_.http_url());
+                remote_ = std::make_unique<hk::ea::Remote>(ea_.http_url(), hk::net::Key(ea_.key));   // (-eakey: shell/keyed.h)
+                const bool keyed = remote_->key().set();
                 std::string why;
-                if (ea_.smartea && !remote_->reachable(&why)) {
-                    printf("e-AMUSEMENT: %s doesn't answer (%s): the server inside HIRAKU (-smartea)\n", ea_.url.c_str(), why.c_str());
-                    remote_.reset();
+                if ((ea_.smartea || keyed) && !remote_->reachable(&why)) {
+                    if (ea_.smartea) {
+                        printf("e-AMUSEMENT: %s doesn't answer (%s): the server inside HIRAKU (-smartea)\n", ea_.url.c_str(), why.c_str());
+                        remote_.reset();
+                    } else {   // (said now: the game would only show a network error)
+                        printf("e-AMUSEMENT: online, %s, which doesn't answer yet: %s\n", ea_.http_url().c_str(), why.c_str());
+                    }
                 } else {
-                    printf("e-AMUSEMENT: online, %s\n", ea_.http_url().c_str());
+                    printf("e-AMUSEMENT: online, %s%s\n", ea_.http_url().c_str(), keyed ? ", behind the server's key" : "");
                 }
             }
             if (!ea_.pcbid.empty()) printf("e-AMUSEMENT: PCBID %s\n", ea_.pcbid.c_str());
@@ -574,7 +579,7 @@ public:
             // online: NET TAISEN through the server's relay, when it is hiraku-eamuse (netrelay.h)
             if (remote_ && lan_where_.empty()) {
                 std::string why;
-                if (relay_.open(remote_->host(), hk::py::Lobby::PORT, 3, &why)) {
+                if (relay_.open(remote_->host(), hk::py::Lobby::PORT, 3, &why, remote_->key())) {
                     const uint32_t a = relay_.address();
                     printf("e-AMUSEMENT: NET TAISEN online through %s:%u, this cabinet %u.%u.%u.%u\n", remote_->host().c_str(),
                            hk::py::Lobby::PORT, a >> 24, (a >> 16) & 255, (a >> 8) & 255, a & 255);

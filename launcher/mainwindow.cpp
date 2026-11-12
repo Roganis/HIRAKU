@@ -1149,6 +1149,12 @@ void MainWindow::play(const QString &id) {
         QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
         env.insert("HIRAKU_ROOT", cfg::rootDir());   // the games use the launcher's root
         env.insert("HK_LAUNCHER", "1");   // the launcher says when a new release is out, not the game (host/notice.h)
+        // a server's key (Settings > e-AMUSEMENT): this way and not as -eakey, so that it is in no
+        // command line and no run's log (runtime/shell/eaoptions.h)
+        auto &st = cfg::settings();
+        if (const QString key = st.value("eamuse/key").toString();
+            !key.isEmpty() && !st.value("eamuse/url", st.value("eamuse/server")).toString().trimmed().isEmpty())
+            env.insert("HK_EA_KEY", key);
         m_proc.setProcessEnvironment(env);
     }
     m_proc.start(g->exe, args);

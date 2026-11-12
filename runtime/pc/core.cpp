@@ -86,7 +86,9 @@ extern char **environ;
 #include "python/netrelay.h"
 #include "shell/cabinet.h"
 #include "shell/core.h"
+#include "eamuse/remote.h"
 #include "shell/eaoptions.h"
+#include "shell/keyed.h"
 #include "shell/net.h"
 #include "shell/kvfile.h"
 #include "shell/sys.h"
@@ -1280,6 +1282,7 @@ private:
     // e-AMUSEMENT: -url's server, or HIRAKU's own on this machine; the DLL is told where (HK_PC_EA)
     bool start_eamuse(const std::string &root) {
         hk::net::start();
+        set_env("HK_EA_KEY", "");   // (read into ea_ already: not the game's process's to have)
         if (ea_.online()) {   // host:port[/path] or http://host:port[/path]: its IPv4 address
             std::string url = ea_.http_url().substr(ea_.http_url().find("://") + 3);
             url = url.substr(0, url.find('/'));
@@ -1295,10 +1298,29 @@ private:
             char ip[INET_ADDRSTRLEN] = "";
             const sockaddr_in *in = (const sockaddr_in *)res->ai_addr;
             inet_ntop(AF_INET, &in->sin_addr, ip, sizeof ip);
-            set_env("HK_PC_EA", std::string(ip) + ":" + std::to_string(ntohs(in->sin_port)));
+            const uint16_t ea_port = ntohs(in->sin_port);
+            freeaddrinfo(res);
+            // A server with a key (-eakey; shell/keyed.h): the game makes its own connections, in its
+            // own process, so they are made to two ports on this computer, which pass them on behind
+            // the key, the calls' and the relay's
+            if (const hk::net::Key key(ea_.key); key.set()) {
+                std::string why;
+                if (!ea_forward_.start(ip, ea_port, key, &why) || !relay_forward_.start(ip, hk::py::Lobby::PORT, key, &why)) {
+                    fprintf(stderr, "e-AMUSEMENT: %s\n", why.c_str());
+                    return false;
+                }
+                set_env("HK_PC_EA", "127.0.0.1:" + std::to_string(ea_forward_.port()));
+                set_env("HK_PC_RELAY", "127.0.0.1:" + std::to_string(relay_forward_.port()));
+                // said now if the server's key is another (the game would only show a network error)
+                if (!hk::ea::Remote(ea_.http_url(), key).reachable(&why))
+                    printf("e-AMUSEMENT: online, %s, which doesn't answer yet: %s\n", ea_.http_url().c_str(), why.c_str());
+                else
+                    printf("e-AMUSEMENT: online, %s, behind the server's key\n", ea_.http_url().c_str());
+                return true;
+            }
+            set_env("HK_PC_EA", std::string(ip) + ":" + std::to_string(ea_port));
             // NET TAISEN: hiraku-eamuse's relay, at its lobby's port (runtime/pc/vsock.c)
             set_env("HK_PC_RELAY", std::string(ip) + ":" + std::to_string(hk::py::Lobby::PORT));
-            freeaddrinfo(res);
             printf("e-AMUSEMENT: online, %s\n", ea_.http_url().c_str());
             return true;
         }
@@ -2057,6 +2079,7 @@ private:
     hk::EaOptions ea_;
     std::unique_ptr<hk::py::EamuseServer> server_;
     hk::py::RelayServer relay_;
+    hk::net::KeyForward ea_forward_, relay_forward_;   // online behind a key: the game's connections passed on
     int listen_ = -1;
     hk_pc_link *link_ = nullptr;
     FrameHook frame_hook_;

@@ -159,7 +159,8 @@ add_executable(hiraku-xt446 tools/xt446/xt446_render.cpp runtime/core/sampler.cp
 target_link_libraries(hiraku-xt446 PRIVATE hiraku_xt446)
 
 # --- what Linux and Windows do differently (runtime/shell/sys.h) ------------------
-add_library(hiraku_sys STATIC runtime/shell/sys.cpp runtime/shell/saves.cpp runtime/shell/net.cpp runtime/shell/overlay.cpp)
+add_library(hiraku_sys STATIC runtime/shell/sys.cpp runtime/shell/saves.cpp runtime/shell/net.cpp runtime/shell/overlay.cpp
+            runtime/shell/crypt.cpp runtime/shell/keyed.cpp)
 target_include_directories(hiraku_sys PUBLIC runtime)
 # the build's commit (hk::sys::build_id(): run logs say which build ran), checked at every build
 set(HK_BUILD_ID_CPP ${CMAKE_BINARY_DIR}/build_id.cpp)

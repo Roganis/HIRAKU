@@ -57,6 +57,11 @@ int main() {
     becomes(fresh, "E004010000ABCDEF then e004010000abcdef then E004010000000002", "#1 then #1 then #2");
     gone(c, "pcbid 0123456789ABCDEF0123 mac 00:1A:2b:3C:4d:5E", "0123456789ABCDEF0123");
     gone(c, "pcbid 0123456789ABCDEF0123 mac 00:1A:2b:3C:4d:5E", "1A:2b");
+    // a server's key typed as an option, or set by hand
+    gone(c, "$ bin/hiraku-python --game popn14 -url play.example.org:8080 -eakey k7m2x-pq9rs-tuv3w-xyz45-abcde -autopin", "k7m2x");
+    gone(c, "--eakey=\"my own words for it\" --frames 10", "own words");
+    gone(c, "HK_EA_KEY=k7m2x-pq9rs-tuv3w-xyz45-abcde bin/hiraku-pc", "pq9rs");
+    becomes(c, "-eakey k7m2x-pq9rs -autopin", "-eakey <key> -autopin");
 
     // the network: addresses, and a server by name wherever it is written
     gone(c, "relay at 192.168.1.20:5740", "192.168");

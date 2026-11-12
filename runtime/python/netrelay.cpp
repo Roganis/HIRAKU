@@ -59,9 +59,12 @@ bool recv_all(int fd, void *p, size_t n) {
     return true;
 }
 
-bool send_packet(int fd, const LanCable::Packet &k) {
-    PacketHeader h{k.src, k.dst, k.sport, k.dport, (uint32_t)k.data.size()};
-    return send_all(fd, &h, sizeof h) && (k.data.empty() || send_all(fd, k.data.data(), k.data.size()));
+// A datagram as it goes over the connection
+std::string packet_bytes(const LanCable::Packet &k) {
+    const PacketHeader h{k.src, k.dst, k.sport, k.dport, (uint32_t)k.data.size()};
+    std::string s((const char *)&h, sizeof h);
+    s.append((const char *)k.data.data(), k.data.size());
+    return s;
 }
 
 }  // namespace
@@ -74,7 +77,20 @@ RelayClient::~RelayClient() {
     if (fd_ >= 0) net::close(fd_);
 }
 
-bool RelayClient::open(const std::string &host, uint16_t port, int seconds, std::string *error) {
+bool RelayClient::put(const void *p, size_t n) { return keyed_ ? keyed_->send(p, n) : send_all(fd_, p, n); }
+
+bool RelayClient::take(void *p, size_t n) {
+    if (!keyed_) return recv_all(fd_, p, n);
+    char *c = (char *)p;
+    while (n) {
+        const ssize_t k = keyed_->recv(c, n);
+        if (k <= 0) return false;
+        c += k, n -= (size_t)k;
+    }
+    return true;
+}
+
+bool RelayClient::open(const std::string &host, uint16_t port, int seconds, std::string *error, const net::Key &key) {
     net::start();
     addrinfo hints{}, *res = nullptr;
     hints.ai_family = AF_UNSPEC;
@@ -97,15 +113,29 @@ bool RelayClient::open(const std::string &host, uint16_t port, int seconds, std:
     if (fd < 0) return false;
     net::set_int(fd, IPPROTO_TCP, TCP_NODELAY, 1);
     net::set_recv_timeout(fd, seconds * 1000);
+    fd_ = fd;
+    if (key.set()) {
+        keyed_ = std::make_unique<net::Keyed>();
+        std::string why;
+        if (!keyed_->connect(fd, key, &why)) {
+            *error = host + ":" + std::to_string(port) + ": " + why;
+            keyed_.reset();
+            net::close(fd);
+            fd_ = -1;
+            return false;
+        }
+    }
     Hello mine{MAGIC, VERSION, 0}, theirs{};
-    if (!send_all(fd, &mine, sizeof mine) || !recv_all(fd, &theirs, sizeof theirs) || theirs.magic != MAGIC ||
-        theirs.version != VERSION) {
-        *error = host + ":" + std::to_string(port) + ": not a HIRAKU relay (or another version)";
+    if (!put(&mine, sizeof mine) || !take(&theirs, sizeof theirs) || theirs.magic != MAGIC || theirs.version != VERSION) {
+        // (a relay with a key says nothing to a cabinet without one)
+        *error = host + ":" + std::to_string(port) + (key.set() ? ": not a HIRAKU relay (or another version)"
+                                                                 : ": not a HIRAKU relay, another version, or one that wants a key (-eakey)");
+        keyed_.reset();
         net::close(fd);
+        fd_ = -1;
         return false;
     }
     net::set_recv_timeout(fd, 0);
-    fd_ = fd;
     address_ = theirs.address;
     thread_ = std::thread([this] { reader(); });
     return true;
@@ -114,9 +144,9 @@ bool RelayClient::open(const std::string &host, uint16_t port, int seconds, std:
 void RelayClient::reader() {
     for (;;) {
         PacketHeader h{};
-        if (!recv_all(fd_, &h, sizeof h) || h.size > 65536) break;
+        if (!take(&h, sizeof h) || h.size > 65536) break;
         LanCable::Packet k{h.src, h.dst, h.sport, h.dport, std::vector<uint8_t>(h.size)};
-        if (h.size && !recv_all(fd_, k.data.data(), h.size)) break;
+        if (h.size && !take(k.data.data(), h.size)) break;
         std::lock_guard<std::mutex> l(mutex_);
         came_.push_back(std::move(k));
     }
@@ -134,8 +164,10 @@ void RelayClient::exchange(std::vector<LanCable::Packet> &out, std::vector<LanCa
         lost = lost_;
     }
     if (!lost)
-        for (const LanCable::Packet &k : out)
-            if (!send_packet(fd_, k)) { lost = true; break; }
+        for (const LanCable::Packet &k : out) {
+            const std::string bytes = packet_bytes(k);
+            if (!put(bytes.data(), bytes.size())) { lost = true; break; }
+        }
     if (lost) {
         fprintf(stderr, "relay: the connection is gone; NET TAISEN online is off now\n");
         net::shutdown(fd_);
@@ -173,6 +205,12 @@ void RelayServer::run() {
         uint32_t address = 0;
         bool greeted = false;
         std::string in;   // bytes not yet a whole hello or datagram
+        // behind the key: the bytes as they came (not yet whole records), and the two directions
+        uint32_t ip = 0;
+        bool keyed = false;
+        std::string raw;
+        net::Sealer out;
+        net::Opener opened;
         std::chrono::steady_clock::time_point came = std::chrono::steady_clock::now();
     };
     // At most kCabinets connections; one that hasn't said its hello kHelloSeconds after it came is let
@@ -186,6 +224,19 @@ void RelayServer::run() {
     std::map<uint16_t, Lobby> pc_lobbies;   // the PC games', one each (Lobby::pc_port)
     const auto t0 = std::chrono::steady_clock::now();
     auto say = [&](const std::string &s) { if (log) log("relay: " + s); };
+    // bytes to a cabinet, behind the key if its connection is
+    auto put = [&](int fd, const void *p, size_t n) {
+        Cabinet &c = cabinets[fd];
+        if (!c.keyed) return send_all(fd, p, n);
+        std::string wire;
+        c.out.seal(p, n, wire);
+        return send_all(fd, wire.data(), wire.size());
+    };
+    auto put_packet = [&](int fd, const LanCable::Packet &k) {
+        const std::string bytes = packet_bytes(k);
+        return put(fd, bytes.data(), bytes.size());
+    };
+    auto away = [&](const Cabinet &c, const char *why) { if (turned_away) turned_away(c.ip, why); };
     for (;;) {
         std::vector<pollfd> fds{net::watch(listen_fd_, POLLIN)};
         for (auto &[fd, c] : cabinets) fds.push_back(net::watch(fd, POLLIN));
@@ -201,7 +252,7 @@ void RelayServer::run() {
             } else if (fd >= 0) {
                 net::set_int(fd, IPPROTO_TCP, TCP_NODELAY, 1);
                 net::set_timeouts(fd, kSendMs);   // (its receives come after poll says there is something)
-                cabinets[fd];
+                cabinets[fd].ip = ntohl(peer.sin_addr.s_addr);
             }
         }
         std::vector<int> gone;
@@ -214,7 +265,36 @@ void RelayServer::run() {
             char buf[8192];
             const ssize_t n = net::recv(fd, buf, sizeof buf);
             if (n <= 0) { gone.push_back(fd); continue; }
-            c.in.append(buf, (size_t)n);
+            if (key.set()) {
+                // Nothing of a connection is read as a cabinet's until it came behind the key
+                c.raw.append(buf, (size_t)n);
+                if (!c.keyed) {
+                    if (c.raw.size() < 4) continue;
+                    if (!net::keyed::is_hello(c.raw.data())) { away(c, "without the key"); gone.push_back(fd); continue; }
+                    if (c.raw.size() < net::keyed::kHello) continue;
+                    uint8_t answer[net::keyed::kServerHello];
+                    if (!net::keyed::server_answer(key, (const uint8_t *)c.raw.data(), answer, c.out, c.opened) ||
+                        !send_all(fd, answer, sizeof answer)) {
+                        gone.push_back(fd);
+                        continue;
+                    }
+                    c.raw.erase(0, net::keyed::kHello);
+                    c.keyed = true;
+                }
+                if (!c.opened.open(c.raw, c.in)) {
+                    away(c, c.opened.records() ? "with a record that isn't the key's" : "with another key");
+                    gone.push_back(fd);
+                    continue;
+                }
+            } else {
+                c.in.append(buf, (size_t)n);
+                if (!c.greeted && c.in.size() >= 4 && net::keyed::is_hello(c.in.data())) {   // a cabinet with a key, and none here
+                    send_all(fd, net::keyed::kNoKey, 4);
+                    away(c, "with a key, and this server has none");
+                    gone.push_back(fd);
+                    continue;
+                }
+            }
             if (!c.greeted) {
                 if (c.in.size() < sizeof(Hello)) continue;
                 Hello h;
@@ -223,7 +303,7 @@ void RelayServer::run() {
                 if (h.magic != MAGIC || h.version != VERSION) { gone.push_back(fd); continue; }
                 c.address = next++;
                 Hello mine{MAGIC, VERSION, c.address};
-                if (!send_all(fd, &mine, sizeof mine)) { gone.push_back(fd); continue; }
+                if (!put(fd, &mine, sizeof mine)) { gone.push_back(fd); continue; }
                 c.greeted = true;
                 size_t here = 0;
                 for (auto &[ofd, o] : cabinets) here += o.greeted;
@@ -242,12 +322,12 @@ void RelayServer::run() {
                 for (auto &[ofd, o] : cabinets)
                     if (o.greeted && o.address == k.dst) to = ofd;
                 if (to >= 0) {
-                    if (!send_packet(to, k)) gone.push_back(to);
+                    if (!put_packet(to, k)) gone.push_back(to);
                 } else if (k.dport == Lobby::PORT || Lobby::is_pc_port(k.dport)) {   // a lobby, at the address the game sent to
                     const double now = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
                     Lobby &l = k.dport == Lobby::PORT ? lobby : pc_lobbies.try_emplace(k.dport, true).first->second;
                     std::vector<uint8_t> r = l.handle(k.data.data(), k.data.size(), now);
-                    if (!r.empty() && !send_packet(fd, {k.dst, k.src, k.dport, k.sport, std::move(r)})) gone.push_back(fd);
+                    if (!r.empty() && !put_packet(fd, {k.dst, k.src, k.dport, k.sport, std::move(r)})) gone.push_back(fd);
                     if (log) {
                         static const char *kinds[] = {"entry", "list", "leave", "participate"};
                         const int kind = k.data.size() > 10 ? k.data[10] : -1;

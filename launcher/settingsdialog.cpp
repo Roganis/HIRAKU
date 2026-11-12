@@ -548,6 +548,13 @@ void SettingsDialog::eamusePage(QVBoxLayout *v) {
     m_pcbid->setToolTip("-p: the cabinet's PCBID, 20 hex digits, for a server that only takes the machines it knows.\n"
                         "HIRAKU's own server (hiraku-eamuse) makes one with --new-cabinet and then answers only the cabinets it lists.");
     fe->addRow("PCBID:", m_pcbid);
+    m_eaKey = new QLineEdit(s.value("eamuse/key").toString());
+    m_eaKey->setEchoMode(QLineEdit::PasswordEchoOnEdit);
+    m_eaKey->setPlaceholderText("none (a server without a key)");
+    m_eaKey->setToolTip("The key of a hiraku-eamuse that has one (its --new-key prints it; -eakey on a command line).\n"
+                        "With it, all that this cabinet and the server say goes over the network sealed, and the "
+                        "server answers only cabinets that have it. A key on both sides, or on neither.");
+    fe->addRow("Server key:", m_eaKey);
     v->addWidget(ea);
     auto *cards = new QGroupBox("Cards");
     fe = new QFormLayout(cards);
@@ -780,6 +787,7 @@ void SettingsDialog::accept() {
     s.setValue("eamuse/url", m_eaUrl->text().trimmed());
     s.setValue("eamuse/smartea", m_smartea->isChecked());
     s.setValue("eamuse/pcbid", m_pcbid->text().trimmed().toUpper());
+    s.setValue("eamuse/key", m_eaKey->text().trimmed());
     for (int n = 0; n < 2; n++) s.setValue(QString("eamuse/card%1").arg(n), m_card[n]->text().trimmed().toUpper());
     s.setValue("eamuse/autocard", m_autocard->currentData().toString());
     s.setValue("eamuse/autopin", m_autopin->isChecked());

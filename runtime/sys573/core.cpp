@@ -13,6 +13,7 @@
 #include "eamuse/access.h"
 #include "shell/kvfile.h"
 #include "shell/core.h"
+#include "shell/eaoptions.h"
 #include "sys573/board.h"
 #include "sys573/mips.h"
 
@@ -36,6 +37,7 @@ public:
         if (name == "--rental") { rental_ = 1; return true; }
         if (name == "--master-calendar") { master_calendar_ = std::stoi(value()); return true; }
         if (name == "--eamuse") { eamuse_ = value(); return true; }
+        if (name == "--eakey") { eakey_ = value(); return true; }   // (as the other cores: shell/eaoptions.h)
         if (name == "--p" || name == "--pcbid") {   // (-p, as the other cores take it: shell/eaoptions.h)
             const std::string v = value();
             pcbid_ = hk::ea::pcbid_of(v);
@@ -56,6 +58,7 @@ public:
                "  --eamuse local|URL  with the unit, when the game has e-AMUSEMENT on: the server in the core\n"
                "                    (default, offline; its data in the save folder's eamuse/) or a server at\n"
                "                    http://host[:port][/path] (online)\n"
+               "  -eakey KEY        online: the key of a hiraku-eamuse that has one (or HK_EA_KEY's value)\n"
                "  -p PCBID          online: this cabinet's own PCBID (20 hex digits) in place of the game's, which\n"
                "                    every copy of it has, for a server that answers the cabinets it lists\n"
                "  --cd hdd          boot the unit's data installer CD (implies --npu): it installs the\n"
@@ -145,6 +148,7 @@ public:
             cfg.pccard2 = "npu";
             cfg.eamuse = eamuse_;
             cfg.pcbid = pcbid_;
+            cfg.eakey = eakey_;
             // the card units come with it: one on DrumMania, one per guitar on GuitarFreaks
             cfg.card_readers = machine["family"] == "gtrf" ? 2 : 1;
         }
@@ -211,6 +215,7 @@ private:
     bool npu_ = false;
     std::string eamuse_ = "local";
     std::string pcbid_;
+    std::string eakey_ = hk::EaOptions::env_key();
     std::string cd_;
     std::string session_host_, session_join_;
     int session_quantum_ = 500;

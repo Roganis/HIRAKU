@@ -8,6 +8,9 @@
 //   -smartea                  with -url: the server inside HIRAKU if that server doesn't answer
 //                             at start
 //   -p PCBID                  the cabinet's PCBID (20 hex digits), sent in place of the game's own
+//   -eakey KEY                HIRAKU's: with -url, the key of a hiraku-eamuse that has one (its
+//                             --new-key; shell/keyed.h). Without the option, HK_EA_KEY's value: what
+//                             the launcher sets, so that the key is on no command line and in no log
 //   -card0 / -card1 NUMBER    player 1's / 2's card number (16 hex digits, E004...). Without it,
 //                             card0.txt / card1.txt: the working directory's, then the save folder's
 //   -autocard off|p1|p2|both  present the card(s) to the reader whenever it waits for one, so
@@ -20,6 +23,7 @@
 #pragma once
 
 #include <cctype>
+#include <cstdlib>
 #include <fstream>
 #include <functional>
 #include <iterator>
@@ -30,6 +34,7 @@ namespace hk {
 struct EaOptions {
     bool ea = false, smartea = false;
     std::string url, pcbid;
+    std::string key = env_key();       // the server's key ("": none)
     std::string card[2];               // "" = none given
     bool autocard[2] = {false, false};
     bool autopin = false;
@@ -46,6 +51,11 @@ struct EaOptions {
         if (name == "--p" || name == "--pcbid") {
             pcbid = upper(value());
             if (!hex(pcbid, 20)) *error = "-p: a PCBID is 20 hex digits, not \"" + pcbid + "\"";
+            return true;
+        }
+        if (name == "--eakey") {
+            key = value();
+            if (key.empty()) *error = "-eakey: empty";
             return true;
         }
         if (name == "--card0" || name == "--card1") {
@@ -94,6 +104,12 @@ struct EaOptions {
         return s;
     }
 
+    // HK_EA_KEY's value: the key when no -eakey says another
+    static std::string env_key() {
+        const char *k = std::getenv("HK_EA_KEY");
+        return k ? k : "";
+    }
+
     bool online() const { return !url.empty(); }
     // url with its scheme: spice2x's "host:port" form is plain HTTP
     std::string http_url() const { return url.find("://") == std::string::npos ? "http://" + url : url; }
@@ -104,6 +120,7 @@ struct EaOptions {
                "  -url URL             a server on the network: host:port[/path] or http://host:port[/path]\n"
                "  -smartea             with -url: the server inside HIRAKU if that one doesn't answer at start\n"
                "  -p PCBID             the cabinet's PCBID (20 hex digits) in the game's calls\n"
+               "  -eakey KEY           with -url: the key of a hiraku-eamuse that has one (or HK_EA_KEY's value)\n"
                "  -card0 NUMBER        player 1's card number (16 hex digits, E004...); default: card0.txt in\n"
                "                       the working directory or the save folder (-card1, card1.txt: player 2)\n"
                "  -autocard off|p1|p2|both  the card is presented whenever the reader waits for one\n"

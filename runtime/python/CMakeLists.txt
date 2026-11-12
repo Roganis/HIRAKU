@@ -32,6 +32,8 @@ add_library(hk_python_shell STATIC
 	${HK}/runtime/shell/sys.cpp
 	${HK}/runtime/shell/saves.cpp
 	${HK}/runtime/shell/net.cpp
+	${HK}/runtime/shell/crypt.cpp
+	${HK}/runtime/shell/keyed.cpp
 	${HK}/runtime/shell/overlay.cpp
 	${HK}/runtime/host/hiddesc.cpp
 	${HK}/runtime/host/script.cpp

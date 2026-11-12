@@ -22,9 +22,10 @@ public:
     // where: "local" (the server in the core, keeping its data in `dir`) or http://host[:port][/path]
     // (online). log: "" or a file for every socket call and every call and answer in clear.
     // now: the cabinet's clock (seconds since 1970, local time). pcbid: "" or the cabinet's own PCBID,
-    // sent to an online server in place of the game's (-p). false: a message was printed.
+    // sent to an online server in place of the game's (-p). key: "" or an online server's key
+    // (-eakey; shell/keyed.h). false: a message was printed.
     bool open(const std::string &where, const std::string &dir, const std::string &log, std::function<int64_t()> now,
-              const std::string &pcbid = "");
+              const std::string &pcbid = "", const std::string &key = "");
     ea::Lan *lan() { return lan_.get(); }
 
     // the GuitarFreaks and DrumMania modules (Server::Game)

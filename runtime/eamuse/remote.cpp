@@ -14,7 +14,7 @@
 
 namespace hk::ea {
 
-Remote::Remote(const std::string &url) {
+Remote::Remote(const std::string &url, const net::Key &key) : key_(key) {
     std::string u = url;
     if (u.compare(0, 7, "http://") != 0) return;   // HTTP only: the game's own protocol is plain HTTP/1.0
     u = u.substr(7);
@@ -33,8 +33,15 @@ Remote::Remote(const std::string &url) {
 bool Remote::reachable(std::string *error) const {
     const int fd = connect_to(host_, port_, 3, error);
     if (fd < 0) return false;
+    bool ok = true;
+    if (key_.set()) {
+        net::Keyed k;
+        std::string why;
+        ok = k.connect(fd, key_, &why);
+        if (!ok) *error = (port_ == 80 ? host_ : host_ + ":" + std::to_string(port_)) + ": " + why;
+    }
     net::close(fd);
-    return true;
+    return ok;
 }
 
 int Remote::connect_to(const std::string &host, uint16_t port, int seconds, std::string *error) {
@@ -87,8 +94,15 @@ std::string Remote::exchange(const Lan::Target &t, const std::string &request, s
 
     const int fd = connect_to(host, port, 15, error);   // the game gives up after about as long
     if (fd < 0) return "";
-
-    for (size_t sent = 0; sent < req.size();) {
+    // (with a key, every server the game is sent to is behind it: the services list of a server
+    // with a key names itself)
+    net::Keyed keyed;
+    if (key_.set()) {
+        std::string why;
+        if (!keyed.connect(fd, key_, &why)) { *error = host_header + ": " + why; net::close(fd); return ""; }
+        if (!keyed.send(req.data(), req.size())) { *error = host_header + ": send: " + net::error(); net::close(fd); return ""; }
+    }
+    for (size_t sent = 0; !key_.set() && sent < req.size();) {
         const ssize_t n = net::send(fd, req.data() + sent, req.size() - sent);
         if (n <= 0) { *error = host_header + ": send: " + net::error(); net::close(fd); return ""; }
         sent += (size_t)n;
@@ -96,8 +110,12 @@ std::string Remote::exchange(const Lan::Target &t, const std::string &request, s
     std::string answer;
     char buf[4096];
     for (;;) {   // HTTP/1.0: the answer ends where the server closes (or its Content-Length)
-        const ssize_t n = net::recv(fd, buf, sizeof buf);
-        if (n < 0) { *error = host_header + ": recv: " + net::error(); net::close(fd); return ""; }
+        const ssize_t n = key_.set() ? keyed.recv(buf, sizeof buf) : net::recv(fd, buf, sizeof buf);
+        if (n < 0) {
+            *error = host_header + (keyed.wrong() ? ": an answer that isn't the key's" : ": recv: " + net::error());
+            net::close(fd);
+            return "";
+        }
         if (n == 0) break;
         answer.append(buf, (size_t)n);
         const size_t he = answer.find("\r\n\r\n");

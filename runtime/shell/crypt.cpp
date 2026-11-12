@@ -206,6 +206,7 @@ struct Poly {
         h[1] += c;
     }
     void add(const uint8_t *p, size_t n) {
+        if (!n) return;   // (nothing, and maybe from no address at all: not for memcpy)
         if (have) {
             const size_t take = n < 16 - have ? n : 16 - have;
             memcpy(buf + have, p, take);

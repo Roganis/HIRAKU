@@ -49,7 +49,7 @@ private:
 
     uint8_t m_regs[0x230]{};
     uint8_t m_seen_status = 0, m_seen_pos[8][3]{};   // as of the last commit()
-    uint8_t m_ram[0x8000]{};   // reverb RAM
+    alignas(int16_t) uint8_t m_ram[0x8000]{};   // reverb RAM (read as 16-bit samples too: render)
     int m_reverb_pos = 0;
     int32_t m_cur_ptr = 0;
     int m_rom_addr = 0;

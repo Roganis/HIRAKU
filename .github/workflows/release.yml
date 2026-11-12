@@ -7,7 +7,8 @@
 # - a push of a tag v*: both packages, published as a GitHub release (a draft, to look over first),
 #   with the LGPL libraries' sources beside them;
 # - a push to main (or a pull request): both packages as the run's artifacts, kept 14 days, and the
-#   unit tests (ctest): what fails on one system only shows before a release is tagged;
+#   unit tests (ctest; the Windows programs' under Wine): what fails on one system only shows
+#   before a release is tagged;
 # - by hand (Actions > release > Run workflow): both packages as the run's artifacts.
 name: release
 
@@ -167,6 +168,10 @@ jobs:
         run: |
           pacman -Syu --noconfirm --needed base-devel git clang lld llvm mingw-w64-gcc qt6-base cmake ninja \
             nasm python p7zip zip curl
+      # (before the build is set up: tests/CMakeLists.txt gives the tests to Wine if it finds it)
+      - name: Wine, to run the unit tests
+        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+        run: pacman -S --noconfirm --needed wine
       - uses: actions/checkout@v7
       - name: Qt's version
         id: qt
@@ -186,6 +191,16 @@ jobs:
         run: HK_PYTHON_WIN=$PWD/python-win tools/release.sh windows dist
         env:   # the release's number in the package (VERSION), for the updater; none for a run by hand
           HK_VERSION: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || '' }}
+          HK_TESTS: ${{ startsWith(github.ref, 'refs/tags/v') && 'OFF' || 'ON' }}
+      # The Windows programs' own tests, run under Wine: what only the Windows build does (its waits,
+      # its paths, the swap chain's thread against a pretend Direct3D, the pop'n board's go-between)
+      # is otherwise never run before a release. No display: the one test that draws is skipped.
+      - name: Unit tests (the Windows programs, under Wine)
+        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+        run: ctest --test-dir build/release-windows --output-on-failure --timeout 300
+        env:
+          WINEPREFIX: ${{ runner.temp }}/wine
+          WINEDEBUG: -all
       - uses: actions/upload-artifact@v7
         with:
           retention-days: ${{ startsWith(github.ref, 'refs/tags/v') && 90 || 14 }}

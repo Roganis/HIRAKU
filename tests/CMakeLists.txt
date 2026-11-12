@@ -1,5 +1,16 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
+# A Windows build made on Linux: ctest starts the tests' programs under Wine, where there is one
+# (the release workflow's Windows job does; by hand: WINEPREFIX=... WINEDEBUG=-all ctest, with no
+# DISPLAY for nothing to show). The Python tests are the build machine's own: those that start one
+# of the programs are left to the Linux build.
+if(WIN32 AND CMAKE_CROSSCOMPILING AND NOT CMAKE_CROSSCOMPILING_EMULATOR)
+  find_program(HK_WINE wine)
+  if(HK_WINE)
+    set(CMAKE_CROSSCOMPILING_EMULATOR ${HK_WINE})
+  endif()
+endif()
+
 # Instruction semantics vs QEMU. The reference cases are generated, not
 # committed: tests/ppc/gen.py needs clang, ld.lld and qemu-ppc (no test without them).
 find_program(HK_QEMU_PPC qemu-ppc)
@@ -21,7 +32,10 @@ endif()
 # hiraku-recomp: a nopoll function still asks at its entry whether a mod changed it, and files that
 # didn't change aren't written again (a made-up program)
 find_package(Python3 COMPONENTS Interpreter QUIET)
-if(Python3_Interpreter_FOUND)
+if(TARGET Python3::Interpreter)
+  set_property(TARGET Python3::Interpreter PROPERTY CROSSCOMPILING_EMULATOR "")   # (the build machine's Python)
+endif()
+if(Python3_Interpreter_FOUND AND NOT CMAKE_CROSSCOMPILING)
   add_test(NAME recomp_nopoll COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/ppc/test_recomp_nopoll.py
            $<TARGET_FILE:hiraku-recomp> ${CMAKE_C_COMPILER} ${CMAKE_SOURCE_DIR}/include)
 endif()
@@ -178,7 +192,7 @@ add_test(NAME sys_sleep COMMAND test_sleep)
 set_tests_properties(sys_sleep PROPERTIES RUN_SERIAL TRUE)   # (it measures times)
 add_executable(key_client eamuse/key_client.cpp)
 target_link_libraries(key_client PRIVATE hiraku_easerver)
-if(Python3_FOUND)
+if(Python3_FOUND AND NOT CMAKE_CROSSCOMPILING)
   add_test(NAME eamuse_key COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/eamuse/test_key.py $<TARGET_FILE:hiraku-eamuse> $<TARGET_FILE:key_client>)
   set_tests_properties(eamuse_key PROPERTIES RESOURCE_LOCK relay_5740 TIMEOUT 180)
 endif()
@@ -297,7 +311,7 @@ if(HK_GIT AND HK_BASH AND NOT WIN32)
   add_test(NAME package_files COMMAND ${HK_BASH} ${CMAKE_CURRENT_SOURCE_DIR}/tools/test_package_files.sh ${CMAKE_SOURCE_DIR})
 endif()
 # tools/ingest.py: a System 573 game's disks without its MAME set (kept for it), then a disk alone
-if(Python3_Interpreter_FOUND AND Python3_VERSION VERSION_GREATER_EQUAL 3.11)
+if(Python3_Interpreter_FOUND AND Python3_VERSION VERSION_GREATER_EQUAL 3.11 AND NOT CMAKE_CROSSCOMPILING)
   add_test(NAME ingest_disks COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/tools/test_ingest_disks.py $<TARGET_FILE:hiraku-chdcat>)
 endif()
 
@@ -318,3 +332,19 @@ add_test(NAME exec_names COMMAND test_exec_names)
 add_executable(test_idle_model sys573/test_idle_model.cpp)
 target_include_directories(test_idle_model PRIVATE ${CMAKE_SOURCE_DIR}/runtime)
 add_test(NAME sys573_waiting_loops COMMAND test_idle_model)
+
+# Windows: the tests' programs take paths as UTF-8, as HIRAKU's own do (the manifest the root file
+# gives to its programs: utf8_paths is about it), and SDL3.dll is beside those that load it
+if(WIN32 AND NOT MSVC)
+  get_property(HK_TEST_TARGETS DIRECTORY PROPERTY BUILDSYSTEM_TARGETS)
+  foreach(t ${HK_TEST_TARGETS})
+    get_target_property(HK_TARGET_TYPE ${t} TYPE)
+    if(HK_TARGET_TYPE STREQUAL "EXECUTABLE")
+      target_sources(${t} PRIVATE $<TARGET_OBJECTS:hiraku_utf8>)
+    endif()
+  endforeach()
+  if(TARGET hiraku_host)
+    add_custom_target(hiraku_tests_sdl3_dll ALL
+      COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:SDL3::SDL3-shared> ${CMAKE_CURRENT_BINARY_DIR})
+  endif()
+endif()

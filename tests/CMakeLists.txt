@@ -122,6 +122,9 @@ if(TARGET hiraku_host)
   target_link_libraries(test_picture PRIVATE hiraku_host)
   add_test(NAME picture_engine COMMAND test_picture)
   set_tests_properties(picture_engine PROPERTIES SKIP_RETURN_CODE 77)
+  if(HK_SANITIZE)   # (SDL and the graphics driver keep a few hundred bytes to the end: not HIRAKU's to free)
+    set_tests_properties(picture_engine PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0")
+  endif()
 endif()
 
 # Host controls (runtime/host/input.h) with a controller SDL makes up: bindings that share an input,
@@ -143,6 +146,9 @@ if(TARGET hiraku_host AND CMAKE_SYSTEM_NAME STREQUAL "Linux" AND NOT CMAKE_CROSS
   add_library(fake_asound SHARED host/fake_asound.c)
   set_target_properties(fake_asound PROPERTIES PREFIX "lib" OUTPUT_NAME "asound" SUFFIX ".so.2"
                         LIBRARY_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/fake-asound)
+  if(HK_SANITIZE)   # (it stands for the system's library, which isn't built with them either: HIRAKU
+    target_compile_options(fake_asound PRIVATE -fno-sanitize=all)   # calls it by its own declarations)
+  endif()
   add_executable(test_alsa_lost host/test_alsa_lost.cpp)
   target_link_libraries(test_alsa_lost PRIVATE hiraku_host)
   add_dependencies(test_alsa_lost fake_asound)

@@ -53,6 +53,16 @@ else()
 endif()
 set(HK_PGO_DIR "" CACHE PATH "directory of per-core llvm-profdata profiles (tools/pgo.py)")
 option(HK_PGO_GENERATE "build instrumented, to train the profiles (tools/pgo.py)" OFF)
+
+# HK_SANITIZE: everything built with AddressSanitizer and UndefinedBehaviorSanitizer (clang or gcc),
+# for ctest to run the tests under them: a read past a buffer or a step the language doesn't define
+# ends the test with where it happened. Not for playing (several times slower), nor for a release.
+#   cmake -B out/asan -DHK_SANITIZE=ON -DHK_GAME_BINARIES=OFF && ctest --test-dir out/asan
+option(HK_SANITIZE "build with ASan and UBSan, for the tests" OFF)
+if(HK_SANITIZE)
+  add_compile_options(-fsanitize=address,undefined -fno-sanitize-recover=undefined -fno-omit-frame-pointer)
+  add_link_options(-fsanitize=address,undefined)
+endif()
 set(HK_PGO_OK OFF)
 if((HK_PGO_GENERATE OR HK_PGO_DIR) AND NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   message(WARNING "PGO needs clang (tools/pgo.py configures it): building without")
@@ -99,6 +109,10 @@ add_library(musashi_020 STATIC
   third_party/musashi/m68kdasm.c
   third_party/musashi/softfloat/softfloat.c)
 target_include_directories(musashi_020 PUBLIC third_party/musashi runtime/djmain)
+if(HK_SANITIZE)   # (Musashi shifts into the sign bit throughout, as its C allows itself: not HIRAKU's to rewrite)
+  target_compile_options(musashi PRIVATE -fno-sanitize=undefined)
+  target_compile_options(musashi_020 PRIVATE -fno-sanitize=undefined)
+endif()
 target_compile_definitions(musashi_020 PUBLIC MUSASHI_CNF="hk_m68kconf_dj.h")
 target_compile_options(musashi_020 PRIVATE -w)
 
@@ -154,6 +168,10 @@ add_dependencies(hiraku_xt446 hiraku_meggen)
 target_include_directories(hiraku_xt446 PRIVATE ${HK_MEG_GEN})
 # MAME sources: their own warning set; optimised even in debug builds (the card is real-time)
 target_compile_options(hiraku_xt446 PRIVATE -w -O3)
+if(HK_SANITIZE)   # (MAME's own H8 and SWP30: the H8's multiply is u16 * u16 as an int, as MAME has it)
+  set_source_files_properties(${HK_H8_SRC} ${HK_MAME}/src/devices/sound/swp30.cpp
+                              PROPERTIES COMPILE_OPTIONS "-fno-sanitize=undefined")
+endif()
 
 add_executable(hiraku-xt446 tools/xt446/xt446_render.cpp runtime/core/sampler.cpp)
 target_link_libraries(hiraku-xt446 PRIVATE hiraku_xt446)

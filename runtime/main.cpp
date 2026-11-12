@@ -584,8 +584,15 @@ int main(int argc, char **argv) {
     int script_snaps = 0;
     // Ctrl-C / SIGTERM: leave at the next frame, saving NVRAM like a normal exit
     static std::atomic<bool> stop_requested{false};
-    std::signal(SIGINT, [](int) { stop_requested = true; });
-    std::signal(SIGTERM, [](int) { stop_requested = true; });
+    // (the window's waits on the sound are told too: a frame waiting there would never end)
+    static const auto stop = [](int) {
+        stop_requested = true;
+#ifdef HK_WITH_SDL
+        host::window_interrupt();
+#endif
+    };
+    std::signal(SIGINT, stop);
+    std::signal(SIGTERM, stop);
 #ifdef HK_WITH_SDL
     // a core that can show the window its picture at the end of vertical blank does: the picture
     // the monitor then shows, the game's flip during the blank included, which the frame hook's

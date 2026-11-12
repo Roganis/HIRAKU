@@ -35,6 +35,7 @@
 #include "alsa.h"
 #include "asio.h"
 #include "wasapi.h"
+#include "soundwatch.h"
 #include "lampview.h"
 #include "shaderview.h"
 #include "notice.h"
@@ -47,6 +48,8 @@
 #endif
 
 namespace hk::host {
+
+static void watch_audio();   // below: the sound's way out, opened again if it stopped taking the sound
 
 namespace {
 uint64_t g_settle_until = 0;   // window/renderer setup right after opening: not a stall
@@ -97,6 +100,11 @@ bool g_fast = false;              // Tab held, or the fast start-up (host/warp.h
 bool g_tab = false;               // Tab held
 int g_device_frames = 0;
 bool g_quit = false;
+std::atomic<bool> g_interrupt{false};   // window_interrupt: Ctrl-C, the waits on the sound end
+SoundWatch g_sound_watch;         // whether the device still takes the sound (host/soundwatch.h)
+int g_audio_level = 0;            // the way out: 0 the one asked for, 1 the system's default only, 2 none
+int g_audio_again = 0;            // times it was opened again in the run (the report)
+uint64_t g_audio_opened_ns = 0;   // when it was last opened
 bool g_display_sync = true;       // display pacing (pacing.h)
 bool g_smooth_motion = false;     // --smooth-motion: the core's in-between pictures on the frame's other refreshes
 uint64_t g_in_between = 0;        // how many it showed (the exit report)
@@ -255,7 +263,11 @@ void poll() {
     auto now = std::chrono::steady_clock::now();
     input_update(std::chrono::duration<double, std::milli>(now - g_last_poll).count());
     g_last_poll = now;
+    watch_audio();
 }
+
+// The sound queued for the device, in bytes (none without a device: nothing to wait for)
+int queued_bytes() { return g_audio ? std::max(0, SDL_GetAudioStreamQueued(g_audio)) : 0; }
 
 // An OpenGL 3.3 window; false (and nothing left open) if it can't run here.
 bool open_gl(const char *title, int scale) {
@@ -537,15 +549,15 @@ static void swap_window(bool sync, bool extra = false) {
     SDL_GL_SwapWindow(g_win);
 }
 
-static bool open_window(const char *title, int scale, const std::string &bindings, int target_ms, bool fullscreen, int rate) {
-    g_rate = rate;
-    // the device's buffer: the sound server's quantum (PipeWire: node.latency)
-    SDL_SetHint(SDL_HINT_AUDIO_DEVICE_SAMPLE_FRAMES, std::to_string(g_audio_buffer > 0 ? g_audio_buffer : 128).c_str());
-    if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO)) return false;
-    input_init(bindings);
+// The sound's way out, opened: at level 0 the one asked for (a card of its own, a device by name),
+// else and failing that the system's default. target_ms: the queue's target, or -1 to keep it (the
+// way out opened again in a run: what the tuner learnt stays)
+static void open_audio(int level, int target_ms) {
     SDL_AudioSpec spec{SDL_AUDIO_F32, 2, g_rate};
+    g_audio_output.clear();
+    g_device_frames = 0;
 #ifdef _WIN32
-    if (!g_audio_asio.empty()) {   // the card through its own ASIO driver: no Windows audio in between
+    if (level == 0 && !g_audio_asio.empty()) {   // the card through its own ASIO driver: no Windows audio in between
         std::string what, why = asio::open(g_audio_asio, spec, g_audio_buffer, g_audio, what);
         if (why.empty()) {
             g_audio_output = "ASIO: " + what;
@@ -554,7 +566,7 @@ static bool open_window(const char *title, int scale, const std::string &binding
             fprintf(stderr, "audio: ASIO driver \"%s\": %s; Windows' audio instead\n", g_audio_asio.c_str(), why.c_str());
         }
     }
-    if (!g_audio && g_audio_exclusive) {   // the device alone, in WASAPI exclusive mode: no system mixer in between
+    if (level == 0 && !g_audio && g_audio_exclusive) {   // the device alone, in WASAPI exclusive mode: no system mixer in between
         std::string what, why = wasapi::open(g_audio_device, spec, g_audio_buffer > 0 ? g_audio_buffer : 128, g_audio, what);
         if (why.empty()) {
             g_audio_output = (g_audio_device.empty() ? std::string("the default output") : g_audio_device) +
@@ -565,7 +577,7 @@ static bool open_window(const char *title, int scale, const std::string &binding
                     g_audio_device.empty() ? "the default output" : g_audio_device.c_str(), why.c_str());
         }
     }
-    if (!g_audio && !g_audio_device.empty()) {   // that device, shared: SDL's WASAPI output, by its name
+    if (level == 0 && !g_audio && !g_audio_device.empty()) {   // that device, shared: SDL's WASAPI output, by its name
         int n = 0;
         SDL_AudioDeviceID *ids = SDL_GetAudioPlaybackDevices(&n);
         for (int k = 0; ids && k < n && !g_audio; k++)
@@ -577,14 +589,14 @@ static bool open_window(const char *title, int scale, const std::string &binding
         if (!g_audio) fprintf(stderr, "audio: no output device named \"%s\"; the system's default output instead\n", g_audio_device.c_str());
     }
 #else
-    if (!g_audio_device.empty()) {   // the card itself, through ALSA: no sound server in between
+    if (level == 0 && !g_audio_device.empty()) {   // the card itself, through ALSA: no sound server in between
         std::string what, why = alsa::open(g_audio_device, spec, g_audio_buffer > 0 ? g_audio_buffer : 128, g_audio, what);
         if (why.empty()) {
             g_audio_output = g_audio_device + " (the card alone, through ALSA: " + what + ")";
             g_device_frames = alsa::period();
         } else {   // busy (the sound server has it open while anything plays), or no such device
-            fprintf(stderr, "audio: %s: %s; the system's default output instead (the sound server lets go of a card "
-                            "a few seconds after the last sound on it stops)\n", g_audio_device.c_str(), why.c_str());
+            fprintf(stderr, "audio: %s: %s; the system's default output instead%s\n", g_audio_device.c_str(), why.c_str(),
+                    target_ms < 0 ? "" : " (the sound server lets go of a card a few seconds after the last sound on it stops)");
         }
     }
 #endif
@@ -593,8 +605,10 @@ static bool open_window(const char *title, int scale, const std::string &binding
     if (g_audio) {
         SDL_AudioSpec dev{};
         if (SDL_GetAudioStreamDevice(g_audio)) SDL_GetAudioDeviceFormat(SDL_GetAudioStreamDevice(g_audio), &dev, &g_device_frames);
-        g_target_frames = g_target_min = g_rate * target_ms / 1000;
-        g_tuner.lo = g_tuner.hi = g_target_frames;
+        if (target_ms >= 0) {
+            g_target_frames = g_target_min = g_rate * target_ms / 1000;
+            g_tuner.lo = g_tuner.hi = g_target_frames;
+        }
         // start with the target lead of silence: the first frames' window setup
         // would otherwise find an empty queue (and grow the target for nothing)
         std::vector<float> silence((size_t)g_target_frames * 2, 0.0f);
@@ -612,8 +626,66 @@ static bool open_window(const char *title, int scale, const std::string &binding
         }, nullptr);
         SDL_ResumeAudioStreamDevice(g_audio);
         g_settle_until = prof::now_ns() + 250'000'000;
-        g_tune_from = prof::now_ns() + 10'000'000'000ull;
+        // the queue's target tunes itself once the game has started; a way out opened in a run is
+        // left two seconds (the changeover's own late chunks aren't the device's)
+        g_tune_from = target_ms >= 0 ? prof::now_ns() + 10'000'000'000ull : std::max<uint64_t>(g_tune_from, prof::now_ns() + 2'000'000'000ull);
     }
+    g_ratio = 1.0;   // (a new stream plays at the game's own speed until it is steered)
+    g_sound_watch.opened(g_audio_opened_ns = prof::now_ns(), g_device_pulls.load(std::memory_order_relaxed));
+}
+
+static void close_audio() {
+    alsa::close();
+#ifdef _WIN32
+    wasapi::close();
+    asio::close();
+#endif
+    if (g_audio) SDL_DestroyAudioStream(g_audio);
+    g_audio = nullptr;
+}
+
+// Each time the controls are read: a way out that has stopped taking the sound (host/soundwatch.h
+// says how that is known) is closed and the sound opened again, the same way first: a card or a
+// driver that was restarted plays on, and one that is gone leaves the system's default output.
+// Where the sound paces the game this is also what lets the game go on: its waits are for a queue
+// that device would never have emptied.
+static void watch_audio() {
+    if (!g_audio) return;
+    bool gone = alsa::lost(), restart = false;
+#ifdef _WIN32
+    gone = gone || wasapi::lost();
+    restart = asio::restart_wanted();
+#endif
+    SoundWatch::Do todo = g_sound_watch.look(prof::now_ns(), g_device_pulls.load(std::memory_order_relaxed), gone, restart);
+    const char *why = g_sound_watch.why();
+    // HK_AUDIO_AGAIN=SECONDS, to try this on a PC's own devices: that long after the game opened
+    // the sound, it is closed and opened again as if its driver had asked (once)
+    static double again_after = getenv("HK_AUDIO_AGAIN") ? atof(getenv("HK_AUDIO_AGAIN")) : 0;
+    if (todo == SoundWatch::Do::nothing && again_after > 0 && (double)(prof::now_ns() - g_audio_opened_ns) >= again_after * 1e9)
+        again_after = 0, todo = SoundWatch::Do::again, why = "HK_AUDIO_AGAIN";
+    if (todo == SoundWatch::Do::nothing) return;
+    const std::string was = g_audio_output;
+    fprintf(stderr, "audio: %s stopped taking the sound (%s): the sound is opened again\n", was.c_str(), why);
+    if (todo == SoundWatch::Do::lesser) g_audio_level++;
+    close_audio();
+    if (g_audio_level < 2) open_audio(g_audio_level, -1);
+    if (!g_audio) g_audio_level = 2;
+    g_audio_again++;
+    g_last_push_end = 0;   // (the time this took isn't a late chunk)
+    fprintf(stderr, "audio: %s%s\n", g_audio ? "the sound now plays on " : "no sound device now: the game goes on without sound, by the clock",
+            g_audio ? g_audio_output.c_str() : "");
+    if (!g_audio) notice::hint({"The sound device stopped.", "No other: the game goes on without sound."});
+    else if (g_audio_output == was) notice::hint({"The sound device stopped,", "and was started again."}, 6);
+    else notice::hint({"The sound device stopped.", "The sound now plays on another:", g_audio_output.substr(0, 44)});
+}
+
+static bool open_window(const char *title, int scale, const std::string &bindings, int target_ms, bool fullscreen, int rate) {
+    g_rate = rate;
+    // the device's buffer: the sound server's quantum (PipeWire: node.latency)
+    SDL_SetHint(SDL_HINT_AUDIO_DEVICE_SAMPLE_FRAMES, std::to_string(g_audio_buffer > 0 ? g_audio_buffer : 128).c_str());
+    if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO)) return false;
+    input_init(bindings);
+    open_audio(0, target_ms);
     g_title = title;
     g_split = g_split_wanted && core().screens() == 2;
     if (g_split_wanted && !g_split) fprintf(stderr, "window: this machine has one monitor: one window\n");
@@ -722,7 +794,7 @@ struct StartToSound {
 double g_steer_i = 0;
 void steer_audio() {
     if (!g_audio) return;
-    double q_ms = SDL_GetAudioStreamQueued(g_audio) / 8 * 1000.0 / (g_rate * g_ratio);
+    double q_ms = queued_bytes() / 8 * 1000.0 / (g_rate * g_ratio);
     double target_ms = g_target_frames * 1000.0 / g_rate;
     if (q_ms < target_ms / 2) {   // starting, or after a stall: fill up at once, not over seconds
         std::vector<float> silence((size_t)((target_ms - q_ms) * g_rate * g_ratio / 1000) * 2, 0.0f);
@@ -1146,7 +1218,7 @@ void window_present(const uint32_t *rgb, int w, int h, double vsec) {
 // a frame starts at machine time vsec: where its sound will be (g_start_to_sound)
 static void sound_lag(double vsec) {
     if (!g_audio || g_fast || prof::now_ns() < g_settle_until || !g_machine_frames) return;
-    const double queued = SDL_GetAudioStreamQueued(g_audio) / 8 * 1000.0 / (g_rate * g_ratio);
+    const double queued = queued_bytes() / 8 * 1000.0 / (g_rate * g_ratio);
     const double behind = std::max(0.0, (vsec - (double)g_machine_frames / g_rate) * 1000.0 / g_ratio);
     g_start_to_sound.add(queued + behind, behind);
 }
@@ -1175,14 +1247,14 @@ bool window_next(double vsec) {
         // as soon as it's drawn. The queue's lowest point is the same as waiting in push_chunk.
         g_frame_paced = true;
         const uint64_t w0 = prof::ticks();
-        while (SDL_GetAudioStreamQueued(g_audio) > g_target_frames * 8 && !g_quit) {
-            poll();
+        while (queued_bytes() > g_target_frames * 8 && !g_quit && !g_interrupt.load(std::memory_order_relaxed)) {
+            poll();   // (which also opens the sound again if its device has stopped: the queue then empties)
             SDL_DelayPrecise(250'000);   // 0.25 ms
         }
         prof::g_wait_ticks += prof::ticks() - w0;
         poll();
         g_frame_start_ns = g_last_push_end = prof::now_ns();   // the wait isn't host work
-        g_queued_after = SDL_GetAudioStreamQueued(g_audio) / 8;
+        g_queued_after = queued_bytes() / 8;
         g_late.wait_mark = prof::g_wait_ticks;
         sound_lag(vsec);
         return !g_quit;
@@ -1239,7 +1311,7 @@ void push_chunk(const float *lr, int frames) {
         int b = gap < 1 ? 0 : gap < 2 ? 1 : gap < 4 ? 2 : gap < 8 ? 3 : gap < 16 ? 4 : gap < 32 ? 5 : gap < 64 ? 6 : 7;
         g_ast.gap_hist[b]++;
         g_ast.worst_gap_ms = std::max(g_ast.worst_gap_ms, gap);
-        int queued = SDL_GetAudioStreamQueued(g_audio) / 8;
+        int queued = queued_bytes() / 8;
         g_ast.chunks++;
         if (queued == 0) g_ast.empty++;
         // what was left of the queue as this chunk came (the device takes it in whole buffers, so
@@ -1268,13 +1340,14 @@ void push_chunk(const float *lr, int frames) {
     }
     g_breaks = g_device_short.load(std::memory_order_relaxed);
     g_breaks_late = g_device_short_late.load(std::memory_order_relaxed);
-    SDL_PutAudioStreamData(g_audio, lr, frames * 8);
+    if (g_audio) SDL_PutAudioStreamData(g_audio, lr, frames * 8);
     // audio is the clock: wait while more than the target is queued, polling controls
     // (with display pacing, the display is the clock, and with a core whose sound comes once
     // per frame the window waits after the frame: window_frame waits instead)
     const uint64_t w0 = prof::ticks();
-    while (!pacing::active() && !g_frame_paced && SDL_GetAudioStreamQueued(g_audio) > g_target_frames * 8 && !g_quit) {
-        poll();
+    while (!pacing::active() && !g_frame_paced && queued_bytes() > g_target_frames * 8 && !g_quit &&
+           !g_interrupt.load(std::memory_order_relaxed)) {
+        poll();   // (which also opens the sound again if its device has stopped: the queue then empties)
         SDL_DelayPrecise(250'000);   // 0.25 ms
     }
     prof::g_wait_ticks += prof::ticks() - w0;
@@ -1282,7 +1355,7 @@ void push_chunk(const float *lr, int frames) {
     prof::reset();
     g_late.wait_mark = prof::g_wait_ticks;
     g_last_push_end = prof::now_ns();
-    g_queued_after = SDL_GetAudioStreamQueued(g_audio) / 8;
+    g_queued_after = queued_bytes() / 8;
 }
 
 // The emulated sound hardware may deliver a few samples at a time (the SPU catching
@@ -1315,8 +1388,11 @@ void audio_push(const float *lr, int frames) {
     }
 }
 
+void window_interrupt() { g_interrupt.store(true, std::memory_order_relaxed); }
+
 std::string audio_describe() {
-    if (!g_audio) return "no audio device";
+    if (!g_audio)
+        return g_audio_again ? "no audio device: the one the game started on stopped taking the sound, and no other opened" : "no audio device";
     char b[4096], tuned[160];
     if (g_audio_fixed) snprintf(tuned, sizeof tuned, "fixed");
     else snprintf(tuned, sizeof tuned, "self-tuning: %.1f to %.1f ms over the run", g_tuner.lo * 1000.0 / g_rate, g_tuner.hi * 1000.0 / g_rate);
@@ -1354,6 +1430,9 @@ std::string audio_describe() {
 #endif
     if (const std::string card = alsa::describe(); !card.empty())   // the card's own pace
         n += snprintf(b + n, sizeof b - n, "\n%s", card.c_str());
+    if (g_audio_again)
+        n += snprintf(b + n, sizeof b - n, "\naudio: the way out stopped taking the sound and was opened again %d time%s in the run "
+                                           "(the first line says what plays now)", g_audio_again, g_audio_again == 1 ? "" : "s");
     if (g_present.n) {
         const PresentStats &p = g_present;
         double mean = p.sum / p.n, sd = std::sqrt(std::max(0.0, p.sum2 / p.n - mean * mean));
@@ -1425,12 +1504,7 @@ std::string audio_describe() {
 void window_close() {
     if (g_gamemode_end) g_gamemode_end(), g_gamemode_end = nullptr;   // (GameMode also notices a game that's gone)
     pacing::shutdown();
-    alsa::close();
-#ifdef _WIN32
-    wasapi::close();
-    asio::close();
-#endif
-    if (g_audio) SDL_DestroyAudioStream(g_audio);
+    close_audio();
     if (g_tex) SDL_DestroyTexture(g_tex);
     if (g_ren) SDL_DestroyRenderer(g_ren);
     if (g_tex2) SDL_DestroyTexture(g_tex2);

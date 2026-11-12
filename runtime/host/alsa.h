@@ -17,6 +17,9 @@ namespace hk::host::alsa {
 std::string open(const std::string &device, const SDL_AudioSpec &src, int period, SDL_AudioStream *&stream, std::string &what);
 void close();
 int period();            // the period the card took, in frames
+// The card is gone (a USB card pulled out): nothing more is written to it, and the sound's stream
+// is no longer emptied. Until close()
+bool lost();
 std::string describe();  // the card's pace and its writer, for the report ("" if none was opened)
 // RealtimeKit over D-Bus: "" if `method` worked for thread `tid`, else why not
 std::string rtkit(const char *method, uint64_t tid, bool realtime, int value);

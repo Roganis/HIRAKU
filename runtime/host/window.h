@@ -71,6 +71,9 @@ bool window_frame(const uint32_t *rgb, int w, int h, double virtual_seconds);
 bool window_next(double virtual_seconds);
 void window_present(const uint32_t *rgb, int w, int h, double virtual_seconds);
 void window_close();
+// From a signal handler (Ctrl-C): the waits on the sound's queue end, so that the frame in hand
+// finishes and the game can leave at its end. Nothing else changes.
+void window_interrupt();
 // Queue stereo float audio for playback (at window_open()'s audio_rate) and pace the machine on it:
 // the emulation waits while more than the target is queued, and controls are
 // polled meanwhile. Audio is then the master clock (low, steady latency);

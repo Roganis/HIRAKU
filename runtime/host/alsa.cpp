@@ -12,6 +12,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <cerrno>
 #include <chrono>
 #include <cstdio>
 #include <cstring>
@@ -63,6 +64,7 @@ unsigned g_card_rate = 0;
 std::atomic<uint64_t> g_written{0}, g_xruns{0};   // frames written after the ring's first fill, underruns
 uint64_t g_t0 = 0;                                 // when the ring was first full
 std::atomic<bool> g_stop{false};
+std::atomic<bool> g_lost{false};   // the card is gone (a USB card pulled out): the thread has stopped writing
 std::thread *g_thread = nullptr;   // never destroyed: a game ends with exit(), the thread still writing
 
 bool load(std::string &why) {
@@ -236,18 +238,24 @@ std::string g_writer;            // how the thread that writes runs (the report)
 
 // each time a period of the ring is free: that much from the stream (silence for what it lacks:
 // the stream's get callback counts that as a break), written. Real-time where allowed: it sleeps
-// until the card has room, and an error is never retried at once, so it can't hold a CPU
+// until the card has room, and an error is never retried at once, so it can't hold a CPU. A card
+// that is gone ("no such device": pulled out, and no call on it will ever work again) ends it:
+// lost() then says so, for the window to open another way out (host/soundwatch.h)
 void run(SDL_AudioStream *stream) {
     g_writer = realtime_thread();
     std::vector<uint8_t> buf((size_t)g_period * g_frame_bytes);
     const int bytes = (int)buf.size();
+    auto gone = [](long e) {   // an error taken up (an underrun: the card started again); true: the card is gone
+        g_xruns.fetch_add(1, std::memory_order_relaxed);
+        if (e == -ENODEV || api.recover(g_pcm, (int)e, 1) == -ENODEV) return g_lost = true, true;
+        SDL_Delay(1);
+        return false;
+    };
     for (unsigned turn = 0; !g_stop.load(std::memory_order_relaxed); turn++) {
         if (turn % 32 == 0) reserve::serve();   // the card's reservation: its owner's calls answered
         long avail = api.avail_update(g_pcm);
         if (avail < 0) {
-            g_xruns.fetch_add(1, std::memory_order_relaxed);
-            api.recover(g_pcm, (int)avail, 1);
-            SDL_Delay(1);
+            if (gone(avail)) break;
             continue;
         }
         if (avail < g_period) {
@@ -258,9 +266,7 @@ void run(SDL_AudioStream *stream) {
         if (got < bytes) memset(buf.data() + got, 0, (size_t)(bytes - got));
         const long n = api.writei(g_pcm, buf.data(), (uframes)g_period);
         if (n < 0) {
-            g_xruns.fetch_add(1, std::memory_order_relaxed);
-            api.recover(g_pcm, (int)n, 1);
-            SDL_Delay(1);
+            if (gone(n)) break;
         } else {
             g_written.fetch_add((uint64_t)n, std::memory_order_relaxed);
         }
@@ -324,8 +330,9 @@ std::string open(const std::string &device, const SDL_AudioSpec &src, int period
     std::vector<uint8_t> zero((size_t)ring * g_frame_bytes, 0);
     api.writei(g_pcm, zero.data(), ring);
     g_card_rate = rate;
+    g_written = 0, g_xruns = 0;   // (opened again after a card was lost: the report is this card's)
     g_t0 = prof::now_ns();
-    g_stop = false;
+    g_stop = false, g_lost = false;
     g_thread = new std::thread(run, stream);
     return "";
 }
@@ -334,6 +341,7 @@ void close() {
     if (!g_pcm) return;
     g_stop = true;
     if (g_thread) g_thread->join(), delete g_thread, g_thread = nullptr;
+    g_lost = false;   // (a card that was lost is closed: whatever plays next isn't)
     api.drop(g_pcm);
     api.close(g_pcm);
     g_pcm = nullptr;
@@ -390,6 +398,7 @@ std::string realtime_thread() {
 }
 
 int period() { return g_period; }
+bool lost() { return g_lost.load(std::memory_order_relaxed); }
 
 std::string describe() {
     if (!g_pcm || !g_t0) return "";

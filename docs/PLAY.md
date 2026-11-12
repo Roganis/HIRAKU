@@ -379,6 +379,21 @@ short. HIRAKU declares the ASIO driver interface itself, from the specification 
 is GPLv3 since October 2025 too, but isn't needed). Checked under Wine with pwasio (PipeWire's
 ASIO driver for Wine): float, 48 kHz, 64-frame buffers, 99.97 % of the rate; and on real Windows.
 
+**A sound device that stops.** A USB card pulled out, a device Windows takes back (unplugged, turned
+off, its format changed in the Sound settings), an ASIO driver whose settings are changed in its
+control panel while a game runs: the game notices that the device no longer takes its sound (at
+once where the device says so, else after two seconds without it taking any), closes it and opens
+the sound again, the same way first. A driver that only wanted to be restarted plays on with its
+new settings; a card that is gone leaves the system's default output, and with no sound device at
+all the game goes on without sound, by the clock. The window says so for a few seconds, the log has
+an `audio: ... stopped taking the sound` line, and the exit report counts the times. A card plugged
+back in is not taken up again by itself: restart the game for that. (Before, the game froze there
+for good, since its sound paces it, and only Esc ended it: Ctrl-C in a terminal now does too.)
+`HK_AUDIO_AGAIN=20` in the environment closes and opens the sound once, 20 seconds in, to try this
+on a PC's own devices. Checked with a pretend ALSA card that a test pulls out or freezes, and under
+Wine with pwasio (the driver closed and started again in a run); not with a real USB card, WASAPI
+exclusive mode or a real ASIO driver's control panel.
+
 **System 573 and Twinkle: sound every millisecond** (the default; launcher: Settings > Audio > "Sound every millisecond"; `--mame-sound` turns it off). These cores run MAME's devices, and MAME hands their sound on 50 times a second: the sound would reach the PC in 20 ms pieces, which adds up to 20 ms of latency, uneven from moment to moment, and the controls would be read once per piece. HIRAKU hands it on every millisecond instead. Measured on beatmania IIDX 3rd style (the exit report's "from a frame starting ... to that moment's sound entering the device"): 9.9 ms every millisecond, 30.1 ms in MAME's pieces.
 - The machine runs the same (the regress cases show the same pictures).
 - On beatmania IIDX the keysounds then start when the game triggers them. MAME's RF5C400 starts them at its previous update, up to 20 ms early, so the sound no longer matches MAME's recordings.

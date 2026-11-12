@@ -21,6 +21,9 @@ std::string open(const std::string &device, const SDL_AudioSpec &src, int frames
                  std::string &what);
 void close();
 bool active();
+// Windows took the device back (unplugged, turned off, its format changed in the Sound settings):
+// nothing more is played on it, and the sound's stream is no longer emptied. Until close()
+bool lost();
 int period_frames();   // the device's buffer, at the device's rate
 // For the report: frames the device took against its rate since the start, and the times the
 // stream had less than a period ready

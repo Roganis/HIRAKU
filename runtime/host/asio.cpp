@@ -77,6 +77,7 @@ double g_rate = 0;
 float *g_scratch = nullptr;   // the stream's interleaved stereo, one buffer's worth
 SDL_AudioStream *g_stream = nullptr;
 std::atomic<uint64_t> g_written{0}, g_short{0}, g_overloads{0}, g_resets{0};
+std::atomic<bool> g_restart{false};   // the driver asked to be restarted, and hasn't been yet
 uint64_t g_t0 = 0;
 
 const char *type_name(long t) {
@@ -155,8 +156,9 @@ long message(long selector, long value, void *, double *) {
         return value == ENGINE_VERSION || value == RESET_REQUEST || value == RESYNC_REQUEST ||
                value == LATENCIES_CHANGED || value == OVERLOAD;
     case ENGINE_VERSION: return 2;
-    case RESET_REQUEST:   // its settings changed (the control panel): taken at the next start
-        g_resets.fetch_add(1, std::memory_order_relaxed);
+    case RESET_REQUEST:   // its settings changed (the control panel), or its card went: it wants to be closed
+        g_resets.fetch_add(1, std::memory_order_relaxed);   // and opened again, which isn't done from its own call:
+        g_restart = true;                                    // restart_wanted(), for the window (host/soundwatch.h)
         return 1;
     case RESYNC_REQUEST:
     case LATENCIES_CHANGED: return 1;
@@ -276,6 +278,7 @@ std::string open(const std::string &driver, const SDL_AudioSpec &src, int frames
              drv_name[0] ? drv_name : name.c_str(), type_name(g_type), g_rate, g_frames, g_frames * 1000.0 / g_rate, min,
              max, preferred, g_out_latency * 1000.0 / g_rate);
     what = b;
+    g_written = 0, g_short = 0, g_flowing = false;   // (started again: the report is this start's)
     g_t0 = prof::now_ns();
     g_started = true;
     if (long r = g_drv->start(); r != OK) {
@@ -284,6 +287,7 @@ std::string open(const std::string &driver, const SDL_AudioSpec &src, int frames
         g_stream = stream = nullptr;
         return close(), error_of("the driver didn't start playing", r);
     }
+    g_restart = false;   // (a request made while it was being set up, the rate set: it is set up now)
     return "";
 }
 
@@ -299,10 +303,12 @@ void close() {
     g_stream = nullptr;   // the caller's (window_close destroys it after this)
     delete[] g_scratch;
     g_scratch = nullptr;
+    g_restart = false;
     if (g_com) CoUninitialize(), g_com = false;
 }
 
 bool active() { return g_started; }
+bool restart_wanted() { return g_started && g_restart.load(std::memory_order_relaxed); }
 int period_frames() { return (int)g_frames; }
 
 std::string describe() {
@@ -314,7 +320,7 @@ std::string describe() {
                      (unsigned long long)g_short.load());
     if (g_overloads) n += snprintf(b + n, sizeof b - n, "; %llu overloads", (unsigned long long)g_overloads.load());
     if (g_resets)
-        snprintf(b + n, sizeof b - n, "; the driver asked %llu times to be restarted (its settings changed: they apply from the next game)",
+        snprintf(b + n, sizeof b - n, "; the driver asked %llu times to be restarted (its settings changed), and was",
                  (unsigned long long)g_resets.load());
     return b;
 }

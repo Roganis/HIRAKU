@@ -118,6 +118,25 @@ if(TARGET hiraku_host)
   add_test(NAME input_bindings COMMAND test_bindings)
 endif()
 
+# A sound device that stops taking the sound (a USB card pulled out, a driver to restart): when it
+# counts as stopped and what is opened in its place (runtime/host/soundwatch.h), then the ALSA back
+# end with a pretend libasound whose card the test takes away (host/fake_asound.c; HIRAKU loads
+# libasound by name at run time, so LD_LIBRARY_PATH puts the pretend one first)
+add_executable(test_soundwatch host/test_soundwatch.cpp)
+target_include_directories(test_soundwatch PRIVATE ${CMAKE_SOURCE_DIR}/runtime)
+add_test(NAME host_soundwatch COMMAND test_soundwatch)
+if(TARGET hiraku_host AND CMAKE_SYSTEM_NAME STREQUAL "Linux" AND NOT CMAKE_CROSSCOMPILING)
+  add_library(fake_asound SHARED host/fake_asound.c)
+  set_target_properties(fake_asound PROPERTIES PREFIX "lib" OUTPUT_NAME "asound" SUFFIX ".so.2"
+                        LIBRARY_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/fake-asound)
+  add_executable(test_alsa_lost host/test_alsa_lost.cpp)
+  target_link_libraries(test_alsa_lost PRIVATE hiraku_host)
+  add_dependencies(test_alsa_lost fake_asound)
+  add_test(NAME host_alsa_lost COMMAND test_alsa_lost ${CMAKE_CURRENT_BINARY_DIR}/fake-asound/gone ${CMAKE_CURRENT_BINARY_DIR}/fake-asound/stuck)
+  set_tests_properties(host_alsa_lost PROPERTIES TIMEOUT 60 ENVIRONMENT
+    "LD_LIBRARY_PATH=${CMAKE_CURRENT_BINARY_DIR}/fake-asound;FAKE_ASOUND_GONE=${CMAKE_CURRENT_BINARY_DIR}/fake-asound/gone;FAKE_ASOUND_STUCK=${CMAKE_CURRENT_BINARY_DIR}/fake-asound/stuck")
+endif()
+
 # Smooth motion's in-between pictures: the scroll guess (include/hiraku/scroll_guess.h)
 add_executable(test_scroll_guess smooth/test_scroll_guess.cpp)
 target_include_directories(test_scroll_guess PRIVATE ${CMAKE_SOURCE_DIR}/include)

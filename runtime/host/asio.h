@@ -27,6 +27,10 @@ std::string open(const std::string &driver, const SDL_AudioSpec &src, int frames
                  std::string &what);
 void close();
 bool active();
+// The driver asked to be restarted (its settings were changed in its control panel, or its card
+// went): close() then open() again, from the thread that opened it. Many drivers stop calling back
+// until then.
+bool restart_wanted();
 int period_frames();   // the driver's buffer, at the card's rate
 // For the report: frames the driver took against its rate, the times the sound came short, the
 // driver's overloads and restart requests

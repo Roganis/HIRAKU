@@ -33,6 +33,7 @@ int g_frame_bytes = 0;
 unsigned g_rate = 0;
 SDL_AudioStream *g_stream = nullptr;
 std::atomic<bool> g_stop{false};
+std::atomic<bool> g_lost{false};   // Windows took the device back: the thread has stopped filling it
 std::thread *g_thread = nullptr;   // never destroyed: a game ends with exit(), the thread still writing
 std::atomic<uint64_t> g_written{0}, g_short{0};
 uint64_t g_t0 = 0;
@@ -45,6 +46,7 @@ const GUID SUBTYPE_PCM = {0x00000001, 0x0000, 0x0010, {0x80, 0x00, 0x00, 0xaa, 0
 const GUID HK_CLSID_MMDeviceEnumerator = {0xbcde0395, 0xe52f, 0x467c, {0x8e, 0x3d, 0xc4, 0x57, 0x92, 0x91, 0x69, 0x2e}};
 const GUID HK_IID_IMMDeviceEnumerator = {0xa95664d2, 0x9614, 0x4f35, {0xa7, 0x46, 0xde, 0x8d, 0xb6, 0x36, 0x17, 0xe6}};
 const GUID HK_IID_IAudioClient = {0x1cb9ad4c, 0xdbfa, 0x4c32, {0xb1, 0x78, 0xc2, 0xf5, 0x68, 0xa7, 0x03, 0xb2}};
+constexpr HRESULT HK_E_RESOURCES_INVALIDATED = (HRESULT)0x88890026;   // AUDCLNT_E_RESOURCES_INVALIDATED (newer headers only)
 const GUID HK_IID_IAudioRenderClient = {0xf294acfc, 0x3146, 0x4483, {0xa7, 0xbf, 0xad, 0xdc, 0xa7, 0xc2, 0x60, 0xe2}};
 
 std::string narrow(const wchar_t *w) {
@@ -100,7 +102,14 @@ void run() {
     while (!g_stop.load(std::memory_order_relaxed)) {
         if (WaitForSingleObject(g_event, 200) != WAIT_OBJECT_0) continue;
         BYTE *p = nullptr;
-        if (FAILED(g_render->GetBuffer(g_buffer, &p))) continue;
+        const HRESULT hr = g_render->GetBuffer(g_buffer, &p);
+        // the device unplugged or turned off, its format changed in Windows' settings, the audio
+        // service stopped: this client is finished, for good (lost(): the window opens another)
+        if (hr == AUDCLNT_E_DEVICE_INVALIDATED || hr == AUDCLNT_E_SERVICE_NOT_RUNNING || hr == HK_E_RESOURCES_INVALIDATED) {
+            g_lost = true;
+            break;
+        }
+        if (FAILED(hr)) continue;
         const int got = std::max(0, SDL_GetAudioStreamData(g_stream, p, bytes));
         if (got < bytes) {   // the game's sound didn't come in time: silence for the rest (a break)
             memset(p + got, 0, (size_t)(bytes - got));
@@ -240,7 +249,8 @@ std::string open(const std::string &device, const SDL_AudioSpec &src, int frames
     snprintf(b, sizeof b, "%s, %u Hz, buffer %u frames (%.1f ms; the device's shortest %.1f ms)", fname, g_rate,
              (unsigned)g_buffer, g_buffer * 1000.0 / g_rate, minimum / 1e4);
     what = b;
-    g_stop = false;
+    g_stop = false, g_lost = false;
+    g_written = 0, g_short = 0;   // (opened again after a device was lost: the report is this one's)
     g_t0 = prof::now_ns();
     g_thread = new std::thread(run);
     g_client->Start();
@@ -254,6 +264,7 @@ void close() {
         delete g_thread;
         g_thread = nullptr;
     }
+    g_lost = false;   // (a device that was lost is closed: whatever plays next isn't)
     if (g_client) g_client->Stop();
     if (g_render) g_render->Release(), g_render = nullptr;
     if (g_client) g_client->Release(), g_client = nullptr;
@@ -262,6 +273,7 @@ void close() {
 }
 
 bool active() { return g_thread != nullptr; }
+bool lost() { return g_lost.load(std::memory_order_relaxed); }
 int period_frames() { return (int)g_buffer; }
 
 std::string describe() {

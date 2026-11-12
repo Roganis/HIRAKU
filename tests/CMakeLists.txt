@@ -279,6 +279,12 @@ if(Python3_Interpreter_FOUND AND NOT WIN32)
   # ... apply and recover: killed at any file, the folder is put right as the old version or the new, never a mix
   add_test(NAME update_apply COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/tools/test_update_apply.py $<TARGET_FILE:test_file_lock>)
 endif()
+# tools/release-fetch.sh: a release's download is used only if it is the file tools/release-sums.txt names
+find_program(HK_BASH bash)
+find_program(HK_CURL curl)
+if(HK_BASH AND HK_CURL AND NOT WIN32)
+  add_test(NAME release_fetch COMMAND ${HK_BASH} ${CMAKE_CURRENT_SOURCE_DIR}/tools/test_release_fetch.sh ${CMAKE_SOURCE_DIR})
+endif()
 # tools/runpath.py: a packaged program's run path keeps only the package's own folders
 find_program(HK_READELF readelf)
 if(Python3_Interpreter_FOUND AND HK_READELF AND CMAKE_SYSTEM_NAME STREQUAL "Linux")

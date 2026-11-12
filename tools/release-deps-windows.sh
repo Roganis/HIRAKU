@@ -22,9 +22,11 @@ ZSTD_VER=1.5.7
 # the static qtbase's version must be the host's (its moc, rcc and uic build the launcher)
 QT_VER=${HK_QT_VER:-$(qmake6 -query QT_VERSION 2>/dev/null || echo 6.12.0)}
 PY_VER=3.14.8
+SEVENZIP=26.02
 
-fetch() {   # URL FILE: into out/win-deps/dl, once
-  [ -f "$dl/$2" ] || curl -fL --retry 3 -o "$dl/$2" "$1"
+. "$root/tools/release-fetch.sh"
+fetch() {   # URL FILE: into out/win-deps/dl, once, checked against tools/release-sums.txt
+  hk_fetch "$1" "$dl/$2"
 }
 
 if [ ! -f "$deps/lib/libzstd.a" ] || [ ! -f "$deps/qt6/lib/libQt6Core.a" ] || [ ! -f "$deps/python/python.exe" ]; then
@@ -44,8 +46,9 @@ fi
 "$root/tools/ffmpeg-min.sh" "$deps" x86_64-w64-mingw32
 
 if [ ! -f "$deps/bin/7zr.exe" ]; then
-  fetch "https://www.7-zip.org/a/7zr.exe" 7zr.exe
+  # (a release's own file: 7-zip.org's 7zr.exe is whichever version is the latest)
+  fetch "https://github.com/ip7z/7zip/releases/download/$SEVENZIP/7zr.exe" "7zr-${SEVENZIP/./}.exe"
   mkdir -p "$deps/bin"
-  cp "$dl/7zr.exe" "$deps/bin/7zr.exe"
+  cp "$dl/7zr-${SEVENZIP/./}.exe" "$deps/bin/7zr.exe"
 fi
 echo "release-deps-windows: in $deps"

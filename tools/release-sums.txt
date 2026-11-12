@@ -1,0 +1,19 @@
+# SHA-256 of the files the release scripts download (tools/release-fetch.sh), by the name each is
+# kept under. Lines: the sum, two spaces, the name.
+#
+# From the publisher's own release (GitHub's digest of the file):
+9c75cf16330322c217dedd2e0609f1124f1b54b8633e763467b4684d0f4334a3  SDL3-3.4.18.tar.gz
+049b9dd711e3fb3f8d84feb998dfec54a75e17cf539c4a80ff4d058d839771cf  SDL3-devel-3.4.18-mingw.tar.gz
+78d84602ae616cfe26b33a73b7d3b9b6b56e8a6650e53d92c9c6ca938f747acd  SDL3-devel-3.4.18-VC.zip
+d8faa1b588506b9e3e5a3f57807bb056d534a1641a6b10d15b6ea3f0b413b960  cpython-3.14.8+20261013-linux.tar.gz
+17761876556afd55736cb895d184f5a1c55d43350f1b1e3b129f8d28706d7992  dxvk-2.6.2.tar.gz
+41aaba7b1235304ab5aa0624530c67ae829496cd29e875925271efdccc28c03e  7z2602-linux-x64.tar.xz
+56b8cc9f4971cef253644fafe54063ed7fdca551d4dee0f8c6baa81b855acd72  7zr-2602.exe
+# Of the file as downloaded for an earlier release:
+a93abe456ab01bd96d7a085b3cdb6566b3063f4241360d114142fbdb07f0a310  python-3.14.8-embed-amd64.zip
+# With the sum its publisher gives beside the file (zstd's .sha256, Qt's .sha256):
+eb33e51f49a15e023950cd7825ca74a4a2b43db8354825ac24fc1b7ee09e6fa3  zstd-1.5.7.tar.gz
+a951bd163c7b80fc6b8c88d7668fb56abf91c152373e13c10666763238131307  qtbase-everywhere-src-6.12.0.tar.xz
+# Of the file as downloaded on 2026-11-12 (its publisher gives no sum):
+9a93b2b7dfdac77ceba5a558a580e74667dd6fede4585b91eefb60f03b72df23  zlib-1.3.1.tar.gz
+a5cb1a6ded7d2d7e92d550ba28edd21be2d1d4044662b399887351023e30ce64  dxvk-2.6.2-LICENSE

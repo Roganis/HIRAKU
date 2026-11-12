@@ -32,8 +32,9 @@ PY_BUILD=20261013
 DXVK_VER=2.6.2
 jobs=$(nproc)
 
-fetch() {   # URL FILE: into PREFIX/src, once
-  [ -f "$prefix/src/$2" ] || curl -fL --retry 3 -o "$prefix/src/$2" "$1"
+. "$root/tools/release-fetch.sh"
+fetch() {   # URL FILE: into PREFIX/src, once, checked against tools/release-sums.txt
+  hk_fetch "$1" "$prefix/src/$2"
 }
 
 work=$(mktemp -d)
@@ -83,7 +84,7 @@ if [ ! -x "$prefix/python/bin/python3" ]; then
 fi
 
 if [ ! -x "$prefix/bin/7zz" ]; then
-  fetch "https://www.7-zip.org/a/7z$SEVENZIP-linux-x64.tar.xz" "7z$SEVENZIP-linux-x64.tar.xz"
+  fetch "https://github.com/ip7z/7zip/releases/download/${SEVENZIP:0:2}.${SEVENZIP:2}/7z$SEVENZIP-linux-x64.tar.xz" "7z$SEVENZIP-linux-x64.tar.xz"
   mkdir -p "$prefix/bin" "$work/7z"
   tar -xf "$prefix/src/7z$SEVENZIP-linux-x64.tar.xz" -C "$work/7z"
   cp "$work/7z/7zzs" "$prefix/bin/7zz"   # the static build

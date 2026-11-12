@@ -6,15 +6,16 @@
 #
 # - a push of a tag v*: both packages, published as a GitHub release (a draft, to look over first),
 #   with the LGPL libraries' sources beside them;
-# - a push to main (or a pull request): both packages as the run's artifacts, kept 14 days, and the
-#   unit tests (ctest; the Windows programs' under Wine): what fails on one system only shows
-#   before a release is tagged;
+# - a push to main or to a branch named ci/... (or a pull request): both packages as the run's
+#   artifacts, kept 14 days, and the unit tests (ctest; the Windows programs' under Wine): what
+#   fails on one system only shows before a release is tagged, and a ci/... branch shows it
+#   before main has the change;
 # - by hand (Actions > release > Run workflow): both packages as the run's artifacts.
 name: release
 
 on:
   push:
-    branches: [main]
+    branches: [main, "ci/**"]   # ci/...: to try a change with these compilers before main has it
     tags: ["v*"]
   pull_request:
   workflow_dispatch:

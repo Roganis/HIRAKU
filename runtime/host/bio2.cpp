@@ -152,9 +152,8 @@ void bio2_stop() {
     if (g_thread.joinable()) g_thread.join();
 }
 
-void bio2_frame(hk::Core &core) {
+void bio2_lamps(hk::Core &core) {
     if (!g_running) return;
-    // the lamps out
     static std::string family;
     static std::vector<int> where;   // each of cab::lamps(family)'s byte, or -1
     if (family != core.family()) {
@@ -169,10 +168,16 @@ void bio2_frame(hk::Core &core) {
     const std::string text = core.display_text();
     if (!text.empty())
         for (size_t k = 0; k < 9; k++) out[0x17 + k] = k < text.size() ? (uint8_t)text[k] : ' ';
+    std::lock_guard<std::mutex> l(g_mutex);
+    memcpy(g_out, out, OUT);
+}
+
+void bio2_frame(hk::Core &core) {
+    if (!g_running) return;
+    bio2_lamps(core);   // the lamps out (again, for who calls only this)
     uint8_t in[IN];
     {
         std::lock_guard<std::mutex> l(g_mutex);
-        memcpy(g_out, out, OUT);
         if (!g_have_in) return;
         memcpy(in, g_in, IN);
     }

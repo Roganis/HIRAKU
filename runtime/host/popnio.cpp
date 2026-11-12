@@ -593,9 +593,8 @@ namespace popnio {
 void use_usb(std::unique_ptr<Usb> usb) { g_usb = std::move(usb); }
 }  // namespace popnio
 
-void popnio_frame(hk::Core &core) {
+void popnio_lamps(hk::Core &core) {
     if (!g_running) return;
-    // the lamps out
     static std::string family;
     static std::vector<uint32_t> bits;   // each of cab::lamps(family)'s on the board's word
     if (family != core.family()) {
@@ -607,10 +606,16 @@ void popnio_frame(hk::Core &core) {
     const auto &lit = core.lamp_state();
     for (size_t i = 0; i < bits.size() && i < lit.size(); i++)
         if (lit[i]) lamps |= bits[i];
+    std::lock_guard<std::mutex> l(g_mutex);
+    g_lamps = lamps;
+}
+
+void popnio_frame(hk::Core &core) {
+    if (!g_running) return;
+    popnio_lamps(core);   // the lamps out (again, for who calls only this)
     uint32_t now, count;
     {
         std::lock_guard<std::mutex> l(g_mutex);
-        g_lamps = lamps;
         if (!g_have_in) return;
         now = g_pad, count = g_coins;
     }

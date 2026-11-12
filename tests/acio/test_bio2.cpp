@@ -176,12 +176,23 @@ int main() {
         hk::host::bio2_frame(m);
         std::this_thread::sleep_for(std::chrono::milliseconds(16));
     }
+    // the lamps alone (what the frame loop calls before its wait): another lamp goes out, and no
+    // control is read by it
+    const size_t inputs_before = m.inputs.size();
+    for (size_t i = 0; i < m.lamps.size(); i++)
+        if (hk::cab::lamps(m.fam)[i].name == "P1 Key Lamp 4") m.lamps[i] = 1;
+    for (int k = 0; k < 8; k++) {
+        hk::host::bio2_lamps(m);
+        std::this_thread::sleep_for(std::chrono::milliseconds(16));
+    }
     hk::host::bio2_stop();
     stop = true;
     fake.join();
     close(master);
 
     CHECK(g_seen);
+    CHECK(m.inputs.size() == inputs_before);
+    CHECK(g_lamps_seen[0x07 + 3] == 0x80);   // P1 key 4, by bio2_lamps
     CHECK(g_lamps_seen[0x07 + 1] == 0x80);   // P1 key 2 (bit 7, as IIDX 27)
     CHECK(g_lamps_seen[0x07] == 0);
     CHECK(g_lamps_seen[0x26] == 0x80);       // spotlight 6

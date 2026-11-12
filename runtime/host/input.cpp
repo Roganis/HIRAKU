@@ -4,6 +4,7 @@
 #include <SDL3/SDL.h>
 
 #include <algorithm>
+#include <atomic>
 #include <cmath>
 #include <cstdlib>
 #include <cstdio>
@@ -284,7 +285,13 @@ namespace {
 thread_local std::chrono::steady_clock::time_point g_event_time{};   // input_event's, while it runs
 }
 
+namespace {
+std::atomic<bool> g_times_used{false};
+}
+bool input_times_used() { return g_times_used.load(std::memory_order_relaxed); }
+
 std::chrono::steady_clock::time_point input_time() {
+    g_times_used.store(true, std::memory_order_relaxed);
     return g_event_time != std::chrono::steady_clock::time_point{} ? g_event_time : std::chrono::steady_clock::now();
 }
 

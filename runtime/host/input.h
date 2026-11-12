@@ -41,5 +41,8 @@ std::string input_describe();                         // the active bindings, fo
 // controller's or keyboard's own event time, so a press between two frames keeps its place
 // (hiraku-pc's --press-time judges by it); now for inputs that come without one
 std::chrono::steady_clock::time_point input_time();
+// A core has asked for one: its inputs count by their times, so the window looks for new ones
+// often while it waits (four times a millisecond), which is where a polled controller's time comes from
+bool input_times_used();
 
 }  // namespace hk::host

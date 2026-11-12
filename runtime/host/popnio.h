@@ -46,7 +46,11 @@ void popnio_default_dll(const std::string &path);
 std::string popnio_help();
 
 void popnio_start();               // the board's thread, if --popn-io was given
-void popnio_frame(hk::Core &core); // once a frame on the core's thread: the controls in, the lamps out
+// Once a frame on the core's thread. popnio_lamps as soon as the frame is emulated (the lamps
+// out, before the wait for the frame's time); popnio_frame as the next one starts (the controls
+// in; and the lamps, for who calls nothing else)
+void popnio_lamps(hk::Core &core);
+void popnio_frame(hk::Core &core);
 void popnio_stop();
 
 namespace popnio {

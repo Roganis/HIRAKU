@@ -55,6 +55,7 @@ static void watch_audio();   // below: the sound's way out, opened again if it s
 namespace {
 uint64_t g_settle_until = 0;   // window/renderer setup right after opening: not a stall
 std::atomic<uint64_t> g_device_pulls{0}, g_device_short{0};   // the device's pulls, and those the queue fell short of
+hk::sys::Wake g_pulled;   // signalled at each pull, for who waits for the queue to go down (wait_pull)
 std::atomic<uint64_t> g_device_short_late{0};                  // ... of those, after the game's boot (g_tune_from)
 uint64_t g_tune_from = 0;          // the queue target self-tunes from here on (window_open + 10 s)
 
@@ -620,6 +621,7 @@ static void open_audio(int level, int target_ms) {
         // the queue runs dry between chunks and is full again when the next one is counted
         SDL_SetAudioStreamGetCallback(g_audio, [](void *, SDL_AudioStream *s, int, int total) {
             g_device_pulls.fetch_add(1, std::memory_order_relaxed);
+            g_pulled.signal();
             const uint64_t t = prof::now_ns();
             if (SDL_GetAudioStreamAvailable(s) < total && !g_fast && t >= g_settle_until) {
                 g_device_short.fetch_add(1, std::memory_order_relaxed);
@@ -1217,6 +1219,17 @@ void window_present(const uint32_t *rgb, int w, int h, double vsec) {
     }
 }
 
+// The wait of the loops below, where the sound paces the game: until the device next takes sound
+// from the queue, which is the only time the queue gets shorter (so the loop sees it at once, not
+// up to a quarter of a millisecond later, and wakes once a pull instead of 4,000 times a second:
+// that was 4 % of a core, as much as a light game's own work). No longer than 4 ms, for the
+// window's events and a device that has stopped. A core that takes its inputs with their times
+// (host/input.h) keeps the quarter of a millisecond: a polled controller's time is its poll's.
+static void wait_pull() {
+    if (input_times_used()) SDL_DelayPrecise(250'000);
+    else g_pulled.wait(4'000'000);
+}
+
 // a frame starts at machine time vsec: where its sound will be (g_start_to_sound)
 static void sound_lag(double vsec) {
     if (!g_audio || g_fast || prof::now_ns() < g_settle_until || !g_machine_frames) return;
@@ -1251,7 +1264,7 @@ bool window_next(double vsec) {
         const uint64_t w0 = prof::ticks();
         while (queued_bytes() > g_target_frames * 8 && !g_quit && !g_interrupt.load(std::memory_order_relaxed)) {
             poll();   // (which also opens the sound again if its device has stopped: the queue then empties)
-            SDL_DelayPrecise(250'000);   // 0.25 ms
+            wait_pull();
         }
         prof::g_wait_ticks += prof::ticks() - w0;
         poll();
@@ -1350,7 +1363,7 @@ void push_chunk(const float *lr, int frames) {
     while (!pacing::active() && !g_frame_paced && queued_bytes() > g_target_frames * 8 && !g_quit &&
            !g_interrupt.load(std::memory_order_relaxed)) {
         poll();   // (which also opens the sound again if its device has stopped: the queue then empties)
-        SDL_DelayPrecise(250'000);   // 0.25 ms
+        wait_pull();
     }
     prof::g_wait_ticks += prof::ticks() - w0;
     poll();

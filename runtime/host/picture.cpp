@@ -718,6 +718,7 @@ void make_target(Target &t, int w, int h, GLenum fmt, bool mip, const std::strin
 }
 
 void Chain::target(Target &t, int i, int w, int h, GLenum fmt, bool mip) {
+    if (t.tex && t.w == w && t.h == h && t.fmt == fmt && t.mip == mip) return;   // as it is: no name to build, every refresh
     make_target(t, w, h, fmt, mip, name + " pass " + std::to_string(i));
 }
 
@@ -889,6 +890,9 @@ BeamKept g_kept[2];
 bool g_beam = false;
 Beam g_beam_cfg;
 GLuint g_beam_prog = 0;
+struct BeamUniforms {   // where the beam's program takes what changes from refresh to refresh (found when it is built)
+    GLint phase = -1, frames_per_hz = -1, gamma = -1, gain = -1, scan = -1, tubes = -1;
+} g_beam_at;
 uint64_t g_beam_refreshes = 0;
 
 const char *const PLAIN_VS = R"(#version 330
@@ -1007,6 +1011,8 @@ bool set_beam(bool on, const Beam &b) {
             gl.glUseProgram(g_beam_prog);
             gl.glUniform1i(gl.glGetUniformLocation(g_beam_prog, "Now"), 0);
             gl.glUniform1i(gl.glGetUniformLocation(g_beam_prog, "Before"), 1);
+            auto loc = [](const char *n) { return gl.glGetUniformLocation(g_beam_prog, n); };
+            g_beam_at = {loc("Phase"), loc("FramesPerHz"), loc("Gamma"), loc("Gain"), loc("Scan"), loc("Tubes")};
         }
     }
     return !on || g_beam_prog;
@@ -1354,13 +1360,12 @@ Mode draw(const uint32_t *rgb, int w, int h, int x, int y, int vw, int vh, int w
             gl.glBindTexture(GL_TEXTURE_2D, kept.pic[u ? kept.now ^ 1 : kept.now].tex);
             gl.glBindSampler(u, nearest);
         }
-        auto loc = [](const char *n) { return gl.glGetUniformLocation(g_beam_prog, n); };
-        gl.glUniform1f(loc("Phase"), (float)std::clamp(beam_phase, 0.0, 0.99999));
-        gl.glUniform1f(loc("FramesPerHz"), (float)frames_per_hz);
-        gl.glUniform1f(loc("Gamma"), g_beam_cfg.gamma);
-        gl.glUniform1f(loc("Gain"), g_beam_cfg.gain);
-        gl.glUniform1i(loc("Scan"), g_beam_cfg.sideways ? 3 : 1);
-        gl.glUniform1f(loc("Tubes"), (float)std::max(1, g_beam_cfg.tubes));
+        gl.glUniform1f(g_beam_at.phase, (float)std::clamp(beam_phase, 0.0, 0.99999));
+        gl.glUniform1f(g_beam_at.frames_per_hz, (float)frames_per_hz);
+        gl.glUniform1f(g_beam_at.gamma, g_beam_cfg.gamma);
+        gl.glUniform1f(g_beam_at.gain, g_beam_cfg.gain);
+        gl.glUniform1i(g_beam_at.scan, g_beam_cfg.sideways ? 3 : 1);
+        gl.glUniform1f(g_beam_at.tubes, (float)std::max(1, g_beam_cfg.tubes));
         gl.glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
         for (int u = 0; u < 2; u++) gl.glBindSampler(u, 0);
         gl.glActiveTexture(GL_TEXTURE0);

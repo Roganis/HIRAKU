@@ -108,6 +108,23 @@ template <class Clock, class Duration>
 void sleep_until(std::chrono::time_point<Clock, Duration> t) {
     sleep_for(t - Clock::now());
 }
+
+// One thread woken by another: wait() comes back when signal() has been called since the last
+// wait came back (true), or after `ns` (false: a wait for nothing or less doesn't wait). signal()
+// takes no lock and may be called from a sound device's thread; one thread waits at a time.
+class Wake {
+public:
+    Wake();
+    ~Wake();
+    Wake(const Wake &) = delete;
+    Wake &operator=(const Wake &) = delete;
+    void signal();
+    bool wait(int64_t ns);
+
+private:
+    struct Impl;
+    Impl *impl_;
+};
 // Windows isn't to slow this process down, nor make its timer coarse, while its window is covered
 // or minimized (Windows 11 may: shell/wintimer.h). True: told; nothing to tell elsewhere
 bool full_speed();

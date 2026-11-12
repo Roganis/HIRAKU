@@ -662,6 +662,13 @@ int main(int argc, char **argv) {
                 exit(machine.exit_code());
             }
         }
+        // the lamps the frame just emulated lit, out now: before the wait for the frame's time below
+        // (most of a frame, on a PC that keeps up), not after it. The controls are read after it.
+#ifdef HK_WITH_SDL
+        host::lights_frame();
+#endif
+        host::bio2_lamps(machine);
+        host::popnio_lamps(machine);
 #ifdef HK_WITH_SDL
         if (window_scale && !(present_at_vblank_end ? host::window_next(machine.seconds())
                                                     : host::window_frame(rgb, w, h, machine.seconds()))) {
@@ -676,9 +683,6 @@ int main(int argc, char **argv) {
         if (between_at_frame) between_draw(w, h);
         if (prof::g_sample_frame) prof::g_sample_frame(f);   // HK_PROFILE_FRAMES
         if (lights_log) lights_log(f);
-#ifdef HK_WITH_SDL
-        host::lights_frame();
-#endif
         host::readers_frame([&](int p, const std::string &n) { return machine.card_read(p, n); },
                             [&](const std::string &name, int v) { return machine.set_input(name, v); });
         host::bio2_frame(machine);

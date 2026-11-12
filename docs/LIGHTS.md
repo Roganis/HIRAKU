@@ -94,7 +94,7 @@ After that it sends one line per change, as it happens, in the same `<lamp>=<0|1
 - the game ID;
 - the cabinet family.
 
-Changes are collected once per video frame (60 Hz). A client that stops reading is dropped. The socket disappears when the game exits.
+Changes are collected once per video frame (60 Hz), as soon as the frame is emulated: before HIRAKU waits for the frame's time, not after (up to 0.9.0 they went out after the wait, most of a frame later on a PC that keeps up). A client that stops reading is dropped. The socket disappears when the game exits.
 
 Watching from a shell:
 

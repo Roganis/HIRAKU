@@ -33,7 +33,11 @@ bool bio2_option(const std::string &name, const std::function<std::string()> &va
 std::string bio2_help();
 
 void bio2_start();               // the board's thread, if --bio2 was given
-void bio2_frame(hk::Core &core); // once a frame on the core's thread: the controls in, the lamps out
+// Once a frame on the core's thread. bio2_lamps as soon as the frame is emulated (the lamps and
+// the ticker out, before the wait for the frame's time); bio2_frame as the next one starts (the
+// controls in; and the lamps, for who calls nothing else)
+void bio2_lamps(hk::Core &core);
+void bio2_frame(hk::Core &core);
 void bio2_stop();
 
 }  // namespace hk::host

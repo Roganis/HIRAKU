@@ -2,13 +2,17 @@
 #include "shell/sys.h"
 
 #include <algorithm>
+#include <atomic>
 #include <cerrno>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <chrono>
+#include <condition_variable>
 #include <fstream>
+#include <mutex>
 #include <thread>
+#include <utility>
 
 #ifdef _WIN32
 #ifndef WIN32_LEAN_AND_MEAN
@@ -35,6 +39,11 @@
 #include <unistd.h>
 #if defined(__GLIBC__)
 #include <execinfo.h>
+#endif
+#if defined(__linux__)
+#include <linux/futex.h>
+#include <sys/syscall.h>
+#include <time.h>
 #endif
 
 extern char **environ;
@@ -72,6 +81,71 @@ void sleep_ns(int64_t ns) {
     std::this_thread::sleep_for(std::chrono::nanoseconds(ns));
 #endif
 }
+
+// Wake. Linux: a word and the kernel's wait on it (0 nothing, 1 signalled, 2 a thread asleep on
+// it), so signal() is one exchange unless a thread is asleep. Windows: an event that resets itself,
+// waited for together with the thread's fine timer. Elsewhere: a lock and a condition.
+#if defined(__linux__)
+struct Wake::Impl {
+    std::atomic<uint32_t> word{0};
+    long futex(int op, uint32_t value, const timespec *t) {
+        return syscall(SYS_futex, reinterpret_cast<uint32_t *>(&word), op | FUTEX_PRIVATE_FLAG, value, t, nullptr, 0);
+    }
+};
+void Wake::signal() {
+    if (impl_->word.exchange(1, std::memory_order_acq_rel) == 2) impl_->futex(FUTEX_WAKE, 1, nullptr);
+}
+bool Wake::wait(int64_t ns) {
+    uint32_t was = 1;
+    if (impl_->word.compare_exchange_strong(was, 0, std::memory_order_acq_rel)) return true;
+    if (ns <= 0) return false;
+    was = 0;
+    if (impl_->word.compare_exchange_strong(was, 2, std::memory_order_acq_rel)) {
+        const timespec t{(time_t)(ns / 1'000'000'000), (long)(ns % 1'000'000'000)};
+        impl_->futex(FUTEX_WAIT, 2, &t);   // (woken, the word no longer 2, the time up, or a signal handler: all one here)
+    }
+    return impl_->word.exchange(0, std::memory_order_acq_rel) == 1;
+}
+#elif defined(_WIN32)
+struct Wake::Impl {
+    HANDLE event = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+    ~Impl() {
+        if (event) CloseHandle(event);
+    }
+};
+void Wake::signal() {
+    if (impl_->event) SetEvent(impl_->event);
+}
+bool Wake::wait(int64_t ns) {
+    if (!impl_->event) return sleep_ns(ns), false;
+    if (ns <= 0) return WaitForSingleObject(impl_->event, 0) == WAIT_OBJECT_0;
+    if (HANDLE t = fine_timer(ns)) {
+        const HANDLE both[2] = {impl_->event, t};
+        return WaitForMultipleObjects(2, both, FALSE, INFINITE) == WAIT_OBJECT_0;
+    }
+    return WaitForSingleObject(impl_->event, (DWORD)std::min<int64_t>((ns + 999'999) / 1'000'000, 0x7fffffff)) == WAIT_OBJECT_0;
+}
+#else
+struct Wake::Impl {
+    std::mutex m;
+    std::condition_variable c;
+    bool set = false;
+};
+void Wake::signal() {
+    {
+        std::lock_guard<std::mutex> l(impl_->m);
+        impl_->set = true;
+    }
+    impl_->c.notify_one();
+}
+bool Wake::wait(int64_t ns) {
+    std::unique_lock<std::mutex> l(impl_->m);
+    if (ns > 0) impl_->c.wait_for(l, std::chrono::nanoseconds(ns), [&] { return impl_->set; });
+    return std::exchange(impl_->set, false);
+}
+#endif
+Wake::Wake() : impl_(new Impl) {}
+Wake::~Wake() { delete impl_; }
 
 bool full_speed() {
 #ifdef _WIN32

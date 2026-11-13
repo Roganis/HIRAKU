@@ -128,6 +128,18 @@ static void update(int unit) {
     if (r->card_at && r->ejected_at && GetTickCount() - r->ejected_at <= MOUTH_MS) {   // out, at the mouth
         r->state = EJECT_CHECK;
         r->st.front_sensor = 1, r->st.rear_sensor = 0;
+    } else if (two_readers() && r->card_at && r->ejected_at) {
+        // IIDX, the pass taken: the reader asleep and empty, and so it stays until the game wakes it
+        // (INIT, at the next entry: it wakes a sleeping reader only). The game's "take your pass" step
+        // ends when it reads SLEEP, with both sensors clear from GOLD on (bm2dx.exe: DistorteD
+        // 0x42019b, GOLD 0x42093a, DJ TROOPERS 0x4235d5, EMPRESS 0x425e4c), and waits for ever on a
+        // reader that says it is closing. pop'n's way below said SLEEP for one second, 2.5 s after the
+        // pass was pushed out, then "closing" for good: a side whose page came to look later (two
+        // players with passes: one page shows a notice more) stood at "take your pass" for ever
+        r->card_at = 0, r->ejected_at = 0;
+        memset(r->st.uid, 0, 8);
+        r->st.front_sensor = r->st.rear_sensor = 0;
+        r->state = SLEEP;
     } else if (r->card_at && r->ejected_at && GetTickCount() - r->ejected_at <= MOUTH_MS + 1000) {
         // taken: the reader starts again, empty (pop'n 18's "take your card" waits for START or
         // INIT with the front sensor clear: 0x49aa06, 0x49a6e0, 0x450ec0)

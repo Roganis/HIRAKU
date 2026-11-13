@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "mainwindow.h"
+#include "runlogs.h"
 #include "nvidia.h"
 
 #include <QAction>
@@ -1551,7 +1552,7 @@ void MainWindow::openRunLog(const QString &game) {
     const QString dir = cfg::logsDir();
     if (!QDir().mkpath(dir)) return;
     const QString name = QDateTime::currentDateTime().toString("yyyyMMdd-HHmmss") + "-" + game + ".log";
-    QStringList old = QDir(dir).entryList({"*.log"}, QDir::Files, QDir::Name);   // oldest first (by name: the time)
+    QStringList old = runlogs::oldestFirst(dir);   // (as written, whatever the PC's clock has done since: runlogs.h)
     while (old.size() >= cfg::kRunLogs) QFile::remove(dir + "/" + old.takeFirst());
     m_lastRunLog = dir + "/" + name;
     m_runLog = new QFile(m_lastRunLog);

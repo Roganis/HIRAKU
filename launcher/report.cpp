@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "report.h"
+#include "runlogs.h"
 
 #include <QApplication>
 #include <QComboBox>
@@ -117,7 +118,8 @@ ReportDialog::ReportDialog(QWidget *parent, const QString &runLog) : QDialog(par
 
     // the runs, newest first ("20261108-183240-iidx16.log")
     const QDir dir(cfg::logsDir());
-    QStringList logs = dir.entryList({"*.log"}, QDir::Files, QDir::Name | QDir::Reversed);
+    QStringList logs = runlogs::oldestFirst(dir.path());   // (as written: runlogs.h)
+    std::reverse(logs.begin(), logs.end());
     for (const QString &l : logs) {
         const QDateTime t = QDateTime::fromString(l.left(15), "yyyyMMdd-HHmmss");
         const QString game = l.mid(16).chopped(4);

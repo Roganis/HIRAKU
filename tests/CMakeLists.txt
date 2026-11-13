@@ -279,6 +279,11 @@ if(Qt6_FOUND)
   target_include_directories(test_cleaner PRIVATE ${CMAKE_SOURCE_DIR}/launcher)
   target_link_libraries(test_cleaner PRIVATE Qt6::Core)
   add_test(NAME report_cleaner COMMAND test_cleaner)
+  # The run logs kept (launcher/runlogs.h): the newest by when they were written, a PC's clock set back or not
+  add_executable(test_runlogs launcher/test_runlogs.cpp)
+  target_include_directories(test_runlogs PRIVATE ${CMAKE_SOURCE_DIR}/launcher)
+  target_link_libraries(test_runlogs PRIVATE Qt6::Core)
+  add_test(NAME launcher_run_logs COMMAND test_runlogs ${CMAKE_CURRENT_BINARY_DIR})
 endif()
 
 # Mods' [[text]]: a string found in memory and its replacement (runtime/host/mods.h)

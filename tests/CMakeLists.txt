@@ -217,7 +217,7 @@ target_include_directories(test_lobby PRIVATE ${CMAKE_SOURCE_DIR}/runtime)
 add_test(NAME eamuse_lobby_bounds COMMAND test_lobby)
 # The PC games' NET TAISEN (runtime/pc/vsock.c) between two processes on one relay, under Wine
 find_program(HK_WINE wine)
-if(TARGET hiraku-pc-test-vsock AND HK_WINE AND NOT WIN32)
+if(TARGET hiraku-pc-test-vsock AND HK_WINE AND (NOT WIN32 OR CMAKE_CROSSCOMPILING))   # (a Windows build: its own server)
   add_test(NAME pc_vsock COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/pc/test_vsock.sh ${CMAKE_BINARY_DIR})
   set_tests_properties(pc_vsock PROPERTIES RESOURCE_LOCK relay_5740 TIMEOUT 120)
 endif()
@@ -354,3 +354,12 @@ if(WIN32 AND NOT MSVC)
       COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:SDL3::SDL3-shared> ${CMAKE_CURRENT_BINARY_DIR})
   endif()
 endif()
+
+# HK_TESTS_REQUIRED: tests that must be there (a list of names). A test whose tool is missing is
+# otherwise left out without a word, and a build machine that lost the tool goes on passing: the
+# workflow names what each of its jobs is to run.
+foreach(t ${HK_TESTS_REQUIRED})
+  if(NOT TEST ${t})
+    message(FATAL_ERROR "tests: ${t} is asked for (HK_TESTS_REQUIRED) and can't be set up here: see tests/CMakeLists.txt for what it needs")
+  endif()
+endforeach()

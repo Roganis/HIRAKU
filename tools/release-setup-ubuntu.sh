@@ -83,6 +83,9 @@ linux)
     libfontconfig1 libfreetype6 libxcb-cursor0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 \
     libxcb-render-util0 libxcb-shape0 libxcb-xinerama0 libxcb-xkb1 libxcb-randr0 libxcb-util1 libxcb-ewmh2 \
     libssl3 libglib2.0-0
+  # for the unit tests: qemu-ppc (the PowerPC instructions held to QEMU's), and a display with
+  # OpenGL in software for the picture engine's (Xvfb and Mesa: the workflow runs ctest in it)
+  $sudo apt-get install -y -q --no-install-recommends qemu-user xvfb libglx-mesa0 libgl1-mesa-dri libegl-mesa0
   # mingw-w64's i686 CRT for the PC games' 32-bit DLLs (runtime/pc/, built by clang), and its gcc
   # for libgcc (clang links it, and finds the CRT's headers by that gcc); its x86_64 CRT and gcc for
   # the 64-bit PC pop'n's loader (runtime/pc64/, hiraku-pc64.exe)

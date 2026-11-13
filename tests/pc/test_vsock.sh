@@ -2,6 +2,7 @@
 # runtime/pc/vsock.c between two processes on one relay (tests/pc/test_vsock.c), under Wine on Linux.
 #   tests/pc/test_vsock.sh BUILD_DIR      (BUILD_DIR: with hiraku-eamuse and pc/test_vsock.exe built:
 #                                          ninja hiraku-eamuse hiraku-pc-test-vsock)
+# In a Windows build made on Linux the server is the Windows one, under Wine too.
 # Needs port 5740 free (the relay's). WINEPREFIX as you have it (a scratch one is made otherwise).
 set -u
 B=$(realpath "${1:-build/cmake}")
@@ -9,9 +10,11 @@ T=$(mktemp -d)
 trap 'kill $E 2>/dev/null; rm -rf "$T"' EXIT
 export WINEPREFIX=${WINEPREFIX:-$T/wine} WINEDEBUG=-all
 wineboot -i > /dev/null 2>&1   # the prefix made now: two programs making it at once start seconds late
-"$B/hiraku-eamuse" --port 0 --data "$T/data" --quiet > "$T/server.log" 2>&1 &
+if [ -x "$B/hiraku-eamuse" ]; then server=("$B/hiraku-eamuse"); else server=(wine "$B/hiraku-eamuse.exe"); fi
+"${server[@]}" --port 0 --data "$T/data" --quiet > "$T/server.log" 2>&1 &
 E=$!
-sleep 1
+# until the relay takes connections (a second here; under Wine with no display, several)
+for _ in $(seq 60); do (exec 3<>/dev/tcp/127.0.0.1/5740) 2>/dev/null && break; sleep 0.5; done
 export HK_PC_RELAY=127.0.0.1:5740
 wine "$B/pc/test_vsock.exe" host > "$T/host.log" 2>&1 &
 H=$!

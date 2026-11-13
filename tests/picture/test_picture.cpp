@@ -100,9 +100,11 @@ void start() {
 }  // namespace
 
 int main() {
+    // (HK_TESTS_NO_SKIP: where a display is promised, the workflow's Xvfb, its lack is a failure)
+    const int skipped = getenv("HK_TESTS_NO_SKIP") ? 1 : 77;
     if (!SDL_Init(SDL_INIT_VIDEO)) {
         printf("skipped: no display (%s)\n", SDL_GetError());
-        return 77;
+        return skipped;
     }
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
@@ -111,7 +113,7 @@ int main() {
     SDL_GLContext ctx = win ? SDL_GL_CreateContext(win) : nullptr;
     if (!ctx) {
         printf("skipped: no OpenGL 3.3 (%s)\n", SDL_GetError());
-        return 77;
+        return skipped;
     }
     g_read = reinterpret_cast<decltype(g_read)>(SDL_GL_GetProcAddress("glReadPixels"));
     g_dir = fs::temp_directory_path() / ("hk-picture-test-" + std::to_string(SDL_GetTicksNS()));

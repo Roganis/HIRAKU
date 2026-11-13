@@ -62,8 +62,9 @@ jobs:
         if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
         # tools/ingest.py's tests with the package's Python (3.14; the runner's is 3.10, and ingest needs tomllib)
         run: |
-          cmake build/release-linux -DPython3_EXECUTABLE=$HOME/hiraku-deps/python/bin/python3
-          ctest --test-dir build/release-linux --output-on-failure
+          cmake build/release-linux -DPython3_EXECUTABLE=$HOME/hiraku-deps/python/bin/python3 \
+            "-DHK_TESTS_REQUIRED=ppc_semantics;picture_engine;host_alsa_lost;release_fetch;package_run_paths"
+          HK_TESTS_NO_SKIP=1 xvfb-run -a -s "-screen 0 1280x1024x24" ctest --test-dir build/release-linux --output-on-failure
       - name: The LGPL libraries' sources
         run: cp ~/hiraku-deps/src/ffmpeg-*.tar.xz ~/hiraku-deps/src/SDL3-*.tar.gz dist/
       - uses: actions/upload-artifact@v7
@@ -206,7 +207,9 @@ jobs:
       # is otherwise never run before a release. No display: the one test that draws is skipped.
       - name: Unit tests (the Windows programs, under Wine)
         if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
-        run: ctest --test-dir build/release-windows --output-on-failure --timeout 300
+        run: |
+          cmake build/release-windows "-DHK_TESTS_REQUIRED=pc_vsock;swapchain_queue;popn_io_ezusb_helper;utf8_paths"
+          ctest --test-dir build/release-windows --output-on-failure --timeout 300
         env:   # (Wine's folder where the job's user owns the folder above it: not the runner's temporary one)
           WINEPREFIX: /tmp/hiraku-wine
           WINEDEBUG: -all

@@ -1,0 +1,3 @@
+# Leaks that aren't HIRAKU's to free, for the tests under the sanitizers (tools/sanitize.sh):
+# SDL keeps a thread's last error text (SDL_SetError) to the end of the program
+leak:libSDL3

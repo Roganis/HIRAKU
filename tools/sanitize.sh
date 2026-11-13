@@ -33,4 +33,5 @@ cmake -S "$root" -B "$build" "${args[@]}"
 cmake --build "$build" -j "${HK_JOBS:-$(nproc)}"
 # a leak ends a test too; an undefined step prints the calls that led to it
 export ASAN_OPTIONS=${ASAN_OPTIONS:-detect_leaks=1} UBSAN_OPTIONS=${UBSAN_OPTIONS:-print_stacktrace=1}
+export LSAN_OPTIONS=${LSAN_OPTIONS:-suppressions=$root/tests/lsan.supp}   # (what a library keeps to the end)
 ctest --test-dir "$build" --output-on-failure --timeout 600

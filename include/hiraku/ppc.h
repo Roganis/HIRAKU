@@ -178,7 +178,8 @@ static inline void op_addis(hk_ctx *c, int rd, int ra, int32_t simm)  { c->r[rd]
 static inline void op_addic(hk_ctx *c, int rd, int ra, int32_t simm, int rc) { c->r[rd] = hk_adde3(c, c->r[ra], (uint32_t)simm, 0, 1, 0); HK_FIN(rd); }
 static inline void op_subfic(hk_ctx *c, int rd, int ra, int32_t simm) { c->r[rd] = hk_adde3(c, ~c->r[ra], (uint32_t)simm, 1, 1, 0); }
 
-static inline void op_mulli(hk_ctx *c, int rd, int ra, int32_t simm) { c->r[rd] = (uint32_t)((int32_t)c->r[ra] * simm); }
+// (the product's low word is the same signed or not, and an unsigned one that doesn't fit is defined)
+static inline void op_mulli(hk_ctx *c, int rd, int ra, int32_t simm) { c->r[rd] = c->r[ra] * (uint32_t)simm; }
 static inline void op_mullw(hk_ctx *c, int rd, int ra, int rb, int oe, int rc) {
     int64_t p = (int64_t)(int32_t)c->r[ra] * (int32_t)c->r[rb];
     c->r[rd] = (uint32_t)p;

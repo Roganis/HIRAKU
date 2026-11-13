@@ -511,7 +511,7 @@ if(SDL3_FOUND)
   # HID outputs (controller LEDs), shared with the launcher
   add_library(hiraku_hidout STATIC runtime/host/hidout.cpp)
   target_link_libraries(hiraku_hidout PUBLIC SDL3::SDL3 hiraku_cabinet)
-  add_library(hiraku_host STATIC runtime/host/window.cpp runtime/host/alsa.cpp runtime/host/effector.cpp runtime/host/notice.cpp runtime/host/warp.cpp runtime/host/lampview.cpp runtime/host/shaderview.cpp runtime/host/picture.cpp runtime/host/input.cpp runtime/host/lights.cpp
+  add_library(hiraku_host STATIC runtime/host/window.cpp runtime/host/alsa.cpp runtime/host/effector.cpp runtime/host/notice.cpp runtime/host/warp.cpp runtime/host/lampview.cpp runtime/host/shaderview.cpp runtime/host/statsview.cpp runtime/host/sysload.cpp runtime/host/picture.cpp runtime/host/input.cpp runtime/host/lights.cpp
               runtime/host/pacing.cpp)
   target_include_directories(hiraku_host PUBLIC runtime)
   target_link_libraries(hiraku_host PUBLIC SDL3::SDL3 hiraku_shell hiraku_hidout)
@@ -523,7 +523,7 @@ if(SDL3_FOUND)
   endif()
   if(WIN32)   # WASAPI exclusive mode and ASIO (--audio-exclusive, --audio-asio: runtime/host/wasapi.h, asio.h)
     target_sources(hiraku_host PRIVATE runtime/host/wasapi.cpp runtime/host/asio.cpp runtime/host/dwm.cpp runtime/host/swapchain.cpp)
-    target_link_libraries(hiraku_host PRIVATE ole32 avrt uuid d3d11 dxgi powrprof)
+    target_link_libraries(hiraku_host PRIVATE ole32 avrt uuid d3d11 dxgi powrprof pdh)   # (pdh: the graphics card's load, host/sysload.h)
   endif()
   # Wayland: the compositor's presentation times and fifo, for display pacing (runtime/host/pacing.h).
   # Found without pkg-config (the laptop package turns it off); libwayland-client is on any system

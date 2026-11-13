@@ -796,6 +796,18 @@ public:
     void debug_line(uint64_t f) override {
         printf("frame %llu: EE pc %08x, cycle %llu\n", (unsigned long long)f, cpuRegs.pc, (unsigned long long)cpuRegs.cycle);
     }
+    // The performance overlay's lines (host/statsview.h): the GS, and the frames that waited for it
+    void overlay_lines(std::vector<std::string> &lines) override {
+        char b[96];
+        snprintf(b, sizeof b, "GS: %s%s", renderer_name(), interp_ ? "; the interpreters" : "");
+        lines.push_back(b);
+        if (gs_waits_ != ov_gs_waits_) {
+            snprintf(b, sizeof b, "waited for the GS on %llu frames, %.1f ms", (unsigned long long)(gs_waits_ - ov_gs_waits_),
+                     gs_wait_ms_ - ov_gs_wait_ms_);
+            lines.push_back(b);
+        }
+        ov_gs_waits_ = gs_waits_, ov_gs_wait_ms_ = gs_wait_ms_;
+    }
 
     double seconds() const override { return seconds_; }
     // a mod's [[rate]] (host/mods.h): PCSX2's NTSC frame rate is the vsync's interval in the
@@ -1405,6 +1417,8 @@ private:
     int gs_w_ = 640, gs_h_ = 448, pic_w_ = 640, pic_h_ = 448;
     uint64_t gs_waits_ = 0;
     double gs_wait_ms_ = 0;
+    uint64_t ov_gs_waits_ = 0;   // ... at overlay_lines' last asking
+    double ov_gs_wait_ms_ = 0;
 };
 
 PythonCore *PythonCore::self_ = nullptr;

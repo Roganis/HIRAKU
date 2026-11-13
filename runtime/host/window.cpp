@@ -39,6 +39,7 @@
 #include "soundwatch.h"
 #include "lampview.h"
 #include "shaderview.h"
+#include "statsview.h"
 #include "notice.h"
 #include "warp.h"
 #include "picture.h"
@@ -51,6 +52,7 @@
 namespace hk::host {
 
 static void watch_audio();   // below: the sound's way out, opened again if it stopped taking the sound
+static void stats_window(statsview::Window &w);   // below: the window's numbers for the performance overlay
 
 namespace {
 uint64_t g_settle_until = 0;   // window/renderer setup right after opening: not a stall
@@ -208,13 +210,14 @@ struct FrameBudget {
         if (budget > ready) {
             const uint64_t w0 = prof::ticks();
             SDL_DelayPrecise((Uint64)(budget - ready));
-            prof::g_wait_ticks += prof::ticks() - w0;
+            pacing::waited(prof::ticks() - w0);
         }
     }
 } g_frame_budget;
 double g_last_vsec = -1;
 void (*g_glFlush)() = nullptr;
 auto g_last_poll = std::chrono::steady_clock::now();
+uint64_t g_pointer_until = 0;     // full screen: the pointer shown until then (the mouse moved with the performance overlay up)
 
 // Poll controls: called every few milliseconds of emulated time.
 void poll() {
@@ -241,6 +244,17 @@ void poll() {
             macro::trigger((size_t)(e.key.key - SDLK_1));
             continue;   // not a game input
         }
+        {   // F7: the performance overlay; the mouse drags its panel (host/statsview.h)
+            const bool mouse = e.type == SDL_EVENT_MOUSE_MOTION || e.type == SDL_EVENT_MOUSE_BUTTON_DOWN || e.type == SDL_EVENT_MOUSE_BUTTON_UP;
+            const float density = g_win ? SDL_GetWindowPixelDensity(g_win) : 0.0f;   // (the mouse's coordinates to pixels)
+            if ((!mouse || SDL_GetWindowFromEvent(&e) == g_win) && statsview::event(e, density > 0 ? density : 1.0f)) continue;
+            // in full screen the pointer is hidden: there while the mouse moves, to take the panel with
+            if (e.type == SDL_EVENT_MOUSE_MOTION && statsview::level() != statsview::Level::off && g_win &&
+                (SDL_GetWindowFlags(g_win) & SDL_WINDOW_FULLSCREEN)) {
+                SDL_ShowCursor();
+                g_pointer_until = prof::now_ns() + 2'500'000'000ull;
+            }
+        }
         if (e.type == SDL_EVENT_KEY_DOWN && !e.key.repeat && e.key.key == SDLK_F9) {   // F9: the game's lights
             lampview::toggle();
             continue;
@@ -261,6 +275,10 @@ void poll() {
         if (e.type == SDL_EVENT_JOYSTICK_ADDED) input_joystick_added(e.jdevice.which);
         if (e.type == SDL_EVENT_JOYSTICK_REMOVED) input_joystick_removed(e.jdevice.which);
         input_event(e);
+    }
+    if (g_pointer_until && prof::now_ns() > g_pointer_until && !statsview::dragging()) {
+        g_pointer_until = 0;
+        if (g_win && (SDL_GetWindowFlags(g_win) & SDL_WINDOW_FULLSCREEN)) SDL_HideCursor();
     }
     auto now = std::chrono::steady_clock::now();
     input_update(std::chrono::duration<double, std::milli>(now - g_last_poll).count());
@@ -314,6 +332,14 @@ void window_set_picture(const std::string &mode, const std::string &shaders_dir,
 
 void window_set_display_sync(bool on) { g_display_sync = on; }
 void window_set_lights_overlay(bool on) { lampview::set_shown(on); }
+bool window_set_stats_overlay(const std::string &level, const std::string &store) {
+    statsview::Level l;
+    if (!statsview::parse_level(level, l)) return false;
+    statsview::set_source(stats_window);
+    statsview::set_store(store);
+    statsview::set_level(l);
+    return true;
+}
 bool window_set_shader_key(const std::string &spec) {
     const size_t eq = spec.find('=');
     return eq != std::string::npos && shaderview::set_control(spec.substr(0, eq), spec.substr(eq + 1));
@@ -883,6 +909,11 @@ static void draw_overlays(int ww, int wh) {
         const int px = shaderview::on_left() ? 8 * k : std::max(0, ww - pw - 8 * k);
         picture::overlay(p.pixels->data(), p.w, p.h, px, 8 * k, pw, ph, 1.0f, ww, wh);
     }
+    if (statsview::Panel p; statsview::panel(p)) {   // the performance overlay (F7), where it was left
+        int px, py, pw, ph;
+        statsview::place(p, ww, wh, px, py, pw, ph);
+        picture::overlay(p.pixels->data(), p.w, p.h, px, py, pw, ph, 1.0f, ww, wh);
+    }
 }
 
 // The second monitor's half in player 2's window (window_set_split), after the first window's
@@ -972,7 +1003,56 @@ std::string cpu_speed_describe() {
 }
 #endif
 
+// Each frame's account for the performance overlay (host/statsview.h): from one frame's start to
+// the next, the time less the waits is the work; of it, what window_present took is the window's
+// and the rest the machine's.
+static struct StatsFrame {
+    uint64_t last = 0, last_wait = 0;     // the frame's start (prof::ticks), and the waits counted by then
+    uint64_t draw_ticks = 0;              // window_present's work since
+    uint64_t part[prof::NCAT] = {};       // prof::g_total at the frame's start, less the waits in each part
+    uint64_t late = 0, breaks = 0;        // the late frames and the sound's breaks counted by then
+    double period = 0;                    // the frame's period, s (0: not at the game's pace)
+} g_sf;
+
+static void stats_frame() {
+    const uint64_t t = prof::ticks(), w = prof::g_wait_ticks;
+    // a part's work so far: its scopes' time, the one open on this thread up to now (the frame hook
+    // is called inside one: a device's timer), less the waits inside them
+    auto part = [t](int c) {
+        const uint64_t all = prof::g_total[c] + (prof::g_open == c ? t - prof::g_open_since : 0);
+        return all - std::min(all, pacing::waited_in()[c]);
+    };
+    const uint64_t late = pacing::late_frames(), breaks = g_device_short_late.load(std::memory_order_relaxed);
+    if (g_fast || !g_frame_start_ns || prof::now_ns() < g_settle_until) {   // fast-forward, leaving, the window just open
+        statsview::gap();
+        g_sf.last = 0;
+    } else {
+        if (g_sf.last && g_sf.period > 0) {
+            const double ms = prof::ns_per_tick() / 1e6;
+            statsview::Frame f;
+            f.number = core().frame_count();
+            const double total = (double)(t - g_sf.last) * ms, wait = (double)(w - g_sf.last_wait) * ms;
+            f.draw_ms = (float)((double)g_sf.draw_ticks * ms);
+            f.game_ms = (float)std::max(0.0, total - wait - f.draw_ms);
+            f.period_ms = (float)(g_sf.period * 1000.0 / pacing::speed());
+            f.sync = g_sync;
+            f.late = g_sync ? late != g_sf.late : total > f.period_ms * 1.5;
+            f.breaks = (int)(breaks - g_sf.breaks);
+            f.again = core().frame_repeated();
+            for (int c = 0; c < prof::NCAT; c++) f.part_ms[c] = (float)((double)(part(c) - std::min(part(c), g_sf.part[c])) * ms);
+            statsview::frame(f);
+        }
+        g_sf.last = t;
+    }
+    g_sf.last_wait = w, g_sf.draw_ticks = 0, g_sf.late = late, g_sf.breaks = breaks;
+    for (int c = 0; c < prof::NCAT; c++) g_sf.part[c] = part(c);
+}
+
 void window_present(const uint32_t *rgb, int w, int h, double vsec) {
+    struct DrawTime {   // (every way out of here)
+        uint64_t t0 = prof::ticks(), w0 = prof::g_wait_ticks;
+        ~DrawTime() { g_sf.draw_ticks += (prof::ticks() - t0) - (prof::g_wait_ticks - w0); }
+    } draw_time;
 #ifdef _WIN32
     cpu_speed_sample();
 #endif
@@ -992,6 +1072,7 @@ void window_present(const uint32_t *rgb, int w, int h, double vsec) {
     }
     const double period = g_last_vsec < 0 || g_fast ? 0.0 : vsec - g_last_vsec;
     g_last_vsec = vsec;
+    g_sf.period = period;
     const bool sync = pacing::frame(period) && !g_fast;
     g_sync = sync;
     // the fast start-up (host/warp.h): its pictures at most 60 a second, the rest not shown
@@ -1051,6 +1132,7 @@ void window_present(const uint32_t *rgb, int w, int h, double vsec) {
         picture::Mode shown = picture::draw(first, first == rgb ? w : fw, first == rgb ? h : fh, (ww - vw) / 2, (wh - vh) / 2,
                                             vw, vh, ww, wh, g_mode, 0, number, beam ? pacing::phase(0) : -1, beam_fph);
         draw_overlays(ww, wh);
+        picture::after_overlays(ww, wh, number);
         if (sync) {
             if (g_glFlush) g_glFlush();   // the GPU draws while we wait for the commit time
             pacing::wait_commit();
@@ -1186,6 +1268,29 @@ void window_present(const uint32_t *rgb, int w, int h, double vsec) {
                 SDL_SetRenderLogicalPresentation(g_ren, lw, lh, lm);
             }
         }
+        if (statsview::Panel p; statsview::panel(p)) {   // the performance overlay, likewise
+            static SDL_Texture *st = nullptr;
+            static unsigned st_id = 0;
+            static int st_w = 0, st_h = 0;
+            if (st && (st_w != p.w || st_h != p.h)) SDL_DestroyTexture(st), st = nullptr;
+            if (!st && (st = SDL_CreateTexture(g_ren, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, p.w, p.h))) {
+                st_w = p.w, st_h = p.h, st_id = p.id - 1;
+                SDL_SetTextureBlendMode(st, SDL_BLENDMODE_BLEND);
+                SDL_SetTextureScaleMode(st, SDL_SCALEMODE_NEAREST);
+            }
+            if (st && st_id != p.id) SDL_UpdateTexture(st, nullptr, p.pixels->data(), p.w * 4), st_id = p.id;
+            int lw, lh, ow, oh;
+            SDL_RendererLogicalPresentation lm;
+            if (st && SDL_GetRenderLogicalPresentation(g_ren, &lw, &lh, &lm)) {
+                SDL_SetRenderLogicalPresentation(g_ren, 0, 0, SDL_LOGICAL_PRESENTATION_DISABLED);
+                SDL_GetCurrentRenderOutputSize(g_ren, &ow, &oh);
+                int px, py, pw, ph;
+                statsview::place(p, ow, oh, px, py, pw, ph);
+                const SDL_FRect r{(float)px, (float)py, (float)pw, (float)ph};
+                SDL_RenderTexture(g_ren, st, nullptr, &r);
+                SDL_SetRenderLogicalPresentation(g_ren, lw, lh, lm);
+            }
+        }
         if (sync) {
             SDL_FlushRenderer(g_ren);
             pacing::wait_commit();
@@ -1238,7 +1343,7 @@ static void sound_lag(double vsec) {
     g_start_to_sound.add(queued + behind, behind);
 }
 
-bool window_next(double vsec) {
+static bool next_frame(double vsec) {
     const bool sync = g_sync;
     if (warp::on() && !warp::frame(vsec)) g_fast = g_tab;   // the fast start-up's end
     poll();
@@ -1266,7 +1371,7 @@ bool window_next(double vsec) {
             poll();   // (which also opens the sound again if its device has stopped: the queue then empties)
             wait_pull();
         }
-        prof::g_wait_ticks += prof::ticks() - w0;
+        pacing::waited(prof::ticks() - w0);
         poll();
         g_frame_start_ns = g_last_push_end = prof::now_ns();   // the wait isn't host work
         g_queued_after = queued_bytes() / 8;
@@ -1287,11 +1392,17 @@ bool window_next(double vsec) {
     if (due > now) {
         const uint64_t w0 = prof::ticks();
         hk::sys::sleep_until(due);
-        prof::g_wait_ticks += prof::ticks() - w0;
+        pacing::waited(prof::ticks() - w0);
     }
     else if (now - due > std::chrono::milliseconds(250)) g_t0 += now - due;   // fell behind: don't try to catch up
     g_frame_start_ns = prof::now_ns();
     return true;
+}
+
+bool window_next(double vsec) {
+    const bool go = next_frame(vsec);
+    stats_frame();   // the frame starts here: the one before it is whole
+    return go;
 }
 
 bool window_frame(const uint32_t *rgb, int w, int h, double vsec) {
@@ -1365,7 +1476,7 @@ void push_chunk(const float *lr, int frames) {
         poll();   // (which also opens the sound again if its device has stopped: the queue then empties)
         wait_pull();
     }
-    prof::g_wait_ticks += prof::ticks() - w0;
+    pacing::waited(prof::ticks() - w0);
     poll();
     prof::reset();
     g_late.wait_mark = prof::g_wait_ticks;
@@ -1514,6 +1625,22 @@ std::string audio_describe() {
         out += b;
     }
     return out;
+}
+
+static void stats_window(statsview::Window &w) {
+    w.sound = g_audio != nullptr;
+    w.output = g_audio_output;
+    w.queue_ms = (float)(queued_bytes() / 8 * 1000.0 / (g_rate * g_ratio));
+    w.target_ms = (float)(g_target_frames * 1000.0 / g_rate);
+    w.device_ms = (float)(g_device_frames * 1000.0 / g_rate);
+    w.breaks = g_device_short_late.load(std::memory_order_relaxed);
+    w.picture = g_shown != picture::Mode::off ? picture::mode_label(g_shown) : "";
+    w.smooth = g_smooth_motion && !g_beam;
+    w.beam = g_beam && g_beam_ok;
+    w.picture_p50 = g_start_to_picture.n ? (float)g_start_to_picture.percentile(0.5) : 0.0f;
+    w.picture_p99 = g_start_to_picture.n ? (float)g_start_to_picture.percentile(0.99) : 0.0f;
+    w.sound_p50 = g_start_to_sound.n ? (float)g_start_to_sound.percentile(0.5) : 0.0f;
+    w.sound_p99 = g_start_to_sound.n ? (float)g_start_to_sound.percentile(0.99) : 0.0f;
 }
 
 void window_close() {

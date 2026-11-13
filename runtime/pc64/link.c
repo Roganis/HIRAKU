@@ -149,9 +149,22 @@ void pc64_nap(void) { hk_win_nap(2000); }
 // The main screen's picture is in the link's pixels (pc64_link_pixels): counted, then the game
 // waits until hiraku-pc has shown it and its pacing starts the next frame (a quarter of a second
 // at most, if it has stopped answering)
+// The CPU time this process has used, for hiraku-pc's performance overlay (link.h cpu_ms): once a second
+static void cpu_time(struct hk_pc_link *l) {
+    static DWORD last;
+    const DWORD now = GetTickCount();
+    FILETIME c, e, k, u;
+    if (now - last < 1000) return;
+    last = now;
+    if (!GetProcessTimes(GetCurrentProcess(), &c, &e, &k, &u)) return;
+    l->cpu_ms = (uint32_t)((((uint64_t)k.dwHighDateTime << 32 | k.dwLowDateTime) + ((uint64_t)u.dwHighDateTime << 32 | u.dwLowDateTime)) / 10000);
+    l->cpu_at_ms = now ? now : 1;
+}
+
 void pc64_link_picture(unsigned w, unsigned h) {
     pc64_patches_apply();   // (the mods' patches: each frame, as the 32-bit games' DLL)
     struct hk_pc_link *l = pc64_link();
+    cpu_time(l);
     l->frame_w = w, l->frame_h = h;
     MemoryBarrier();
     l->frame_seq = l->frame_seq + 1;

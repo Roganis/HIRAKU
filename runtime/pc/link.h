@@ -16,7 +16,7 @@
 #include <stdint.h>
 
 #define HK_PC_LINK_MAGIC 0x4b50484bu   // "HKPK"
-#define HK_PC_LINK_VERSION 13u
+#define HK_PC_LINK_VERSION 14u
 #define HK_PC_WATCHES 8u                           // [[rate]]'s words of the game's memory
 
 // The pad's bits, as Konami's ezusb.dll gives them to pop'n music (usbPadRead)
@@ -148,6 +148,11 @@ struct hk_pc_link {
     // with B (runtime/pc/cabinet.c chart_frame). hiraku-pc runs the game at the rate its music keeps
     // with the charts then
     volatile uint32_t chart_frame_ns;
+    // (v14) The CPU time the game's process has used so far, all its threads (ms), and when that
+    // was read (ms, the process's tick count); the DLL writes them about once a second, 0 until
+    // then: hiraku-pc's line on the performance overlay (runtime/host/statsview.h), the game's work
+    // being in a process of its own
+    volatile uint32_t cpu_ms, cpu_at_ms;
 };
 
 // A quad the game drew (two triangles in screen space, one texture): the texture (its address, the

@@ -922,6 +922,43 @@ public:
         t.erase(std::find(t.begin(), t.end(), '\0'), t.end());
         return t;
     }
+    // The performance overlay's lines (host/statsview.h): how the game keeps up, in its own process
+    void overlay_lines(std::vector<std::string> &lines) override {
+        if (!link_) return;
+        const auto now = std::chrono::steady_clock::now();
+        const double sec = std::chrono::duration<double>(now - ov_.at).count();
+        const uint32_t seq = link_->frame_seq, cpu = link_->cpu_ms, cpu_at = link_->cpu_at_ms;
+        char b[96];
+        if (ov_.set && sec > 0.2 && seq >= ov_.seq) {
+            snprintf(b, sizeof b, "the game drew %.1f pictures a second", (seq - ov_.seq) / sec);
+            lines.push_back(b + (repeats_ != ov_.repeats ? ", " + std::to_string(repeats_ - ov_.repeats) + " shown again" : std::string()));
+        }
+        if (cpu_at != ov_.cpu_at) {   // the DLL's reading, about once a second: the share between two
+            if (ov_.cpu_at && cpu >= ov_.cpu) ov_.share = 100.0 * (cpu - ov_.cpu) / (double)(uint32_t)(cpu_at - ov_.cpu_at);
+            ov_.cpu = cpu, ov_.cpu_at = cpu_at;
+        }
+        if (ov_.share >= 0) {
+            snprintf(b, sizeof b, "the game's process: %.0f %% of one processor", ov_.share);
+            lines.push_back(b);
+        }
+        if (!go_to_shell_.empty()) {   // the last second's frames: from each one's start
+            const size_t n = std::min<size_t>(60, go_to_shell_.size());
+            double read = 0, here = 0;
+            for (size_t i = go_to_shell_.size() - n; i < go_to_shell_.size(); i++) read += pad_read_[i], here += go_to_shell_[i];
+            snprintf(b, sizeof b, "its frame: controls read +%.1f ms, picture +%.1f", read / (double)n, here / (double)n);
+            lines.push_back(b);
+        }
+        if (!late_runs_.empty()) {
+            snprintf(b, sizeof b, "hold-ups: %zu, the last at %.0f s of the run", late_runs_.size(), late_runs_.back().t);
+            lines.push_back(b);
+        }
+        if (between_drawn_ || between_late_) {
+            snprintf(b, sizeof b, "in-between pictures: %llu, %llu not answered", (unsigned long long)between_drawn_,
+                     (unsigned long long)between_late_);
+            lines.push_back(b);
+        }
+        ov_.set = true, ov_.at = now, ov_.seq = seq, ov_.repeats = repeats_;
+    }
     void report() override {
         printf("hiraku-pc: %llu frames shown, %llu of them again while the game drew none\n", (unsigned long long)frame_,
                (unsigned long long)repeats_);
@@ -2104,6 +2141,13 @@ private:
     std::vector<float> key_to_sound_;   // ms, per press (report)
     std::function<void()> on_fatal_;
     uint64_t frame_ = 0, repeats_ = 0;
+    struct {   // overlay_lines: the counts at the last asking
+        bool set = false;
+        std::chrono::steady_clock::time_point at;
+        uint32_t seq = 0, cpu = 0, cpu_at = 0;
+        uint64_t repeats = 0;
+        double share = -1;
+    } ov_;
     // frames shown again while the game's sound plays, its pictures for them still to come (run());
     // at most MAX_OWED (half a second at 60 Hz)
     static constexpr int MAX_OWED = 30;

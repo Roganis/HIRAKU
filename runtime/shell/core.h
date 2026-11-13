@@ -100,6 +100,11 @@ public:
     // nullptr: the core can't (or not yet)
     virtual const uint32_t *render_between(double t, int &w, int &h) { (void)t, (void)w, (void)h; return nullptr; }
     virtual uint64_t frame_count() const = 0;
+    // The core's own numbers for the window's performance overlay (runtime/host/statsview.h), a
+    // short line each (48 characters at most): what only it knows of how the game runs here. Asked
+    // for about once a second while the overlay shows them, on the frame hook's thread; a core may
+    // count from one asking to the next.
+    virtual void overlay_lines(std::vector<std::string> &lines) { (void)lines; }
 
     // Inputs by MAME name ("P1 Button 3", "Coin 1", "TURNTABLE_P1/Turntable"):
     // 1/0 for buttons, the position for analog inputs. false for an unknown name.

@@ -82,6 +82,14 @@ static const char COMMON_OPTIONS[] = R"HK(  --frames N        stop after N video
   --crt-beam-gain X   its brightness against motion blur (0.7; 1 as bright as without it)
   --lights-overlay  the game's lights over its picture: every lamp the core decodes, lit or not
                     as the game drives it, and how often they change (F9 shows or hides it)
+  --stats-overlay [LEVEL]  how the game runs on this PC, over its picture: line (the pictures a
+                    second, a frame's work against its time, the processor, the sound queued,
+                    late frames), panel (the default: with the display's rate, a graph of the
+                    last three seconds' frames, the sound and the display sync) or full (with
+                    the latencies, the busiest threads, the graphics card and the core's own
+                    numbers). F7 goes through them; the mouse drags the panel, Shift+F7 puts it
+                    in the next corner. A frame that didn't fit its time is a "slow frame" line
+                    in the log either way. runtime/host/statsview.h
   --macro NAME[@F]  run one of the game's code macros (games/<game>/macros.txt) at frame F, or
                     at its own `at` frame (power-on codes); repeatable. In the window,
                     Ctrl+1..9 types the 1st..9th macro
@@ -335,6 +343,7 @@ int main(int argc, char **argv) {
     std::string audio_asio;
     bool fast_boot = false;
     double fast_boot_seconds = 0;
+    std::string stats_overlay = "off";
     for (int k = 1; k < argc; k++) {
         std::string a = argv[k];
         // one dash is two, as spice2x writes its options (-url, -p, -card0: shell/eaoptions.h)
@@ -371,6 +380,7 @@ int main(int argc, char **argv) {
         else if (a == "--crt-beam-gamma") beam_gamma = std::stof(val());
         else if (a == "--crt-beam-gain") beam_gain = std::stof(val());
         else if (a == "--lights-overlay") lights_overlay = true;
+        else if (a == "--stats-overlay") stats_overlay = (k + 1 < argc && argv[k + 1][0] != '-') ? val() : "panel";
         else if (a == "--lights-log") lights_log_path = val();
         else if (a == "--nvram") { nvram_dir = val(); nvram_given = true; }
         else if (a == "--save-every") save_every = std::stod(val());
@@ -548,6 +558,11 @@ int main(int argc, char **argv) {
     host::window_set_smooth_motion(smooth_motion);
     host::window_set_beam(crt_beam, beam_gamma, beam_gain);
     host::window_set_lights_overlay(lights_overlay);
+    // (its place on the picture kept with the user's data, for every game)
+    if (!host::window_set_stats_overlay(stats_overlay, window_scale ? hk::user_data_dir(opt.root) + "/stats-overlay.txt" : "")) {
+        fprintf(stderr, "--stats-overlay %s: not line, panel, full or off\n", stats_overlay.c_str());
+        return 2;
+    }
     for (const std::string &k : shader_keys)
         if (!host::window_set_shader_key(k)) fprintf(stderr, "--shader-key %s: not ACTION=BINDING with a known action\n", k.c_str());
     host::window_set_audio_output(audio_device, audio_buffer, audio_exclusive);

@@ -92,6 +92,7 @@ std::string exe_path();   // this program's file, with / between folders; empty 
 // waits for it: its exit code, -1 if it couldn't be started
 int run_quiet(const std::vector<std::string> &argv);
 double thread_cpu_ms();   // the calling thread's CPU time
+double process_cpu_ms();  // all of the process's threads' CPU time
 long major_faults();      // the process's page faults that read the disk (0 where unknown)
 // A wait, in place of std::this_thread's: the Windows build's (mingw's winpthreads) counts in whole
 // milliseconds of a clock that moves every 15.6 ms, so sleep_for(100 us) doesn't wait at all (the

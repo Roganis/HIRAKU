@@ -97,11 +97,15 @@ void set_window_fbo(unsigned fbo);
 // After draw: an ARGB picture (w x h, with its own alpha, times `alpha`) blended over the window,
 // drawn at (x, y, dw, dh) from the top left, its pixels sharp (host/notice.h's banner)
 void overlay(const uint32_t *argb, int w, int h, int x, int y, int dw, int dh, float alpha, int win_w, int win_h);
+void after_overlays(int win_w, int win_h, uint64_t frame);   // HK_WINDOW_SNAP, below
 void shutdown();
 
 // HK_PICTURE_SNAP=FRAME[-LAST],FILE.ppm writes the window's picture at that game frame (its first
 // draw: checking a shader; a range: FILE-<frame>.ppm each, and a frame's later refreshes
 // FILE-<frame>-<n>.ppm: smooth motion's in-between pictures as the window shows them).
+// HK_WINDOW_SNAP=FRAME,FILE.ppm writes the window as it shows that game frame (or the first after
+// it), the overlays over the picture: the window calls after_overlays once they are drawn. For
+// checking an overlay where there is no display to look at.
 // HK_PICTURE_PASSES=1 prints each pass's GPU time at exit (it reads the timers back every frame: for
 // finding a preset's costly passes, not for playing).
 

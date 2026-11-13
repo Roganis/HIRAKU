@@ -28,6 +28,10 @@ namespace hk::k573::mips {
 void init(psxcpu_device &cpu);
 void finish();            // writes the recording (HK_573_RECORD)
 std::string report();     // "" unless HK_573_MIPS_STATS is set
+// The share of the CPU's cycles run as built-in blocks since the last asking, percent, for the
+// performance overlay (Core::overlay_lines); the first asking starts the count (an add a block run)
+// and says -1; -2 with no blocks built in for the game
+double share();
 
 // Waiting loops (runtime/sys573/idle.cpp): a loop that only waits (the library's VSync(): a
 // timeout counted down, a counter in RAM compared) is found as the interpreter runs it, and the

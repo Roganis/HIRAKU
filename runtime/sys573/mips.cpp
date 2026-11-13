@@ -140,6 +140,7 @@ struct State {
     std::vector<Node> nodes;
     size_t nblocks = 0;
     bool stats_on = false;
+    bool count_on = false;   // the blocks' runs and cycles counted (stats_on, or share() asked)
     Stats st;
     // recording
     std::string rec_path;
@@ -251,7 +252,7 @@ bool run(psxcpu_device &d, const void *p) {
         const int before = X::icount(d);
         const int stolen = d.m_cycles_stolen;
         n->fn(d);
-        if (g.stats_on) {   // what it ran: the cycles it took, less any a device cut from the timeslice
+        if (g.count_on) {   // what it ran: the cycles it took, less any a device cut from the timeslice
             g.st.runs++;
             g.st.insns += before - X::icount(d) - (d.m_cycles_stolen - stolen);
         }
@@ -335,7 +336,7 @@ uint64_t g_slow_kind[3][9];
 
 void init(psxcpu_device &cpu) {
     g.cpu = &cpu;
-    g.stats_on = getenv("HK_573_MIPS_STATS") != nullptr;
+    g.stats_on = g.count_on = getenv("HK_573_MIPS_STATS") != nullptr;
     X::note_on = g.stats_on;
     if (X::program(cpu).page_bits() != X::PAGE_BITS) {
         fprintf(stderr, "mips: the shim's pages are %d bits, the blocks expect %d: interpreting\n",
@@ -400,6 +401,17 @@ void finish() {
     fclose(f);
     sys::replace_file(tmp, g.rec_path);
     printf("mips: %zu blocks recorded in %s\n", all.size(), g.rec_path.c_str());
+}
+
+double share() {
+    static uint64_t insns0 = 0, total0 = 0;
+    if (!g.cpu || !g.nblocks) return -2;
+    const bool counted = g.count_on;
+    g.count_on = true;
+    const uint64_t total = static_cast<cpu_device *>(g.cpu)->total_cycles();
+    const uint64_t insns = g.st.insns - insns0, cycles = total - total0;
+    insns0 = g.st.insns, total0 = total;
+    return counted && cycles ? 100.0 * (double)insns / (double)cycles : -1;
 }
 
 std::string report() {

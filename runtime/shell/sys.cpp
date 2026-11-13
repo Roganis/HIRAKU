@@ -449,6 +449,13 @@ double thread_cpu_ms() {
     return ms(k) + ms(u);
 }
 
+double process_cpu_ms() {
+    FILETIME c, e, k, u;
+    if (!GetProcessTimes(GetCurrentProcess(), &c, &e, &k, &u)) return 0;
+    auto ms = [](const FILETIME &f) { return (double)((uint64_t)f.dwHighDateTime << 32 | f.dwLowDateTime) / 1e4; };
+    return ms(k) + ms(u);
+}
+
 long major_faults() { return 0; }   // Windows counts soft and hard faults together
 
 std::tm utc(std::time_t t) {
@@ -666,6 +673,12 @@ int run_quiet(const std::vector<std::string> &argv) {
 double thread_cpu_ms() {
     timespec ts;
     clock_gettime(CLOCK_THREAD_CPUTIME_ID, &ts);
+    return (double)ts.tv_sec * 1e3 + (double)ts.tv_nsec / 1e6;
+}
+
+double process_cpu_ms() {
+    timespec ts;
+    clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &ts);
     return (double)ts.tv_sec * 1e3 + (double)ts.tv_nsec / 1e6;
 }
 

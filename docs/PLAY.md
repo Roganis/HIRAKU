@@ -138,6 +138,7 @@ The machine boots like a cabinet. The skipped BIOS time passes instantly. Then t
 | F10 | picture: off, CRT light, CRT full, CRT analog |
 | F9 | the game's lights over the picture (docs/LIGHTS.md) |
 | F8 | the CRT shader's settings, changed while you play (below) |
+| F7 | how the game runs on this PC, over the picture: one line, a panel, everything, off (below) |
 | Ctrl+1 … Ctrl+9 | type one of the game's codes (below) |
 | Esc | quit |
 
@@ -484,6 +485,61 @@ frames' work) so the pictures keep their cadence. Before, the wait came between 
 emulation and its picture, a whole frame (~17 ms) from the controls to the picture; now 2.6 ms
 on DJ Main, ~5 ms on pop'n 9, 9 ms on Keyboardmania (whose synth card is heavy). The exit report's
 `video: from a frame starting` line shows it, in either mode.
+
+## The performance overlay (F7)
+
+How the game runs on this PC, over its picture. A general tool (MangoHud, RTSS) counts frames and
+reads the processor; this says what only HIRAKU knows: whether each of the game's frames held its
+place on the display, whether the sound stayed whole, and where a slow frame's time went. **F7**
+goes through its levels; `--stats-overlay line|panel|full` (or the launcher's Settings > Display,
+**Performance overlay**) starts with one.
+
+- **One line:** the game's pictures a second, a frame's work against its time (`1.8/16.7 ms`), the
+  game thread's share of one processor, the sound queued, the frames shown late in the last ten
+  seconds. Amber when something went wrong lately.
+- **The panel** adds the display's rate and the speed the game runs at for display sync (pop'n
+  `+2.50 %` at 60 Hz); the late frames of the whole run; the work's worst frame of the last second
+  and the window's own part of it; the processor time of the game thread and of all of HIRAKU's
+  threads; the sound's queue against its target, its breaks and its way out; the display sync's
+  state, and what else is on (smooth motion and its late pictures, the CRT beam, the picture's
+  mode). And a **graph of the last three seconds**, a bar a frame: green the machine's work, blue
+  the window's on top, the line a frame's time. A bar over the line is red; a red mark at the top
+  is a frame shown late, an amber one a break in the sound. A grey bar is a frame a PC game drew
+  no picture for (loading, or held up: the game's own report at exit lists those).
+- **Everything** adds the latencies (a press to the start of the frame that reads it, a frame's
+  start to its picture handed to the display plus the display's own time where it says it, a
+  frame's start to its sound entering the sound device plus the device's buffer), HIRAKU's
+  busiest threads, the graphics card, the processors' clock, and the core's own lines: a PC game's
+  pictures a second and its process's processor time (the game's work is in a process of its own),
+  the share of a System 573 or Twinkle game's CPU run as built-in code, the Konami Python games'
+  GS and the frames that waited for it.
+
+**Late** is the display's own word where it gives one (display sync on Wayland, or on Windows
+through the DXGI swap chain): the frame wasn't up for its refreshes. Without that, a frame counts
+as late when it started more than half a frame after its time.
+
+**The graphics card's load** depends on what the system says. Linux with an AMD card: the whole
+card's load and clock, and this window's share of it. Intel: this window's share and the clock
+(the whole card's load needs more rights than a game has). NVIDIA's driver: the whole card's,
+through its own library if it is installed. Windows: the 3D engines' use, all programs' and this
+window's. Elsewhere the line says it isn't known. A PC game draws in its own process, so its
+drawing is in the whole card's number and not in "this window".
+
+**Moving it:** drag it with the mouse anywhere on the picture (in full screen the pointer shows
+while the mouse moves), or **Shift+F7** puts it in the next corner, for a cabinet with no mouse.
+Where you leave it is kept for every game (`stats-overlay.txt` with the saves). A click beside
+the panel is the game's as before.
+
+**A frame that didn't fit** (its work longer than its time, or with display sync shown late, or
+with a break in the sound) stays on the panel in red for a few seconds, with where its time went
+(`cpu 14.1, gpu 5.0, disk 2.1, window 0.8`: the parts of the exit report's `frametime:` lines).
+The same goes into the log, overlay or not, as a `slow frame` line: the first of each five
+seconds, forty a run at most, none in the game's first ten seconds. A report of a stutter then
+says what it was.
+
+The overlay is drawn by the window over the picture it shows: no snapshot, recording or digest
+has it, and the game computes the same with it. Its graph is redrawn ten times a second and its
+text once a second, some tens of microseconds each time.
 
 ## The last runs' logs
 

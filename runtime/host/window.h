@@ -56,6 +56,10 @@ bool window_smooth_motion();   // --smooth-motion asked for
 void window_set_beam(bool on, float gamma = 2.2f, float gain = 0.7f);
 // --lights-overlay: the game's lights over its picture from the start (F9 toggles it; host/lampview.h)
 void window_set_lights_overlay(bool on);
+// --stats-overlay LEVEL: the performance overlay (host/statsview.h) from the start: "off", "line",
+// "panel" or "full" (F7 goes through them). store: the file its place on the picture is kept in
+// ("": not kept). False: no such level.
+bool window_set_stats_overlay(const std::string &level, const std::string &store);
 // --shader-key ACTION=BINDING: one of the in-game shader settings' controls (host/shaderview.h:
 // show, up, down, less, more, saved, default, save, save_game), as a bindings file spells it
 // ("key:F8", "joy[DAO FPS]:button3"; empty: none); repeatable. False: no such action.

@@ -971,9 +971,22 @@ void hk_present_begin(void) {
 // with its frame's sound, then the game waits for hiraku-pc's next frame
 static void profile_frame(void);
 
+// The CPU time this process has used, for hiraku-pc's performance overlay (link.h cpu_ms): once a second
+static void cpu_time(struct hk_pc_link *l) {
+    static DWORD last;
+    const DWORD now = GetTickCount();
+    FILETIME c, e, k, u;
+    if (now - last < 1000) return;
+    last = now;
+    if (!GetProcessTimes(GetCurrentProcess(), &c, &e, &k, &u)) return;
+    l->cpu_ms = (uint32_t)((((uint64_t)k.dwHighDateTime << 32 | k.dwLowDateTime) + ((uint64_t)u.dwHighDateTime << 32 | u.dwLowDateTime)) / 10000);
+    l->cpu_at_ms = now ? now : 1;
+}
+
 void hk_picture_drawn(int captured) {
     struct hk_pc_link *l = hk_link();
     profile_frame();
+    cpu_time(l);
     if (captured) {
         hk_dsound_picture();   // the frame's sound, with its picture
         l->drawn_us = l->go_count ? us_since_go(l) : 0;

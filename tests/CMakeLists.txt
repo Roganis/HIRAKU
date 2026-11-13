@@ -135,6 +135,15 @@ if(TARGET hiraku_host)
   add_test(NAME input_bindings COMMAND test_bindings)
 endif()
 
+# The performance overlay (runtime/host/statsview.h): what it reads of the system's files (made-up
+# ones), its panel from made-up frames, its levels, and its place: the corners, a drag with the
+# mouse, kept in a file
+if(TARGET hiraku_host)
+  add_executable(test_statsview host/test_statsview.cpp)
+  target_link_libraries(test_statsview PRIVATE hiraku_host)
+  add_test(NAME host_statsview COMMAND test_statsview ${CMAKE_CURRENT_BINARY_DIR}/statsview)
+endif()
+
 # A sound device that stops taking the sound (a USB card pulled out, a driver to restart): when it
 # counts as stopped and what is opened in its place (runtime/host/soundwatch.h), then the ALSA back
 # end with a pretend libasound whose card the test takes away (host/fake_asound.c; HIRAKU loads

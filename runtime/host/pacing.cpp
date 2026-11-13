@@ -67,12 +67,24 @@ uint64_t n_shown = 0, n_zero_copy = 0;   // every frame's presentation feedback,
 std::string g_state;           // the last announced state, to print changes once
 bool g_debug = getenv("HK_PACING_DEBUG") != nullptr;
 
+uint64_t g_waited_in[prof::NCAT] = {};
+
+}  // namespace
+
+void waited(uint64_t ticks) {
+    prof::g_wait_ticks += ticks;
+    if (prof::g_open >= 0) g_waited_in[prof::g_open] += ticks;
+}
+const uint64_t *waited_in() { return g_waited_in; }
+
+namespace {
+
 void sleep_until(int64_t t) {
     int64_t d = t - (int64_t)prof::now_ns();
     if (d <= 0) return;
     const uint64_t w0 = prof::ticks();
     SDL_DelayPrecise((Uint64)d);
-    prof::g_wait_ticks += prof::ticks() - w0;
+    waited(prof::ticks() - w0);
 }
 
 // The display mode's refresh period, ns (0: unknown)
@@ -727,6 +739,21 @@ std::string scanout_describe() {
              n_zero_copy * 2 < n_shown ? "; the compositor scans a window out directly when it is fullscreen (F11) with nothing over it" : "");
     return b;
 }
+
+Stats stats() {
+    Stats s;
+    s.enabled = g_enabled, s.active = g_active, s.exact = g_active && g_exact;
+    s.refreshes = g_active ? (g_exact ? 0 : g_k) : 1;
+    s.refresh_hz = refresh_hz(), s.speed = speed();
+    s.presented = n_presented, s.on_time = n_on_time, s.late = n_late, s.not_ready = n_overrun, s.replaced = n_discarded;
+    s.extra = n_extra, s.extra_late = n_extra_late;
+    s.feedback = n_on_time + n_late > 0;
+    s.lead_ms = (double)g_lead / MS, s.budget_ms = (double)g_budget / MS, s.to_screen_ms = (double)g_best / MS;
+    s.state = g_state;
+    return s;
+}
+
+uint64_t late_frames() { return n_on_time + n_late ? n_late : n_overrun; }
 
 std::string describe() {
     char b[512];

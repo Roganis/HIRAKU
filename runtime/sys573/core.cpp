@@ -194,6 +194,12 @@ public:
         if (std::string s = k573::mips::report(); !s.empty()) printf("%s\n", s.c_str());
     }
     void debug_line(uint64_t f) override { printf("f%llu pc %08x\n", (unsigned long long)f, k573::pc()); }
+    void overlay_lines(std::vector<std::string> &lines) override {   // the performance overlay (host/statsview.h)
+        const double s = k573::mips::share();
+        char b[64];
+        if (s >= 0) snprintf(b, sizeof b, "the game's CPU: %.0f %% of cycles in built-in code", s), lines.push_back(b);
+        else if (s == -2) lines.push_back("the game's CPU: interpreted (no code built in)");
+    }
 
     double seconds() const override { return k573::seconds(); }
     const uint32_t *render_between(double t, int &w, int &h) override { return k573::render_between(t, w, h); }

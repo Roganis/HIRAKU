@@ -92,6 +92,28 @@ void pump();
 // count the frames that went to the screen directly (scanout_describe).
 void observe();
 std::string describe();
+// A wait on purpose just ended on this thread, `ticks` long (prof::ticks): counted in
+// prof::g_wait_ticks, and under the part of the work it was waited in (core/prof.h's scopes count
+// the waits inside them as their own: a sound chip's timer hands the sound on, and the window
+// waits there for the queue), so that a frame's parts can be told without their waits
+void waited(uint64_t ticks);
+const uint64_t *waited_in();   // by part (prof::NCAT of them), since the start
+// The same numbers as they stand, for the performance overlay (host/statsview.h)
+struct Stats {
+    bool enabled = false, active = false, exact = false;   // exact: the game at its own speed (smooth motion's pacing)
+    int refreshes = 1;                // a frame's refreshes (0 with exact: they vary)
+    double refresh_hz = 0, speed = 1;
+    uint64_t presented = 0, on_time = 0, late = 0, not_ready = 0, replaced = 0;   // frames, by the display's own account
+    uint64_t extra = 0, extra_late = 0;   // the frames' other refreshes' pictures, and those a refresh or more late
+    bool feedback = false;            // the display says when each frame reached the screen (else on_time and late stay 0)
+    double lead_ms = 0, budget_ms = 0;
+    double to_screen_ms = 0;          // from a frame handed over to its refresh, at best (0: not known)
+    std::string state;                // "on: ...", "off: ..." as the log says it
+};
+Stats stats();
+// Frames shown late so far: by the display's account, or where it gives none, those that weren't
+// ready at their time
+uint64_t late_frames();
 // How many frames were shown, and how many of them straight from HIRAKU's buffer (direct scanout,
 // not composited: a fullscreen window with nothing over it); "" if the compositor doesn't say.
 std::string scanout_describe();

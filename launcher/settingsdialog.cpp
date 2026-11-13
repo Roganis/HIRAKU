@@ -321,6 +321,17 @@ void SettingsDialog::displayPage(QVBoxLayout *v) {
     connect(m_motion, &QComboBox::currentIndexChanged, this, beamShown);
     connect(m_displaySync, &QCheckBox::toggled, this, beamShown);
     beamShown();
+    m_statsOverlay = new QComboBox;   // runtime/host/statsview.h
+    m_statsOverlay->addItem("Off (F7 in the game shows it)", "off");
+    m_statsOverlay->addItem("One line: frame rate, a frame's work, processor, sound, late frames", "line");
+    m_statsOverlay->addItem("Panel: with a graph of the frames, the sound and the display sync", "panel");
+    m_statsOverlay->addItem("Everything: with latencies, threads, the graphics card, the core's numbers", "full");
+    m_statsOverlay->setCurrentIndex(std::max(0, m_statsOverlay->findData(s.value("video/statsOverlay", "off").toString())));
+    m_statsOverlay->setToolTip("How the game runs on this PC, over its picture: whether each frame held its place on the "
+                               "display and the sound stayed whole, and where a slow frame's time went. In the game, F7 "
+                               "goes through the levels, the mouse drags the panel anywhere on the picture, and Shift+F7 "
+                               "puts it in the next corner. It changes nothing in the game, and no snapshot has it.");
+    fv->addRow("Performance overlay:", m_statsOverlay);
     m_picture = new QComboBox;
     m_picture->addItem("Off: sharp pixels", "off");
     m_picture->addItem("CRT light: crt-guest-advanced-fast", "light");
@@ -758,6 +769,7 @@ void SettingsDialog::accept() {
     s.setValue("video/crtBeam", m_motion->currentData().toString() == "beam");
     s.setValue("video/crtBeamGamma", m_beamGamma->value());
     s.setValue("video/crtBeamGain", m_beamGain->value());
+    s.setValue("video/statsOverlay", m_statsOverlay->currentData().toString());
     s.setValue("video/picture", m_picture->currentData().toString());
     s.setValue("video/pythonRenderer", m_pyRenderer->currentData().toString());
     for (const cfg::ShaderKey &k : cfg::shaderKeys()) {   // only what differs from the defaults

@@ -52,6 +52,8 @@ add_library(hk_python_shell STATIC
 	${HK}/runtime/host/warp.cpp
 	${HK}/runtime/host/lampview.cpp
 	${HK}/runtime/host/shaderview.cpp
+	${HK}/runtime/host/statsview.cpp
+	${HK}/runtime/host/sysload.cpp
 	${HK}/runtime/host/picture.cpp
 	${HK}/runtime/host/input.cpp
 	${HK}/runtime/host/lights.cpp
@@ -65,7 +67,7 @@ target_link_libraries(hk_python_shell PUBLIC ZLIB::ZLIB)
 if(WIN32)   # as HIRAKU's own build: Winsock (shell/net.h); WASAPI exclusive mode and ASIO (host/wasapi.h,
             # asio.h); the DXGI swap chain (host/swapchain.h)
 	target_sources(hk_python_shell PRIVATE ${HK}/runtime/host/wasapi.cpp ${HK}/runtime/host/asio.cpp ${HK}/runtime/host/dwm.cpp ${HK}/runtime/host/swapchain.cpp)
-	target_link_libraries(hk_python_shell PUBLIC ws2_32 PRIVATE ole32 avrt uuid d3d11 dxgi)
+	target_link_libraries(hk_python_shell PUBLIC ws2_32 PRIVATE ole32 avrt uuid d3d11 dxgi pdh)
 	# MSVC's <windows.h> has min and max macros in C++ too (mingw's only in C): asio.cpp and
 	# wasapi.cpp call std::max
 	target_compile_definitions(hk_python_shell PRIVATE NOMINMAX)

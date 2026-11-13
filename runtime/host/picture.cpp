@@ -280,6 +280,8 @@ GLuint g_window_fbo = 0;   // the window's picture goes here (set_window_fbo: DX
 uint32_t g_draws = 0;
 uint32_t g_snap_frame = UINT32_MAX, g_snap_last = UINT32_MAX;   // HK_PICTURE_SNAP=FRAME[-LAST],FILE
 std::string g_snap_path;
+uint64_t g_wsnap_frame = UINT64_MAX;   // HK_WINDOW_SNAP=FRAME,FILE
+std::string g_wsnap_path;
 
 class Chain {
 public:
@@ -995,6 +997,8 @@ bool init(const std::string &shaders_dir, const std::vector<std::string> &config
         if (end && *end == '-') g_snap_last = (uint32_t)strtoul(end + 1, nullptr, 10);
         if (const char *c = strchr(e, ',')) g_snap_path = c + 1;
     }
+    if (const char *e = getenv("HK_WINDOW_SNAP"))
+        if (const char *c = strchr(e, ',')) g_wsnap_frame = strtoull(e, nullptr, 10), g_wsnap_path = c + 1;
     fprintf(stderr, "picture: OpenGL %s on %s\n", (const char *)gl.glGetString(GL_VERSION),
             (const char *)gl.glGetString(GL_RENDERER));
     bg_open();
@@ -1414,6 +1418,21 @@ void overlay(const uint32_t *argb, int w, int h, int x, int y, int dw, int dh, f
     gl.glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
     gl.glDisable(GL_BLEND);
     gl.glViewport(0, 0, win_w, win_h);
+}
+
+void after_overlays(int win_w, int win_h, uint64_t frame) {
+    if (!g_ok || frame < g_wsnap_frame || g_wsnap_path.empty()) return;
+    std::vector<uint8_t> px((size_t)win_w * win_h * 3);
+    gl.glBindFramebuffer(GL_FRAMEBUFFER, g_window_fbo);
+    gl.glPixelStorei(GL_PACK_ALIGNMENT, 1);
+    gl.glReadPixels(0, 0, win_w, win_h, GL_RGB, GL_UNSIGNED_BYTE, px.data());
+    if (FILE *f = fopen(g_wsnap_path.c_str(), "wb")) {
+        fprintf(f, "P6\n%d %d\n255\n", win_w, win_h);
+        for (int y = win_h - 1; y >= 0; y--) fwrite(&px[(size_t)y * win_w * 3], 1, (size_t)win_w * 3, f);
+        fclose(f);
+        fprintf(stderr, "picture: the window at frame %llu written to %s\n", (unsigned long long)frame, g_wsnap_path.c_str());
+    }
+    g_wsnap_path.clear();   // (once)
 }
 
 void shutdown() {

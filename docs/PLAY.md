@@ -535,7 +535,10 @@ with a break in the sound) stays on the panel in red for a few seconds, with whe
 (`cpu 14.1, gpu 5.0, disk 2.1, window 0.8`: the parts of the exit report's `frametime:` lines).
 The same goes into the log, overlay or not, as a `slow frame` line: the first of each five
 seconds, forty a run at most, none in the game's first ten seconds. A report of a stutter then
-says what it was.
+says what it was. On Windows the line ends with the CPU's clock when Windows ran it slower than
+its nominal one (`the CPU at 800 of its 3001 MHz`): a power plan that lets the processors slow
+down between a frame's bursts of work makes each burst take longer. Windows' High performance
+plan keeps them at speed, and the exit report's `system:` line says when that would help.
 
 The overlay is drawn by the window over the picture it shows: no snapshot, recording or digest
 has it, and the game computes the same with it. Its graph is redrawn ten times a second and its

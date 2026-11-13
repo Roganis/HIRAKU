@@ -455,9 +455,11 @@ void frame(const Frame &f) {
                 std::string more;
                 if (g_unsaid) more = fmt("; %llu more since the last such line", (unsigned long long)g_unsaid);
                 const std::string where = parts(f);
-                fprintf(stderr, "slow frame %llu: %.1f ms of work for a %.1f ms frame%s%s%s%s%s\n", (unsigned long long)f.number, work,
+                std::string clock;   // (a power plan that lets the processors slow between a frame's bursts of work)
+                if (f.cpu_mhz && f.cpu_mhz * 10 < f.cpu_nominal_mhz * 9) clock = fmt("; the CPU at %d of its %d MHz", f.cpu_mhz, f.cpu_nominal_mhz);
+                fprintf(stderr, "slow frame %llu: %.1f ms of work for a %.1f ms frame%s%s%s%s%s%s\n", (unsigned long long)f.number, work,
                         f.period_ms, where.empty() ? "" : (" (" + where + ")").c_str(), f.late && f.sync ? "; shown late" : "",
-                        f.breaks ? "; the sound broke" : "",
+                        f.breaks ? "; the sound broke" : "", clock.c_str(),
                         more.c_str(), ++g_logged == LOG_MOST ? "; no more of these lines in this run" : "");
                 g_logged_at = now, g_unsaid = 0;
             }

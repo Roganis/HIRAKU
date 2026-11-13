@@ -25,6 +25,7 @@
 #include <vector>
 
 #include "../core/prof.h"
+#include "pacing.h"
 
 namespace hk::host::dxgi {
 
@@ -126,15 +127,21 @@ void answer_sent() {
     MSG m;
     PeekMessageW(&m, nullptr, 0, 0, PM_NOREMOVE | PM_QS_SENDMESSAGE);
 }
+// (What it waited is a wait, not the frame's work: pacing::waited, for the frame times and the overlay.)
 struct Locked {
     explicit Locked(bool settled = false) {
-        for (;;) {
+        const uint64_t t0 = prof::ticks();
+        for (bool waited = false;; waited = true) {
             for (int n = 0; !q.mu.try_lock(); n++) {   // (held for some tens of microseconds a picture)
+                waited = true;
                 if (n) answer_sent();
                 if (n < 200) SwitchToThread();
                 else Sleep(1);
             }
-            if (!settled || q.jobs.empty()) return;
+            if (!settled || q.jobs.empty()) {
+                if (waited) pacing::waited(prof::ticks() - t0);
+                return;
+            }
             q.mu.unlock();
             if (MsgWaitForMultipleObjectsEx(1, &q.idle, 50, QS_SENDMESSAGE, 0) == WAIT_OBJECT_0 + 1) answer_sent();
         }
@@ -145,6 +152,7 @@ struct Locked {
 };
 bool g_queues = false;                    // queue() is of use (start(): not with HK_DXGI_NO_QUEUE; off when a texture can't be made)
 uint64_t n_queued = 0, n_queue_late = 0, n_no_room = 0, n_dropped = 0;
+uint64_t n_present_waits = 0;             // the game's thread's presents that waited for the display (over 1 ms)
 int64_t g_queue_late_sum = 0, g_queue_late_worst = 0;
 
 template <typename T> void release(T *&p) {
@@ -558,7 +566,11 @@ bool present(bool in_turn, bool extra) {
     g_ctx->CopyResource(g_back, g_slot[0].tex);
     // in turn: at the refresh after the last picture's; else (display sync off) at the next refresh,
     // in place of one still waiting for it, as OpenGL's swap did
+    // (with two pictures waiting for their refreshes already, it returns when one has had its own: a
+    // wait for the display, a refresh or more, not work)
+    const uint64_t t0 = prof::ticks();
     const HRESULT hr = g_swap->Present(in_turn ? 1 : 0, 0);
+    if (const uint64_t t = prof::ticks() - t0; (double)t * prof::ns_per_tick() > 1e6) pacing::waited(t), n_present_waits++;
     if (FAILED(hr)) {
         present_failed(hr);
         return false;
@@ -649,6 +661,8 @@ std::string describe() {
              g_effect, g_adapter.empty() ? "" : ", on ", g_adapter.c_str(), g_shared_as, (unsigned long long)n_presents,
              (unsigned long long)n_left_out, n_failed ? (", " + std::to_string(n_failed) + " presents failed").c_str() : "");
     std::string out = b;
+    if (n_present_waits)   // (the frame's next start waits with it; not counted as its work)
+        out += "; " + std::to_string(n_present_waits) + " of the frames' own waited over 1 ms for the display to take them";
     // the queue's thread: how near their times its pictures went
     Locked l;
     if (n_queued || n_no_room || n_dropped) {

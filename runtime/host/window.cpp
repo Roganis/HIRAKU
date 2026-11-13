@@ -960,6 +960,7 @@ struct ProcessorPower {   // PROCESSOR_POWER_INFORMATION (no SDK header declares
 struct CpuSpeed {
     uint64_t n = 0, sum = 0, next_ns = 0;
     ULONG lowest = ~0ul, nominal = 0, limit = 0;
+    ULONG last = 0;   // the latest reading
 } g_cpu_speed;
 void cpu_speed_sample() {
     const uint64_t t = prof::now_ns();
@@ -977,18 +978,20 @@ void cpu_speed_sample() {
         g_cpu_speed.limit = std::max(g_cpu_speed.limit, p[i].mhz_limit);
     }
     if (!fastest) return;
+    g_cpu_speed.last = fastest;
     g_cpu_speed.n++;
     g_cpu_speed.sum += fastest;
     g_cpu_speed.lowest = std::min(g_cpu_speed.lowest, fastest);
 }
 std::string cpu_speed_describe() {
     if (!g_cpu_speed.n) return {};
-    char b[400];
+    char b[800];
     int n = snprintf(b, sizeof b, "system: the CPU at %lu MHz on average over the run (its fastest processor each second; lowest %lu), "
                      "of its nominal %lu MHz", (unsigned long)(g_cpu_speed.sum / g_cpu_speed.n), (unsigned long)g_cpu_speed.lowest,
                      (unsigned long)g_cpu_speed.nominal);
     if (g_cpu_speed.limit && g_cpu_speed.limit < g_cpu_speed.nominal)
         n += snprintf(b + n, sizeof b - n, " (the power plan holds it to %lu MHz)", (unsigned long)g_cpu_speed.limit);
+    const bool slowed = g_cpu_speed.lowest * 10 < g_cpu_speed.nominal * 9;
     GUID *scheme = nullptr;
     if (PowerGetActiveScheme(nullptr, &scheme) == ERROR_SUCCESS && scheme) {
         wchar_t name[128] = {};
@@ -996,9 +999,14 @@ std::string cpu_speed_describe() {
         char utf8[256] = {};
         if (PowerReadFriendlyName(nullptr, scheme, nullptr, nullptr, (UCHAR *)name, &size) == ERROR_SUCCESS &&
             WideCharToMultiByte(CP_UTF8, 0, name, -1, utf8, sizeof utf8 - 1, nullptr, nullptr) > 0)
-            snprintf(b + n, sizeof b - n, "; Windows' power plan: %s", utf8);
+            n += snprintf(b + n, sizeof b - n, "; Windows' power plan: %s", utf8);
         LocalFree(scheme);
     }
+    // A game's frame is a short burst of work, then a wait: a plan that lets the processors slow down
+    // while they wait starts each burst slow. The same work then takes longer, and frames come late.
+    if (slowed)
+        snprintf(b + n, sizeof b - n, "\nsystem: Windows let the CPU slow down between the frames' bursts of work, which then take "
+                 "longer: its High performance power plan (or a minimum processor state of 100 %% in this one) keeps it at speed");
     return b;
 }
 #endif
@@ -1039,6 +1047,9 @@ static void stats_frame() {
             f.late = g_sync ? late != g_sf.late : total > f.period_ms * 1.5;
             f.breaks = (int)(breaks - g_sf.breaks);
             f.again = core().frame_repeated();
+#ifdef _WIN32
+            f.cpu_mhz = (int)g_cpu_speed.last, f.cpu_nominal_mhz = (int)g_cpu_speed.nominal;
+#endif
             for (int c = 0; c < prof::NCAT; c++) f.part_ms[c] = (float)((double)(part(c) - std::min(part(c), g_sf.part[c])) * ms);
             statsview::frame(f);
         }

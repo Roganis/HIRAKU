@@ -58,6 +58,8 @@ struct Frame {
     bool again = false;     // the last picture shown again, the game having drawn none (Core::frame_repeated: a PC
                             // game loading or held up; its own report has those, they aren't "slow frames")
     float part_ms[prof::NCAT] = {};   // the work by part (core/prof.h)
+    int cpu_mhz = 0, cpu_nominal_mhz = 0;   // the processors' clock about now and their nominal one (0: not known:
+                                            // Windows says; a slow frame's line has it when the PC ran them slow)
 };
 void frame(const Frame &f);
 void gap();   // the frames aren't at the game's pace now (fast-forward): none counted, the next starts afresh

@@ -733,6 +733,9 @@ def compare(case, base, cur, took=""):
     # agree) are not run statistics: the runs must be the same
     how = re.compile(r"^(hiraku \S+:) \d+ (recompiled )?functions, (native|executed \(hiraku-firebeat\))$", re.M)
     sa, sb = how.sub(r"\1 functions", sa), how.sub(r"\1 functions", sb)
+    # nor is a build without FFmpeg saying so (the ARM build: Twinkle's background video)
+    nov = re.compile(r"^video: not built \(no FFmpeg libraries\)\n", re.M)
+    sa, sb = nov.sub("", sa), nov.sub("", sb)
     if sa != sb:
         print(f"{case}: frames and sound identical, run statistics DIFFER:{took}")
         for la, lb in zip(sa.splitlines(), sb.splitlines()):

@@ -494,10 +494,18 @@ Asahi); the profiler's ticks from `cntvct_el0`, and a NEON copy of the K057714 b
 the binaries and the build's own `hiraku-recomp`. On 2026-10-13 the recompiler's output on ARM was
 byte-identical to x86's and all 17 regress cases then gave x86's digests under qemu.
 
+Checked again 2026-11-14, after a month of other work had broken the build (zlib and zstd it
+lacked: `tools/arm-deps.sh` builds them; two places that needed SDL; 8cb5125): eleven cases across
+Firebeat, DJ Main, the 573 and Twinkle give x86's frames and sound under qemu. The ARM build has no
+FFmpeg (Twinkle's background video), which its run statistics say. Once, with ten qemu cases
+running at once, `bmiidx-play` stopped at frame 2969 with every thread in a futex wait; run again
+alone it went through: not seen since.
+
 Full history: docs/PLAN-HISTORY.md §22.
 
 **Open**
-- (build) Re-run regress on the ARM build: CI doesn't build it, and the last full check under qemu was 2026-10-13.
+- (build) CI doesn't build ARM, so it breaks unseen: an ARM job (cross-build, a few regress cases under qemu), or a check before releases.
+- (build) Watch for the futex hang above (Twinkle, under load): if it comes back, the two threads' waits are the place to look.
 - (owner) Speed on real ARM hardware: qemu says nothing about it.
 - (parked) Android (GLES renderer, frame pacing, launcher, packaging the per-dump game code): to decide when it's time.
 

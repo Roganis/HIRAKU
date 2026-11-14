@@ -146,6 +146,8 @@ int main(int argc, char **argv) {
             QTimer::singleShot(0, &w, [&w, why = args[1]] {
                 QMessageBox::warning(&w, "HIRAKU", "The update could not be put in; this is still the version you had.\n\n" + why);
             });
+    } else if (!args.isEmpty() && args.first() == "--menu") {   // a cabinet's shortcut: start in the game menu
+        QTimer::singleShot(0, &w, [&w] { w.openMenu(w.lastGame()); });
     } else if (!args.isEmpty()) {
         QTimer::singleShot(0, &w, [&w, id = args.first()] { w.play(id); });
     }

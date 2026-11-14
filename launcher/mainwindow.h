@@ -26,6 +26,8 @@ class MainWindow : public QMainWindow {
 public:
     MainWindow();
     void play(const QString &id);
+    void openMenu(const QString &left);   // the game menu, opening on that game (the one just left)
+    QString lastGame() const;
     // ingest a game's files (tools/ingest.py): ROM sets, CHDs, images, folders
     void addGameFiles(const QStringList &paths);
     void setEcho(bool on) { m_echo = on; }   // the log on stderr too (hiraku --add from a terminal)
@@ -91,6 +93,18 @@ private:
     void checkFiles(const QString &id, bool big);
     QString filesHtml(const Game &g);
     QString m_running;          // game id, while one runs
+    // The game menu (gamemenu.h; runtime/menu/menu.h): a list of the games driven by the cabinet's
+    // own controls, shown when a game was left by its 10-key's 5, 7 and 3, or at the launcher's
+    // start (Settings > General, or hiraku --menu). The game it gives is started; closed with
+    // none, the launcher's window is back
+    QProcess m_menu;
+    QString m_menuList, m_menuChoice;   // the files it reads and writes
+    QList<int> m_order;                 // m_games in the list's order (refresh)
+    QList<QWidget *> m_covers;          // black over each screen between a full-screen game and the menu
+    quint64 m_coverShown = 0;           // counts the times it was put up
+    void menuClosed(int code, QProcess::ExitStatus st);
+    void cover(bool on);
+    void uncoverLater();                // ... off again once the program just started has its window up
     // updates (updater.h): the bar that says a new version is out, the release it names
     void checkForUpdate(bool asked);
     void offerUpdate();

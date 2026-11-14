@@ -42,6 +42,8 @@
 #include "statsview.h"
 #include "notice.h"
 #include "warp.h"
+#include "menukey.h"
+#include "menuview.h"
 #include "picture.h"
 #include "input.h"
 #include "../core/prof.h"
@@ -104,6 +106,7 @@ bool g_fast = false;              // Tab held, or the fast start-up (host/warp.h
 bool g_tab = false;               // Tab held
 int g_device_frames = 0;
 bool g_quit = false;
+std::string g_menu_key;   // --game-menu-key: a binding held like the 10-key's 5, 7 and 3 (host/menukey.h)
 std::atomic<bool> g_interrupt{false};   // window_interrupt: Ctrl-C, the waits on the sound end
 SoundWatch g_sound_watch;         // whether the device still takes the sound (host/soundwatch.h)
 int g_audio_level = 0;            // the way out: 0 the one asked for, 1 the system's default only, 2 none
@@ -261,6 +264,11 @@ void poll() {
         }
         if (shaderview::event(e, g_mode, g_gl != nullptr))   // F8: the shader's settings (its controls: not the game's)
             continue;
+        if (!g_menu_key.empty())   // the player's own way out to the game menu, held (host/menukey.h)
+            if (const int r = input_binding_event(g_menu_key, e)) {
+                menukey::input(menukey::OWN_KEY, r > 0);
+                continue;
+            }
         if (e.type == SDL_EVENT_KEY_DOWN && !e.key.repeat && e.key.key == SDLK_F10 && g_gl)   // F10: off, light, full, lola
             g_mode = g_mode == picture::Mode::off     ? picture::Mode::light
                    : g_mode == picture::Mode::light ? picture::Mode::full
@@ -340,6 +348,7 @@ bool window_set_stats_overlay(const std::string &level, const std::string &store
     statsview::set_level(l);
     return true;
 }
+void window_set_menu_key(const std::string &binding) { g_menu_key = binding; }
 bool window_set_shader_key(const std::string &spec) {
     const size_t eq = spec.find('=');
     return eq != std::string::npos && shaderview::set_control(spec.substr(0, eq), spec.substr(eq + 1));
@@ -875,14 +884,18 @@ static void place_lights(const lampview::Panel &p, int win_w, int win_h, int &x,
     x = y = 8 * k;
 }
 
-// host/warp.h's box: whole times its size (as the banner's), in the middle of the window
-static void place_warp(const warp::Panel &p, int win_w, int win_h, int &x, int &y, int &dw, int &dh) {
+// A box whole times its size (as the banner's), in the middle of the window
+static void place_middle(int w, int h, int win_w, int win_h, int &x, int &y, int &dw, int &dh) {
     int k = std::max(1, win_h / 360);
-    while (k > 1 && p.w * k > win_w - 16) k--;
-    dw = p.w * k;
-    dh = p.h * k;
+    while (k > 1 && w * k > win_w - 16) k--;
+    dw = w * k;
+    dh = h * k;
     x = (win_w - dw) / 2;
     y = (win_h - dh) / 2;
+}
+// host/warp.h's box
+static void place_warp(const warp::Panel &p, int win_w, int win_h, int &x, int &y, int &dw, int &dh) {
+    place_middle(p.w, p.h, win_w, win_h, x, y, dw, dh);
 }
 
 // The overlays over a picture in the GL window: the banner (host/notice.h) and the lights
@@ -896,6 +909,11 @@ static void draw_overlays(int ww, int wh) {
         int bx, by, bw, bh;
         place_banner(b, ww, wh, bx, by, bw, bh);
         picture::overlay(b.pixels->data(), b.w, b.h, bx, by, bw, bh, b.alpha, ww, wh);
+    }
+    if (menuview::Panel p; menuview::panel(p)) {   // the way out to the game menu, held (host/menukey.h): in the middle
+        int px, py, pw, ph;
+        place_middle(p.w, p.h, ww, wh, px, py, pw, ph);
+        picture::overlay(p.pixels->data(), p.w, p.h, px, py, pw, ph, 1.0f, ww, wh);
     }
     if (lampview::Panel p; lampview::panel(p)) {
         int px, py, pw, ph;
@@ -1276,6 +1294,28 @@ void window_present(const uint32_t *rgb, int w, int h, double vsec) {
                 const SDL_FRect r{(float)px, (float)py, (float)pw, (float)ph};
                 SDL_SetTextureAlphaModFloat(wt, p.alpha);
                 SDL_RenderTexture(g_ren, wt, nullptr, &r);
+                SDL_SetRenderLogicalPresentation(g_ren, lw, lh, lm);
+            }
+        }
+        if (menuview::Panel p; menuview::panel(p)) {   // the way out to the game menu, likewise
+            static SDL_Texture *mt = nullptr;
+            static unsigned mt_id = 0;
+            if (mt && mt_id != p.id) SDL_DestroyTexture(mt), mt = nullptr;
+            if (!mt && (mt = SDL_CreateTexture(g_ren, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STATIC, p.w, p.h))) {
+                mt_id = p.id;
+                SDL_UpdateTexture(mt, nullptr, p.pixels->data(), p.w * 4);
+                SDL_SetTextureBlendMode(mt, SDL_BLENDMODE_BLEND);
+                SDL_SetTextureScaleMode(mt, SDL_SCALEMODE_NEAREST);
+            }
+            int lw, lh, ow, oh;
+            SDL_RendererLogicalPresentation lm;
+            if (mt && SDL_GetRenderLogicalPresentation(g_ren, &lw, &lh, &lm)) {
+                SDL_SetRenderLogicalPresentation(g_ren, 0, 0, SDL_LOGICAL_PRESENTATION_DISABLED);
+                SDL_GetCurrentRenderOutputSize(g_ren, &ow, &oh);
+                int px, py, pw, ph;
+                place_middle(p.w, p.h, ow, oh, px, py, pw, ph);
+                const SDL_FRect r{(float)px, (float)py, (float)pw, (float)ph};
+                SDL_RenderTexture(g_ren, mt, nullptr, &r);
                 SDL_SetRenderLogicalPresentation(g_ren, lw, lh, lm);
             }
         }

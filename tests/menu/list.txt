@@ -1,0 +1,7 @@
+hiraku-menu-list 1
+current	bm7thmix
+game	bm1stmix	beatmania	beatmania	1997  DJ Main
+game	bm7thmix	beatmania	beatmania 7th MIX	2002  DJ Main
+game	bmfinal	beatmania	beatmania THE FINAL	2002  DJ Main
+game	bmiidx	beatmania IIDX	beatmania IIDX	1999  Twinkle
+game	iidx16	beatmania IIDX	beatmania IIDX 16 EMPRESS	2008  PC

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "mainwindow.h"
 #include "runlogs.h"
+#include "gamemenu.h"
 #include "nvidia.h"
 
 #include <QAction>
@@ -20,6 +21,8 @@
 #include <QFileDialog>
 #include <QMimeData>
 #include <QRegularExpression>
+#include <QSaveFile>
+#include <QScreen>
 #include <QDesktopServices>
 #include <QDateTime>
 #include <QDir>
@@ -479,8 +482,13 @@ MainWindow::MainWindow() {
     connect(&m_proc, &QProcess::readyRead, this, [this] { log(QString::fromLocal8Bit(m_proc.readAll())); });
     connect(&m_proc, &QProcess::finished, this, [this](int code, QProcess::ExitStatus st) {
         QString title = find(m_running) ? find(m_running)->title : m_running;
-        bool ok = m_stopping || (st == QProcess::NormalExit && (code == 0 || code == 130));
-        QString msg = st == QProcess::CrashExit ? title + " crashed" : QString("%1 exited (code %2)").arg(title).arg(code);
+        // left from the cabinet's controls for the game menu (runtime/host/menukey.h)
+        const bool toMenu = !m_stopping && st == QProcess::NormalExit && code == gamemenu::kExitCode &&
+                            cfg::settings().value("menu/enabled", true).toBool();
+        bool ok = m_stopping || (st == QProcess::NormalExit && (code == 0 || code == 130)) || toMenu;
+        QString msg = st == QProcess::CrashExit ? title + " crashed"
+                      : toMenu                  ? title + " left for the game menu"
+                                                : QString("%1 exited (code %2)").arg(title).arg(code);
         // the run log says why (a crash's exception, or the launcher's own ending of it)
         const QString why = m_killed ? title + " ended by the launcher: it hadn't stopped 5 s after being asked"
                             : st == QProcess::CrashExit ? title + " crashed: " + exitReason(code, st)
@@ -489,10 +497,14 @@ MainWindow::MainWindow() {
         closeRunLog();
         statusBar()->showMessage(ok ? title + " stopped" : msg);
         if (!ok) m_logDock->show();
-        m_running.clear();
+        const QString left = std::exchange(m_running, QString());
         m_stopping = false;
         m_killed = false;
-        if (isHidden()) show();
+        if (toMenu) cover(true);   // (before anything else is shown: the desktop stays out of sight)
+        else {
+            cover(false);
+            if (isHidden()) show();
+        }
         updateActions();
         // a network unit's install: done (INSTALLATION COMPLETED on the screen), the unit is fitted from
         // now on; else the next start installs again
@@ -505,6 +517,15 @@ MainWindow::MainWindow() {
         }
         gameChanged();   // its saves now exist: no longer a first boot
         if (!ok) exitReport(title, code, st);
+        if (toMenu) openMenu(left);
+    });
+    m_menu.setProcessChannelMode(QProcess::MergedChannels);
+    connect(&m_menu, &QProcess::finished, this, &MainWindow::menuClosed);
+    connect(&m_menu, &QProcess::errorOccurred, this, [this](QProcess::ProcessError e) {
+        if (e != QProcess::FailedToStart) return;
+        cover(false);
+        if (isHidden()) show();
+        statusBar()->showMessage("The game menu couldn't be started: " + m_menu.errorString());
     });
     connect(&m_proc, &QProcess::errorOccurred, this, [this](QProcess::ProcessError e) {
         if (e != QProcess::FailedToStart) return;
@@ -512,6 +533,7 @@ MainWindow::MainWindow() {
         closeRunLog();
         QMessageBox::warning(this, "HIRAKU", "Could not start " + m_proc.program() + ":\n" + m_proc.errorString());
         m_running.clear();
+        cover(false);
         if (isHidden()) show();
         updateActions();
     });
@@ -522,6 +544,9 @@ MainWindow::MainWindow() {
         QTimer::singleShot(0, this, [this] { resizeDocks({m_detailsDock}, {std::max(300, width() / 3)}, Qt::Horizontal); });
     qApp->installEventFilter(this);
     refresh();
+    // a cabinet that starts in the game menu (Settings > General)
+    if (cfg::settings().value("menu/atStart", false).toBool() && cfg::settings().value("menu/enabled", true).toBool())
+        QTimer::singleShot(0, this, [this] { openMenu(lastGame()); });
 }
 
 bool MainWindow::eventFilter(QObject *o, QEvent *e) {
@@ -560,6 +585,10 @@ void MainWindow::closeEvent(QCloseEvent *e) {
         stop();
         m_proc.waitForFinished(5000);
     }
+    if (m_menu.state() != QProcess::NotRunning) {   // the game menu goes with the launcher
+        m_menu.terminate();
+        if (!m_menu.waitForFinished(3000)) m_menu.kill();
+    }
     auto &s = cfg::settings();
     s.setValue("ui/geometry", saveGeometry());
     s.setValue("ui/state", saveState(kLayout));
@@ -591,6 +620,7 @@ void MainWindow::refresh() {
         if (m_games[a].year != m_games[b].year) return m_games[a].year < m_games[b].year;
         return titles.compare(m_games[a].title, m_games[b].title) < 0;
     });
+    m_order = order;   // (the game menu lists them the same way)
     m_arranging = true;
     m_list->clear();
     QMap<QString, QTreeWidgetItem *> groups;
@@ -945,6 +975,46 @@ static QString unitState(const Game &g) {
     return v == "install" || (v == "on" && unitInstalled(g)) ? v : QString();
 }
 
+// The sound's way out (Settings > Audio), for a game or the game menu
+static void audioArguments(QStringList &a) {
+    auto &s = cfg::settings();
+    a << "--audio-ms" << QString::number(s.value("audio/ms", 8).toInt());
+    if (s.value("audio/fixed", false).toBool()) a << "--audio-fixed";
+    if (int v = s.value("audio/volumeDb", 0).toInt(); v) a << "--volume" << QString::number(v);
+    if (QString d = s.value("audio/device").toString(); d.startsWith("asio:")) a << "--audio-asio" << d.mid(5);   // Windows
+    else {
+        if (!d.isEmpty()) a << "--audio-device" << d;
+#ifdef _WIN32
+        if (s.value("audio/exclusive", false).toBool()) a << "--audio-exclusive";
+#endif
+    }
+    if (int f = s.value("audio/buffer", 0).toInt(); f > 0) a << "--audio-buffer" << QString::number(f);
+}
+
+// A cabinet's own parts, for a game of that family or the game menu driven by its controls: the
+// family's controls and lights files, the e-AMUSEMENT card readers, the I/O boards
+static void cabinetArguments(QStringList &a, const QString &family) {
+    auto &s = cfg::settings();
+    QString controls = cfg::controlsFile(family), lights = cfg::lightsFile(family);
+    if (QFileInfo::exists(controls)) a << "--bindings" << controls;
+    if (lightsFileUsed(lights)) a << "--lights" << lights;
+    if (s.value("lights/socket", true).toBool()) a << "--lights-socket" << cfg::lightsSocket();
+    // the card readers (runtime/host/readers.h), for every game: one with no reader of its own (a
+    // beatmania on an IIDX cabinet) is still left for the game menu by their 10-key's 5, 7 and 3
+    // (runtime/host/menukey.h)
+    const QString r0 = s.value("readers/serial0").toString(), r1 = s.value("readers/serial1").toString();
+    if (!r0.isEmpty() || !r1.isEmpty()) a << "--reader" << r0;   // "": player 2's only
+    if (!r1.isEmpty()) a << "--reader" << r1;
+    if (s.value("readers/scard", false).toBool()) a << "--scard";
+    if (s.value("readers/cardio", false).toBool()) a << "--cardio";
+    if (QString b = s.value("cabinet/bio2").toString(); !b.isEmpty() && cfg::controlsSet(family) == "beatmania")
+        a << "--bio2" << b;   // the IIDX cabinet's controls and lamps (runtime/host/bio2.h)
+    if (QString b = s.value("cabinet/popnio").toString(); !b.isEmpty() && cfg::controlsSet(family) == "popn") {
+        a << "--popn-io" << b;   // the pop'n cabinet's buttons and lamps (runtime/host/popnio.h)
+        if (QString f = s.value("cabinet/popnioDll").toString(); !f.isEmpty()) a << "--popn-io-dll" << f;
+    }
+}
+
 QStringList MainWindow::arguments(const Game &g) const {
     auto &s = cfg::settings();
     QStringList a = {"--window", QString::number(s.value("video/scale", 2).toInt())};
@@ -965,26 +1035,19 @@ QStringList MainWindow::arguments(const Game &g) const {
     for (const cfg::ShaderKey &k : cfg::shaderKeys())   // the in-game shader settings' controls (Settings > Display)
         if (s.contains(QString("shaderKeys/") + k.action))
             a << "--shader-key" << QString("%1=%2").arg(k.action, s.value(QString("shaderKeys/") + k.action).toString());
-    a << "--audio-ms" << QString::number(s.value("audio/ms", 8).toInt());
-    if (s.value("audio/fixed", false).toBool()) a << "--audio-fixed";
+    audioArguments(a);
     if (!s.value("system/priority", true).toBool()) a << "--normal-priority";
-    if (int v = s.value("audio/volumeDb", 0).toInt(); v) a << "--volume" << QString::number(v);
     if (s.value("video/splitScreens", false).toBool() && g.family == "kbm") a << "--split-screens";
-    if (QString d = s.value("audio/device").toString(); d.startsWith("asio:")) a << "--audio-asio" << d.mid(5);   // Windows
-    else {
-        if (!d.isEmpty()) a << "--audio-device" << d;
-#ifdef _WIN32
-        if (s.value("audio/exclusive", false).toBool()) a << "--audio-exclusive";
-#endif
-    }
-    if (int f = s.value("audio/buffer", 0).toInt(); f > 0) a << "--audio-buffer" << QString::number(f);
     // every millisecond is the cores' default (2026-10-20); the key is new, so that the old one's
     // stored "off" (saved by any OK in Settings) doesn't keep it off
     if ((g.core == "sys573" || g.core == "twinkle") && !s.value("audio/soundEveryMs", true).toBool()) a << "--mame-sound";
-    QString controls = cfg::controlsFile(g.family), lights = cfg::lightsFile(g.family);
-    if (QFileInfo::exists(controls)) a << "--bindings" << controls;
-    if (lightsFileUsed(lights)) a << "--lights" << lights;
-    if (s.value("lights/socket", true).toBool()) a << "--lights-socket" << cfg::lightsSocket();
+    cabinetArguments(a, g.family);
+    // the way out to the game menu from the cabinet's controls (Settings > General; runtime/host/menukey.h)
+    if (!s.value("menu/enabled", true).toBool()) a << "--game-menu" << "off";
+    else {
+        if (const double h = s.value("menu/hold", 2.0).toDouble(); h != 2.0) a << "--game-menu-hold" << QString::number(h);
+        if (const QString k = s.value("menu/key").toString().trimmed(); !k.isEmpty()) a << "--game-menu-key" << k;
+    }
     if (s.value("lights/overlay", false).toBool()) a << "--lights-overlay";   // runtime/host/lampview.h
     if (const QString o = s.value("video/statsOverlay", "off").toString(); o != "off") a << "--stats-overlay" << o;   // host/statsview.h
     if (s.value("game/fastBoot", true).toBool() && g.core != "pc") a << "--fast-boot";   // runtime/host/warp.h
@@ -1008,19 +1071,6 @@ QStringList MainWindow::arguments(const Game &g) const {
     if (g.core == "pc") {   // pop'n music 15-18's presses (runtime/pc/press.c)
         if (s.value("game/pressTime", false).toBool()) a << "--press-time";
         if (int ms = s.value("game/judgeOffset", 0).toInt(); ms) a << "--judge-offset" << QString::number(ms);
-    }
-    if (g.core == "python" || g.core == "pc" || g.family == "drmn" || g.family == "gtrf") {   // the e-AMUSEMENT card readers (runtime/host/readers.h)
-        const QString r0 = s.value("readers/serial0").toString(), r1 = s.value("readers/serial1").toString();
-        if (!r0.isEmpty() || !r1.isEmpty()) a << "--reader" << r0;   // "": player 2's only
-        if (!r1.isEmpty()) a << "--reader" << r1;
-        if (s.value("readers/scard", false).toBool()) a << "--scard";
-        if (s.value("readers/cardio", false).toBool()) a << "--cardio";
-    }
-    if (QString b = s.value("cabinet/bio2").toString(); !b.isEmpty() && cfg::controlsSet(g.family) == "beatmania")
-        a << "--bio2" << b;   // the IIDX cabinet's controls and lamps (runtime/host/bio2.h)
-    if (QString b = s.value("cabinet/popnio").toString(); !b.isEmpty() && cfg::controlsSet(g.family) == "popn") {
-        a << "--popn-io" << b;   // the pop'n cabinet's buttons and lamps (runtime/host/popnio.h)
-        if (QString f = s.value("cabinet/popnioDll").toString(); !f.isEmpty()) a << "--popn-io-dll" << f;
     }
     // mods (docs/MODS.md): each folder in order, and the saves of their own (cfg::saveDir)
     const QStringList mods = cfg::modsOn(g.id);
@@ -1079,6 +1129,7 @@ bool MainWindow::wineMissing(const Game &g) {
     return false;
 #else
     if (g.core != "pc" || arguments(g).contains("--wine") || !QStandardPaths::findExecutable("wine").isEmpty()) return false;
+    cover(false);
     QMessageBox box(this);
     box.setWindowTitle(g.title);
     box.setIcon(QMessageBox::Warning);
@@ -1103,7 +1154,12 @@ void MainWindow::play(const QString &id) {
         return;
     }
     if (!m_running.isEmpty()) return;
+    if (m_menu.state() != QProcess::NotRunning) {   // started from the launcher's window with the game menu up: the menu gives way
+        m_menu.terminate();
+        if (!m_menu.waitForFinished(3000)) m_menu.kill(), m_menu.waitForFinished(1000);
+    }
     if (g->status != Game::Ready) {
+        cover(false);   // (from the game menu: what is said mustn't be under the black)
         QMessageBox box(this);
         box.setWindowTitle(g->title);
         box.setIcon(QMessageBox::Information);
@@ -1122,6 +1178,7 @@ void MainWindow::play(const QString &id) {
     const auto copyFailed = [&](const QString &from, const QString &to) {
         QDir(to).removeRecursively();
         closeRunLog();
+        cover(false);
         QMessageBox::warning(this, "HIRAKU", QString("%1's saves couldn't be copied from\n%2\nto\n%3\n\nIs the disk full?").arg(g->title, from, to));
     };
     if (QString seed = nvramSeed(*g); !seed.isEmpty() && !QFileInfo::exists(cfg::nvramDir(g->id))) {
@@ -1176,6 +1233,117 @@ void MainWindow::stop() {
     // (this run only: a game started within those 5 s, after this one went, isn't the one asked to stop)
     QTimer::singleShot(5000, this, [this, run = m_run] {
         if (run == m_run && m_proc.state() != QProcess::NotRunning) m_killed = true, m_proc.kill();
+    });
+}
+
+QString MainWindow::lastGame() const { return cfg::settings().value("ui/lastGame").toString(); }
+
+// The game menu (runtime/menu/menu.h): the games ready to play, in the list's order and on its
+// series' shelves, those the cabinet's controls can play (the controls set of the game just left;
+// Settings > General: or all of them), driven by that game's family's controls
+void MainWindow::openMenu(const QString &left) {
+    if (!m_running.isEmpty() || m_menu.state() != QProcess::NotRunning) return;
+    auto &s = cfg::settings();
+    const auto giveUp = [this](const QString &why) {
+        cover(false);
+        if (isHidden()) show();
+        statusBar()->showMessage(why);
+    };
+    // the cabinet: the game just left's, else the first ready game's
+    const Game *from = find(left);
+    if (!from || from->status != Game::Ready) {
+        from = nullptr;
+        for (int k : m_order)
+            if (m_games[k].status == Game::Ready) {
+                from = &m_games[k];
+                break;
+            }
+    }
+    if (!from) return giveUp("The game menu: no game is ready to play yet");
+    const bool all = s.value("menu/games", "fit").toString() == "all";
+    QList<gamemenu::Row> rows;
+    for (int k : m_order) {
+        const Game &g = m_games[k];
+        if (g.status != Game::Ready || (!all && cfg::controlsSet(g.family) != cfg::controlsSet(from->family))) continue;
+        const Shelf sh = shelf(g);
+        rows << gamemenu::Row{g.id, gamemenu::plainTitle(sh.series), gamemenu::plainTitle(g.title, g.latin),
+                              gamemenu::plainTitle(g.year + "  " + sh.system)};
+    }
+    QString exe = cfg::binDir() + "/" + cfg::exeName("hiraku-menu");
+    if (!QFileInfo(exe).isExecutable()) return giveUp("The game menu (hiraku-menu) isn't in " + cfg::binDir());
+    const QString base = QDir::tempPath() + QString("/hiraku-menu-%1").arg(QCoreApplication::applicationPid());
+    m_menuList = base + ".list", m_menuChoice = base + ".choice";
+    QFile::remove(m_menuChoice);
+    if (QSaveFile f(m_menuList); !f.open(QIODevice::WriteOnly) || f.write(gamemenu::listText(rows, from->id)) < 0 || !f.commit())
+        return giveUp("The game menu's list couldn't be written to " + m_menuList);
+    // the display, sound and cabinet as a game of that family gets them; no saves of its own
+    QStringList a = {"--window", QString::number(s.value("video/scale", 2).toInt()), "--nvram", "",
+                     "--family", from->family, "--list", m_menuList, "--choice", m_menuChoice};
+    if (s.value("video/fullscreen", false).toBool()) a << "--fullscreen";
+    if (!s.value("video/displaySync", true).toBool()) a << "--display-sync" << "off";
+    if (const QScreen *scr = screen(); scr && scr->size().width() * 10 >= scr->size().height() * 15) a << "--wide";   // a wide screen: 16:9
+    audioArguments(a);
+    cabinetArguments(a, from->family);
+    a << QProcess::splitCommand(QString::fromLocal8Bit(qgetenv("HK_MENU_ARGS")));   // (tests: a script to drive it)
+    log("\n$ " + exe + " " + a.join(' ') + "\n");
+    m_menu.setWorkingDirectory(cfg::rootDir());
+    QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
+    env.insert("HIRAKU_ROOT", cfg::rootDir());
+    env.insert("HK_LAUNCHER", "1");
+    m_menu.setProcessEnvironment(env);
+    cover(true);
+    m_menu.start(exe, a);
+    uncoverLater();
+    statusBar()->showMessage("The game menu is open (the cabinet's controls choose; Escape closes it)");
+    if (s.value("ui/hideWhileRunning", false).toBool()) hide();
+}
+
+void MainWindow::menuClosed(int code, QProcess::ExitStatus st) {
+    const QString id = gamemenu::readChoice(m_menuChoice);
+    const QString said = QString::fromLocal8Bit(m_menu.readAll());
+    QFile::remove(m_menuChoice);
+    QFile::remove(m_menuList);
+    const bool fine = st == QProcess::NormalExit && (code == 0 || code == 130);
+    if (!fine || !said.contains("menu: chosen")) log(said);   // (what went wrong, or nothing chosen: its own lines)
+    if (fine && !id.isEmpty() && find(id)) {
+        cover(true);
+        play(id);   // (clears the log for the game's own)
+        if (!m_running.isEmpty()) return uncoverLater();
+    }
+    cover(false);
+    if (isHidden()) show();
+    statusBar()->showMessage(fine ? "The game menu was closed" : QString("The game menu stopped (code %1)").arg(code));
+    if (!fine) m_logDock->show();
+}
+
+// Black over every screen while one full-screen program gives way to the next (a game to the game
+// menu, the menu to a game), so that the desktop doesn't show on a cabinet's screen in between.
+// Only where the games are in full screen.
+void MainWindow::cover(bool on) {
+    if (!on) {
+        for (QWidget *w : m_covers) w->hide();
+        return;
+    }
+    if (!cfg::settings().value("video/fullscreen", false).toBool()) return;
+    if (m_covers.isEmpty())
+        for (QScreen *scr : QGuiApplication::screens()) {
+            auto *w = new QWidget(nullptr, Qt::Window | Qt::FramelessWindowHint);
+            w->setWindowTitle("HIRAKU");
+            w->setStyleSheet("background: black");
+            w->setCursor(Qt::BlankCursor);
+            w->setScreen(scr);
+            w->setGeometry(scr->geometry());
+            m_covers << w;
+        }
+    for (QWidget *w : m_covers) w->showFullScreen();
+    m_coverShown++;
+}
+
+// ... and away again a few seconds after the next program was started: its window is up by then
+// (a game's opens before the game boots), and should it have opened behind the cover it shows now
+void MainWindow::uncoverLater() {
+    QTimer::singleShot(4000, this, [this, shown = m_coverShown] {
+        if (shown == m_coverShown) cover(false);   // (not a cover put up since, for the next change)
     });
 }
 

@@ -142,6 +142,15 @@ if(TARGET hiraku_host)
   add_executable(test_statsview host/test_statsview.cpp)
   target_link_libraries(test_statsview PRIVATE hiraku_host)
   add_test(NAME host_statsview COMMAND test_statsview ${CMAKE_CURRENT_BINARY_DIR}/statsview)
+  # The game menu and the way out to it (runtime/menu/menu.h, runtime/host/menukey.h): the hold, the
+  # launcher's list, and that every cabinet family the games name can drive the menu
+  add_executable(test_menu menu/test_menu.cpp)
+  target_link_libraries(test_menu PRIVATE hiraku_menu hiraku_shell)
+  add_test(NAME game_menu COMMAND test_menu ${CMAKE_SOURCE_DIR}/games)
+  # ... and hiraku-menu itself, driven by a script as an IIDX cabinet drives it: the game it gives
+  add_test(NAME game_menu_pick COMMAND hiraku-menu --list ${CMAKE_CURRENT_SOURCE_DIR}/menu/list.txt --family iidx
+           --script ${CMAKE_CURRENT_SOURCE_DIR}/menu/pick.his --frames 400 --out ${CMAKE_CURRENT_BINARY_DIR}/menu-run)
+  set_tests_properties(game_menu_pick PROPERTIES PASS_REGULAR_EXPRESSION "menu: chosen iidx16")
 endif()
 
 # A sound device that stops taking the sound (a USB card pulled out, a driver to restart): when it
@@ -284,6 +293,11 @@ if(Qt6_FOUND)
   target_include_directories(test_runlogs PRIVATE ${CMAKE_SOURCE_DIR}/launcher)
   target_link_libraries(test_runlogs PRIVATE Qt6::Core)
   add_test(NAME launcher_run_logs COMMAND test_runlogs ${CMAKE_CURRENT_BINARY_DIR})
+  # the game menu's list and choice, the launcher's side (launcher/gamemenu.h)
+  add_executable(test_gamemenu launcher/test_gamemenu.cpp)
+  target_include_directories(test_gamemenu PRIVATE ${CMAKE_SOURCE_DIR}/launcher)
+  target_link_libraries(test_gamemenu PRIVATE Qt6::Core)
+  add_test(NAME launcher_game_menu COMMAND test_gamemenu ${CMAKE_CURRENT_BINARY_DIR})
 endif()
 
 # Mods' [[text]]: a string found in memory and its replacement (runtime/host/mods.h)

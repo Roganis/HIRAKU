@@ -733,6 +733,48 @@ void SettingsDialog::generalPage(QVBoxLayout *v) {
                            "speed at once. The arcade games (not the PC ones); Tab, held, fast-forwards any time.");
     fs->addRow("", m_fastBoot);
     v->addWidget(start);
+    // the game menu (runtime/menu/menu.h) and the way out to it from the cabinet (runtime/host/menukey.h)
+    auto *menu = new QGroupBox("Game menu: change games from the cabinet");
+    auto *fm = new QFormLayout(menu);
+    m_menuOn = new QCheckBox("5, 7 and 3 held together on a card reader's 10-key leave the game for the game menu");
+    m_menuOn->setChecked(s.value("menu/enabled", true).toBool());
+    m_menuOn->setToolTip("Either player's 10-key, the three keys together; on a cabinet with no 10-key, the Test and "
+                         "Service switches held together. A box on the picture says so while they are held. The game "
+                         "ends as when its window is closed (its saves written), and a list of the games opens, driven "
+                         "by the cabinet's own controls: a turntable, pop'n's buttons, the panels, the 10-key itself. "
+                         "The game chosen there starts; Escape closes the menu.");
+    fm->addRow("", m_menuOn);
+    m_menuHold = new QDoubleSpinBox;
+    m_menuHold->setRange(0.5, 10.0);
+    m_menuHold->setSingleStep(0.5);
+    m_menuHold->setDecimals(1);
+    m_menuHold->setSuffix(" s");
+    m_menuHold->setValue(s.value("menu/hold", 2.0).toDouble());
+    fm->addRow("Held for:", m_menuHold);
+    m_menuKey = new QLineEdit(s.value("menu/key").toString());
+    m_menuKey->setPlaceholderText("none (e.g. key:F12 or joy0:button11)");
+    m_menuKey->setToolTip("A key or a controller's button that does the same when held, as a controls file spells it: "
+                          "key:F12, joy0:button11, joy[DAO FPS]:button9.");
+    fm->addRow("A key or button of your own:", m_menuKey);
+    m_menuGames = new QComboBox;
+    m_menuGames->addItem("The games this cabinet's controls play", "fit");
+    m_menuGames->addItem("Every game", "all");
+    m_menuGames->setCurrentIndex(std::max(0, m_menuGames->findData(s.value("menu/games", "fit").toString())));
+    m_menuGames->setToolTip("This cabinet's: the games with the same controls as the one just left (on an IIDX cabinet, "
+                            "every beatmania, IIDX and beatmania III).");
+    fm->addRow("It lists:", m_menuGames);
+    m_menuAtStart = new QCheckBox("HIRAKU starts in the game menu (a cabinet that boots into it)");
+    m_menuAtStart->setChecked(s.value("menu/atStart", false).toBool());
+    m_menuAtStart->setToolTip("With full screen (Display) and \"Hide the launcher while a game runs\" below, the cabinet's "
+                              "screen shows only the menu and the games. Escape in the menu comes back to this window.");
+    fm->addRow("", m_menuAtStart);
+    const auto menuRows = [this] {
+        for (QWidget *w : {(QWidget *)m_menuHold, (QWidget *)m_menuKey, (QWidget *)m_menuGames, (QWidget *)m_menuAtStart})
+            w->setEnabled(m_menuOn->isChecked());
+    };
+    connect(m_menuOn, &QCheckBox::toggled, this, menuRows);
+    menuRows();
+    v->addWidget(menu);
     auto *adv = new QGroupBox("Launcher");
     auto *fx = new QFormLayout(adv);
     m_hideLauncher = new QCheckBox("Hide the launcher while a game runs");
@@ -792,6 +834,11 @@ void SettingsDialog::accept() {
     s.setValue("paths/nvram", m_nvram->text().trimmed());
     s.setValue("ui/hideWhileRunning", m_hideLauncher->isChecked());
     s.setValue("game/fastBoot", m_fastBoot->isChecked());
+    s.setValue("menu/enabled", m_menuOn->isChecked());
+    s.setValue("menu/hold", m_menuHold->value());
+    s.setValue("menu/key", m_menuKey->text().trimmed());
+    s.setValue("menu/games", m_menuGames->currentData().toString());
+    s.setValue("menu/atStart", m_menuAtStart->isChecked());
     s.setValue("ingest/place", m_place->currentData().toString());
     s.setValue("updates/check", m_checkUpdates->isChecked());
     s.setValue("game/extraArgs", m_extra->text().trimmed());

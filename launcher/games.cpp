@@ -46,6 +46,7 @@ void readManifest(const QString &path, Game &g) {
         }
         if (k == "id") g.id = v;
         else if (k == "title") g.title = v;
+        else if (k == "title_latin") g.latin = v;
         else if (k == "family") g.family = v;
         else if (k == "mame") g.mame = v;
         else if (k == "core") g.core = v;

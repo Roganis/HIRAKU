@@ -214,7 +214,7 @@ target_link_libraries(hiraku_cabinet PUBLIC hiraku_sys)
 # --- the shell: what every machine core shares (runtime/shell/core.h) --------------
 # Input scripts; the host front end below. Cores provide hk::core().
 add_library(hiraku_shell STATIC runtime/host/script.cpp runtime/host/macro.cpp runtime/host/mods.cpp runtime/host/pythondisk.cpp runtime/host/png.cpp
-            runtime/host/acio.cpp runtime/host/readers.cpp runtime/host/bio2.cpp runtime/host/popnio.cpp)
+            runtime/host/acio.cpp runtime/host/readers.cpp runtime/host/bio2.cpp runtime/host/popnio.cpp runtime/host/menukey.cpp)
 target_include_directories(hiraku_shell PUBLIC runtime)
 find_package(Threads REQUIRED)
 find_package(ZLIB REQUIRED)   # mods' PNG pictures (runtime/host/png.h)
@@ -511,7 +511,7 @@ if(SDL3_FOUND)
   # HID outputs (controller LEDs), shared with the launcher
   add_library(hiraku_hidout STATIC runtime/host/hidout.cpp)
   target_link_libraries(hiraku_hidout PUBLIC SDL3::SDL3 hiraku_cabinet)
-  add_library(hiraku_host STATIC runtime/host/window.cpp runtime/host/alsa.cpp runtime/host/effector.cpp runtime/host/notice.cpp runtime/host/warp.cpp runtime/host/lampview.cpp runtime/host/shaderview.cpp runtime/host/statsview.cpp runtime/host/sysload.cpp runtime/host/picture.cpp runtime/host/input.cpp runtime/host/lights.cpp
+  add_library(hiraku_host STATIC runtime/host/window.cpp runtime/host/alsa.cpp runtime/host/effector.cpp runtime/host/notice.cpp runtime/host/warp.cpp runtime/host/lampview.cpp runtime/host/menuview.cpp runtime/host/shaderview.cpp runtime/host/statsview.cpp runtime/host/sysload.cpp runtime/host/picture.cpp runtime/host/input.cpp runtime/host/lights.cpp
               runtime/host/pacing.cpp)
   target_include_directories(hiraku_host PUBLIC runtime)
   target_link_libraries(hiraku_host PUBLIC SDL3::SDL3 hiraku_shell hiraku_hidout)
@@ -552,6 +552,13 @@ if(SDL3_FOUND)
   if(TARGET hiraku-pc-dlls)
     add_dependencies(hiraku-pc hiraku-pc-dlls)
   endif()
+  # hiraku-menu: the game menu, a list of the games chosen from with the cabinet's own controls, as
+  # a core of the shell (runtime/menu/menu.h, PLAN.md section 43); the launcher starts it
+  add_library(hiraku_menu STATIC runtime/menu/menu.cpp runtime/menu/nav.cpp runtime/menu/draw.cpp)
+  target_include_directories(hiraku_menu PUBLIC runtime)
+  target_link_libraries(hiraku_menu PUBLIC SDL3::SDL3)
+  add_executable(hiraku-menu runtime/menu/core.cpp)
+  target_link_libraries(hiraku-menu PRIVATE hiraku_main hiraku_built_none hiraku_menu hiraku_host hiraku_shell)
 endif()
 
 # --- the launcher (optional: Qt 6 Widgets + SDL3) ------------------------------------

@@ -1,0 +1,9 @@
+# The game menu driven as an IIDX cabinet drives it (tests/CMakeLists.txt, game_menu_pick): from
+# beatmania 7th MIX, the turntable to the next game, a black key to the next shelf, a 10-key's 2
+# to that shelf's second game, a white key to play it: iidx16.
+game menu
+
+at 30 press "P1 Turntable +" 4
+at 50 press "P1 Button 4" 4
+at 70 press "Keypad 2" 4
+at 90 press "P1 Button 1" 4

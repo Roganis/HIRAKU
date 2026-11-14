@@ -16,6 +16,7 @@
 
 #include "../shell/core.h"
 #include "../shell/cabinet.h"
+#include "menukey.h"
 #include "warp.h"
 
 namespace hk::host {
@@ -124,6 +125,7 @@ void press(const std::string &name, bool down, double speed = 1.0) {
     if (n > 0) warp::pressed();   // a player's: the fast start-up ends (host/warp.h)
     if (name.find("Turntable") != std::string::npos) return;   // handled in input_update
     if (name.find(" Wheel Up") != std::string::npos || name.find(" Wheel Down") != std::string::npos) return;   // likewise
+    menukey::input(name, n > 0 ? 1 : 0);   // (the way out to the game menu watches what the game is given)
     core().set_input(name, n > 0 ? 1 : 0);
 }
 

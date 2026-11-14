@@ -17,6 +17,7 @@
 #include "../shell/core.h"
 #include "../shell/sys.h"
 #include "acio.h"
+#include "menukey.h"
 #include "warp.h"
 
 namespace hk::host {
@@ -194,6 +195,7 @@ void bio2_frame(hk::Core &core) {
     static const std::vector<Button> all = buttons();
     for (auto &b : all)
         if (bit(in, b.bit) != bit(last, b.bit)) {
+            menukey::input(b.name, bit(in, b.bit));   // (Test and Service held: the way out to the game menu)
             core.set_input(b.name, bit(in, b.bit));
             if (bit(in, b.bit)) warp::pressed();   // the fast start-up ends (host/warp.h)
         }

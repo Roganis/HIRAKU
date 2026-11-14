@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "../shell/core.h"
+#include "menukey.h"
 
 namespace hk::script {
 
@@ -49,6 +50,7 @@ std::vector<std::string> g_events;   // happened since the last frame
 std::map<std::string, int> g_seen;
 
 void set_field(const std::string &name, int64_t value) {
+    host::menukey::input(name, (int)value);   // (a script holding the way out to the game menu, in a window)
     if (!core().set_input(name, (int)value)) fprintf(stderr, "script: unknown input field '%s'\n", name.c_str());
 }
 

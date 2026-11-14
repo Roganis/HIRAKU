@@ -64,6 +64,9 @@ bool window_set_stats_overlay(const std::string &level, const std::string &store
 // show, up, down, less, more, saved, default, save, save_game), as a bindings file spells it
 // ("key:F8", "joy[DAO FPS]:button3"; empty: none); repeatable. False: no such action.
 bool window_set_shader_key(const std::string &spec);
+// --game-menu-key BINDING: a key or button of the player's own that, held, leaves the game for the
+// game menu as the 10-key's 5, 7 and 3 do (host/menukey.h), as a bindings file spells it
+void window_set_menu_key(const std::string &binding);
 bool window_open(const char *title, int scale, const std::string &bindings, int audio_target_ms, bool fullscreen = false,
                  int audio_rate = 44100);
 // Present one frame; then sleep so that `virtual_seconds` does not run ahead

@@ -25,6 +25,10 @@ private:
     void cabinetPage(QVBoxLayout *v);
     void generalPage(QVBoxLayout *v);
     QSpinBox *m_scale, *m_audioMs, *m_volume;
+    QCheckBox *m_menuOn, *m_menuAtStart;   // the game menu (General)
+    QDoubleSpinBox *m_menuHold;
+    QLineEdit *m_menuKey;
+    QComboBox *m_menuGames;
     QCheckBox *m_fullscreen, *m_splitScreens, *m_displaySync, *m_fineSound, *m_audioFixed, *m_priority, *m_audioExclusive = nullptr, *m_socket, *m_lightsOverlay, *m_fastBoot, *m_hideLauncher, *m_checkUpdates;
     QComboBox *m_picture, *m_audioDevice, *m_audioBuffer;
     QMap<QString, QString> m_shaderKeys;    // the in-game shader settings' controls, by action

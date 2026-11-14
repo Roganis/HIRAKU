@@ -27,6 +27,7 @@
 
 #include "core/prof.h"
 #include "host/macro.h"
+#include "host/menukey.h"
 #include "host/mods.h"
 #include "host/script.h"
 #include "shell/cabinet.h"
@@ -135,6 +136,14 @@ static const char COMMON_OPTIONS[] = R"HK(  --frames N        stop after N video
                     boot_seconds: the machine's seconds to its title or attract), or until a
                     player presses one of its buttons. host/warp.h
   --fast-boot-seconds S  ... up to S seconds of the machine's time instead (implies --fast-boot)
+  --game-menu on|off  with --window (on by default): 5, 7 and 3 of an e-AMUSEMENT reader's 10-key
+                    held together (either player's), or the Test and Service switches held
+                    together, leave the game as a closed window does, with exit code 73: the
+                    launcher then shows its game menu, driven by the cabinet's own controls
+                    (host/menukey.h). A box on the picture says so while they are held
+  --game-menu-hold S  ... held for S seconds (2 by default)
+  --game-menu-key BINDING  a key or button of your own that does the same, held (as a bindings
+                    file spells it: key:F12, joy0:button11)
   --volume DB       the sound out of the window, louder or quieter (e.g. 6 or -3; 0 by default):
                     what the speakers get, not what --wav and --digest record
   --audio-exclusive Windows: the output (--audio-device's, else the default one) in WASAPI exclusive
@@ -344,6 +353,9 @@ int main(int argc, char **argv) {
     bool fast_boot = false;
     double fast_boot_seconds = 0;
     std::string stats_overlay = "off";
+    bool game_menu = true;
+    double game_menu_hold = 2.0;
+    std::string game_menu_key;
     for (int k = 1; k < argc; k++) {
         std::string a = argv[k];
         // one dash is two, as spice2x writes its options (-url, -p, -card0: shell/eaoptions.h)
@@ -394,6 +406,9 @@ int main(int argc, char **argv) {
         else if (a == "--fast-boot") fast_boot = true;
         else if (a == "--fast-boot-seconds") fast_boot = true, fast_boot_seconds = std::stod(val());
         else if (a == "--mod") mod_dirs.push_back(val());
+        else if (a == "--game-menu") game_menu = val() != "off";
+        else if (a == "--game-menu-hold") game_menu_hold = std::stod(val());
+        else if (a == "--game-menu-key") game_menu_key = val();
         else if (a == "--audio-asio") audio_asio = val();
         else if (a == "--audio-buffer") audio_buffer = std::stoi(val());
         else if (a == "--window") window_scale = (k + 1 < argc && argv[k + 1][0] != '-') ? std::stoi(val()) : 2;
@@ -591,6 +606,11 @@ int main(int argc, char **argv) {
         host::readers_start();
         host::bio2_start();
         host::popnio_start();
+        // the way out to the game menu, from the cabinet's controls (not from the menu itself)
+        host::menukey::set(game_menu && game != "menu", game_menu_hold);
+#ifdef HK_WITH_SDL
+        if (game_menu) host::window_set_menu_key(game_menu_key);
+#endif
     }
     if (!script_path.empty() && !script::load(script_path, out)) return 2;
     if (!macro::load(opt.root + "/games/" + game + "/macros.txt")) return 2;
@@ -699,9 +719,21 @@ int main(int argc, char **argv) {
         if (prof::g_sample_frame) prof::g_sample_frame(f);   // HK_PROFILE_FRAMES
         if (lights_log) lights_log(f);
         host::readers_frame([&](int p, const std::string &n) { return machine.card_read(p, n); },
-                            [&](const std::string &name, int v) { return machine.set_input(name, v); });
+                            [&](const std::string &name, int v) {
+                                host::menukey::input(name, v);   // (a 10-key's 5, 7 and 3, whatever the game has)
+                                return machine.set_input(name, v);
+                            });
         host::bio2_frame(machine);
         host::popnio_frame(machine);
+        // 5, 7 and 3 held (host/menukey.h): the game ends as a closed window ends it, and says where to
+        if (host::menukey::frame(host::menukey::now())) {
+            printf("game menu: asked for from the cabinet's controls\n");
+            finish();
+#ifdef HK_WITH_SDL
+            if (window_scale) host::window_close();
+#endif
+            exit(host::menukey::EXIT_CODE);
+        }
         if (snap_every && f >= snap_from && f % snap_every == 0) {
             char name[64];
             snprintf(name, sizeof name, "/frame%06llu.ppm", (unsigned long long)f);

@@ -1,6 +1,7 @@
 # pop'n music 18 せんごく列伝 (J39), Konami 2010: a Windows PC, as pop'n music 15 (games/popn15, PLAN.md section 30)
 id = "popn18"
 title = "pop'n music 18 せんごく列伝"
+title_latin = "pop'n music 18 Sengoku Retsuden"   # for the game menu's font (ASCII)
 family = "pcpopn"       # pop'n on a PC: 9 buttons, the e-AMUSEMENT reader and 10-key, the board's lamps
 core = "pc"             # Konami's own program in HIRAKU's cabinet (runtime/pc/, PLAN.md section 30)
 

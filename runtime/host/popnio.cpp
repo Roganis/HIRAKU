@@ -18,6 +18,7 @@
 #include "../shell/cabinet.h"
 #include "../shell/core.h"
 #include "../shell/sys.h"
+#include "menukey.h"
 #include "warp.h"
 
 #ifdef _WIN32
@@ -628,6 +629,7 @@ void popnio_frame(hk::Core &core) {
     if (first) last_count = count, first = false;
     for (auto &b : inputs())
         if ((now >> b.bit & 1) != (last >> b.bit & 1)) {
+            menukey::input(b.name, now >> b.bit & 1);   // (Test and Service held: the way out to the game menu)
             core.set_input(b.name, now >> b.bit & 1);
             if (now >> b.bit & 1) warp::pressed();   // the fast start-up ends (host/warp.h)
         }

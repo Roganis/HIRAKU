@@ -321,6 +321,36 @@ Then run `sudo udevadm control --reload` and plug the board in again. 04b4:8613 
 
 An UltimatePopnController (CrazyRedMachine's) needs none of this on Linux: its buttons are a game controller's (**Controls**), and its lamps are named HID outputs that a lights file drives ([LIGHTS.md](LIGHTS.md)). On Windows it works either way: as a controller with a lights file, or with `--popn-io auto` and its own `ezusb.dll`.
 
+## The game menu: changing games from the cabinet
+
+A cabinet has no keyboard to press Escape on and no mouse for the launcher. So a game can be left from the cabinet's own controls, and the next one chosen with them.
+
+**Leaving a game:** hold **5, 7 and 3** together on an e-AMUSEMENT reader's 10-key (573; either player's, the three keys on the same 10-key) for two seconds. After a moment a box on the picture says "GAME MENU" with a bar that fills; let go before it's full and nothing happens. The game then ends as when its window is closed, with its saves written. It works in every game, whether the game itself has a card reader or not: on an IIDX cabinet, a DJ Main beatmania is left by the cabinet's readers all the same. A cabinet with no 10-key holds its **Test and Service** switches together instead, and you can add a key or button of your own (**Settings > General > Game menu**, or `--game-menu-key key:F12`). The game gets the keys too: at a PIN prompt the three digits are typed.
+
+**The menu** then opens: the games ready to play, on a shelf for each series (beatmania, beatmania IIDX, pop'n music...), the one you just left under the bar. The cabinet's own controls drive it, and the bottom of the screen says which:
+
+| Cabinet | Choose a game | Change shelf | Play |
+|---|---|---|---|
+| beatmania, IIDX, beatmania III | the turntable | the black keys | a white key, or Start |
+| pop'n music | the blue buttons | the green buttons | the red button |
+| pop'n stage | Select left / right | the outer buttons | Select OK |
+| DDR | the Up / Down panels | the Left / Right panels | Start |
+| DDR Solo | Select L / R, or Up / Down | the Left / Right panels | Start |
+| Dance Maniax | Select L / R | the upper sensors | Start |
+| DrumMania | Select L / R, or hi-hat / cymbal | the toms | Start, or the snare |
+| GuitarFreaks | the neck's R / B | the neck's G | Start, or the pick |
+| Mambo a GoGo | Select left / right | the left / right conga | Start, or the centre conga |
+| Keyboardmania | the wheel, or the lowest C / D | the lowest black keys | Start |
+| ParaParaParadise | the Left / Right buttons | the outer sensor bars | Start |
+
+A reader's 10-key drives it on any cabinet: **8** and **2** choose, **4** and **6** change shelf, **Enter** (the readers' **00**) plays. So do a keyboard's arrows and Enter, where the cabinet's own controls don't use them. A control held keeps moving. The lamps of the controls that do something are lit, the ones that play blink, and an IIDX cabinet's ticker shows the game's name. Escape closes the menu and brings the launcher's window back.
+
+The menu lists the games the cabinet's controls can play: those that share the controls of the game you left (on an IIDX cabinet, every beatmania, IIDX and beatmania III). **Settings > General > Game menu** has "Every game" instead, how long the keys are held, a switch to turn the whole thing off, and **HIRAKU starts in the game menu** for a cabinet that boots into it (`hiraku --menu` does that once). With full screen, the screen goes black between a game and the menu, not to the desktop.
+
+It needs the launcher: a game started on its own just ends when the keys are held (exit code 73; `--game-menu off` turns the hold off, `--game-menu-hold S` sets its seconds). The menu is a program of its own, `hiraku-menu`, which the launcher gives its list.
+
+Not yet checked on a cabinet: whether a real reader's 10-key tells three keys held at once (5, 7 and 3 share no row or column, which is what such keypads need), and the menu driven through a BIO2 or a pop'n I/O board.
+
 ## Latency
 
 **In the game:** HIRAKU measures it as the time from a key press to the RF5C400 starting the keysound. beatmania III scans its keys once per video frame (59.94 Hz), so this is **2–20 ms, mean about 9.5 ms**, exactly as on a real cabinet. Everything above that is the PC.

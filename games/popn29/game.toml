@@ -1,6 +1,7 @@
 # pop'n music (M39), Konami 2024/2026: a 64-bit Windows PC with two screens
 id = "popn29"
 title = "pop'n music High☆Cheers!!"
+title_latin = "pop'n music High Cheers!!"   # for the game menu's font (ASCII)
 family = "pcpopnhc"     # pop'n's 9 buttons and the cabinet's two big buttons, the touch screen
 core = "pc"             # Konami's own DLL, started by HIRAKU's loader (runtime/pc64/, PLAN.md section 32)
 

@@ -45,12 +45,14 @@ add_library(hk_python_shell STATIC
 	${HK}/runtime/host/readers.cpp
 	${HK}/runtime/host/bio2.cpp
 	${HK}/runtime/host/popnio.cpp
+	${HK}/runtime/host/menukey.cpp
 	${HK}/runtime/host/hidout.cpp
 	${HK}/runtime/host/window.cpp
 	${HK}/runtime/host/alsa.cpp
 	${HK}/runtime/host/notice.cpp
 	${HK}/runtime/host/warp.cpp
 	${HK}/runtime/host/lampview.cpp
+	${HK}/runtime/host/menuview.cpp
 	${HK}/runtime/host/shaderview.cpp
 	${HK}/runtime/host/statsview.cpp
 	${HK}/runtime/host/sysload.cpp

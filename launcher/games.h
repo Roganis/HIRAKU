@@ -8,6 +8,7 @@
 
 struct Game {
     QString id, title, family, mame;
+    QString latin;                       // title_latin: the title spelt in ASCII, where it isn't (the game menu's font)
     QString core;                        // firebeat (default), djmain, sys573
     QString year, maker;                 // from the manifest's first comment line
     QString firstBoot;                   // what a new cabinet needs in test mode

@@ -682,7 +682,46 @@ void draw_picture(std::vector<uint32_t> &out, int &ow, int &oh) {
 void vblank_end_fire();
 Timer g_vblank_end("vblank end", vblank_end_fire);
 std::vector<uint32_t> g_present_fb;
+
+// HK_BETWEEN_SNAP=FIRST-LAST,PREFIX: at the end of each vblank of frames FIRST to LAST, the picture
+// on show and its in-between pictures a quarter, a half and three quarters on (render_between, as
+// --smooth-motion draws them), as PREFIX-<frame>-<0..3>.ppm. Headless snapshots come before the
+// game's flip and can't show them (docs/SMOOTH.md, "To check a game")
+void between_snap() {
+    static const char *e = getenv("HK_BETWEEN_SNAP");
+    static unsigned long first = 0, last = 0;
+    static char prefix[512] = "";
+    static bool parsed = e && sscanf(e, "%lu-%lu,%511s", &first, &last, prefix) == 3;
+    if (!parsed || g_frame < first || g_frame > last) return;
+    auto write = [](const uint32_t *px, int w, int h, int n) {
+        char name[600];
+        snprintf(name, sizeof name, "%s-%06llu-%d.ppm", prefix, (unsigned long long)g_frame, n);
+        FILE *f = fopen(name, "wb");
+        if (!f) return;
+        fprintf(f, "P6\n%d %d\n255\n", w, h);
+        for (size_t i = 0; i < (size_t)w * h; i++) {
+            const uint8_t rgb[3] = {(uint8_t)(px[i] >> 16), (uint8_t)(px[i] >> 8), (uint8_t)px[i]};
+            fwrite(rgb, 1, 3, f);
+        }
+        fclose(f);
+    };
+    static int step = 0;
+    static Timer later("between snap", [] { between_snap(); });
+    std::vector<uint32_t> fb;
+    int w, h;
+    if (step == 0) {
+        draw_picture(fb, w, h);
+        write(fb.data(), w, h, 0);
+    }
+    // each in-between picture at its own moment of the frame, as the window asks for them
+    step++;
+    if (const uint32_t *p = render_between(step / 4.0, w, h)) write(p, w, h, step);
+    if (step < 3) later.in(frame_ticks() / 4);
+    else step = 0;
+}
+
 void vblank_end_fire() {
+    between_snap();
     if (!g_present_hook) return;
     int w, h;
     draw_picture(g_present_fb, w, h);

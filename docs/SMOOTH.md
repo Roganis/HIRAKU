@@ -154,6 +154,13 @@ few frames changed picture as well: unpaired, it stood still for a frame). Where
 this:
 - its middle: pop'n music 8's notes squash and stretch to the beat about their middle, so their
   left edge moves while they don't;
+- unless only its size changed: the same picture from the same left or top edge, longer or shorter,
+  is resized there, not moved (its middle moves). beatmania III draws its lane covers (TRANSLUCENT)
+  as strips blended over each other, the top one from row 0 and 186 and 178 rows tall by turns
+  with the strips under it 8 rows higher or lower: carried on by its middle, it went 2 rows over the
+  next strip halfway, and those rows were blended twice, a dark line flickering at the strips' edge
+  (issue 15, 2026-11-14; tests/gcu/test_gcu_between.cpp). pop'n music 8's How to Play cuts an arrow
+  off from the right this way: it now stays where it is as it goes, as the game draws it;
 - where it reaches the screen: pop'n 8 draws its notes into a strip of VRAM (x 608-760) that a
   later object copies onto the lanes, the strip a few pixels sideways from frame to frame. An object
   inside a later one's source rectangle is placed through that copy (its offset turned back into
@@ -249,9 +256,12 @@ To check a game:
 2. dump the window's picture and an in-between picture at a few frames: on DJ Main,
    `--smooth-motion --snap-every N` writes `frameNNNNNN-half.ppm` beside each snapshot. Firebeat's
    and Twinkle's in-between pictures go with the picture at the end of vblank (after the game's
-   flip), not the frame hook's, so they need a dump there (a few lines in `vblank_end_fire`,
-   runtime/firebeat/board.cpp, or a screen `m_hk_vblank_end` on Twinkle, calling
-   `render_between(0.5, w, h)`);
+   flip), not the frame hook's, so they need a dump there. On Firebeat,
+   `HK_BETWEEN_SNAP=FIRST-LAST,PREFIX` writes, for each of those frames, the picture at the end of
+   vblank and the in-between pictures a quarter, a half and three quarters on, each at its own
+   moment of the frame (as the window asks for them, the next frame being drawn meanwhile), as
+   `PREFIX-<frame>-<0..3>.ppm`; on Twinkle, a screen `m_hk_vblank_end` calling
+   `render_between(0.5, w, h)`;
 3. compare: only what moves should differ, by half its step.
 
 To see how a Firebeat game draws: log each GCU command with its frame number (type, source,

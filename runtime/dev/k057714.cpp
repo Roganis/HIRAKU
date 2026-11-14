@@ -600,7 +600,15 @@ bool K057714::draw_between(uint32_t *out, int width, int height, double t) {
             if (b[0] != c[0] && b[3] != c[3]) continue;
             const int bx = there[kb].x, by = there[kb].y;
             if (std::abs(x - bx) > hk::ScrollGuess::REACH || std::abs(y - by) > hk::ScrollGuess::REACH) continue;
-            const int dx = ahead ? bx - x : x - bx, dy = ahead ? by - y : y - by;
+            int dx = ahead ? bx - x : x - bx, dy = ahead ? by - y : y - by;
+            // the same picture from the same edge, only longer or shorter on that side: resized, not
+            // moved (its middle moves). beatmania III's lane covers (TRANSLUCENT) are strips blended
+            // over each other, the top one from row 0 186 and 178 rows tall by turns: carried on 4
+            // rows a frame, it went over the next strip, and those rows showed darker (issue 15)
+            if (b[0] == c[0] && !here[k].copied && !there[kb].copied) {
+                if ((b[1] & 0x3ff) == (c[1] & 0x3ff)) dx = 0;
+                if (((b[1] >> 10) & 0x3fff) == ((c[1] >> 10) & 0x3fff)) dy = 0;
+            }
             cands.push_back({(int)k, (int)kb, dx, dy, (b[0] != c[0] ? 8 : 0) + (b[3] != c[3] ? 8 : 0) + (b[2] != c[2] ? 4 : 0), true});
         }
     }

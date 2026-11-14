@@ -399,6 +399,13 @@ add_executable(test_gcu_rows gcu/test_gcu_rows.cpp)
 target_include_directories(test_gcu_rows PRIVATE ${CMAKE_SOURCE_DIR}/runtime)
 add_test(NAME gcu_rows COMMAND test_gcu_rows)
 
+# The GCU's in-between pictures (--smooth-motion): a moving note carried on, translucent strips
+# resized from their top edge (beatmania III's lane covers) left as the frame draws them
+add_executable(test_gcu_between gcu/test_gcu_between.cpp)
+target_include_directories(test_gcu_between PRIVATE ${CMAKE_SOURCE_DIR}/runtime)
+target_link_libraries(test_gcu_between PRIVATE hiraku_rt)
+add_test(NAME gcu_between COMMAND test_gcu_between)
+
 # The Firebeat executor's recorder (runtime/core/exec_rec.cpp): which registers an instruction
 # names and which it only sets, against the semantics with registers changed at random
 add_executable(test_exec_names core/test_exec_names.cpp)

@@ -128,8 +128,14 @@ static QString unitState(const Game &g);
 static QString nvramSeed(const Game &g);
 static bool firstBoot(const Game &g);
 
+// The window's name: "HIRAKU ~completeMIX~" while the newest games are listed (secretKeys)
+static QString mainTitle() {
+    QString t = cfg::settings().value("ui/pc64").toBool() ? "HIRAKU ~completeMIX~" : "HIRAKU";
+    return upd::currentVersion().isEmpty() ? t : t + " " + upd::currentVersion();
+}
+
 MainWindow::MainWindow() {
-    setWindowTitle(upd::currentVersion().isEmpty() ? QString("HIRAKU") : "HIRAKU " + upd::currentVersion());
+    setWindowTitle(mainTitle());
     resize(900, 600);
 
     // ---- actions ----
@@ -572,6 +578,7 @@ void MainWindow::secretKeys(int key) {
     m_secret = 0;
     const bool on = !cfg::settings().value("ui/pc64").toBool();
     cfg::settings().setValue("ui/pc64", on);
+    setWindowTitle(mainTitle());
     refresh();
 }
 

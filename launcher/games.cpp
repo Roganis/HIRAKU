@@ -10,6 +10,7 @@
 #include <QTextStream>
 
 #include "config.h"
+#include "theme.h"
 
 namespace {
 
@@ -265,6 +266,8 @@ QIcon familyIcon(const QString &family) {
            : family == "gtrf" ? Look{QColor(0x2b, 0x8a, 0xc8), "GF"}
            : family == "iidx" ? Look{QColor(0x18, 0x18, 0x20), "IIDX"}
                               : Look{QColor(0x3a, 0x4c, 0xb8), "bm III"};
+    const bool pop = theme::pop();
+    l.bg = theme::badge(family, l.bg);
     QIcon icon;
     for (int size : {32, 64}) {
         QPixmap pm(size, size);
@@ -272,15 +275,35 @@ QIcon familyIcon(const QString &family) {
         QPainter p(&pm);
         p.setRenderHint(QPainter::Antialiasing);
         p.setPen(Qt::NoPen);
-        p.setBrush(l.bg);
-        p.drawRoundedRect(QRectF(1, 1, size - 2, size - 2), size / 6.0, size / 6.0);
+        if (pop) {   // Pop: a sweet, a shade under it, a shine on top
+            const double r = size / 4.0;
+            p.setBrush(l.bg.darker(135));
+            p.drawRoundedRect(QRectF(1, 2.5, size - 2, size - 3.5), r, r);
+            QLinearGradient g(0, 0, 0, size);
+            g.setColorAt(0, l.bg.lighter(118));
+            g.setColorAt(1, l.bg);
+            p.setBrush(g);
+            p.drawRoundedRect(QRectF(1, 1, size - 2, size - 4.5), r, r);
+            p.setBrush(QColor(255, 255, 255, 60));
+            p.drawRoundedRect(QRectF(size * 0.18, size * 0.1, size * 0.64, size * 0.16), size * 0.08, size * 0.08);
+        } else {
+            p.setBrush(l.bg);
+            p.drawRoundedRect(QRectF(1, 1, size - 2, size - 2), size / 6.0, size / 6.0);
+        }
         QFont f = p.font();
-        f.setBold(true);
+        f.setWeight(pop ? QFont::Black : QFont::Bold);
         f.setPixelSize(size * (strlen(l.text) > 4 ? 0.26 : 0.32));
         p.setFont(f);
-        p.setPen(Qt::white);
-        p.drawText(QRectF(0, 0, size, size), Qt::AlignCenter, l.text);
+        const bool light = 0.299 * l.bg.redF() + 0.587 * l.bg.greenF() + 0.114 * l.bg.blueF() > 0.7;   // (yellow: dark letters)
+        const QRectF box(0, pop ? -1 : 0, size, size);
+        if (pop && !light) {
+            p.setPen(QColor(0, 0, 0, 70));
+            p.drawText(box.translated(0, size / 32.0), Qt::AlignCenter, l.text);
+        }
+        p.setPen(light ? QColor("#3a2a00") : Qt::white);
+        p.drawText(box, Qt::AlignCenter, l.text);
         icon.addPixmap(pm);
+        if (pop) icon.addPixmap(pm, QIcon::Selected);   // (not faded on the selected row)
     }
     return icon;
 }

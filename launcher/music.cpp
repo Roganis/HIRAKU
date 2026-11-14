@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "music.h"
 
+#include <QApplication>
 #include <QDesktopServices>
 #include <QDir>
 #include <QDirIterator>
@@ -23,6 +24,7 @@
 #include <utility>
 
 #include "config.h"
+#include "theme.h"
 
 namespace {
 
@@ -74,6 +76,7 @@ public:
 protected:
     void paintEvent(QPaintEvent *) override {
         QPainter p(this);
+        const bool pop = theme::pop();   // Pop: each part its colour, blue to purple
         const QColor lit = palette().color(QPalette::Highlight);
         QColor unlit = palette().color(QPalette::WindowText);
         unlit.setAlphaF(0.08f);
@@ -85,7 +88,8 @@ protected:
             const int on = (int)std::lround(m_shown[k] * kSegments), top = (int)std::ceil(m_peak[k] * kSegments);
             for (int seg = 0; seg < kSegments; seg++) {
                 const int y = height() - (seg + 1) * 4;
-                p.fillRect(QRect(x, y, x2 - x, 3), seg < on ? lit : seg + 1 == top && top > on ? peak : unlit);
+                p.fillRect(QRect(x, y, x2 - x, 3), seg < on ? (pop ? theme::along(k / 15.0) : lit)
+                                                   : seg + 1 == top && top > on ? peak : unlit);
             }
         }
     }
@@ -119,6 +123,7 @@ MusicPlayer::MusicPlayer(QWidget *parent) : QWidget(parent) {
     QPalette grey = m_status->palette();
     grey.setColor(QPalette::WindowText, grey.color(QPalette::Disabled, QPalette::WindowText));
     m_status->setPalette(grey);
+    m_status->setProperty("hkMuted", true);   // (Pop: its quieter colour, theme.cpp)
     QFont small = m_status->font();
     small.setPointSizeF(small.pointSizeF() * 0.9);
     m_status->setFont(small);
@@ -132,7 +137,7 @@ MusicPlayer::MusicPlayer(QWidget *parent) : QWidget(parent) {
     times->setSpacing(6);
     m_timeLabel = new QLabel("0:00");
     m_lengthLabel = new QLabel("0:00");
-    for (QLabel *l : {m_timeLabel, m_lengthLabel}) l->setFont(small), l->setPalette(grey);
+    for (QLabel *l : {m_timeLabel, m_lengthLabel}) l->setFont(small), l->setPalette(grey), l->setProperty("hkMuted", true);
     m_position = new QSlider(Qt::Horizontal);
     m_position->setRange(0, 0);
     m_position->setToolTip("Where the song is: drag to move in it");
@@ -154,8 +159,7 @@ MusicPlayer::MusicPlayer(QWidget *parent) : QWidget(parent) {
     m_autoplay->setFont(small);
     m_autoplay->setChecked(cfg::settings().value("music/autoplay", true).toBool());
     m_folder = button(this, style()->standardIcon(QStyle::SP_DirOpenIcon), "...", "Open the music folder");
-    auto *speaker = new QLabel;
-    speaker->setPixmap(style()->standardIcon(QStyle::SP_MediaVolume).pixmap(16, 16));
+    auto *speaker = m_speaker = new QLabel;
     m_volume = new QSlider(Qt::Horizontal);
     m_volume->setRange(0, 100);
     m_volume->setFixedWidth(64);
@@ -425,8 +429,23 @@ void MusicPlayer::showTimes() {
     m_lengthLabel->setText(clock(m_length));
 }
 
+void MusicPlayer::themeChanged() {
+    m_toggle->setObjectName(theme::pop() ? "hkMusicPlay" : "");   // (Pop: a round orange button)
+    const bool pop = theme::pop();
+    const QColor ink = QApplication::palette().color(QPalette::WindowText);
+    m_prev->setIcon(pop ? theme::glyph("prev", ink) : style()->standardIcon(QStyle::SP_MediaSkipBackward));
+    m_next->setIcon(pop ? theme::glyph("next", ink) : style()->standardIcon(QStyle::SP_MediaSkipForward));
+    m_speaker->setPixmap((pop ? theme::glyph("speaker", ink) : style()->standardIcon(QStyle::SP_MediaVolume)).pixmap(16, 16));
+    m_folder->setIcon(style()->standardIcon(QStyle::SP_DirOpenIcon));
+    m_toggle->style()->unpolish(m_toggle);
+    m_toggle->style()->polish(m_toggle);
+    updateButtons();
+    m_levels->update();
+}
+
 void MusicPlayer::updateButtons() {
-    m_toggle->setIcon(style()->standardIcon(m_playing ? QStyle::SP_MediaPause : QStyle::SP_MediaPlay));
+    if (theme::pop()) m_toggle->setIcon(theme::glyph(m_playing ? "pause" : "play", Qt::white));
+    else m_toggle->setIcon(style()->standardIcon(m_playing ? QStyle::SP_MediaPause : QStyle::SP_MediaPlay));
     m_toggle->setToolTip(m_playing ? (m_held ? "Pause (the music waits for the game to end)" : "Pause") : "Play");
     m_prev->setEnabled(!m_songs.isEmpty());
     m_next->setEnabled(!m_songs.isEmpty());

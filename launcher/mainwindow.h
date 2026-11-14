@@ -17,6 +17,7 @@ class QLineEdit;
 class QMenu;
 class QStackedWidget;
 class QPlainTextEdit;
+class QToolButton;
 class QTreeWidget;
 class QTreeWidgetItem;
 class UpdateCheck;
@@ -41,6 +42,7 @@ protected:
 private:
     void secretKeys(int key);   // ↑↑↓↓←→←→ B A: the AVS2 PC games listed, or hidden again
     void refresh();
+    void themeChanged();   // View > Look: what the launcher paints itself, again (theme.h)
     void applyFilter();
     void updateActions();
     void showDetails();
@@ -83,6 +85,8 @@ private:
     QDockWidget *m_detailsDock;    // the game's details, beside the list
     static constexpr int kLayout = 1;   // saveState's version: 1, the details and log beside the list
     QAction *m_play, *m_stop, *m_controls, *m_lights, *m_showAll;
+    QToolButton *m_logo;
+    int m_logoH = 0;
     QProcess m_proc;
     QProcess m_ingest;                // tools/ingest.py, one batch at a time
     QList<QStringList> m_ingestQueue;

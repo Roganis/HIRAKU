@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "mainwindow.h"
+#include "theme.h"
 #include "runlogs.h"
 #include "gamemenu.h"
 #include "powerplan.h"
@@ -225,12 +226,9 @@ MainWindow::MainWindow() {
     tb->addAction(addFiles);
     // the HIRAKU logo, as tall as the buttons beside it; a click shows About HIRAKU
     tb->addSeparator();
-    auto *logo = new QToolButton;
-    const int logoH = tb->iconSize().height() + tb->fontMetrics().height();
-    QPixmap lp = QPixmap(":/logo.png").scaledToHeight(logoH * devicePixelRatio(), Qt::SmoothTransformation);
-    lp.setDevicePixelRatio(devicePixelRatio());
-    logo->setIcon(QIcon(lp));
-    logo->setIconSize(lp.deviceIndependentSize().toSize());
+    auto *logo = m_logo = new QToolButton;
+    logo->setObjectName("hkLogo");
+    m_logoH = tb->iconSize().height() + tb->fontMetrics().height();
     logo->setAutoRaise(true);
     logo->setCursor(Qt::PointingHandCursor);
     logo->setToolTip("About HIRAKU");
@@ -249,6 +247,8 @@ MainWindow::MainWindow() {
     m_filter->setClearButtonEnabled(true);
     m_filter->setMaximumWidth(240);
     tb->addWidget(m_filter);
+    tb->widgetForAction(m_play)->setObjectName("hkPlay");   // (Pop's green and red buttons: theme.cpp)
+    tb->widgetForAction(m_stop)->setObjectName("hkStop");
     connect(m_filter, &QLineEdit::textChanged, this, [this] {
         applyFilter();
         updateActions();
@@ -433,6 +433,20 @@ MainWindow::MainWindow() {
     view->addAction(m_logDock->toggleViewAction());
     view->addAction(m_musicDock->toggleViewAction());
     view->addAction(refreshAct);
+    view->addSeparator();
+    auto *looks = view->addMenu("Look");
+    auto *lookGroup = new QActionGroup(this);
+    for (auto [look, name] : {std::pair{theme::System, "The system's"}, {theme::Pop, "Pop"}, {theme::Night, "Pop night"}}) {
+        auto *a = looks->addAction(name);
+        a->setCheckable(true);
+        a->setChecked(theme::current() == look);
+        lookGroup->addAction(a);
+        connect(a, &QAction::triggered, this, [this, look] {
+            cfg::settings().setValue("ui/theme", theme::key(look));
+            theme::apply(look);
+            themeChanged();
+        });
+    }
     auto *help = menuBar()->addMenu("&Help");
     help->addAction("How to play (docs/PLAY.md)", this, [] {
         QDesktopServices::openUrl(QUrl::fromLocalFile(cfg::rootDir() + "/docs/PLAY.md"));
@@ -588,6 +602,7 @@ MainWindow::MainWindow() {
     if (!m_musicDock->isHidden()) m_music->autoplay();   // (when its panel is there)
     m_music->firstSongs();
     qApp->installEventFilter(this);
+    themeChanged();
     refresh();
     planBack();   // (a launcher that ended before it could: the plan it had changed)
     // a cabinet that starts in the game menu (Settings > General)
@@ -620,6 +635,20 @@ void MainWindow::secretKeys(int key) {
     cfg::settings().setValue("ui/pc64", on);
     setWindowTitle(mainTitle());
     refresh();
+}
+
+void MainWindow::themeChanged() {
+    const bool pop = theme::pop();
+    // the logo: HIRAKU's picture, or in Pop its word in the six colours
+    QPixmap lp = pop ? theme::wordmark(m_logoH, devicePixelRatio())
+                     : QPixmap(":/logo.png").scaledToHeight(m_logoH * devicePixelRatio(), Qt::SmoothTransformation);
+    lp.setDevicePixelRatio(devicePixelRatio());
+    m_logo->setIcon(QIcon(lp));
+    m_logo->setIconSize(lp.deviceIndependentSize().toSize());
+    m_play->setIcon(pop ? theme::glyph("play", Qt::white) : QIcon::fromTheme("media-playback-start"));
+    m_stop->setIcon(pop ? theme::glyph("stop", Qt::white) : QIcon::fromTheme("media-playback-stop"));
+    m_music->themeChanged();
+    if (m_list->topLevelItemCount()) refresh();   // the badges and the statuses' colours
 }
 
 void MainWindow::closeEvent(QCloseEvent *e) {
@@ -807,7 +836,7 @@ void MainWindow::refreshStatuses() {
         bool notable;
         it->setText(Status, statusOf(*g, &notable));
         if (g->status == Game::Ready)   // green, amber where the next start is special
-            it->setForeground(Status, notable ? QColor(0xc0, 0x80, 0x10) : QColor(0x2e, 0x9e, 0x4a));
+            it->setForeground(Status, notable ? theme::notable() : theme::ready());
     }
 }
 

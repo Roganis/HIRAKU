@@ -34,6 +34,7 @@ public:
     void autoplay();                           // the launcher opened: the music, when Autoplay is on
     void firstSongs();                         // ... and on its first launches, the first songs (music.cpp)
     void pause();                              // (the panel closed: no music nobody can stop)
+    void themeChanged();                       // View > Look (theme.h): its icons again
 
 protected:
     void resizeEvent(QResizeEvent *e) override;   // (the title elided to the width)
@@ -62,6 +63,7 @@ private:
     QSlider *m_position, *m_volume;
     QToolButton *m_prev, *m_toggle, *m_next, *m_shuffle, *m_autoplay, *m_folder;
     MusicLevels *m_levels;
+    QLabel *m_speaker;
     QProcess m_proc;
     QByteArray m_buffer;
     QList<QPointer<QProcess>> m_watched;

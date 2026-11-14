@@ -30,6 +30,7 @@
 #include "nvidia.h"
 #include "dipsdialog.h"
 #include "modsdialog.h"
+#include "theme.h"
 #include "updater.h"
 
 #ifdef Q_OS_WIN
@@ -95,6 +96,7 @@ int main(int argc, char **argv) {
     QApplication::setDesktopFileName("hiraku");
     QApplication::setWindowIcon(QIcon(":/icon.png"));
     cfg::mergeControls();
+    theme::applySaved();   // the system's look, or Pop (theme.h)
     app.installEventFilter(new ScreenFit(&app));   // every window inside a small screen too (fit.h)
     QStringList args = app.arguments().mid(1);
     // An update's script starts the launcher itself when it's done (--updated, --update-failed).

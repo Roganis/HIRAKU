@@ -1131,7 +1131,13 @@ QStringList MainWindow::arguments(const Game &g) const {
     }
     if (s.value("lights/overlay", false).toBool()) a << "--lights-overlay";   // runtime/host/lampview.h
     if (const QString o = s.value("video/statsOverlay", "off").toString(); o != "off") a << "--stats-overlay" << o;   // host/statsview.h
-    if (s.value("game/fastBoot", true).toBool() && g.core != "pc") a << "--fast-boot";   // runtime/host/warp.h
+    if (s.value("game/fastBoot", true).toBool() && g.core != "pc") {   // runtime/host/warp.h
+        // a start that installs the game's data (minutes): fast to the install's end instead
+        if (g.installSeconds > 0 && (firstBoot(g) || installCassette(g) || installCd(g)))
+            a << "--fast-boot-seconds" << QString::number(g.installSeconds);
+        else
+            a << "--fast-boot";
+    }
     QString sf = s.value("audio/soundfont").toString();
     if (g.family == "kbm" && !sf.isEmpty()) a << "--soundfont" << sf;
     // the Konami Python games' GS (Settings > Display): Vulkan by default, less CPU than the

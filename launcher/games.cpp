@@ -41,6 +41,8 @@ void readManifest(const QString &path, Game &g) {
         // (a number, not a text in quotes: when its title screen shows, for the game menu's picture)
         static const QRegularExpression seconds(R"(^\s*title_seconds\s*=\s*([0-9.]+))");
         if (auto n = seconds.match(line); n.hasMatch() && section.isEmpty()) g.titleSeconds = n.captured(1).toDouble();
+        static const QRegularExpression install(R"(^\s*install_seconds\s*=\s*([0-9.]+))");   // (fast start-up)
+        if (auto n = install.match(line); n.hasMatch() && section.isEmpty()) g.installSeconds = n.captured(1).toDouble();
         auto m = kv.match(line);
         if (!m.hasMatch()) continue;
         QString k = m.captured(1), v = m.captured(2);

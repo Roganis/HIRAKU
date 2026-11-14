@@ -5,6 +5,7 @@ family = "dmx"          # Dance Maniax cabinet: per player four hand sensors (up
 mame = "dmx2majp"       # MAME set name, used by the oracle
 core = "sys573"         # System 573 (runtime/sys573/, PLAN.md section 19); digital I/O board
 boot_seconds = 52       # fast start-up's ready point: the machine's seconds to the end of its start-up (host/warp.h)
+install_seconds = 165    # ... and on a first start that installs (minutes): to the install's end, erring long (its regress case)
 title_seconds = 106     # the game menu's picture: the machine's seconds to its title screen (host/menupic.h)
 
 [roms]

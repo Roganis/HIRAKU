@@ -880,7 +880,7 @@ Full history: docs/PLAN-HISTORY.md §38 (the per-game times).
 **Open**
 - (build) DrumMania V and V2 (Python): start-up waits on the session check for a GuitarFreaks partner; no ready point.
 - (parked) the PC games: under Wine the game's own clock is real time, nothing to speed up.
-- (build) a first boot's install (minutes) still ends the fast part at the normal start-up's point.
+- (build) `install_seconds` for the other installing 573 sets (19 have one, from their regress install cases), and the network unit's 15-20 minute install, which has none.
 - (build) a 573 session pair (two processes in lockstep) would run only one side fast.
 
 ## 39. beatmania III's floppy drive

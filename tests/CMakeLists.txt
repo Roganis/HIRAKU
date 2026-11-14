@@ -135,6 +135,12 @@ if(TARGET hiraku_host)
   add_test(NAME input_bindings COMMAND test_bindings)
 endif()
 
+# The launcher's MIDI player's file reader (runtime/midi/smf.h): made-up files of each kind, cut
+# ones, and starting part-way
+add_executable(test_smf midi/test_smf.cpp)
+target_link_libraries(test_smf PRIVATE hiraku_midi)
+add_test(NAME midi_files COMMAND test_smf)
+
 # The performance overlay (runtime/host/statsview.h): what it reads of the system's files (made-up
 # ones), its panel from made-up frames, its levels, and its place: the corners, a drag with the
 # mouse, kept in a file

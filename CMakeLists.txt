@@ -176,6 +176,10 @@ endif()
 add_executable(hiraku-xt446 tools/xt446/xt446_render.cpp runtime/core/sampler.cpp)
 target_link_libraries(hiraku-xt446 PRIVATE hiraku_xt446)
 
+# MIDI files, for hiraku-midi (the launcher's MIDI player, below)
+add_library(hiraku_midi STATIC runtime/midi/smf.cpp)
+target_include_directories(hiraku_midi PUBLIC runtime)
+
 # --- what Linux and Windows do differently (runtime/shell/sys.h) ------------------
 add_library(hiraku_sys STATIC runtime/shell/sys.cpp runtime/shell/saves.cpp runtime/shell/net.cpp runtime/shell/overlay.cpp
             runtime/shell/crypt.cpp runtime/shell/keyed.cpp)
@@ -559,6 +563,14 @@ if(SDL3_FOUND)
   target_link_libraries(hiraku_menu PUBLIC SDL3::SDL3)
   add_executable(hiraku-menu runtime/menu/core.cpp)
   target_link_libraries(hiraku-menu PRIVATE hiraku_main hiraku_built_none hiraku_menu hiraku_host hiraku_shell)
+  # hiraku-midi: the launcher's MIDI player, through Keyboardmania's synth card (dev/xt446), a
+  # SoundFont (TinySoundFont) or Windows' own synth (runtime/midi/player.cpp)
+  add_executable(hiraku-midi runtime/midi/player.cpp)
+  target_include_directories(hiraku-midi SYSTEM PRIVATE third_party/tinysoundfont)
+  target_link_libraries(hiraku-midi PRIVATE hiraku_midi hiraku_xt446 hiraku_sys SDL3::SDL3)
+  if(WIN32)
+    target_link_libraries(hiraku-midi PRIVATE winmm)
+  endif()
 endif()
 
 # --- the launcher (optional: Qt 6 Widgets + SDL3) ------------------------------------

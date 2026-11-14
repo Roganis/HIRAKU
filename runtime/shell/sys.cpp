@@ -863,4 +863,15 @@ Lock lock_file(const std::string &path) {
 #endif
 }
 
+namespace {
+std::atomic<int> g_exit_status{0};
+}
+
+void exit(int status) {
+    g_exit_status = status;
+    std::exit(status);
+}
+
+int exit_status() { return g_exit_status; }
+
 }  // namespace hk::sys

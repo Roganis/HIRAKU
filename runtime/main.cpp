@@ -697,7 +697,7 @@ int main(int argc, char **argv) {
 #ifdef HK_WITH_SDL
             if (window_scale) host::window_close();
 #endif
-            exit(130);
+            hk::sys::exit(130);
         }
 #ifdef HK_WITH_SDL
         if (window_scale) mods::display_rate(host::pacing::refresh_hz());
@@ -715,7 +715,7 @@ int main(int argc, char **argv) {
 #ifdef HK_WITH_SDL
                 if (window_scale) host::window_close();
 #endif
-                exit(machine.exit_code());
+                hk::sys::exit(machine.exit_code());
             }
         }
         // the lamps the frame just emulated lit, out now: before the wait for the frame's time below
@@ -732,7 +732,7 @@ int main(int argc, char **argv) {
             lights_off();
             report();
             host::window_close();
-            exit(0);
+            hk::sys::exit(0);
         }
 #endif
         if (debug_every && f % debug_every == 0) machine.debug_line(f);
@@ -757,7 +757,7 @@ int main(int argc, char **argv) {
 #ifdef HK_WITH_SDL
             if (window_scale) host::window_close();
 #endif
-            exit(host::menukey::EXIT_CODE);
+            hk::sys::exit(host::menukey::EXIT_CODE);
         }
         if (snap_every && f >= snap_from && f % snap_every == 0) {
             char name[64];
@@ -783,7 +783,7 @@ int main(int argc, char **argv) {
 #ifdef HK_WITH_SDL
             if (window_scale) host::window_close();   // the sound card back to its owner
 #endif
-            exit(machine.exit_code());
+            hk::sys::exit(machine.exit_code());
         }
     });
 

@@ -1003,11 +1003,11 @@ private:
         // then assert (the VM is still mapped), so leave before them with the same status;
         // the shell has already saved and reported everything by then.
 #ifdef _WIN32
-        // Windows has no on_exit, and atexit isn't told the status: the shell's exits once a run
-        // is going are exit(0) and an interrupted run's exit(130), which leaves with 0 here.
+        // Windows has no on_exit, and atexit isn't told the status: the shell leaves a run through
+        // hk::sys::exit, which keeps it (130 for Ctrl+C, the game menu's 73, a script's fault)
         std::atexit([] {
             fflush(nullptr);
-            _exit(0);
+            _exit(hk::sys::exit_status());
         });
 #else
         on_exit([](int status, void *) {

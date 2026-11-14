@@ -57,6 +57,10 @@ bool exists(const std::string &path);     // a file or a folder
 bool copy_file(const std::string &from, const std::string &to);
 // rename(), and the file at `to` replaced if there is one (Windows' rename() fails then)
 bool replace_file(const std::string &from, const std::string &to);
+// exit(status), the status kept first for an atexit handler, which isn't told it: the Python core's
+// on Windows, where there is no on_exit (runtime/python/core.cpp). The shell leaves a run this way.
+[[noreturn]] void exit(int status);
+int exit_status();   // what exit() was given (0 before)
 // A save: n bytes as the file at `path`, whole or not at all. Written beside it (path + ".tmp"), sent
 // to the disk and checked, then put in its place: a full disk, a disk gone read-only or a kill half
 // way leaves the file from before as it was. false then (and no .tmp left behind)

@@ -420,7 +420,6 @@ Full history: docs/PLAN-HISTORY.md §20.
 **Open**
 - (build) M17, a song added to pop'n 14: the song list entry and its checksum, the chart commands, the `ele`/`bt`/`pre` ADPCM layout, a `[[song]]` laid into a free slot; not started.
 - (build) Media mods on Python 2 (its disk is PCSX2's DEV9 ATA); hard-disk file maps exist only for pop'n 14's family.
-- (build) Input scripts attached to a mod (macros are per game, not per mod).
 - (owner) The 2026-10-20 smooth-motion fixes on beatmania IIDX 7th style (ghost notes, lag between scenes), seen fixed only in the play case.
 - (owner) Display pacing on a real 60 Hz display, and smooth motion at 144 Hz.
 - (parked) Native hooks on guest functions (a per-function override check): byte patches have covered every mod so far.
@@ -915,7 +914,7 @@ Full history: docs/PLAN-HISTORY.md §41.
 **Open**
 - (build) the executor's own steps: 35 % of beatmania III's frame, about 2 ns each.
 - (build) the GCU's picture composed once a frame (`draw`, `draw_frame`: 12 %) and its plain row copies (8 %).
-- (build) disk loading by PIO: 40 ns a word through `hk_mmio_read` and four layers to `AtaBus::read`, and a `posix_fadvise` of 8 MB at every READ (`runtime/dev/ata.cpp`, every core's); pop'n music 7's 6 ms frames.
+- (build) disk loading by PIO: 40 ns a word through `hk_mmio_read` and four layers to `AtaBus::read`; pop'n music 7's 6 ms frames. (The 8 MB read-ahead asked at every READ is now asked only when a READ leaves the last range: 8ab86d5, 456 calls to 3 in pop'n 7's attract.)
 - (build) one yield in ten falls near an event and runs in full.
 - (owner) one picture a frame on a real display (checked on SDL's offscreen driver only).
 - (owner) a Firebeat game on Windows (in the packages since 0.10.0; only the unit tests ran, under Wine) and on ARM (the rows' NEON half only by its unit test under qemu).

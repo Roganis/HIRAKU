@@ -4,6 +4,7 @@ title = "beatmania III"
 family = "bm3"          # bm3 | popn | ppp | kbm  - selects the board variant
 mame = "bm3"            # MAME set name, used by the oracle
 boot_seconds = 41       # fast start-up's ready point: the machine's seconds to the end of its start-up (host/warp.h)
+title_seconds = 66      # the game menu's picture: the machine's seconds to its title screen (host/menupic.h)
 
 [program]
 exe = "HIKARU.EXE"

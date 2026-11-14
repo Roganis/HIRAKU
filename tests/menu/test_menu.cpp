@@ -17,6 +17,7 @@
 #include <string>
 
 #include "host/menukey.h"
+#include "host/menupic.h"
 #include "menu/menu.h"
 #include "shell/cabinet.h"
 
@@ -211,9 +212,51 @@ static void test_draw() {
     menu::draw(empty, "popn", 0, px.data(), 640, 480);   // says there is none, and doesn't fall over
 }
 
+// A game's picture: a frame kept by the shell (host/menupic.h) is what the menu reads and shows
+// behind the list, at its right; a blank frame isn't kept, and a file that isn't there is no picture
+static void test_picture(const std::string &dir) {
+    // a frame of many colours, light at the right (a title screen, for what it matters here)
+    std::vector<uint32_t> frame(512 * 384);
+    for (int y = 0; y < 384; y++)
+        for (int x = 0; x < 512; x++)
+            frame[(size_t)y * 512 + x] = x >= 128 ? 0xc0c0c0u + (uint32_t)(y / 8 % 4) * 0x101010u + (uint32_t)(x / 64 % 4) * 0x000810u : (uint32_t)(y / 24) << 20 | 0x203040;
+    const std::string file = dir + "/menu-picture-test.bmp", blank_file = dir + "/menu-picture-blank.bmp";
+    std::filesystem::remove(file);
+    std::filesystem::remove(blank_file);
+    CHECK(host::menupic::save(file, frame.data(), 512, 384, 4.0 / 3.0));
+    CHECK(std::filesystem::exists(file) && std::filesystem::file_size(file) == 54 + 320 * 3 * 240);   // 240 lines of the monitor's shape
+    const std::vector<uint32_t> blank(64 * 64, 0x101010);
+    CHECK(!host::menupic::save(blank_file, blank.data(), 64, 64, 0) && !std::filesystem::exists(blank_file));
+    // a start-up error's screen: white and red text on black, a blue box
+    std::vector<uint32_t> text(640 * 480, 0);
+    for (int y = 0; y < 480; y++)
+        for (int x = 0; x < 640; x++)
+            text[(size_t)y * 640 + x] = y >= 200 && y < 360 && x >= 40 && x < 600 ? (x % 8 < 2 && y % 16 < 8 ? 0xffffffu : 0x2020a0u) : y < 120 && x % 16 < 3 && y % 12 < 7 ? (x < 320 ? 0xffffffu : 0xff2020u) : 0;
+    CHECK(!host::menupic::save(blank_file, text.data(), 640, 480, 4.0 / 3.0) && !std::filesystem::exists(blank_file));
+
+    const auto drawn = [](const std::string &picture, uint64_t at) {
+        menu::List l;
+        std::string err;
+        CHECK(l.parse("hiraku-menu-list 1\ngame\ta\tShelf\tA game\t2001\ngame\tb\tShelf\tAnother\t2002\t" + picture + "\ncurrent\tb\n", err));
+        CHECK(l.shelves.size() == 1 && l.shelves[0].games[1].picture == picture && l.shelves[0].games[0].picture.empty());
+        menu::State s;
+        s.set(l);
+        std::vector<uint32_t> px(640 * 480, 0);
+        menu::draw(s, "popn", at, px.data(), 640, 480);
+        return px;
+    };
+    const std::vector<uint32_t> without = drawn("", 60), with = drawn(file, 60), missing = drawn(dir + "/no-such-picture.bmp", 60);
+    const size_t at = (size_t)118 * 640 + 618;   // in the list's place, right of every text
+    CHECK((without[at] >> 16 & 0xff) < 60 && (with[at] >> 16 & 0xff) > 120);
+    CHECK(missing == without);
+    CHECK((drawn(file, 1)[at] >> 16 & 0xff) < (with[at] >> 16 & 0xff));   // it comes up, it isn't there at once
+    for (uint32_t p : with) CHECK(p >> 24 == 0xff);
+    std::filesystem::remove(file);
+}
+
 int main(int argc, char **argv) {
     if (argc < 2) {
-        fprintf(stderr, "test_menu GAMES_DIR [--ppm FILE FAMILY [wide]]\n");
+        fprintf(stderr, "test_menu GAMES_DIR [SCRATCH_DIR | --ppm FILE FAMILY [wide]]\n");
         return 2;
     }
     if (argc >= 5 && !strcmp(argv[2], "--ppm")) {
@@ -234,11 +277,18 @@ int main(int argc, char **argv) {
         write_ppm(argv[3], px, w, 480);
         return 0;
     }
+    // (first: nothing has been pressed yet)
+    CHECK(!host::menukey::touched());
+    host::menukey::input("P1 Button 1", 0);
+    CHECK(!host::menukey::touched());
+    host::menukey::input("P1 Button 1", 1);
+    CHECK(host::menukey::touched());   // with the way out off too: a picture isn't taken from a game someone plays
     test_hold();
     test_list();
     test_state();
     test_cabinets(argv[1]);
     test_draw();
+    test_picture(argc > 2 ? argv[2] : ".");
     if (g_failed) {
         fprintf(stderr, "%d checks failed\n", g_failed);
         return 1;

@@ -22,7 +22,7 @@ constexpr Watched kWatched[] = {
 constexpr unsigned kChords[] = {0x007, 0x038, 0x0c0, 0x100};
 constexpr double kShownAfter = 0.3;   // seconds of hold before the box shows
 
-std::atomic<bool> g_on{false};
+std::atomic<bool> g_on{false}, g_touched{false};
 std::mutex g_lock;
 double g_hold = 2.0;
 unsigned g_held = 0;
@@ -48,7 +48,10 @@ void set(bool on, double hold_seconds) {
 
 bool on() { return g_on; }
 
+bool touched() { return g_touched; }
+
 void input(const std::string &name, int value) {
+    if (value) g_touched = true;
     if (!g_on) return;
     for (const Watched &w : kWatched)
         if (name == w.name) {

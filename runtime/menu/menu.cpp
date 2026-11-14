@@ -54,7 +54,7 @@ bool List::parse(const std::string &text, std::string &error) {
         } else if (f[0] == "game" && f.size() >= 4 && !f[1].empty()) {
             const std::string shelf = ascii(f[2]);
             if (shelves.empty() || shelves.back().name != shelf) shelves.push_back({shelf, {}});
-            shelves.back().games.push_back({f[1], ascii(f[3]), f.size() > 4 ? ascii(f[4]) : std::string()});
+            shelves.back().games.push_back({f[1], ascii(f[3]), f.size() > 4 ? ascii(f[4]) : std::string(), f.size() > 5 ? f[5] : std::string()});
         } else {
             error = "line " + std::to_string(n) + ": not \"current ID\" or \"game ID SHELF TITLE DETAIL\", tabs between";
             return false;

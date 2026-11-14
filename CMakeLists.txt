@@ -214,7 +214,7 @@ target_link_libraries(hiraku_cabinet PUBLIC hiraku_sys)
 # --- the shell: what every machine core shares (runtime/shell/core.h) --------------
 # Input scripts; the host front end below. Cores provide hk::core().
 add_library(hiraku_shell STATIC runtime/host/script.cpp runtime/host/macro.cpp runtime/host/mods.cpp runtime/host/pythondisk.cpp runtime/host/png.cpp
-            runtime/host/acio.cpp runtime/host/readers.cpp runtime/host/bio2.cpp runtime/host/popnio.cpp runtime/host/menukey.cpp)
+            runtime/host/acio.cpp runtime/host/readers.cpp runtime/host/bio2.cpp runtime/host/popnio.cpp runtime/host/menukey.cpp runtime/host/menupic.cpp)
 target_include_directories(hiraku_shell PUBLIC runtime)
 find_package(Threads REQUIRED)
 find_package(ZLIB REQUIRED)   # mods' PNG pictures (runtime/host/png.h)

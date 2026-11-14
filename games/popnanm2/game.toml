@@ -4,6 +4,7 @@ title = "pop'n music Animelo 2"
 family = "popn"
 mame = "popnanm2"
 boot_seconds = 48       # fast start-up's ready point: the machine's seconds to the end of its start-up (host/warp.h)
+title_seconds = 71      # the game menu's picture: the machine's seconds to its title screen (host/menupic.h)
 
 [program]
 exe = "FIREBEAT.EXE"

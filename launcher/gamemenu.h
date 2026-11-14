@@ -25,6 +25,7 @@ inline QString plainTitle(const QString &title, const QString &latin = QString()
 
 struct Row {
     QString id, shelf, title, detail;   // detail: "2002  DJ Main"
+    QString picture;                    // a BMP file's path, "" if the game has no picture
 };
 
 // The list file's text: the rows in the order given (a shelf's games together), and the game the
@@ -34,7 +35,8 @@ inline QByteArray listText(const QList<Row> &rows, const QString &current) {
     QString text = "hiraku-menu-list 1\n";
     if (!current.isEmpty()) text += "current\t" + field(current) + "\n";
     for (const Row &r : rows)
-        text += "game\t" + field(r.id) + "\t" + field(r.shelf) + "\t" + field(r.title) + "\t" + field(r.detail) + "\n";
+        text += "game\t" + field(r.id) + "\t" + field(r.shelf) + "\t" + field(r.title) + "\t" + field(r.detail) +
+                (r.picture.isEmpty() ? QString() : "\t" + field(r.picture)) + "\n";
     return text.toUtf8();
 }
 

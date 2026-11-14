@@ -11,6 +11,7 @@ struct Game {
     QString latin;                       // title_latin: the title spelt in ASCII, where it isn't (the game menu's font)
     QString core;                        // firebeat (default), djmain, sys573
     QString year, maker;                 // from the manifest's first comment line
+    double titleSeconds = 0;             // title_seconds: the machine's seconds to its title screen (the game menu's picture)
     QString firstBoot;                   // what a new cabinet needs in test mode
     bool installCassette = false;        // System 573: first boots with an install cassette (ddr3mj)
     bool hidden = false;                 // the AVS2 PC games ([pc] loader = "pc64", "pc32"): listed once unlocked

@@ -32,6 +32,10 @@ QString saveDir(const QString &game);
 // The last runs' logs (the launcher's log pane, a file a run: <yyyyMMdd-HHmmss>-<game>.log), beside
 // the saves: <data>/logs. The launcher keeps the newest kRunLogs.
 QString logsDir();
+// The games' pictures for the game menu, beside the saves: <data>/menu-pictures. The player's own are
+// <id>.png (.jpg, .bmp); auto/ holds what HIRAKU made (a title screen a run kept, runtime/host/menupic.h,
+// and the player's own as the menu reads them)
+QString menuPicturesDir();
 constexpr int kRunLogs = 10;
 QString controlsFile(const QString &family);  // the family's controls set's file
 void mergeControls();                       // once: a set's members' old files joined into the set's

@@ -768,8 +768,15 @@ void SettingsDialog::generalPage(QVBoxLayout *v) {
     m_menuAtStart->setToolTip("With full screen (Display) and \"Hide the launcher while a game runs\" below, the cabinet's "
                               "screen shows only the menu and the games. Escape in the menu comes back to this window.");
     fm->addRow("", m_menuAtStart);
+    m_menuPictures = new QCheckBox("Keep a picture of each game's title screen for the menu");
+    m_menuPictures->setChecked(s.value("menu/pictures", true).toBool());
+    m_menuPictures->setToolTip("The first time a game reaches its title screen with no control touched, that picture is kept "
+                               "(in " + QDir::toNativeSeparators(cfg::menuPicturesDir()) + ") and the menu shows it behind the list. "
+                               "A picture of your own there, named after the game's id (iidx16.png), is shown instead. "
+                               "Not every game has a title time yet: those show none until you give one.");
+    fm->addRow("", m_menuPictures);
     const auto menuRows = [this] {
-        for (QWidget *w : {(QWidget *)m_menuHold, (QWidget *)m_menuKey, (QWidget *)m_menuGames, (QWidget *)m_menuAtStart})
+        for (QWidget *w : {(QWidget *)m_menuHold, (QWidget *)m_menuKey, (QWidget *)m_menuGames, (QWidget *)m_menuAtStart, (QWidget *)m_menuPictures})
             w->setEnabled(m_menuOn->isChecked());
     };
     connect(m_menuOn, &QCheckBox::toggled, this, menuRows);
@@ -839,6 +846,7 @@ void SettingsDialog::accept() {
     s.setValue("menu/key", m_menuKey->text().trimmed());
     s.setValue("menu/games", m_menuGames->currentData().toString());
     s.setValue("menu/atStart", m_menuAtStart->isChecked());
+    s.setValue("menu/pictures", m_menuPictures->isChecked());
     s.setValue("ingest/place", m_place->currentData().toString());
     s.setValue("updates/check", m_checkUpdates->isChecked());
     s.setValue("game/extraArgs", m_extra->text().trimmed());

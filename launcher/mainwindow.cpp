@@ -32,6 +32,7 @@
 #include <QFrame>
 #include <QHBoxLayout>
 #include <QHeaderView>
+#include <QImage>
 #include <QLabel>
 #include <QLineEdit>
 #include <QMap>
@@ -1057,6 +1058,10 @@ QStringList MainWindow::arguments(const Game &g) const {
     else {
         if (const double h = s.value("menu/hold", 2.0).toDouble(); h != 2.0) a << "--game-menu-hold" << QString::number(h);
         if (const QString k = s.value("menu/key").toString().trimmed(); !k.isEmpty()) a << "--game-menu-key" << k;
+        // its picture of this game: the title screen, kept by the first run that reaches it untouched
+        // (runtime/host/menupic.h); asked for until there is one
+        if (g.titleSeconds > 0 && s.value("menu/pictures", true).toBool())
+            if (const QString kept = cfg::menuPicturesDir() + "/auto/" + g.id + ".bmp"; !QFileInfo::exists(kept)) a << "--menu-picture" << kept;
     }
     if (s.value("lights/overlay", false).toBool()) a << "--lights-overlay";   // runtime/host/lampview.h
     if (const QString o = s.value("video/statsOverlay", "off").toString(); o != "off") a << "--stats-overlay" << o;   // host/statsview.h
@@ -1251,6 +1256,24 @@ QString MainWindow::lastGame() const { return cfg::settings().value("ui/lastGame
 // The game menu (runtime/menu/menu.h): the games ready to play, in the list's order and on its
 // series' shelves, those the cabinet's controls can play (the controls set of the game just left;
 // Settings > General: or all of them), driven by that game's family's controls
+// A game's picture for the menu, "" if it has none: the player's own (menu-pictures/<id>.png, .jpg,
+// .bmp: whatever Qt reads), made once into the BMP the menu reads, at the size it shows; else the
+// title screen a run of the game kept (runtime/host/menupic.h)
+static QString menuPicture(const QString &id) {
+    const QString dir = cfg::menuPicturesDir();
+    for (const QFileInfo &own : QDir(dir).entryInfoList({id + ".*"}, QDir::Files, QDir::Name)) {
+        const QString made = dir + "/auto/" + id + "-own.bmp";
+        if (QFileInfo(made).exists() && QFileInfo(made).lastModified() >= own.lastModified()) return made;
+        QImage img(own.filePath());
+        if (img.isNull()) continue;
+        if (img.height() > 264) img = img.scaledToHeight(264, Qt::SmoothTransformation);
+        QDir().mkpath(dir + "/auto");
+        if (img.convertToFormat(QImage::Format_RGB888).save(made, "BMP")) return made;
+    }
+    const QString kept = dir + "/auto/" + id + ".bmp";
+    return QFileInfo::exists(kept) ? kept : QString();
+}
+
 void MainWindow::openMenu(const QString &left) {
     if (!m_running.isEmpty() || m_menu.state() != QProcess::NotRunning) return;
     auto &s = cfg::settings();
@@ -1277,7 +1300,7 @@ void MainWindow::openMenu(const QString &left) {
         if (g.status != Game::Ready || (!all && cfg::controlsSet(g.family) != cfg::controlsSet(from->family))) continue;
         const Shelf sh = shelf(g);
         rows << gamemenu::Row{g.id, gamemenu::plainTitle(sh.series), gamemenu::plainTitle(g.title, g.latin),
-                              gamemenu::plainTitle(g.year + "  " + sh.system)};
+                              gamemenu::plainTitle(g.year + "  " + sh.system), menuPicture(g.id)};
     }
     QString exe = cfg::binDir() + "/" + cfg::exeName("hiraku-menu");
     if (!QFileInfo(exe).isExecutable()) return giveUp("The game menu (hiraku-menu) isn't in " + cfg::binDir());

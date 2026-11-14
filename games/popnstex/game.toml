@@ -5,6 +5,7 @@ family = "djpstage"     # DJ Main pop'n stage cabinet: 10 buttons, 3 selection b
 mame = "popnstex"       # MAME set name, used by the oracle
 core = "djmain"         # interpreted 68EC020 on the DJ Main board (runtime/djmain/)
 boot_seconds = 77       # fast start-up's ready point: the machine's seconds to the end of its start-up (host/warp.h)
+title_seconds = 85      # the game menu's picture: the machine's seconds to its title screen (host/menupic.h)
 
 [roms]
 program = ["970jba01.6a", "970jba02.8a"]

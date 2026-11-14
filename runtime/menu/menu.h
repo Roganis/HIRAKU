@@ -7,9 +7,11 @@
 // The launcher writes the list (--list FILE), one line each, tabs between the fields:
 //     hiraku-menu-list 1
 //     current <id>                        the game just left: where the menu opens
-//     game <id> <shelf> <title> <detail>  in the order shown; a shelf is its games in a row
+//     game <id> <shelf> <title> <detail> [<picture>]  in the order shown; a shelf is its games in a row
 // and reads the choice (--choice FILE: the id and a new line; no file when the menu was closed).
-// Text is drawn in SDL's 8x8 font: ASCII (anything else shows as '?').
+// Text is drawn in SDL's 8x8 font: ASCII (anything else shows as '?'). A game's picture is a BMP
+// file's path, shown behind the list while the game is the one chosen: the player's own, or the
+// title screen the shell kept from a run of the game (host/menupic.h); HIRAKU comes with none.
 #pragma once
 
 #include <cstdint>
@@ -20,6 +22,7 @@ namespace hk::menu {
 
 struct Game {
     std::string id, title, detail;
+    std::string picture;   // a BMP file, "" if the game has none
 };
 struct Shelf {
     std::string name;

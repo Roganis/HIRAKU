@@ -4,6 +4,7 @@ title = "ParaParaParadise"
 family = "ppp"
 mame = "ppp"
 boot_seconds = 38       # fast start-up's ready point: the machine's seconds to the end of its start-up (host/warp.h)
+title_seconds = 65      # the game menu's picture: the machine's seconds to its title screen (host/menupic.h)
 first_boot = "the backup RAM (E160) and sound flash (E124) are blank. Press F2 for test mode, run SOUND FLASH INIT, then ALL FACTORY SETTINGS."   # shown by the launcher
 
 [program]

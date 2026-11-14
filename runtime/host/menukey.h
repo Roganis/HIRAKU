@@ -25,6 +25,9 @@ void set(bool on, double hold_seconds = 2.0);
 bool on();
 // An input as the game is given it (any thread): its cabinet name, 1 held, 0 let go
 void input(const std::string &name, int value);
+// Whether any control at all was given pressed since the program started (the menu's picture of a
+// game is taken only from one nobody has touched yet: host/menupic.h)
+bool touched();
 // Once a frame, with the time (now()): true once, when one of the holds has lasted
 bool frame(double now_seconds);
 // How far the hold is, 0 to 1, for the box; 0 while there is none or it has only just begun

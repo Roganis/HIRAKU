@@ -146,7 +146,7 @@ if(TARGET hiraku_host)
   # launcher's list, and that every cabinet family the games name can drive the menu
   add_executable(test_menu menu/test_menu.cpp)
   target_link_libraries(test_menu PRIVATE hiraku_menu hiraku_shell)
-  add_test(NAME game_menu COMMAND test_menu ${CMAKE_SOURCE_DIR}/games)
+  add_test(NAME game_menu COMMAND test_menu ${CMAKE_SOURCE_DIR}/games ${CMAKE_CURRENT_BINARY_DIR})
   # ... and hiraku-menu itself, driven by a script as an IIDX cabinet drives it: the game it gives
   add_test(NAME game_menu_pick COMMAND hiraku-menu --list ${CMAKE_CURRENT_SOURCE_DIR}/menu/list.txt --family iidx
            --script ${CMAKE_CURRENT_SOURCE_DIR}/menu/pick.his --frames 400 --out ${CMAKE_CURRENT_BINARY_DIR}/menu-run)

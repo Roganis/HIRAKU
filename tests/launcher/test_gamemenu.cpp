@@ -25,12 +25,14 @@ int main(int argc, char **argv) {
     CHECK(gamemenu::plainTitle(QString::fromUtf8("pop'n music 18 \xe3\x81\x9b\xe3\x82\x93"), "pop'n music 18 Sengoku") == "pop'n music 18 Sengoku");
     CHECK(gamemenu::plainTitle(QString::fromUtf8("A \xe2\x98\x86 B")) == "A B");   // no two spaces where a sign was
 
-    const QList<gamemenu::Row> rows = {{"bm7thmix", "beatmania", "beatmania 7th MIX", "2002  DJ Main"},
-                                       {"odd", "a\tshelf", "a title\nover two lines", ""}};
+    const QList<gamemenu::Row> rows = {{"bm7thmix", "beatmania", "beatmania 7th MIX", "2002  DJ Main", ""},
+                                       {"odd", "a\tshelf", "a title\nover two lines", "", ""},
+                                       {"shown", "s", "t", "d", "/a folder/shown.bmp"}};
     const QByteArray text = gamemenu::listText(rows, "bm7thmix");
     CHECK(text == "hiraku-menu-list 1\ncurrent\tbm7thmix\n"
                   "game\tbm7thmix\tbeatmania\tbeatmania 7th MIX\t2002  DJ Main\n"
-                  "game\todd\ta shelf\ta title over two lines\t\n");
+                  "game\todd\ta shelf\ta title over two lines\t\n"
+                  "game\tshown\ts\tt\td\t/a folder/shown.bmp\n");   // a picture's path, where there is one
     CHECK(gamemenu::listText({}, "") == "hiraku-menu-list 1\n");
 
     const QString choice = dir + "/choice";

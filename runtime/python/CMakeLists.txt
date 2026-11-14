@@ -46,6 +46,7 @@ add_library(hk_python_shell STATIC
 	${HK}/runtime/host/bio2.cpp
 	${HK}/runtime/host/popnio.cpp
 	${HK}/runtime/host/menukey.cpp
+	${HK}/runtime/host/menupic.cpp
 	${HK}/runtime/host/hidout.cpp
 	${HK}/runtime/host/window.cpp
 	${HK}/runtime/host/alsa.cpp

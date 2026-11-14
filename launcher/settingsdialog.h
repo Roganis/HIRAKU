@@ -25,7 +25,7 @@ private:
     void cabinetPage(QVBoxLayout *v);
     void generalPage(QVBoxLayout *v);
     QSpinBox *m_scale, *m_audioMs, *m_volume;
-    QCheckBox *m_menuOn, *m_menuAtStart;   // the game menu (General)
+    QCheckBox *m_menuOn, *m_menuAtStart, *m_menuPictures;   // the game menu (General)
     QDoubleSpinBox *m_menuHold;
     QLineEdit *m_menuKey;
     QComboBox *m_menuGames;

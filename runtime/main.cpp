@@ -28,6 +28,7 @@
 #include "core/prof.h"
 #include "host/macro.h"
 #include "host/menukey.h"
+#include "host/menupic.h"
 #include "host/mods.h"
 #include "host/script.h"
 #include "shell/cabinet.h"
@@ -144,6 +145,10 @@ static const char COMMON_OPTIONS[] = R"HK(  --frames N        stop after N video
   --game-menu-hold S  ... held for S seconds (2 by default)
   --game-menu-key BINDING  a key or button of your own that does the same, held (as a bindings
                     file spells it: key:F12, joy0:button11)
+  --menu-picture FILE  the game's picture for that menu: one frame written to FILE (a BMP) once
+                    the machine has run for the game's title_seconds (its game.toml), unless a
+                    control was pressed before then (host/menupic.h)
+  --menu-picture-at S  ... after S seconds of the machine's time instead
   --volume DB       the sound out of the window, louder or quieter (e.g. 6 or -3; 0 by default):
                     what the speakers get, not what --wav and --digest record
   --audio-exclusive Windows: the output (--audio-device's, else the default one) in WASAPI exclusive
@@ -295,15 +300,17 @@ std::string find_root() {
     return up.empty() ? "." : up;   // (a package whose dumps/ is gone: still the folder above bin/)
 }
 
-// A game.toml's `boot_seconds = N` (its top, before any [section]): the fast start-up's ready
-// point; 0 if none
-double boot_seconds(const std::string &toml) {
+// A game.toml's `KEY = N` (its top, before any [section]), a time of the machine's in seconds; 0 if
+// none. boot_seconds: the fast start-up's ready point. title_seconds: when its title screen shows
+// (the game menu's picture, host/menupic.h)
+double manifest_seconds(const std::string &toml, const char *key) {
     FILE *f = fopen(toml.c_str(), "r");
     if (!f) return 0;
+    const std::string format = std::string(" ") + key + " = %lf";
     char line[512];
     double s = 0;
     while (fgets(line, sizeof line, f) && line[0] != '[')
-        if (sscanf(line, " boot_seconds = %lf", &s) == 1) break;
+        if (sscanf(line, format.c_str(), &s) == 1) break;
     fclose(f);
     return s;
 }
@@ -355,7 +362,8 @@ int main(int argc, char **argv) {
     std::string stats_overlay = "off";
     bool game_menu = true;
     double game_menu_hold = 2.0;
-    std::string game_menu_key;
+    std::string game_menu_key, menu_picture;
+    double menu_picture_at = 0;
     for (int k = 1; k < argc; k++) {
         std::string a = argv[k];
         // one dash is two, as spice2x writes its options (-url, -p, -card0: shell/eaoptions.h)
@@ -409,6 +417,8 @@ int main(int argc, char **argv) {
         else if (a == "--game-menu") game_menu = val() != "off";
         else if (a == "--game-menu-hold") game_menu_hold = std::stod(val());
         else if (a == "--game-menu-key") game_menu_key = val();
+        else if (a == "--menu-picture") menu_picture = val();
+        else if (a == "--menu-picture-at") menu_picture_at = std::stod(val());
         else if (a == "--audio-asio") audio_asio = val();
         else if (a == "--audio-buffer") audio_buffer = std::stoi(val());
         else if (a == "--window") window_scale = (k + 1 < argc && argv[k + 1][0] != '-') ? std::stoi(val()) : 2;
@@ -587,7 +597,7 @@ int main(int argc, char **argv) {
     host::window_set_split(split_screens);
     if (fast_boot && window_scale) {   // the ready point: --fast-boot-seconds, else the game's
         double s = fast_boot_seconds;
-        if (s <= 0) s = boot_seconds(opt.root + "/games/" + game + "/game.toml");
+        if (s <= 0) s = manifest_seconds(opt.root + "/games/" + game + "/game.toml", "boot_seconds");
         if (s > 0) host::warp::set(s);
         else fprintf(stderr, "fast start-up: games/%s/game.toml has no boot_seconds: the start-up at its own speed\n", game.c_str());
     }
@@ -628,6 +638,16 @@ int main(int argc, char **argv) {
     };
     std::signal(SIGINT, stop);
     std::signal(SIGTERM, stop);
+    // The game menu's picture of this game (host/menupic.h): the first frame once the machine has
+    // run to the game's title screen, if nobody has touched a control by then; one try a run
+    if (!menu_picture.empty() && menu_picture_at <= 0) menu_picture_at = manifest_seconds(opt.root + "/games/" + game + "/game.toml", "title_seconds");
+    if (menu_picture_at <= 0) menu_picture.clear();
+    auto title_picture = [&](const uint32_t *rgb, int w, int h) {
+        if (menu_picture.empty() || machine.seconds() < menu_picture_at) return;
+        if (!host::menukey::touched() && host::menupic::save(menu_picture, rgb, w, h, machine.display_aspect()))
+            printf("game menu: this game's picture kept, %.1f s in\n", machine.seconds());
+        menu_picture.clear();
+    };
 #ifdef HK_WITH_SDL
     // a core that can show the window its picture at the end of vertical blank does: the picture
     // the monitor then shows, the game's flip during the blank included, which the frame hook's
@@ -636,6 +656,7 @@ int main(int argc, char **argv) {
     const bool present_at_vblank_end =
         window_scale && machine.set_present_hook([&](const uint32_t *rgb, int w, int h) {
             host::window_present(rgb, w, h, machine.seconds());
+            title_picture(rgb, w, h);
         });
 #endif
     // HK_BETWEEN_BENCH: the in-between pictures where a window asks for them (with the picture at
@@ -715,6 +736,10 @@ int main(int argc, char **argv) {
         }
 #endif
         if (debug_every && f % debug_every == 0) machine.debug_line(f);
+#ifdef HK_WITH_SDL
+        if (!present_at_vblank_end)
+#endif
+            title_picture(rgb, w, h);
         if (between_at_frame) between_draw(w, h);
         if (prof::g_sample_frame) prof::g_sample_frame(f);   // HK_PROFILE_FRAMES
         if (lights_log) lights_log(f);

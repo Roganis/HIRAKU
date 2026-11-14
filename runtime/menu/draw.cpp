@@ -10,6 +10,8 @@
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <map>
+#include <vector>
 
 #include "menu.h"
 
@@ -80,6 +82,49 @@ struct Canvas {
 
 int width(const std::string &t, int k) { return (int)t.size() * 8 * k; }
 
+// A game's picture as it is drawn: its file scaled to the list's height, or to its place's width if
+// it is wider than that (Keyboardmania's two screens). The last few looked at are kept; a file that
+// can't be read is no picture.
+struct Picture {
+    int w = 0, h = 0;
+    std::vector<uint32_t> px;
+};
+std::map<std::string, Picture> g_pictures;
+const Picture *picture(const std::string &path, int box_h, int max_w) {
+    if (path.empty()) return nullptr;
+    const std::string key = std::to_string(box_h) + "x" + std::to_string(max_w) + " " + path;
+    if (const auto it = g_pictures.find(key); it != g_pictures.end()) return it->second.w ? &it->second : nullptr;
+    if (g_pictures.size() >= 12) g_pictures.clear();
+    Picture &p = g_pictures[key];
+    SDL_Surface *file = SDL_LoadBMP(path.c_str());
+    SDL_Surface *s = file ? SDL_ConvertSurface(file, SDL_PIXELFORMAT_ARGB8888) : nullptr;
+    if (s && s->w > 1 && s->h > 1 && s->w <= 4096 && s->h <= 4096) {
+        const int full_w = std::max(2, (int)std::lround((double)s->w * box_h / s->h));
+        p.w = std::min(full_w, max_w), p.h = full_w > max_w ? std::max(2, (int)std::lround((double)s->h * max_w / s->w)) : box_h;
+        p.px.resize((size_t)p.w * p.h);
+        const auto at = [&](int x, int y) { return ((const uint32_t *)((const uint8_t *)s->pixels + (size_t)y * s->pitch))[x]; };
+        for (int y = 0; y < p.h; y++) {   // between the file's pixels, by 256ths
+            const int fy = std::min((int)((int64_t)y * (s->h - 1) * 256 / std::max(1, p.h - 1)), (s->h - 1) * 256 - 1);
+            const int y0 = fy >> 8, wy = fy & 255;
+            for (int x = 0; x < p.w; x++) {
+                const int fx = std::min((int)((int64_t)x * (s->w - 1) * 256 / std::max(1, p.w - 1)), (s->w - 1) * 256 - 1);
+                const int x0 = fx >> 8, wx = fx & 255;
+                const uint32_t a = at(x0, y0), b = at(x0 + 1, y0), c = at(x0, y0 + 1), d = at(x0 + 1, y0 + 1);
+                uint32_t out = 0;
+                for (int sh = 0; sh < 24; sh += 8) {
+                    const int top = (int)(a >> sh & 255) * (256 - wx) + (int)(b >> sh & 255) * wx;
+                    const int bottom = (int)(c >> sh & 255) * (256 - wx) + (int)(d >> sh & 255) * wx;
+                    out |= (uint32_t)((top * (256 - wy) + bottom * wy) >> 16) << sh;
+                }
+                p.px[(size_t)y * p.w + x] = out;
+            }
+        }
+    }
+    if (s) SDL_DestroySurface(s);
+    if (file) SDL_DestroySurface(file);
+    return p.w ? &p : nullptr;
+}
+
 // a title too long for its place rolls: a wait, across, a wait, back to the start
 int roll(int over, uint64_t since) {
     if (over <= 0) return 0;
@@ -138,10 +183,31 @@ void draw(const State &s, const std::string &family, uint64_t frame, uint32_t *p
         }
     }
 
-    // the list: the chosen row on the bar, the others dimmer the further they are
+    // the chosen game's picture behind the list, at its right: it fades away towards the titles'
+    // side and comes up after a move
+    const int bar_x = mx - 8, bar_end = w - (mx - 8);
+    const Picture *pic = picture(sel->picture, rows * row_h, (bar_end - bar_x) * 6 / 10);
+    int solid_to = bar_end, clear_from = bar_end;   // the bar's amber: whole up to the first, gone from the second
+    if (pic) {
+        const int left = bar_end - pic->w, ramp = std::max(2, pic->w * 45 / 100);
+        const uint64_t since = frame - s.moved_at();
+        const int top = since < 8 ? 175 * ((int)since + 1) / 9 : 175;
+        const int up = list_y + (rows * row_h - pic->h) / 2;
+        for (int y = 0; y < pic->h; y++)
+            for (int x = 0; x < pic->w; x++) c.put(left + x, up + y, pic->px[(size_t)y * pic->w + x] & 0xffffff, top * std::min(x, ramp) / ramp);
+        solid_to = left + ramp / 2, clear_from = left + ramp;
+    }
+
+    // the list: the chosen row on the bar, the others dimmer the further they are. Over a picture
+    // the bar thins out to two lines, so that the middle of a title screen (its name) shows whole
     const int n = (int)shelf.games.size();
     const bool flash = started && started_for / 3 % 2 == 0;
-    c.fill(mx - 8, bar_y, w - 2 * (mx - 8), row_h, flash ? 0xffffff : kAmber);
+    const uint32_t bar = flash ? 0xffffff : kAmber;
+    c.fill(bar_x, bar_y, solid_to - bar_x, row_h, bar);
+    for (int x = solid_to; x < clear_from; x++) c.fill(x, bar_y, 1, row_h, bar, 255 * (clear_from - x) / (clear_from - solid_to));
+    c.fill(solid_to, bar_y, bar_end - solid_to, 2, bar, 170);
+    c.fill(solid_to, bar_y + row_h - 2, bar_end - solid_to, 2, bar, 170);
+    const int bar_text_to = (solid_to + clear_from) / 2;   // dark on the amber up to here, light after
     c.clip(0, list_y, w, list_y + rows * row_h);
     for (int i = 0; i < n; i++) {
         const double off = i - s.shown_row();
@@ -151,16 +217,28 @@ void draw(const State &s, const std::string &family, uint64_t frame, uint32_t *p
         const bool on_bar = i == s.row();
         const int a = on_bar ? 255 : std::max(60, 235 - (int)(std::fabs(off) * 34));
         const int detail_w = width(g.detail, 1), title_x = mx + 8;
-        const int room = w - 2 * (mx + 8) - (detail_w ? detail_w + 16 : 0);
+        const bool detail = !pic || on_bar;   // the year and the system: every row's, or over a picture the chosen game's alone
+        const int room = w - 2 * (mx + 8) - (detail && detail_w ? detail_w + 16 : 0);
         const int over = width(g.title, 2) - room;
         Canvas row = c;
         row.clip(title_x, std::max(c.y0, y - 4), title_x + room, std::min(c.y1, y + 20));
-        if (on_bar) row.text(title_x - roll(over, frame - s.moved_at()), y, g.title, 2, kDark);
-        else if (over > 0) {   // cut short, with dots
+        if (on_bar) {
+            const int tx = title_x - roll(over, frame - s.moved_at());
+            Canvas on = row, past = row;
+            on.x1 = std::min(row.x1, bar_text_to), past.x0 = std::max(row.x0, bar_text_to);
+            on.text(tx, y, g.title, 2, kDark);
+            past.text(tx + 2, y + 2, g.title, 2, kDark, 190);
+            past.text(tx, y, g.title, 2, kText);
+        } else if (over > 0) {   // cut short, with dots
             const size_t fit = (size_t)std::max(0, room / 16 - 2);
+            if (pic) row.text(title_x + 2, y + 2, g.title.substr(0, fit) + "..", 2, kDark, a * 3 / 4);   // (a shadow, over a picture)
             row.text(title_x, y, g.title.substr(0, fit) + "..", 2, kText, a);
-        } else row.text(title_x, y, g.title, 2, kText, a);
-        c.text(w - mx - 8 - detail_w, y + 4, g.detail, 1, on_bar ? kDark : kDim, a);
+        } else {
+            if (pic) row.text(title_x + 2, y + 2, g.title, 2, kDark, a * 3 / 4);
+            row.text(title_x, y, g.title, 2, kText, a);
+        }
+        if (pic && on_bar) c.text(w - mx - 8 - detail_w + 1, y + 5, g.detail, 1, kDark, 220);
+        if (detail) c.text(w - mx - 8 - detail_w, y + 4, g.detail, 1, pic ? kText : on_bar ? kDark : kDim, a);
     }
     c.unclip();
     {   // where the bar is in the shelf

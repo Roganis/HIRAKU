@@ -27,7 +27,8 @@ class MainWindow : public QMainWindow {
 public:
     MainWindow();
     void play(const QString &id);
-    void openMenu(const QString &left);   // the game menu, opening on that game (the one just left)
+    // the game menu, opening on that game (the one just left); `notice` is said in it first
+    void openMenu(const QString &left, const QString &notice = QString());
     QString lastGame() const;
     // ingest a game's files (tools/ingest.py): ROM sets, CHDs, images, folders
     void addGameFiles(const QStringList &paths);
@@ -105,6 +106,7 @@ private:
     QList<int> m_order;                 // m_games in the list's order (refresh)
     QList<QWidget *> m_covers;          // black over each screen between a full-screen game and the menu
     quint64 m_coverShown = 0;           // counts the times it was put up
+    bool m_fromMenu = false;            // the game running was chosen in the menu: it goes back there when it ends
     void menuClosed(int code, QProcess::ExitStatus st);
     void cover(bool on);
     void uncoverLater();                // ... off again once the program just started has its window up

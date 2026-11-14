@@ -9,6 +9,7 @@
 //     current <id>                        the game just left: where the menu opens
 //     game <id> <shelf> <title> <detail> [<picture>]  in the order shown; a shelf is its games in a row
 // and reads the choice (--choice FILE: the id and a new line; no file when the menu was closed).
+// --notice "LINE|LINE" is said on opening: a game that came back here because it ended with an error.
 // Text is drawn in SDL's 8x8 font: ASCII (anything else shows as '?'). A game's picture is a BMP
 // file's path, shown behind the list while the game is the one chosen: the player's own, or the
 // title screen the shell kept from a run of the game (host/menupic.h); HIRAKU comes with none.
@@ -78,6 +79,10 @@ public:
     uint64_t shelf_at() const { return shelf_at_; }
     uint64_t moved_at() const { return moved_at_; }   // the last move: a long title starts to roll from then
     void animate();   // once a frame
+    // Something to tell the player on opening (--notice: the game just left ended with an error),
+    // "a first line|a second, smaller": shown where the controls are said, until the first move
+    void set_notice(const std::string &text) { notice_ = text; }
+    const std::string &notice() const { return notice_; }
 
 private:
     List list_;
@@ -87,6 +92,7 @@ private:
     uint64_t chosen_at_ = 0, shelf_at_ = 0, moved_at_ = 0;
     int shelf_dir_ = 0;
     double shown_row_ = 0;
+    std::string notice_;
 };
 
 // --- the picture (menu/draw.cpp) -------------------------------------------------

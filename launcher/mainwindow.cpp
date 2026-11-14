@@ -512,12 +512,16 @@ MainWindow::MainWindow() {
     connect(&m_proc, &QProcess::readyRead, this, [this] { log(QString::fromLocal8Bit(m_proc.readAll())); });
     connect(&m_proc, &QProcess::finished, this, [this](int code, QProcess::ExitStatus st) {
         QString title = find(m_running) ? find(m_running)->title : m_running;
-        // left from the cabinet's controls for the game menu (runtime/host/menukey.h)
-        const bool toMenu = !m_stopping && st == QProcess::NormalExit && code == gamemenu::kExitCode &&
-                            cfg::settings().value("menu/enabled", true).toBool();
-        bool ok = m_stopping || (st == QProcess::NormalExit && (code == 0 || code == 130)) || toMenu;
+        // left from the cabinet's controls for the game menu (runtime/host/menukey.h); and a game
+        // chosen in the menu goes back to it however it ends (its own way out, Escape, an error):
+        // a cabinet has no mouse for the launcher's window
+        const bool menuOn = cfg::settings().value("menu/enabled", true).toBool();
+        const bool asked = st == QProcess::NormalExit && code == gamemenu::kExitCode && menuOn;
+        bool ok = m_stopping || (st == QProcess::NormalExit && (code == 0 || code == 130)) || asked;
+        const bool toMenu = !m_stopping && menuOn && (asked || m_fromMenu);
+        m_fromMenu = false;
         QString msg = st == QProcess::CrashExit ? title + " crashed"
-                      : toMenu                  ? title + " left for the game menu"
+                      : asked                   ? title + " left for the game menu"
                                                 : QString("%1 exited (code %2)").arg(title).arg(code);
         // the run log says why (a crash's exception, or the launcher's own ending of it)
         const QString why = m_killed ? title + " ended by the launcher: it hadn't stopped 5 s after being asked"
@@ -546,8 +550,13 @@ MainWindow::MainWindow() {
                 cfg::settings().setValue("npu/" + id, "on");
         }
         gameChanged();   // its saves now exist: no longer a first boot
-        if (!ok) exitReport(title, code, st);
-        if (toMenu) openMenu(left);
+        // (an error's report is a dialog: not over a cabinet's menu, which says so itself; the log
+        // pane is open in the launcher's window when it is next seen)
+        if (!ok && !toMenu) exitReport(title, code, st);
+        if (toMenu) {
+            const Game *was = find(left);
+            openMenu(left, ok ? QString() : gamemenu::plainTitle(title, was ? was->latin : QString()) + "|ended with an error: HIRAKU's window has its log");
+        }
     });
     m_menu.setProcessChannelMode(QProcess::MergedChannels);
     connect(&m_menu, &QProcess::finished, this, &MainWindow::menuClosed);
@@ -1239,6 +1248,7 @@ void MainWindow::play(const QString &id) {
     if (g->core == "pc") nvidiaNotice(*g);
     m_running = g->id;
     m_stopping = false;
+    m_fromMenu = false;   // (the menu says so itself, once the game has started)
     m_run++;
     m_proc.setWorkingDirectory(cfg::rootDir());
     {
@@ -1296,7 +1306,7 @@ static QString menuPicture(const QString &id) {
     return QFileInfo::exists(kept) ? kept : QString();
 }
 
-void MainWindow::openMenu(const QString &left) {
+void MainWindow::openMenu(const QString &left, const QString &notice) {
     if (!m_running.isEmpty() || m_menu.state() != QProcess::NotRunning) return;
     auto &s = cfg::settings();
     const auto giveUp = [this](const QString &why) {
@@ -1337,6 +1347,7 @@ void MainWindow::openMenu(const QString &left) {
     if (s.value("video/fullscreen", false).toBool()) a << "--fullscreen";
     if (!s.value("video/displaySync", true).toBool()) a << "--display-sync" << "off";
     if (const QScreen *scr = screen(); scr && scr->size().width() * 10 >= scr->size().height() * 15) a << "--wide";   // a wide screen: 16:9
+    if (!notice.isEmpty()) a << "--notice" << notice;
     audioArguments(a);
     cabinetArguments(a, from->family);
     a << QProcess::splitCommand(QString::fromLocal8Bit(qgetenv("HK_MENU_ARGS")));   // (tests: a script to drive it)
@@ -1363,7 +1374,10 @@ void MainWindow::menuClosed(int code, QProcess::ExitStatus st) {
     if (fine && !id.isEmpty() && find(id)) {
         cover(true);
         play(id);   // (clears the log for the game's own)
-        if (!m_running.isEmpty()) return uncoverLater();
+        if (!m_running.isEmpty()) {
+            m_fromMenu = true;
+            return uncoverLater();
+        }
     }
     cover(false);
     if (isHidden()) show();

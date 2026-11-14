@@ -204,6 +204,17 @@ static void test_draw() {
         CHECK(px != first);                        // a move shows
         s.act(menu::Act::prev, 2);
     }
+    // a notice (the game that came back ended with an error) is said until the first move
+    {
+        std::vector<uint32_t> px(640 * 480, 0), said(640 * 480, 0);
+        menu::draw(s, "iidx", 50, px.data(), 640, 480);
+        s.set_notice("beatmania 7th MIX|ended with an error");
+        menu::draw(s, "iidx", 50, said.data(), 640, 480);
+        CHECK(said != px && s.notice() == "beatmania 7th MIX|ended with an error");
+        CHECK(s.act(menu::Act::next, 51) && s.notice().empty());
+        s.act(menu::Act::prev, 52);
+        s.animate();
+    }
     menu::State empty;
     menu::List none;
     CHECK(none.parse("hiraku-menu-list 1\n", err));
@@ -273,6 +284,7 @@ int main(int argc, char **argv) {
         std::vector<uint32_t> px((size_t)w * 480, 0);
         const uint64_t frame = getenv("HK_MENU_FRAME") ? strtoull(getenv("HK_MENU_FRAME"), nullptr, 0) : 100;
         if (getenv("HK_MENU_START")) s.act(menu::Act::start, frame - 4);
+        if (getenv("HK_MENU_NOTICE")) s.set_notice(getenv("HK_MENU_NOTICE"));
         menu::draw(s, argv[4], frame, px.data(), w, 480);
         write_ppm(argv[3], px, w, 480);
         return 0;

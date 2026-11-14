@@ -111,6 +111,7 @@ bool State::act(Act a, uint64_t frame) {
     const int n = (int)list_.shelves[(size_t)shelf_].games.size();
     int &r = rows_[(size_t)shelf_];
     moved_at_ = frame;
+    notice_.clear();   // read, by now
     switch (a) {
     case Act::prev:
     case Act::next: {

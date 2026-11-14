@@ -82,6 +82,17 @@ struct Canvas {
 
 int width(const std::string &t, int k) { return (int)t.size() * 8 * k; }
 
+// what the 8x8 font can show of a text: a '?' for each character that isn't ASCII
+std::string ascii_only(const std::string &s) {
+    std::string out;
+    for (const char ch : s) {
+        const unsigned char c = (unsigned char)ch;
+        if (c >= 32 && c < 127) out += ch;
+        else if (c >= 0xc0) out += '?';
+    }
+    return out;
+}
+
 // A game's picture as it is drawn: its file scaled to the list's height, or to its place's width if
 // it is wider than that (Keyboardmania's two screens). The last few looked at are kept; a file that
 // can't be read is no picture.
@@ -254,6 +265,16 @@ void draw(const State &s, const std::string &family, uint64_t frame, uint32_t *p
         const std::string line = "Starting " + sel->title;
         const int k = width(line, 2) <= w - 2 * mx ? 2 : 1;
         c.text((w - width(line, k)) / 2, legend_y + 28, line, k, kText);
+        return;
+    }
+    if (!s.notice().empty()) {   // said first: a box in the controls' place, until the first move
+        const size_t bar_at = s.notice().find('|');
+        std::string first = ascii_only(s.notice().substr(0, bar_at)), second = bar_at == std::string::npos ? "" : ascii_only(s.notice().substr(bar_at + 1));
+        if (width(first, 2) > w - 2 * mx - 32) first = first.substr(0, (size_t)(w - 2 * mx - 32) / 16 - 2) + "..";
+        c.fill(mx, legend_y, w - 2 * mx, 72, kAmber);
+        c.fill(mx + 2, legend_y + 2, w - 2 * mx - 4, 68, kDark);
+        c.text((w - width(first, 2)) / 2, legend_y + (second.empty() ? 28 : 16), first, 2, kText);
+        c.text((w - width(second, 1)) / 2, legend_y + 44, second, 1, kAmber);
         return;
     }
     const std::vector<Hint> hints = legend(family);

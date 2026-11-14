@@ -37,6 +37,7 @@ public:
         else if (name == "--list") list_path_ = value();
         else if (name == "--choice") choice_path_ = value();
         else if (name == "--wide") wide_ = true;
+        else if (name == "--notice") notice_ = value();
         else return false;
         return true;
     }
@@ -45,7 +46,8 @@ public:
                "  --choice FILE     where the chosen game's id is written\n"
                "  --family NAME     the cabinet whose controls drive the menu (iidx, popn, ddr...: a\n"
                "                    game.toml's family; default iidx)\n"
-               "  --wide            a 16:9 picture (848x480) instead of 4:3 (640x480)\n";
+               "  --wide            a 16:9 picture (848x480) instead of 4:3 (640x480)\n"
+               "  --notice TEXT     said on opening, until the first move (\"a line|a smaller line\")\n";
     }
 
     bool init(const Options &o) override {
@@ -60,6 +62,7 @@ public:
             return false;
         }
         state_.set(list);
+        state_.set_notice(notice_);
         window_ = o.window;
         w_ = wide_ ? 848 : 640;
         frame_px_.assign((size_t)w_ * h_, 0);
@@ -270,7 +273,7 @@ private:
         exit(0);
     }
 
-    std::string family_ = "iidx", list_path_, choice_path_;
+    std::string family_ = "iidx", list_path_, choice_path_, notice_;
     bool wide_ = false, window_ = false;
     int w_ = 640, h_ = 480;
     menu::State state_;

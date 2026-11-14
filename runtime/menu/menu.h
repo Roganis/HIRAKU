@@ -10,7 +10,8 @@
 //     game <id> <shelf> <title> <detail> [<picture>]  in the order shown; a shelf is its games in a row
 // and reads the choice (--choice FILE: the id and a new line; no file when the menu was closed).
 // --notice "LINE|LINE" is said on opening: a game that came back here because it ended with an error.
-// Text is drawn in SDL's 8x8 font: ASCII (anything else shows as '?'). A game's picture is a BMP
+// Text is drawn in the launcher's fonts where it gives them (--font: menu/font.h), any alphabet;
+// else in SDL's 8x8 font, ASCII (anything else shows as '?'). A game's picture is a BMP
 // file's path, shown behind the list while the game is the one chosen: the player's own, or the
 // title screen the shell kept from a run of the game (host/menupic.h); HIRAKU comes with none.
 #pragma once
@@ -98,5 +99,11 @@ private:
 // --- the picture (menu/draw.cpp) -------------------------------------------------
 // The menu's frame, w x h (640 or 848 by 480), ARGB
 void draw(const State &s, const std::string &family, uint64_t frame, uint32_t *px, int w, int h);
+// The launcher's fonts for it (--font: menu/font.h; false and why if the file isn't one), and
+// HIRAKU's name as a picture for the top (--logo: a BMP, white on black). "" takes them away.
+bool set_font(const std::string &path, std::string &error);
+void set_logo(const std::string &path);
+// A text as the 8x8 font has it: a '?' for each character that isn't ASCII
+std::string ascii_only(const std::string &text);
 
 }  // namespace hk::menu

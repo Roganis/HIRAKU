@@ -13,6 +13,7 @@
 #include <map>
 #include <vector>
 
+#include "font.h"
 #include "menu.h"
 
 namespace hk::menu {
@@ -20,6 +21,10 @@ namespace hk::menu {
 namespace {
 
 constexpr uint32_t kAmber = 0xffb830, kText = 0xe8ecf4, kDim = 0x8088a4, kDark = 0x10121c;
+
+// The launcher's fonts (--font), where it gave them: the text's sizes 1, 2 and 3 below are its
+// small, row and heading sizes
+Font g_real;
 
 // SDL's 8x8 font, a bit a pixel: read once from what its renderer draws (as host/statsview.cpp's)
 uint8_t g_font[96][8];
@@ -68,8 +73,14 @@ struct Canvas {
         for (int yy = ya; yy < yb; yy++)
             for (int xx = xa; xx < xb; xx++) put(xx, yy, rgb, a);
     }
-    // text at k times the font's size; its width is 8 k a character
-    void text(int x, int y, const std::string &t, int k, uint32_t rgb, int a = 255) {
+    // text at size k (1 small, 2 a row's, 3 a heading's), in a box 8 k high from y: the launcher's
+    // fonts, centred in that box; or the 8x8 font k times its size, 8 k a character
+    void text(int x, int y, const std::string &given, int k, uint32_t rgb, int a = 255) {
+        if (g_real.loaded()) {
+            g_real.draw(px, w, h, x0, y0, x1, y1, x, y + 4 * k - g_real.line(k - 1) / 2, k - 1, given, rgb, a);
+            return;
+        }
+        const std::string t = ascii_only(given);
         for (size_t i = 0; i < t.size(); i++, x += 8 * k) {
             const unsigned c = (unsigned char)t[i];
             if (c <= 32 || c >= 127 || x + 8 * k <= x0 || x >= x1) continue;
@@ -80,17 +91,18 @@ struct Canvas {
     }
 };
 
-int width(const std::string &t, int k) { return (int)t.size() * 8 * k; }
+int width(const std::string &t, int k) { return g_real.loaded() ? g_real.width(k - 1, t) : (int)ascii_only(t).size() * 8 * k; }
 
-// what the 8x8 font can show of a text: a '?' for each character that isn't ASCII
-std::string ascii_only(const std::string &s) {
-    std::string out;
-    for (const char ch : s) {
-        const unsigned char c = (unsigned char)ch;
-        if (c >= 32 && c < 127) out += ch;
-        else if (c >= 0xc0) out += '?';
+// a text cut short with dots, if it is wider than its room
+std::string cut(const std::string &given, int k, int room) {
+    if (width(given, k) <= room) return given;
+    const std::string t = g_real.loaded() ? given : ascii_only(given);
+    size_t fits = 0, over = utf8_points(t).size();   // the most characters that fit, by halves
+    while (fits + 1 < over) {
+        const size_t mid = (fits + over) / 2;
+        (width(utf8_first(t, mid) + "..", k) <= room ? fits : over) = mid;
     }
-    return out;
+    return utf8_first(t, fits) + "..";
 }
 
 // A game's picture as it is drawn: its file scaled to the list's height, or to its place's width if
@@ -144,7 +156,32 @@ int roll(int over, uint64_t since) {
     return t < wait ? 0 : t < wait + across ? (int)(t - wait) * 2 : over;
 }
 
+std::string g_logo;   // --logo's file
+
 }  // namespace
+
+std::string ascii_only(const std::string &s) {
+    std::string out;
+    for (const char ch : s) {
+        const unsigned char c = (unsigned char)ch;
+        if (c >= 32 && c < 127) out += ch;
+        else if (c >= 0xc0) out += '?';   // (a UTF-8 character's first byte: its others add nothing)
+    }
+    return out;
+}
+
+bool set_font(const std::string &path, std::string &error) {
+    if (path.empty()) {
+        g_real = Font();
+        return true;
+    }
+    Font f;
+    if (!f.load(path, error)) return false;
+    g_real = std::move(f);
+    return true;
+}
+
+void set_logo(const std::string &path) { g_logo = path; }
 
 void draw(const State &s, const std::string &family, uint64_t frame, uint32_t *px, int w, int h) {
     if (!g_font_read) read_font();
@@ -156,7 +193,15 @@ void draw(const State &s, const std::string &family, uint64_t frame, uint32_t *p
         std::fill(px + (size_t)y * w, px + (size_t)(y + 1) * w, 0xff000000u | rgb);
     }
     const int mx = 24;   // the side margins (a tube's overscan)
-    c.text(mx, 16, "HIRAKU", 3, kAmber);
+    // HIRAKU's name: the launcher's picture of it (white on black: how light a pixel is, is how
+    // much of it is drawn), else in letters
+    if (const Picture *logo = picture(g_logo, 30, w / 2)) {
+        for (int y = 0; y < logo->h; y++)
+            for (int x = 0; x < logo->w; x++) {
+                const uint32_t p = logo->px[(size_t)y * logo->w + x];
+                c.put(mx + x, 9 + y, kText, (int)((p >> 16 & 0xff) * 2 + (p >> 8 & 0xff) * 5 + (p & 0xff)) / 8);
+            }
+    } else c.text(mx, 16, "HIRAKU", 3, kAmber);
     c.text(w - mx - width("GAME MENU", 2), 20, "GAME MENU", 2, kText);
     c.fill(mx, 48, w - 2 * mx, 2, kAmber);
 
@@ -190,7 +235,7 @@ void draw(const State &s, const std::string &family, uint64_t frame, uint32_t *p
             c.text(w - mx - 24, 64, ">", 3, blink ? kAmber : kDim);
             // a mark for each shelf, this one's lit
             const int n = (int)list.shelves.size(), step = 14, x0 = (w - (n * step - 6)) / 2;
-            for (int i = 0; i < n; i++) c.fill(x0 + i * step, 96, 8, 4, i == s.shelf() ? kAmber : 0x3a4060);
+            for (int i = 0; i < n; i++) c.fill(x0 + i * step, g_real.loaded() ? 100 : 96, 8, 4, i == s.shelf() ? kAmber : 0x3a4060);
         }
     }
 
@@ -241,9 +286,9 @@ void draw(const State &s, const std::string &family, uint64_t frame, uint32_t *p
             past.text(tx + 2, y + 2, g.title, 2, kDark, 190);
             past.text(tx, y, g.title, 2, kText);
         } else if (over > 0) {   // cut short, with dots
-            const size_t fit = (size_t)std::max(0, room / 16 - 2);
-            if (pic) row.text(title_x + 2, y + 2, g.title.substr(0, fit) + "..", 2, kDark, a * 3 / 4);   // (a shadow, over a picture)
-            row.text(title_x, y, g.title.substr(0, fit) + "..", 2, kText, a);
+            const std::string shown = cut(g.title, 2, room);
+            if (pic) row.text(title_x + 2, y + 2, shown, 2, kDark, a * 3 / 4);   // (a shadow, over a picture)
+            row.text(title_x, y, shown, 2, kText, a);
         } else {
             if (pic) row.text(title_x + 2, y + 2, g.title, 2, kDark, a * 3 / 4);
             row.text(title_x, y, g.title, 2, kText, a);
@@ -269,8 +314,8 @@ void draw(const State &s, const std::string &family, uint64_t frame, uint32_t *p
     }
     if (!s.notice().empty()) {   // said first: a box in the controls' place, until the first move
         const size_t bar_at = s.notice().find('|');
-        std::string first = ascii_only(s.notice().substr(0, bar_at)), second = bar_at == std::string::npos ? "" : ascii_only(s.notice().substr(bar_at + 1));
-        if (width(first, 2) > w - 2 * mx - 32) first = first.substr(0, (size_t)(w - 2 * mx - 32) / 16 - 2) + "..";
+        const std::string first = cut(s.notice().substr(0, bar_at), 2, w - 2 * mx - 32);
+        const std::string second = bar_at == std::string::npos ? "" : cut(s.notice().substr(bar_at + 1), 1, w - 2 * mx - 32);
         c.fill(mx, legend_y, w - 2 * mx, 72, kAmber);
         c.fill(mx + 2, legend_y + 2, w - 2 * mx - 4, 68, kDark);
         c.text((w - width(first, 2)) / 2, legend_y + (second.empty() ? 28 : 16), first, 2, kText);
@@ -278,13 +323,13 @@ void draw(const State &s, const std::string &family, uint64_t frame, uint32_t *p
         return;
     }
     const std::vector<Hint> hints = legend(family);
-    size_t longest = 0, does = 0;
-    for (const Hint &hint : hints) longest = std::max(longest, hint.control.size()), does = std::max(does, hint.does.size());
-    const int x = std::max(mx, (w - (int)(longest + 2 + does) * 16) / 2);
+    int longest = 0, does = 0;
+    for (const Hint &hint : hints) longest = std::max(longest, width(hint.control, 2)), does = std::max(does, width(hint.does, 2));
+    const int gap = width("mm", 2), x = std::max(mx, (w - (longest + gap + does)) / 2);
     for (size_t i = 0; i < hints.size(); i++) {
         const int y = legend_y + 4 + (int)i * 24;
         c.text(x, y, hints[i].control, 2, kAmber);
-        c.text(x + (int)(longest + 2) * 16, y, hints[i].does, 2, kText);
+        c.text(x + longest + gap, y, hints[i].does, 2, kText);
     }
 }
 

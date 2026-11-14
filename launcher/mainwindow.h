@@ -103,6 +103,7 @@ private:
     // none, the launcher's window is back
     QProcess m_menu;
     QString m_menuList, m_menuChoice;   // the files it reads and writes
+    QString m_menuFont, m_menuLogo;     // ... and its text's fonts and HIRAKU's name, drawn for it (menufont.h)
     QList<int> m_order;                 // m_games in the list's order (refresh)
     QList<QWidget *> m_covers;          // black over each screen between a full-screen game and the menu
     quint64 m_coverShown = 0;           // counts the times it was put up

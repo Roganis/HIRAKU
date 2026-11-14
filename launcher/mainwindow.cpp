@@ -3,6 +3,7 @@
 #include "runlogs.h"
 #include "gamemenu.h"
 #include "powerplan.h"
+#include "menufont.h"
 #include "nvidia.h"
 
 #include <QAction>
@@ -556,8 +557,7 @@ MainWindow::MainWindow() {
         // pane is open in the launcher's window when it is next seen)
         if (!ok && !toMenu) exitReport(title, code, st);
         if (toMenu) {
-            const Game *was = find(left);
-            openMenu(left, ok ? QString() : gamemenu::plainTitle(title, was ? was->latin : QString()) + "|ended with an error: HIRAKU's window has its log");
+            openMenu(left, ok ? QString() : title + "|ended with an error: HIRAKU's window has its log");
         }
     });
     m_menu.setProcessChannelMode(QProcess::MergedChannels);
@@ -1337,19 +1337,36 @@ void MainWindow::openMenu(const QString &left, const QString &notice) {
     }
     if (!from) return giveUp("The game menu: no game is ready to play yet");
     const bool all = s.value("menu/games", "fit").toString() == "all";
-    QList<gamemenu::Row> rows;
-    for (int k : m_order) {
-        const Game &g = m_games[k];
-        if (g.status != Game::Ready || (!all && cfg::controlsSet(g.family) != cfg::controlsSet(from->family))) continue;
-        const Shelf sh = shelf(g);
-        rows << gamemenu::Row{g.id, gamemenu::plainTitle(sh.series), gamemenu::plainTitle(g.title, g.latin),
-                              gamemenu::plainTitle(g.year + "  " + sh.system), menuPicture(g.id)};
-    }
     QString exe = cfg::binDir() + "/" + cfg::exeName("hiraku-menu");
     if (!QFileInfo(exe).isExecutable()) return giveUp("The game menu (hiraku-menu) isn't in " + cfg::binDir());
     const QString base = QDir::tempPath() + QString("/hiraku-menu-%1").arg(QCoreApplication::applicationPid());
-    m_menuList = base + ".list", m_menuChoice = base + ".choice";
+    m_menuList = base + ".list", m_menuChoice = base + ".choice", m_menuFont = base + ".font", m_menuLogo = base + ".logo.bmp";
     QFile::remove(m_menuChoice);
+    // The games, with their names as they are written: the menu sets them in this window's fonts,
+    // handed over as a file (menufont.h). If that can't be made, in the menu's own 8x8 font, which
+    // has ASCII only: the names without their other characters
+    struct Listed {
+        const Game *g;
+        Shelf sh;
+    };
+    QList<Listed> listed;
+    QString text = notice;
+    for (int k : m_order) {
+        const Game &g = m_games[k];
+        if (g.status != Game::Ready || (!all && cfg::controlsSet(g.family) != cfg::controlsSet(from->family))) continue;
+        listed << Listed{&g, shelf(g)};
+        text += listed.last().sh.series + g.title + g.year + listed.last().sh.system;
+    }
+    bool fonts = false;
+    if (QSaveFile f(m_menuFont); f.open(QIODevice::WriteOnly)) fonts = f.write(menufont::build(font(), text)) > 0 && f.commit();
+    const bool logo = menufont::logo(QImage(":/logo.png")).save(m_menuLogo, "BMP");
+    QList<gamemenu::Row> rows;
+    for (const Listed &l : listed) {
+        const QString detail = l.g->year + "  " + l.sh.system;
+        rows << (fonts ? gamemenu::Row{l.g->id, l.sh.series, l.g->title, detail, menuPicture(l.g->id)}
+                       : gamemenu::Row{l.g->id, gamemenu::plainTitle(l.sh.series), gamemenu::plainTitle(l.g->title, l.g->latin),
+                                       gamemenu::plainTitle(detail), menuPicture(l.g->id)});
+    }
     if (QSaveFile f(m_menuList); !f.open(QIODevice::WriteOnly) || f.write(gamemenu::listText(rows, from->id)) < 0 || !f.commit())
         return giveUp("The game menu's list couldn't be written to " + m_menuList);
     // the display, sound and cabinet as a game of that family gets them; no saves of its own
@@ -1358,7 +1375,9 @@ void MainWindow::openMenu(const QString &left, const QString &notice) {
     if (s.value("video/fullscreen", false).toBool()) a << "--fullscreen";
     if (!s.value("video/displaySync", true).toBool()) a << "--display-sync" << "off";
     if (const QScreen *scr = screen(); scr && scr->size().width() * 10 >= scr->size().height() * 15) a << "--wide";   // a wide screen: 16:9
-    if (!notice.isEmpty()) a << "--notice" << notice;
+    if (!notice.isEmpty()) a << "--notice" << (fonts ? notice : gamemenu::plainTitle(notice));
+    if (fonts) a << "--font" << m_menuFont;
+    if (logo) a << "--logo" << m_menuLogo;
     audioArguments(a);
     cabinetArguments(a, from->family);
     a << QProcess::splitCommand(QString::fromLocal8Bit(qgetenv("HK_MENU_ARGS")));   // (tests: a script to drive it)
@@ -1380,6 +1399,8 @@ void MainWindow::menuClosed(int code, QProcess::ExitStatus st) {
     const QString said = QString::fromLocal8Bit(m_menu.readAll());
     QFile::remove(m_menuChoice);
     QFile::remove(m_menuList);
+    QFile::remove(m_menuFont);
+    QFile::remove(m_menuLogo);
     const bool fine = st == QProcess::NormalExit && (code == 0 || code == 130);
     if (!fine || !said.contains("menu: chosen")) log(said);   // (what went wrong, or nothing chosen: its own lines)
     if (fine && !id.isEmpty() && find(id)) {

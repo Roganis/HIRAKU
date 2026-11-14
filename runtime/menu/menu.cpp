@@ -9,17 +9,6 @@ namespace hk::menu {
 
 namespace {
 
-// A field as the 8x8 font can show it: ASCII, a '?' for each character that isn't
-std::string ascii(const std::string &s) {
-    std::string out;
-    for (size_t i = 0; i < s.size(); i++) {
-        const unsigned char c = (unsigned char)s[i];
-        if (c >= 32 && c < 127) out += (char)c;
-        else if (c >= 0xc0 || c < 32) out += '?';   // (a UTF-8 character's first byte: its others add nothing)
-    }
-    return out;
-}
-
 std::vector<std::string> fields(const std::string &line) {
     std::vector<std::string> f;
     size_t at = 0;
@@ -52,9 +41,9 @@ bool List::parse(const std::string &text, std::string &error) {
         } else if (f[0] == "current" && f.size() >= 2) {
             current = f[1];
         } else if (f[0] == "game" && f.size() >= 4 && !f[1].empty()) {
-            const std::string shelf = ascii(f[2]);
+            const std::string &shelf = f[2];
             if (shelves.empty() || shelves.back().name != shelf) shelves.push_back({shelf, {}});
-            shelves.back().games.push_back({f[1], ascii(f[3]), f.size() > 4 ? ascii(f[4]) : std::string(), f.size() > 5 ? f[5] : std::string()});
+            shelves.back().games.push_back({f[1], f[3], f.size() > 4 ? f[4] : std::string(), f.size() > 5 ? f[5] : std::string()});
         } else {
             error = "line " + std::to_string(n) + ": not \"current ID\" or \"game ID SHELF TITLE DETAIL\", tabs between";
             return false;

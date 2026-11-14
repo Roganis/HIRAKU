@@ -20,6 +20,7 @@
 
 #include "host/menukey.h"
 #include "host/menupic.h"
+#include "menu/font.h"
 #include "menu/menu.h"
 #include "menu/pads.h"
 
@@ -91,7 +92,9 @@ static void test_list() {
     CHECK(l.shelves.size() == 3 && l.games() == 6 && l.current == "bm7thmix");
     CHECK(l.shelves[1].name == "beatmania IIDX" && l.shelves[1].games[1].id == "iidx16");
     CHECK(l.shelves[1].games[1].detail == "2008  PC");
-    CHECK(l.shelves[2].games[0].title == "pop'n music 18 ??");   // what the font hasn't: a mark each
+    // a name is kept as it is written; the 8x8 font shows a mark for each character it hasn't
+    CHECK(l.shelves[2].games[0].title.rfind("pop'n music 18 ", 0) == 0 && l.shelves[2].games[0].title.size() > 17);
+    CHECK(menu::ascii_only(l.shelves[2].games[0].title) == "pop'n music 18 ??");
     CHECK(!l.parse("", err));
     CHECK(!l.parse("something else\n", err));
     CHECK(!l.parse("hiraku-menu-list 1\ngame\tonly-an-id\n", err) && err.find("line 2") != std::string::npos);
@@ -270,6 +273,79 @@ static void test_picture(const std::string &dir) {
     std::filesystem::remove(file);
 }
 
+// The launcher's fonts for the menu (menu/font.h), from a file made up here: read, measured and
+// drawn; a character it hasn't shows as its question mark; a file cut short anywhere, or with a
+// glyph outside its pixels, is refused whole; the menu drawn with it differs from the 8x8 one's
+static void test_font(const std::string &dir) {
+    const auto u32 = [](std::string &o, uint32_t v) { for (int k = 0; k < 4; k++) o += (char)(v >> (8 * k) & 0xff); };
+    const auto u16 = [](std::string &o, int v) { o += (char)(v & 0xff), o += (char)(v >> 8 & 0xff); };
+    std::string file("HKMF1\0\0\0", 8), ink;
+    u32(file, 3);
+    const uint32_t chars[] = {'A', '?', ' ', 0x65e5};   // (the last: a Japanese one)
+    for (int size = 0; size < 3; size++) {
+        const int box = 6 + size * 4;   // each glyph a box of ink, a space none
+        u32(file, (uint32_t)(box + 4));
+        u32(file, 4);
+        for (const uint32_t c : chars) {
+            const int w = c == ' ' ? 0 : box, shade = c == '?' ? 0x40 : 0xff;
+            u32(file, c), u16(file, box + 2), u16(file, 1), u16(file, 2), u16(file, w), u16(file, w);
+            u32(file, (uint32_t)ink.size());
+            ink.append((size_t)w * w, (char)shade);
+        }
+    }
+    u32(file, (uint32_t)ink.size());
+    file += ink;
+    menu::Font f;
+    std::string err;
+    CHECK(f.parse((const uint8_t *)file.data(), file.size(), err) && f.loaded() && f.line(0) == 10 && f.line(2) == 18);
+    CHECK(f.width(1, "A A") == 3 * 12 && f.width(1, "A\xe6\x97\xa5") == 2 * 12);
+    CHECK(f.width(1, "\xc3\xa9") == 12 && f.width(1, "\xff") == 12);   // one it hasn't, a byte that is no character: its '?'
+    std::vector<uint32_t> px(64 * 32, 0xff000000u);
+    f.draw(px.data(), 64, 32, 0, 0, 64, 32, 4, 3, 1, "A\xc3\xa9", 0xffffff, 255);
+    CHECK((px[(size_t)5 * 64 + 5] & 0xffffff) > 0xf0f0f0);        // 'A': ink, where left and top put it
+    CHECK(px[(size_t)4 * 64 + 5] == 0xff000000u && px[(size_t)5 * 64 + 4] == 0xff000000u);
+    const uint32_t mark = px[(size_t)5 * 64 + 17] & 0xff;           // the '?' in the other's place: faint
+    CHECK(mark > 0x20 && mark < 0x60);
+    std::vector<uint32_t> clipped(64 * 32, 0xff000000u);
+    f.draw(clipped.data(), 64, 32, 8, 0, 64, 32, 4, 3, 1, "A", 0xffffff, 255);
+    CHECK(clipped[(size_t)5 * 64 + 5] == 0xff000000u && (clipped[(size_t)5 * 64 + 9] & 0xffffff) != 0);   // kept to its box
+    f.draw(clipped.data(), 64, 32, 0, 0, 64, 32, 60, 28, 2, "AAAA", 0xffffff, 255);                          // off the edges: no harm
+    CHECK(menu::utf8_points("a\xe6\x97\xa5\xe6") == (std::vector<uint32_t>{'a', 0x65e5, 0xfffd}));
+    CHECK(menu::utf8_first("a\xe6\x97\xa5z", 2) == "a\xe6\x97\xa5" && menu::utf8_first("abc", 9) == "abc");
+    // cut short anywhere: refused, and nothing of it kept
+    for (size_t n = 0; n < file.size(); n++) {
+        menu::Font cut;
+        if (cut.parse((const uint8_t *)file.data(), n, err) || cut.loaded()) {
+            CHECK(!"a font file cut short was taken");
+            break;
+        }
+    }
+    std::string outside = file;
+    outside[8 + 4 + 8 + 14] = (char)0xff, outside[8 + 4 + 8 + 15] = (char)0xff, outside[8 + 4 + 8 + 16] = (char)0xff;   // the first glyph's place: far away
+    CHECK(!f.parse((const uint8_t *)outside.data(), outside.size(), err) && !f.loaded());
+
+    // the menu with it
+    menu::List l;
+    CHECK(l.parse(kList, err));
+    menu::State s;
+    s.set(l);
+    std::vector<uint32_t> plain(640 * 480, 0), real(640 * 480, 0), again(640 * 480, 0);
+    menu::draw(s, "iidx", 40, plain.data(), 640, 480);
+    const std::string path = dir + "/menu-font-test.hkmf";
+    std::ofstream(path, std::ios::binary) << file;
+    CHECK(menu::set_font(path, err));
+    menu::draw(s, "iidx", 40, real.data(), 640, 480);
+    CHECK(real != plain);
+    for (uint32_t p : real) CHECK(p >> 24 == 0xff);
+    CHECK(!menu::set_font(dir + "/no-such-font", err));   // a file that isn't there: the font before stays
+    menu::draw(s, "iidx", 40, again.data(), 640, 480);
+    CHECK(again == real);
+    CHECK(menu::set_font("", err));
+    menu::draw(s, "iidx", 40, again.data(), 640, 480);
+    CHECK(again == plain);
+    std::filesystem::remove(path);
+}
+
 // A plain gamepad (menu/pads.h), one SDL makes up: its d-pad and stick choose and change shelf, A
 // and Start play; what it holds when first seen does nothing until let go; a controller that is
 // the cabinet's is left alone
@@ -369,6 +445,8 @@ int main(int argc, char **argv) {
         const uint64_t frame = getenv("HK_MENU_FRAME") ? strtoull(getenv("HK_MENU_FRAME"), nullptr, 0) : 100;
         if (getenv("HK_MENU_START")) s.act(menu::Act::start, frame - 4);
         if (getenv("HK_MENU_NOTICE")) s.set_notice(getenv("HK_MENU_NOTICE"));
+        if (std::string why; getenv("HK_MENU_FONT") && !menu::set_font(getenv("HK_MENU_FONT"), why)) fprintf(stderr, "%s\n", why.c_str());
+        if (getenv("HK_MENU_LOGO")) menu::set_logo(getenv("HK_MENU_LOGO"));
         menu::draw(s, argv[4], frame, px.data(), w, 480);
         write_ppm(argv[3], px, w, 480);
         return 0;
@@ -385,6 +463,7 @@ int main(int argc, char **argv) {
     test_cabinets(argv[1]);
     test_draw();
     test_picture(argc > 2 ? argv[2] : ".");
+    test_font(argc > 2 ? argv[2] : ".");
     test_pads();
     if (g_failed) {
         fprintf(stderr, "%d checks failed\n", g_failed);

@@ -40,6 +40,8 @@ public:
         else if (name == "--choice") choice_path_ = value();
         else if (name == "--wide") wide_ = true;
         else if (name == "--notice") notice_ = value();
+        else if (name == "--font") font_path_ = value();
+        else if (name == "--logo") logo_path_ = value();
         else return false;
         return true;
     }
@@ -49,7 +51,9 @@ public:
                "  --family NAME     the cabinet whose controls drive the menu (iidx, popn, ddr...: a\n"
                "                    game.toml's family; default iidx)\n"
                "  --wide            a 16:9 picture (848x480) instead of 4:3 (640x480)\n"
-               "  --notice TEXT     said on opening, until the first move (\"a line|a smaller line\")\n";
+               "  --notice TEXT     said on opening, until the first move (\"a line|a smaller line\")\n"
+               "  --font FILE       the launcher's fonts for the text (menu/font.h); else an 8x8 ASCII font\n"
+               "  --logo FILE       HIRAKU's name as a picture (a BMP, white on black) for the top\n";
     }
 
     bool init(const Options &o) override {
@@ -65,6 +69,8 @@ public:
         }
         state_.set(list);
         state_.set_notice(notice_);
+        if (std::string why; !font_path_.empty() && !menu::set_font(font_path_, why)) fprintf(stderr, "menu: %s: the 8x8 font instead\n", why.c_str());
+        menu::set_logo(logo_path_);
         window_ = o.window;
         w_ = wide_ ? 848 : 640;
         frame_px_.assign((size_t)w_ * h_, 0);
@@ -232,7 +238,7 @@ private:
         // the chosen game's name on a cabinet's text display, nine characters at a time
         std::string text;
         if (const menu::Game *g = state_.selected()) {
-            text = g->title;
+            text = menu::ascii_only(g->title);   // (a 16-segment display)
             if (text.size() > 9) {
                 const std::string loop = text + "   ";
                 const size_t at = (size_t)((frame_ - state_.moved_at()) / 12) % loop.size();
@@ -290,7 +296,7 @@ private:
         exit(0);
     }
 
-    std::string family_ = "iidx", list_path_, choice_path_, notice_;
+    std::string family_ = "iidx", list_path_, choice_path_, notice_, font_path_, logo_path_;
     bool wide_ = false, window_ = false;
     menu::Pads pads_;
     bool pads_set_ = false, by_pad_ = false;   // by_pad_: the last control used was a gamepad's

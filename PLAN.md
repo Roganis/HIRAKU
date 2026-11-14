@@ -911,7 +911,7 @@ Full history: docs/PLAN-HISTORY.md §40.
 
 **Open**
 - (owner) Twinkle with smooth motion on the cabinet under the High performance power plan (the 0.9.0 run there ran the CPU at 2277 of 3001 MHz under Balanced).
-- (build) the local 573/Twinkle PGO profile predates the new interpreter: run `tools/pgo.py` again.
+- (build) the local 573/Twinkle PGO profile predates the new interpreter: run `tools/pgo.py` again. Tried 2026-11-14: its instrumented build of every game (`build/pgo-gen`) filled DATA2 at 3.8 GB and stopped; it needs well over 10 GB free.
 
 ## 41. Firebeat in a release: the executor's speed
 

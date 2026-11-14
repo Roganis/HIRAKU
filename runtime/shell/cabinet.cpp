@@ -548,7 +548,7 @@ std::vector<Lamp> make_mambo_lamps() {
     };
 }
 
-// pop'n stage: not decoded yet (no dump to watch); listed by register and bit
+// pop'n stage: not decoded yet (popnstex can be watched now); listed by register and bit
 std::vector<Lamp> make_djpstage_lamps() {
     std::vector<Lamp> l;
     for (int r = 0; r < 2; r++)

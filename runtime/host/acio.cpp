@@ -35,8 +35,8 @@ AcioPort::~AcioPort() { close(); }
 
 #ifdef _WIN32
 // Windows: a COM port ("COM3"; the \\.\ in front, which COM10 and up need, is added) through
-// Win32's serial calls. Not yet
-// tried on a real port (PLAN.md section 26).
+// Win32's serial calls. Used on a real cabinet's COM port by its BIO2 (inputs and lamps,
+// 2026-10-23; PLAN.md section 26).
 namespace {
 HANDLE handle(intptr_t fd) { return reinterpret_cast<HANDLE>(fd); }
 

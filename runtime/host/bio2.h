@@ -15,8 +15,8 @@
 // (docs/BIO2-BI2X.md).
 //
 // The start-up is IIDX 27's (docs/BIO2-BI2A.md: a break and aa echoes at 115200, 0001 [00], 0002, 0003,
-// 0100 [2d], 0120 [00 00], then 0152 polls); not checked on a board yet, nor the turntables'
-// direction. HK_ACIO_LOG=1 shows the packets.
+// 0100 [2d], 0120 [00 00], then 0152 polls); inputs and lamps checked on a cabinet's BI2A board
+// (Windows, COM5, 2026-10-23). HK_ACIO_LOG=1 shows the packets.
 #pragma once
 
 #include <functional>

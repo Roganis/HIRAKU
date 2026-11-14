@@ -507,8 +507,9 @@ so their memory and files are the game's own process's, not an emulated machine'
   `games/popn29/mods/`: `every-market` (the songs and characters a cabinet's market leaves out,
   listed in every one) and `usa-pictures` (the USA's market on data without its pictures).
   The save folder's `pc.log` lists the songs brought back
-  and those left out (PLAN.md section 34; how to install a pack: [SONGS-BACK.md](SONGS-BACK.md)). Not yet: songs past the game's own (custom songs), PNGs
-  in the `_ifs` folders, and their scores on HIRAKU's e-AMUSEMENT server.
+  and those left out (PLAN.md section 34; how to install a pack: [SONGS-BACK.md](SONGS-BACK.md)). Songs past the game's
+  own (custom songs) work too. HIRAKU's e-AMUSEMENT server keeps their scores, but they haven't been
+  seen read back in the game yet. Not yet: PNGs in the `_ifs` folders.
 
 - **The last 32-bit PC pop'n** (`[pc] loader = "pc32"`): a mod's folder is laid over the game's
   data folder (new files too, the first mod winning), and inside the game's packs as ifs_layeredfs
@@ -516,8 +517,8 @@ so their memory and files are the game's own process's, not an emulated machine'
   `data/sd/system/system28.ifs`, for any pack the game mounts (a pack inside a pack too). The save
   folder's `pc.log` lists the files and members read from the mods (`mods: ...`). Its music data
   (popnhax's XML, any `.xml` in the folder) brings back the songs the game left out, each whose
-  Normal chart's `sd/<folder>/<file>.ifs` and banner are there (`songs: ...` in `pc.log`). Not yet:
-  songs past the game's own and charts added to the game's songs. Pictures as PNGs work too
+  Normal chart's `sd/<folder>/<file>.ifs` and banner are there (`songs: ...` in `pc.log`), songs past
+  the game's own too, and charts it adds to the game's own songs. Pictures as PNGs work too
   (`<pack>_ifs/tex/<name>.png`, as translations have them): each is converted for the game the
   first time it's shown in a run (`mods: picture ...` in `pc.log`), its size the game's, or the
   mod's own `tex/texturelist.xml`'s; not yet `dxt5` pictures, nor new pictures without a list of the

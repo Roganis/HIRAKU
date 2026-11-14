@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # HIRAKU's release packages (PLAN.md section 28): a Linux .tar.xz and a Windows .zip that run the
-# DJ Main, System 573 and Twinkle games from the user's own dropped-in data, with nothing else to
-# install. Built with HK_GAME_BINARIES off: nothing in them comes from a game (a clean checkout has
+# DJ Main, System 573, Twinkle, Firebeat and Konami Python games, and the PC games, from the
+# user's own dropped-in data, with nothing else to install. Built with HK_GAME_BINARIES off: nothing in them comes from a game (a clean checkout has
 # no build/ or dumps/ anyway).
 #
 # - a push of a tag v*: both packages, published as a GitHub release (a draft, to look over first),

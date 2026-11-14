@@ -2,7 +2,8 @@
 // HIRAKU's libacio.dll for the PC pop'n music games (PLAN.md section 30) and beatmania IIDX 13:
 // Konami's library for the e-AMUSEMENT card readers on the cabinet's serial port, answered from
 // hiraku-pc's cards and 10-keys (runtime/pc/link.h) instead. The reader's states and status block are spice2x's (acio/icca,
-// acio/core). With a real reader on a serial port, hiraku-pc keeps Konami's DLL instead of this one.
+// acio/core). Always this one: a real reader on a serial port is HIRAKU's (runtime/host/readers.cpp),
+// whose cards come in through the link like the keyboard's.
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <stdint.h>

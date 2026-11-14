@@ -589,7 +589,7 @@ Full history: docs/PLAN-HISTORY.md §23.
 - (build) GuitarFreaks V2 and its session with DrumMania; waits on the owner's copy of the game.
 - (build) DrumMania V's gametop `musicdata` (answered without it so far).
 - (build) DrumMania V ingested from MAME's set (only Reliquary's `.py2` now).
-- (build) `--autoplay` for pop'n 10–14.
+- (build) `--autoplay` for pop'n 13 and 14 (9–12 have it): their judge and button code was compiled anew, so pop'n 9's two tests aren't found by the code around them; the button reader's is (13 `0x174ea7c`, 14 `0x173fedc`), the flag's isn't.
 - (build) docs/EAMUSE3.md, "Not known yet": no INTERNET RANKING place with a KONAMI ID; a few statuses.
 - (build) Watch: under heavy disk I/O (2026-10-15) five Python cases differed; where was not captured.
 - (parked) Dancing Stage Fusion: edited media; needs a clean dump or a documented repair.
@@ -616,7 +616,6 @@ Full history: docs/PLAN-HISTORY.md §24.
 - (build) GuitarFreaks 9th × DrumMania 8th session: GF 9th runs since 3c1ddf3, the session isn't done.
 - (build) Sessions from the launcher (GF×DM and the club kits): it would start the second process with its socket.
 - (build) Club play: the IIDX side's mix peaks at 1.6 of full scale and clips at the default gain.
-- (build) `oracle/lockstep.sh`'s pin pass reruns MAME with the host's clock, so on the 573 the frame it names is meaningless.
 - (owner) Hands-on play of the new sets, and controllers for Dance Maniax's sensors and Mambo's congas (options in `docs/CATALOGUE.md`).
 - (parked) Sets waiting on media: older cassette dumps (`dsem`, `dsem2`, `dsfdr`, `dsfdct`, `dsfdcta`, `ddr4ms`, `ddr4msj`, `ddrs2k`, `ddrs2kj`), GF/DM 1st's other regions, `ddrjb`, `ddr2ml`, `drmna`, `ddr2mlb`, `dmxa`, the unit's CD for `pcnfrk4mk`–`pcnfrk10m`.
 - (parked) `mamboagga` stops at its plays-used-up screen: emulating the rental replenishment would get round Konami's licensing.
@@ -674,7 +673,6 @@ What the code relies on:
 Real Windows so far: the owner's Windows 11 test VM (no GPU: waits, folder names, packages) and the owner's IIDX cabinet (Windows 10, GTX 1650, 120 Hz, ASIO), which runs 0.10.x with its window, sound, display pacing and the PC IIDX games (§42). Full history: docs/PLAN-HISTORY.md §26.
 
 **Open**
-- (build) The Python core on Windows leaves through `atexit` (no `on_exit`): a run stopped with Ctrl+C ends with 0, not 130 (`runtime/python/core.cpp`).
 - (owner) WASAPI exclusive mode on real Windows (Wine refuses it; only the shared fallback checked).
 - (owner) Which of HIRAKU's reader paths the cabinet's readers use on Windows: they read real cards (a642bf0), and a PC game's reader is always HIRAKU's (its `libacio.dll`), but no log has been kept. The game's log says: `reader COMn: ICCA...` for `--reader`, `cardio: ...`, or `scard: ...`. HID lights untried. (The BIO2 through `--bio2 COM5` works: §25.)
 - (owner) Firebeat and Python games on real Windows (checked under Wine only).
@@ -899,7 +897,7 @@ Full history: docs/PLAN-HISTORY.md §39.
 - (owner) a real cabinet's disks as raw-sector images: should work, untested.
 - (owner) two players each with a disk, changed between them with the control: untried.
 - (parked) other image formats (.d88, .hfe): raw images are enough so far.
-- (parked) READ TRACK, FORMAT TRACK and the deleted-data commands: no game uses them ("unsupported command").
+- (parked) READ TRACK and FORMAT TRACK: no game uses them ("unsupported command"). READ DELETED DATA is in (2fc2926): The Final reads a player's disk's boot sector with it before saving over it.
 
 ## 40. The PlayStation cores in a release: the interpreter's speed
 

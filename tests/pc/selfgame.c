@@ -20,6 +20,10 @@
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <mmreg.h>
+#ifndef _LPCWAVEFORMATEX_DEFINED   // older mingw-w64 (Ubuntu 22.04's 8.0) lacks it where dsound.h wants it
+#define _LPCWAVEFORMATEX_DEFINED
+typedef const WAVEFORMATEX *LPCWAVEFORMATEX;
+#endif
 #include <d3d9.h>
 #include <dsound.h>
 #include <stdint.h>

@@ -584,6 +584,7 @@ if(Qt6_FOUND AND TARGET hiraku_hidout)
     launcher/games.cpp
     launcher/inputs.cpp
     launcher/mainwindow.cpp
+    launcher/powerplan.cpp
     launcher/capturedialog.cpp
     launcher/controlsdialog.cpp
     launcher/lightsdialog.cpp
@@ -617,6 +618,9 @@ if(Qt6_FOUND AND TARGET hiraku_hidout)
     message(STATUS "hiraku: the launcher gets its first songs from the folder the build names")
   endif()
   target_link_libraries(hiraku PRIVATE Qt6::Widgets Qt6::Network hiraku_cabinet hiraku_hidout)
+  if(WIN32)   # the power plan while a game runs (launcher/powerplan.h)
+    target_link_libraries(hiraku PRIVATE powrprof)
+  endif()
   # Windows: a window program, so that no console window opens behind the launcher (what it prints
   # when started from a console still goes there: launcher/main.cpp, use_parent_console). The games
   # stay console programs: the launcher reads what they print, and gives them no console window.

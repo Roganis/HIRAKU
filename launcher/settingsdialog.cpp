@@ -40,6 +40,7 @@
 
 #include "capturedialog.h"
 #include "config.h"
+#include "powerplan.h"
 #include "inputs.h"
 #include "updater.h"
 
@@ -454,6 +455,16 @@ void SettingsDialog::audioPage(QVBoxLayout *v) {
                            "doesn't delay its frames and sound; the sound server and the desktop keep theirs. "
                            "A sound card of its own (Output) is written by a real-time thread either way.");
     fq->addRow("", m_priority);
+    if (powerplan::available()) {   // Windows (launcher/powerplan.h)
+        m_powerPlan = new QCheckBox("Windows' High performance power plan while a game runs");
+        m_powerPlan->setChecked(s.value("system/highPerformance", false).toBool());
+        m_powerPlan->setToolTip("Windows' Balanced plan lets the processor slow down while a game waits for its next frame, and "
+                                "on some PCs frames then come late (a game's log says so: \"Windows let the CPU slow down\"). "
+                                "With this on, HIRAKU changes to the High performance plan when a game starts and back to "
+                                "yours when its window is back. The PC uses more power meanwhile. A plan you set yourself "
+                                "is left as it is.");
+        fq->addRow("", m_powerPlan);
+    }
     m_audioDevice = new QComboBox;
     const QString device = s.value("audio/device").toString();
 #ifdef _WIN32
@@ -862,6 +873,7 @@ void SettingsDialog::accept() {
     s.setValue("audio/ms", m_audioMs->value());
     s.setValue("audio/fixed", m_audioFixed->isChecked());
     s.setValue("system/priority", m_priority->isChecked());
+    if (m_powerPlan) s.setValue("system/highPerformance", m_powerPlan->isChecked());
     s.setValue("audio/volumeDb", m_volume->value());
     s.setValue("audio/soundEveryMs", m_fineSound->isChecked());
     s.setValue("audio/device", m_audioDevice->currentData().toString());

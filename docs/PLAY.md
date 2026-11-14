@@ -589,6 +589,11 @@ says what it was. On Windows the line ends with the CPU's clock when Windows ran
 its nominal one (`the CPU at 800 of its 3001 MHz`): a power plan that lets the processors slow
 down between a frame's bursts of work makes each burst take longer. Windows' High performance
 plan keeps them at speed, and the exit report's `system:` line says when that would help.
+**Settings > Audio > Latency** has a switch for it (Windows only, off by default): HIRAKU then
+changes to the High performance plan when a game starts and back to yours when its own window is
+back, the game menu between two games included. A plan you chose yourself is left alone, and a
+PC without that plan (some laptops have only Balanced) is told so in the log. The PC uses more
+power while it is on.
 
 The overlay is drawn by the window over the picture it shows: no snapshot, recording or digest
 has it, and the game computes the same with it. Its graph is redrawn ten times a second and its

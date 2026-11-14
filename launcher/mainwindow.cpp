@@ -2,6 +2,7 @@
 #include "mainwindow.h"
 #include "runlogs.h"
 #include "gamemenu.h"
+#include "powerplan.h"
 #include "nvidia.h"
 
 #include <QAction>
@@ -538,6 +539,7 @@ MainWindow::MainWindow() {
         else {
             cover(false);
             if (isHidden()) show();
+            planBack();
         }
         updateActions();
         // a network unit's install: done (INSTALLATION COMPLETED on the screen), the unit is fitted from
@@ -564,6 +566,7 @@ MainWindow::MainWindow() {
         if (e != QProcess::FailedToStart) return;
         cover(false);
         if (isHidden()) show();
+        planBack();
         statusBar()->showMessage("The game menu couldn't be started: " + m_menu.errorString());
     });
     connect(&m_proc, &QProcess::errorOccurred, this, [this](QProcess::ProcessError e) {
@@ -574,6 +577,7 @@ MainWindow::MainWindow() {
         m_running.clear();
         cover(false);
         if (isHidden()) show();
+        planBack();
         updateActions();
     });
 
@@ -585,6 +589,7 @@ MainWindow::MainWindow() {
     m_music->firstSongs();
     qApp->installEventFilter(this);
     refresh();
+    planBack();   // (a launcher that ended before it could: the plan it had changed)
     // a cabinet that starts in the game menu (Settings > General)
     if (cfg::settings().value("menu/atStart", false).toBool() && cfg::settings().value("menu/enabled", true).toBool())
         QTimer::singleShot(0, this, [this] { openMenu(lastGame()); });
@@ -627,6 +632,7 @@ void MainWindow::closeEvent(QCloseEvent *e) {
         stop();
         m_proc.waitForFinished(5000);
     }
+    planBack();
     if (m_menu.state() != QProcess::NotRunning) {   // the game menu goes with the launcher
         m_menu.terminate();
         if (!m_menu.waitForFinished(3000)) m_menu.kill();
@@ -1245,6 +1251,11 @@ void MainWindow::play(const QString &id) {
     }
     QStringList args = arguments(*g);
     log("$ " + g->exe + " " + args.join(' ') + "\n");
+    // Windows' High performance power plan while games run, if asked for (Settings > Audio; powerplan.h):
+    // until the launcher's window is back (planBack), so not put back and changed again between a
+    // game and the game menu
+    if (powerplan::available() && cfg::settings().value("system/highPerformance", false).toBool())
+        if (const QString said = powerplan::raise(cfg::settings(), powerplan::windowsApi()); !said.isEmpty()) log(said + "\n");
     if (g->core == "pc") nvidiaNotice(*g);
     m_running = g->id;
     m_stopping = false;
@@ -1381,6 +1392,7 @@ void MainWindow::menuClosed(int code, QProcess::ExitStatus st) {
     }
     cover(false);
     if (isHidden()) show();
+    planBack();
     statusBar()->showMessage(fine ? "The game menu was closed" : QString("The game menu stopped (code %1)").arg(code));
     if (!fine) m_logDock->show();
 }
@@ -1388,6 +1400,11 @@ void MainWindow::menuClosed(int code, QProcess::ExitStatus st) {
 // Black over every screen while one full-screen program gives way to the next (a game to the game
 // menu, the menu to a game), so that the desktop doesn't show on a cabinet's screen in between.
 // Only where the games are in full screen.
+void MainWindow::planBack() {
+    if (!powerplan::available()) return;
+    if (const QString said = powerplan::restore(cfg::settings(), powerplan::windowsApi()); !said.isEmpty()) log(said + "\n");
+}
+
 void MainWindow::cover(bool on) {
     if (!on) {
         for (QWidget *w : m_covers) w->hide();

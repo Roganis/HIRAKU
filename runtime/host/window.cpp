@@ -1024,7 +1024,8 @@ std::string cpu_speed_describe() {
     // while they wait starts each burst slow. The same work then takes longer, and frames come late.
     if (slowed)
         snprintf(b + n, sizeof b - n, "\nsystem: Windows let the CPU slow down between the frames' bursts of work, which then take "
-                 "longer: its High performance power plan (or a minimum processor state of 100 %% in this one) keeps it at speed");
+                 "longer: its High performance power plan (or a minimum processor state of 100 %% in this one) keeps it at speed. "
+                 "HIRAKU's Settings > Audio can change to that plan while a game runs");
     return b;
 }
 #endif

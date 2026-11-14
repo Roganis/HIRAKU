@@ -110,6 +110,7 @@ private:
     void menuClosed(int code, QProcess::ExitStatus st);
     void cover(bool on);
     void uncoverLater();                // ... off again once the program just started has its window up
+    void planBack();                    // Windows' power plan as it was before a game (powerplan.h)
     // updates (updater.h): the bar that says a new version is out, the release it names
     void checkForUpdate(bool asked);
     void offerUpdate();

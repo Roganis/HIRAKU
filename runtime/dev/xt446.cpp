@@ -2,7 +2,8 @@
 // copyright-holders:R. Belmont, Olivier Galibert
 //
 // Yamaha XT446 (embedded MU100B), ported from MAME's xt446.cpp: same memory maps,
-// ROM layout and CPU hookups. See xt446.h for what differs.
+// ROM layout and CPU hookups, except that MIDI comes in on SCI1 (see midi_w). See xt446.h for
+// what else differs.
 #include "xt446.h"
 
 #include <algorithm>
@@ -22,7 +23,10 @@ class xt446_device : public device_t {
 public:
     xt446_device(const machine_config &mconfig, const char *tag, device_t *owner, u32 clock = 0);
 
-    void midi_w(int state) { m_maincpu->sci_rx_w<0>(state); }
+    // The game's MIDI is the MU100 firmware's port A (parts 1-16), which is SCI1, as MAME's MU100
+    // driver wires it; SCI0 is port B (parts 17-32). MAME's xt446.h uses SCI0, and then a song that
+    // sets parts 17-32's receive channels silences the game's own channels (issue 14).
+    void midi_w(int state) { m_maincpu->sci_rx_w<1>(state); }
 
     required_device<h8s2655_device> m_maincpu;
     required_device<swp30_device> m_swp30;

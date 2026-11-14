@@ -99,8 +99,14 @@ if [[ -n "$first" && "$HIRAKU_HASH_EVERY" -gt 1 ]]; then
     lo=$(( first - HIRAKU_HASH_EVERY )); (( lo < 0 )) && lo=0
     pin="$(mktemp -d)"
     { grep -v -E '^at [0-9]+ quit' "$script"; echo "at $((first + 1)) quit"; } > "$pin/pin.his"
+    # the same power-on time as the first run (MAME's -rtc, local time as the Lua's os.time reads
+    # it): MAME otherwise starts from the host's clock again, and on the 573 and Twinkle a clock a
+    # minute later is a different run from its first frames, so the frame it names means nothing
+    pin_rtc=()
+    [[ -n "$rtc" ]] && pin_rtc=(-rtc "$(date -d "@$rtc" +%Y%m%d%H%M%S)")
     HIRAKU_HASH_EVERY=1000000000 HIRAKU_HASH_FROM=$lo HIRAKU_HASH_TO=$((first + 1)) \
         HIRAKU_NVRAM="${mame_nv:+$root/$mame_nv}" MAME_BIN="$bin" HIRAKU_TAPS="${HIRAKU_TAPS:-none}" \
+        MAME_ARGS="${MAME_ARGS:-}${pin_rtc:+ ${pin_rtc[*]}}" \
         nice oracle/mame.sh "$game" "$pin/pin.his" "$run-pin" > "$h.pin.txt" 2>&1 || true
     exact="$(python3 oracle/snapcmp.py "$h" "out/oracle/$game/$run-pin" 2>&1 | grep -o 'first difference at MAME frame [0-9]*' | awk '{print $NF}' | sort -n | head -1 || true)"
     echo "first difference pinned to MAME frame ${exact:-?} (every frame hashed from $lo)"

@@ -79,9 +79,10 @@ def generate(name: str, gid: str | None = None, title: str | None = None, family
 
     year = m.get("year", "")
     head = re.sub(r"\s+", " ", m["title"])
+    plain = re.sub(r" \(G.*?\)$", "", head)   # (not in the f-string: Python before 3.12 takes no backslash there)
     out = [f"# {head}, Konami {year}: generated from MAME's ksys573.cpp (tools/gen573.py)",
            f'id = "{gid}"',
-           f'title = "{title or re.sub(r" \(G.*?\)$", "", head)}"',
+           f'title = "{title or plain}"',
            line("family", q(fam), fam_comment, 24),
            line("mame", q(name), "MAME set name, used by the oracle", 24),
            line("core", q("sys573"), f"System 573 (runtime/sys573/, PLAN.md section 19); {c['io_board']} I/O board", 24)]

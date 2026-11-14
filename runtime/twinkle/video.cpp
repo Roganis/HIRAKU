@@ -440,36 +440,59 @@ void PlayerVideo::composite(double t, uint32_t *rgb, int w, int h, const Picture
             m_want_pic = pic;
         }
     }
-    // Where the player's picture is on the screen (issue 16, measured on a beatmania IIDX 4th style
-    // cabinet's footage): as an NTSC picture, its 704 active samples a line (a Video CD's 352 pixels
-    // two each) 704 of the PlayStation's 640 pixels wide, starting 43 to the left of its picture,
-    // and its lines 3 above it, so its left and right edges and its last 3 lines are off the screen.
-    // A DVD's 720 pixels are a sample each, the 704 from the 8th (the same signal, not checked on a
-    // DVD cabinet). For another screen size, the same in proportion to 640 x 240.
+    // Where the player's picture is on the screen (issue 16, measured on cabinets' footage). A Video
+    // CD (a beatmania IIDX 4th style cabinet): as an NTSC picture, its 704 active samples a line (its
+    // 352 pixels two each) 704 of the PlayStation's 640 pixels wide, starting 43 to the left of its
+    // picture. A DVD (8th style): its 720 pixels (13.5 MHz) 716 of the PlayStation's (13.42 MHz)
+    // wide, starting 46 to the left. Both start 3 lines above, so their left and right edges and
+    // their last lines are off the screen. A DVD's 480 lines on the 240: each screen line the two
+    // there blended, as the screen's fields by turns look. For another screen size, the same in
+    // proportion to 640 x 240.
     if (m_col_for[0] != (unsigned)w || m_col_for[1] != (unsigned)h || m_col_for[2] != c.w || m_col_for[3] != c.h) {
         m_col_for[0] = (unsigned)w, m_col_for[1] = (unsigned)h, m_col_for[2] = c.w, m_col_for[3] = c.h;
-        constexpr double kLeft = 43, kUp = 3;            // the 704 samples' start and the first line, off the screen
-        const double spp = c.w >= 704 ? 1.0 : 704.0 / c.w;   // samples a video pixel
-        const double first = (704 - c.w * spp) / 2;          // its first pixel's sample (a DVD's: -8)
+        constexpr double kUp = 3;                          // the first screen line's, in the 240
+        const bool dvd = c.w >= 704;
+        const double ppp = dvd ? 716.0 / 720 : 704.0 / c.w;     // the PlayStation's pixels a video pixel
+        const double left = dvd ? 46 - (720.0 - c.w) / 2 * ppp : 43;   // its first one's, off the screen
         m_col.resize((size_t)w);
         for (int x = 0; x < w; x++) {
-            const double sample = (x + 0.5) * 640.0 / w + kLeft;
-            const double vx = std::floor((sample - first) / spp);
+            const double vx = std::floor(((x + 0.5) * 640.0 / w + left) / ppp);
             m_col[(size_t)x] = vx >= 0 && vx < c.w ? (int32_t)vx : -1;
         }
         m_row.resize((size_t)h);
+        m_rows.resize((size_t)h);
         for (int y = 0; y < h; y++) {
-            const double vy = std::floor(((y + 0.5) * 240.0 / h + kUp) * c.h / 240.0);
-            m_row[(size_t)y] = vy >= 0 && vy < c.h ? (int32_t)vy : -1;
+            // the video lines under this screen line: all of them blended when it covers two or
+            // more, else the one at its middle
+            const double scale = c.h / 240.0;
+            int32_t r0 = (int32_t)std::lround((y * 240.0 / h + kUp) * scale);
+            int32_t r1 = (int32_t)std::lround(((y + 1) * 240.0 / h + kUp) * scale);
+            if (r1 - r0 < 2) r0 = (int32_t)std::floor(((y + 0.5) * 240.0 / h + kUp) * scale), r1 = r0 + 1;
+            r0 = std::max(r0, 0), r1 = std::min(r1, (int32_t)c.h);
+            m_row[(size_t)y] = r1 > r0 ? r0 : -1;
+            m_rows[(size_t)y] = (uint8_t)std::clamp(r1 - r0, 0, 255);
         }
     }
-    // where the PlayStation's picture is black, the video (nearest pixel)
+    // where the PlayStation's picture is black, the video (nearest pixel; its lines blended)
     for (int y = 0; y < h; y++) {
         if (m_row[(size_t)y] < 0) continue;
         const uint32_t *src = &m_rgb[(size_t)m_row[(size_t)y] * c.w];
+        const unsigned n = m_rows[(size_t)y];
         uint32_t *row = rgb + (size_t)y * w;
-        for (int x = 0; x < w; x++)
-            if (!(row[x] & 0x00ffffffu) && m_col[(size_t)x] >= 0) row[x] = src[m_col[(size_t)x]];
+        for (int x = 0; x < w; x++) {
+            const int32_t vx = m_col[(size_t)x];
+            if (row[x] & 0x00ffffffu || vx < 0) continue;
+            if (n == 1) {
+                row[x] = src[vx];
+                continue;
+            }
+            unsigned r = 0, g = 0, b = 0;
+            for (unsigned k = 0; k < n; k++) {
+                const uint32_t p = src[(size_t)k * c.w + vx];
+                r += p >> 16 & 0xff, g += p >> 8 & 0xff, b += p & 0xff;
+            }
+            row[x] = 0xff000000u | (r + n / 2) / n << 16 | (g + n / 2) / n << 8 | (b + n / 2) / n;
+        }
     }
 }
 

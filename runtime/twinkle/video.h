@@ -111,7 +111,8 @@ private:
     Picture m_want_pic;
     int64_t m_rgb_index = -1;
     Picture m_rgb_pic;
-    std::vector<int32_t> m_col, m_row;  // each screen column's and row's source one, -1 none (for m_col_for)
+    std::vector<int32_t> m_col, m_row;  // each screen column's and row's (first) source one, -1 none (for m_col_for)
+    std::vector<uint8_t> m_rows;        // each screen row's number of source rows, blended (a DVD's 2)
     unsigned m_col_for[4] = {};         // the screen's and the video's sizes they were made for
 
     // The worker decodes into m_queue; the emulation takes frames from it in order, waiting for

@@ -198,8 +198,8 @@ afterwards. Nothing else to install: the Python that does the adding is in pytho
 install, a clock or a test-mode setting) says what to do there.
 
 Needs glibc $glibc or later. From the system: the graphics drivers, X11 and Wayland's client
-libraries (libwayland-client: an X11 desktop has it too), fontconfig, D-Bus, glib and OpenSSL,
-which every desktop has. SDL3 is in bin/lib. NFC card readers (PC/SC):
+libraries (libwayland-client and libxkbcommon: an X11 desktop has them too), fontconfig, D-Bus,
+glib, OpenSSL and libcurl, which every desktop has. SDL3 is in bin/lib. NFC card readers (PC/SC):
 when the system has pcsc-lite and its daemon.
 
 Your saves and the launcher's settings: in user/ beside this file when there is one (a portable

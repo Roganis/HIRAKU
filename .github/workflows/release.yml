@@ -58,6 +58,12 @@ jobs:
         env:   # the release's number in the package (VERSION), for the updater; none for a run by hand
           HK_VERSION: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || '' }}
           HK_TESTS: ${{ startsWith(github.ref, 'refs/tags/v') && 'OFF' || 'ON' }}
+      # The package as it will be downloaded, tried with no game data on a bare Debian 12 that has
+      # only what the README asks of a system (tools/smoke.sh): every program's --help, the game
+      # menu run by a script, the tools with the package's Python, the launcher's window drawn.
+      # For releases too: it is the package that is tried, not the build's folder.
+      - name: The package, tried on a bare Debian 12
+        run: tools/smoke.sh --debian dist/hiraku-linux-x86_64.tar.xz
       - name: Unit tests
         if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
         # tools/ingest.py's tests with the package's Python (3.14; the runner's is 3.10, and ingest needs tomllib)
@@ -178,9 +184,9 @@ jobs:
         run: |
           pacman -Syu --noconfirm --needed base-devel git clang lld llvm mingw-w64-gcc qt6-base cmake ninja \
             nasm python p7zip zip curl
-      # (before the build is set up: tests/CMakeLists.txt gives the tests to Wine if it finds it)
-      - name: Wine, to run the unit tests
-        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+      # (before the build is set up: tests/CMakeLists.txt gives the tests to Wine if it finds it; a
+      # release's build has no tests, and Wine then tries its package: tools/smoke.sh)
+      - name: Wine, to run the unit tests and try the package
         run: pacman -S --noconfirm --needed wine
       - uses: actions/checkout@v7
       - name: Qt's version
@@ -205,6 +211,16 @@ jobs:
       # The Windows programs' own tests, run under Wine: what only the Windows build does (its waits,
       # its paths, the swap chain's thread against a pretend Direct3D, the pop'n board's go-between)
       # is otherwise never run before a release. No display: the one test that draws is skipped.
+      # The package as it will be downloaded, unpacked and tried under Wine with no game data
+      # (tools/smoke.sh): every program's --help, the game menu run by a script, the tools with the
+      # package's Python. For releases too.
+      - name: The package, tried under Wine
+        run: |
+          mkdir smoke && 7z x -bso0 -osmoke dist/hiraku-windows-x86_64.zip
+          tools/smoke.sh smoke/hiraku wine
+        env:
+          WINEPREFIX: /tmp/hiraku-wine
+          WINEDEBUG: -all
       - name: Unit tests (the Windows programs, under Wine)
         if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
         run: |

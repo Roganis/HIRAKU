@@ -327,7 +327,7 @@ A cabinet has no keyboard to press Escape on and no mouse for the launcher. So a
 
 **Leaving a game:** hold **5, 7 and 3** together on an e-AMUSEMENT reader's 10-key (573; either player's, the three keys on the same 10-key) for two seconds. After a moment a box on the picture says "GAME MENU" with a bar that fills; let go before it's full and nothing happens. The game then ends as when its window is closed, with its saves written. It works in every game, whether the game itself has a card reader or not: on an IIDX cabinet, a DJ Main beatmania is left by the cabinet's readers all the same. A cabinet with no 10-key holds its **Test and Service** switches together instead, and you can add a key or button of your own (**Settings > General > Game menu**, or `--game-menu-key key:F12`). The game gets the keys too: at a PIN prompt the three digits are typed.
 
-**The menu** then opens: the games ready to play, on a shelf for each series (beatmania, beatmania IIDX, pop'n music...), the one you just left under the bar. The cabinet's own controls drive it, and the bottom of the screen says which:
+**The menu** then opens: the games ready to play, on a shelf for each series (beatmania, beatmania IIDX, pop'n music...), the one you just left under the bar. HIRAKU's logo opens first, on a black screen: a line that widens into its black box ("hiraku", 開く, is "to open"). Then it goes up into the top corner as the black fades away; the first press sends it up at once. When a game is chosen it comes back down to the middle as the screen goes black again, and closes before the game starts. The cabinet's own controls drive it, and the bottom of the screen says which:
 
 | Cabinet | Choose a game | Change shelf | Play |
 |---|---|---|---|

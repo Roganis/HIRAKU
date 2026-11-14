@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "menu.h"
 
+#include <algorithm>
 #include <cmath>
 #include <fstream>
 #include <sstream>
@@ -82,6 +83,7 @@ void State::set(const List &l) {
     rows_.assign(list_.shelves.size(), 0);
     shelf_ = 0;
     chosen_ = false;
+    dock_at_ = UINT64_MAX;
     for (size_t s = 0; s < list_.shelves.size(); s++)
         for (size_t g = 0; g < list_.shelves[s].games.size(); g++)
             if (list_.shelves[s].games[g].id == list_.current) shelf_ = (int)s, rows_[s] = (int)g;
@@ -96,6 +98,7 @@ const Game *State::selected() const {
 
 bool State::act(Act a, uint64_t frame) {
     if (chosen_ || !selected() || a == Act::none) return false;
+    dock_at_ = std::min(dock_at_, frame);   // (the logo makes way: logo_at)
     const int shelves = (int)list_.shelves.size();
     const int n = (int)list_.shelves[(size_t)shelf_].games.size();
     int &r = rows_[(size_t)shelf_];

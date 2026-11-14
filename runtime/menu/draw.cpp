@@ -14,6 +14,7 @@
 #include <vector>
 
 #include "font.h"
+#include "logo.h"
 #include "menu.h"
 
 namespace hk::menu {
@@ -183,8 +184,10 @@ bool set_font(const std::string &path, std::string &error) {
 
 void set_logo(const std::string &path) { g_logo = path; }
 
-void draw(const State &s, const std::string &family, uint64_t frame, uint32_t *px, int w, int h) {
-    if (!g_font_read) read_font();
+namespace {
+
+// the menu under the logo
+void draw_menu(const State &s, const std::string &family, uint64_t frame, uint32_t *px, int w, int h) {
     Canvas c{px, w, h, 0, 0, w, h};
     // the ground: night blue, a little lighter towards the bottom
     for (int y = 0; y < h; y++) {
@@ -193,9 +196,11 @@ void draw(const State &s, const std::string &family, uint64_t frame, uint32_t *p
         std::fill(px + (size_t)y * w, px + (size_t)(y + 1) * w, 0xff000000u | rgb);
     }
     const int mx = 24;   // the side margins (a tube's overscan)
-    // HIRAKU's name: the launcher's picture of it (white on black: how light a pixel is, is how
-    // much of it is drawn), else in letters
-    if (const Picture *logo = picture(g_logo, 30, w / 2)) {
+    // HIRAKU's name: its logo, once it has come up here (draw); without one, the launcher's picture
+    // of it (white on black: how light a pixel is, is how much of it is drawn), else in letters
+    if (logo::ready()) {
+        // (drawn last, over the rest)
+    } else if (const Picture *logo = picture(g_logo, 30, w / 2)) {
         for (int y = 0; y < logo->h; y++)
             for (int x = 0; x < logo->w; x++) {
                 const uint32_t p = logo->px[(size_t)y * logo->w + x];
@@ -331,6 +336,86 @@ void draw(const State &s, const std::string &family, uint64_t frame, uint32_t *p
         c.text(x, y, hints[i].control, 2, kAmber);
         c.text(x + longest + gap, y, hints[i].does, 2, kText);
     }
+}
+
+// A frame of the logo, scaled down to its place: each pixel the mean of the logo's it covers
+// (bilinear would drop its thin lines when small), weighed by how opaque each is
+void draw_logo(Canvas &c, const LogoAt &at) {
+    const uint8_t *src = logo::frame((logo::Anim)at.anim, at.frame);
+    const int lw = logo::width(), lh = logo::height();
+    if (!src || at.w < 1 || at.h < 1) return;
+    for (int y = 0; y < at.h; y++) {
+        const int py = at.y + y;
+        if (py < c.y0 || py >= c.y1) continue;
+        const int sy0 = y * lh / at.h, sy1 = std::min(lh, std::max(sy0 + 1, (y + 1) * lh / at.h));
+        for (int x = 0; x < at.w; x++) {
+            const int px = at.x + x;
+            if (px < c.x0 || px >= c.x1) continue;
+            const int sx0 = x * lw / at.w, sx1 = std::min(lw, std::max(sx0 + 1, (x + 1) * lw / at.w));
+            uint32_t light = 0, opaque = 0;
+            for (int sy = sy0; sy < sy1; sy++)
+                for (int sx = sx0; sx < sx1; sx++) {
+                    const uint8_t *p = src + ((size_t)sy * lw + sx) * 2;
+                    light += (uint32_t)p[0] * p[1], opaque += p[1];
+                }
+            if (!opaque) continue;
+            const uint32_t l = light / opaque, a = opaque / (uint32_t)((sy1 - sy0) * (sx1 - sx0));
+            if (a) c.put(px, py, l << 16 | l << 8 | l, (int)a);
+        }
+    }
+}
+
+// the frame the logo starts closing at: down in the middle again, its opening done
+uint64_t closing_from(const State &s) {
+    return std::max<uint64_t>(s.chosen_at() + kLogoGlide, (uint64_t)logo::still_from(logo::opening));
+}
+
+}  // namespace
+
+LogoAt logo_at(const State &s, uint64_t frame, int w, int h) {
+    LogoAt at;
+    if (!logo::ready()) return at;
+    const double lw = logo::width(), lh = logo::height();
+    // in the middle, and up in the corner: as high as the top's text, where HIRAKU's name was
+    const double mid_x = (w - lw) / 2, mid_y = (h - lh) / 2, top_h = 40, top_w = lw * top_h / lh, top_x = 24, top_y = 4;
+    const uint64_t opening = (uint64_t)logo::frames(logo::opening), dock = std::min(s.dock_at(), opening);
+    const auto ease = [](double t) {
+        t = std::clamp(t, 0.0, 1.0);
+        return t * t * (3 - 2 * t);
+    };
+    const auto up = [&](uint64_t f) { return f < dock ? 0.0 : ease((double)(f - dock) / kLogoGlide); };   // 0 the middle, 1 the corner
+    // the black behind it: whole while it opens, gone quickly as it goes up
+    const auto dark = [&](uint64_t f) { return f < dock ? 255 : 255 - (int)std::min<uint64_t>(255, (f - dock) * 255 / kLogoFade); };
+    double p = up(frame);
+    at.dark = dark(frame);
+    at.anim = logo::opening, at.frame = (int)std::min(frame, opening - 1);
+    if (s.chosen() && frame >= s.chosen_at()) {
+        p = up(s.chosen_at()) * (1 - ease((double)(frame - s.chosen_at()) / kLogoGlide));
+        // ... and back as it comes down, whole by the time it is in the middle
+        const uint64_t c = s.chosen_at(), from_c = kLogoGlide - kLogoFade;
+        at.dark = std::max(dark(std::min(frame, c)), frame < c + from_c ? 0 : (int)std::min<uint64_t>(255, (frame - c - from_c) * 255 / kLogoFade));
+        if (const uint64_t from = closing_from(s); frame >= from) {
+            if (frame - from >= (uint64_t)logo::frames(logo::closing)) {
+                at.anim = -1;   // closed: the black alone
+                return at;
+            }
+            at.anim = logo::closing, at.frame = (int)(frame - from);
+        }
+    }
+    at.w = (int)std::lround(lw + (top_w - lw) * p), at.h = (int)std::lround(lh + (top_h - lh) * p);
+    at.x = (int)std::lround(mid_x + (top_x - mid_x) * p), at.y = (int)std::lround(mid_y + (top_y - mid_y) * p);
+    return at;
+}
+
+uint64_t logo_closed(const State &s) { return logo::ready() ? closing_from(s) + (uint64_t)logo::frames(logo::closing) : 0; }
+
+void draw(const State &s, const std::string &family, uint64_t frame, uint32_t *px, int w, int h) {
+    if (!g_font_read) read_font();
+    draw_menu(s, family, frame, px, w, h);
+    const LogoAt at = logo_at(s, frame, w, h);
+    Canvas c{px, w, h, 0, 0, w, h};
+    if (at.dark) c.fill(0, 0, w, h, 0, at.dark);
+    if (at.anim >= 0) draw_logo(c, at);
 }
 
 }  // namespace hk::menu

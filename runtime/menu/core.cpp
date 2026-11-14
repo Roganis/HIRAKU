@@ -28,7 +28,8 @@ namespace {
 constexpr int kRate = 44100, kFrameSamples = kRate / 60;
 constexpr uint64_t kQuiet = 20;         // frames at the start when presses do nothing (what was held on the way in)
 constexpr uint64_t kRepeatAfter = 24, kRepeatEvery = 6;   // a held control repeats its move
-constexpr uint64_t kStartFrames = 36;   // from the choice to the end: its flash and its sound
+constexpr uint64_t kStartFrames = 36;   // from the choice to the end at least: its flash and its sound
+                                        // (and until the logo has closed: menu::logo_closed)
 constexpr int kTurnStep = 16;           // turntable counts a move (a sixteenth of a turn)
 constexpr uint64_t kTurnEvery = 5;      // ... and at most a move every so many frames
 
@@ -140,7 +141,7 @@ public:
             mix(sound.data());
             if (sink_) sink_(sound.data(), kFrameSamples);
             if (hook_) hook_(frame_, frame_px_.data(), w_, h_);
-            if (const menu::Game *g = state_.chosen(); g && frame_ - state_.chosen_at() >= kStartFrames) leave(*g);
+            if (const menu::Game *g = state_.chosen(); g && frame_ - state_.chosen_at() >= kStartFrames && frame_ >= menu::logo_closed(state_)) leave(*g);
             frame_++;
         }
     }

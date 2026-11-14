@@ -29,3 +29,6 @@ __pycache__/
 
 # Local notes and backups, not for the repo
 /local/
+
+# the logo animation's exports (tools/data/logo/build_anim.py): baked into runtime/menu/logo.anim
+/tools/data/logo/out/

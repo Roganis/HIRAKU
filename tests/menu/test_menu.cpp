@@ -6,6 +6,7 @@
 //   - every cabinet: each family that a games/*/game.toml names can choose, change shelf and play
 //     with controls it has, and the lamps named for them are its own
 //   - the picture is drawn at both sizes
+//   - HIRAKU's logo: its pictures read, and where it is when (opening, up to the top, closing)
 // test_menu GAMES_DIR                      the checks
 // test_menu GAMES_DIR --ppm FILE FAMILY [wide]   a picture of the menu for that cabinet, to look at
 #include <cstdio>
@@ -21,6 +22,7 @@
 #include "host/menukey.h"
 #include "host/menupic.h"
 #include "menu/font.h"
+#include "menu/logo.h"
 #include "menu/menu.h"
 #include "menu/pads.h"
 
@@ -190,6 +192,9 @@ static void write_ppm(const std::string &path, const std::vector<uint32_t> &px, 
     fclose(f);
 }
 
+// a frame by which the logo has gone up into its corner and the black has gone (test_logo)
+constexpr uint64_t kUp = 200;
+
 static void test_draw() {
     menu::List l;
     std::string err;
@@ -198,7 +203,7 @@ static void test_draw() {
     s.set(l);
     for (int w : {640, 848}) {
         std::vector<uint32_t> px((size_t)w * 480, 0);
-        menu::draw(s, "iidx", 0, px.data(), w, 480);
+        menu::draw(s, "iidx", kUp, px.data(), w, 480);
         std::set<uint32_t> colours(px.begin(), px.end());
         CHECK(colours.size() > 8);                 // a ground, text, the bar
         CHECK(colours.count(0xffffb830u) == 1);    // the bar's amber
@@ -206,21 +211,21 @@ static void test_draw() {
         for (uint32_t p : px) opaque &= p >> 24 == 0xff;
         CHECK(opaque);
         const std::vector<uint32_t> first = px;
-        s.act(menu::Act::next, 1);
+        s.act(menu::Act::next, kUp + 1);
         s.animate();
-        menu::draw(s, "iidx", 1, px.data(), w, 480);
+        menu::draw(s, "iidx", kUp + 1, px.data(), w, 480);
         CHECK(px != first);                        // a move shows
-        s.act(menu::Act::prev, 2);
+        s.act(menu::Act::prev, kUp + 2);
     }
     // a notice (the game that came back ended with an error) is said until the first move
     {
         std::vector<uint32_t> px(640 * 480, 0), said(640 * 480, 0);
-        menu::draw(s, "iidx", 50, px.data(), 640, 480);
+        menu::draw(s, "iidx", kUp + 50, px.data(), 640, 480);
         s.set_notice("beatmania 7th MIX|ended with an error");
-        menu::draw(s, "iidx", 50, said.data(), 640, 480);
+        menu::draw(s, "iidx", kUp + 50, said.data(), 640, 480);
         CHECK(said != px && s.notice() == "beatmania 7th MIX|ended with an error");
-        CHECK(s.act(menu::Act::next, 51) && s.notice().empty());
-        s.act(menu::Act::prev, 52);
+        CHECK(s.act(menu::Act::next, kUp + 51) && s.notice().empty());
+        s.act(menu::Act::prev, kUp + 52);
         s.animate();
     }
     menu::State empty;
@@ -260,8 +265,9 @@ static void test_picture(const std::string &dir) {
         CHECK(l.shelves.size() == 1 && l.shelves[0].games[1].picture == picture && l.shelves[0].games[0].picture.empty());
         menu::State s;
         s.set(l);
+        s.act(menu::Act::next, kUp), s.act(menu::Act::prev, kUp);   // (a move at kUp: the picture comes up from then)
         std::vector<uint32_t> px(640 * 480, 0);
-        menu::draw(s, "popn", at, px.data(), 640, 480);
+        menu::draw(s, "popn", kUp + at, px.data(), 640, 480);
         return px;
     };
     const std::vector<uint32_t> without = drawn("", 60), with = drawn(file, 60), missing = drawn(dir + "/no-such-picture.bmp", 60);
@@ -330,18 +336,18 @@ static void test_font(const std::string &dir) {
     menu::State s;
     s.set(l);
     std::vector<uint32_t> plain(640 * 480, 0), real(640 * 480, 0), again(640 * 480, 0);
-    menu::draw(s, "iidx", 40, plain.data(), 640, 480);
+    menu::draw(s, "iidx", kUp + 40, plain.data(), 640, 480);
     const std::string path = dir + "/menu-font-test.hkmf";
     std::ofstream(path, std::ios::binary) << file;
     CHECK(menu::set_font(path, err));
-    menu::draw(s, "iidx", 40, real.data(), 640, 480);
+    menu::draw(s, "iidx", kUp + 40, real.data(), 640, 480);
     CHECK(real != plain);
     for (uint32_t p : real) CHECK(p >> 24 == 0xff);
     CHECK(!menu::set_font(dir + "/no-such-font", err));   // a file that isn't there: the font before stays
-    menu::draw(s, "iidx", 40, again.data(), 640, 480);
+    menu::draw(s, "iidx", kUp + 40, again.data(), 640, 480);
     CHECK(again == real);
     CHECK(menu::set_font("", err));
-    menu::draw(s, "iidx", 40, again.data(), 640, 480);
+    menu::draw(s, "iidx", kUp + 40, again.data(), 640, 480);
     CHECK(again == plain);
     std::filesystem::remove(path);
 }
@@ -425,6 +431,67 @@ static void test_pads() {
     SDL_DetachVirtualJoystick(cabinet);
 }
 
+// HIRAKU's logo (menu/logo.h): read from what the menu carries; it opens in the middle, goes up to
+// the top at the end of its opening or at the first press, and closes in the middle once a game is
+// chosen, the menu's end waiting for it
+static void test_logo() {
+    namespace lg = menu::logo;
+    CHECK(lg::ready() && lg::width() == 501 && lg::height() == 145);
+    CHECK(lg::frames(lg::opening) == 105 && lg::frames(lg::closing) == 54);
+    const size_t n = (size_t)lg::width() * lg::height() * 2;
+    const auto opaque = [&](const uint8_t *p) {
+        size_t k = 0;
+        for (size_t i = 1; i < n; i += 2) k += p[i] != 0;
+        return k;
+    };
+    const uint8_t *still = lg::frame(lg::opening, 104);
+    CHECK(opaque(still) == n / 2);                                        // standing: the whole box
+    CHECK(still[((72 * 501) + 10) * 2] == 0 && still[((72 * 501) + 10) * 2 + 1] == 255);   // black inside
+    CHECK(lg::still_from(lg::opening) > 30 && lg::still_from(lg::opening) < 104);
+    CHECK(!memcmp(lg::frame(lg::closing, 0), still, n));                  // closing starts where opening stood
+    CHECK(opaque(lg::frame(lg::closing, 53)) == 0);                       // ... and leaves nothing
+    CHECK(opaque(lg::frame(lg::opening, 0)) < n / 20);                    // opening: a line, first
+    CHECK(lg::frame(lg::opening, 1000) == lg::frame(lg::opening, 104));   // past the end: the last
+
+    menu::List l;
+    std::string err;
+    CHECK(l.parse(kList, err));
+    menu::State s;
+    s.set(l);
+    const menu::LogoAt mid = menu::logo_at(s, 60, 640, 480);
+    CHECK(mid.anim == lg::opening && mid.frame == 60 && mid.w == 501 && mid.x == 70 && mid.y == 168);   // (69.5, 167.5: rounded)
+    const menu::LogoAt top = menu::logo_at(s, 105 + menu::kLogoGlide, 848, 480);
+    CHECK(top.anim == lg::opening && top.frame == 104 && top.h == 40 && top.x == 24 && top.y == 4);
+    CHECK(menu::logo_at(s, 3000, 640, 480).h == 40);                      // and stays
+    CHECK(menu::logo_at(s, 0, 640, 480).dark == 255 && menu::logo_at(s, 104, 640, 480).dark == 255);   // opening on black
+    CHECK(menu::logo_at(s, 105 + 4, 640, 480).dark > 0 && menu::logo_at(s, 105 + menu::kLogoFade, 640, 480).dark == 0);   // gone quickly
+    menu::State pressed;
+    pressed.set(l);
+    CHECK(pressed.act(menu::Act::next, 30));
+    CHECK(menu::logo_at(pressed, 30 + menu::kLogoGlide, 640, 480).h == 40);   // a press: up at once
+    CHECK(menu::logo_at(pressed, 30 + menu::kLogoGlide, 640, 480).frame == 30 + (int)menu::kLogoGlide);   // (still opening)
+    CHECK(pressed.act(menu::Act::start, 200));
+    CHECK(menu::logo_at(pressed, 200, 640, 480).h == 40 && menu::logo_at(pressed, 200, 640, 480).dark == 0);
+    CHECK(menu::logo_at(pressed, 30, 640, 480).dark == 255 && menu::logo_at(pressed, 30 + menu::kLogoFade, 640, 480).dark == 0);
+    CHECK(menu::logo_at(pressed, 200 + menu::kLogoGlide, 640, 480).dark == 255);   // black again, down in the middle
+    const menu::LogoAt down = menu::logo_at(pressed, 200 + menu::kLogoGlide, 640, 480);
+    CHECK(down.anim == lg::closing && down.frame == 0 && down.w == 501);
+    CHECK(menu::logo_closed(pressed) == 200 + menu::kLogoGlide + 54);
+    CHECK(menu::logo_at(pressed, menu::logo_closed(pressed), 640, 480).anim == -1);
+    CHECK(menu::logo_at(pressed, menu::logo_closed(pressed), 640, 480).dark == 255);   // ends on black
+    // chosen before the opening stood still: it closes from the standing box all the same
+    menu::State quick;
+    quick.set(l);
+    CHECK(quick.act(menu::Act::start, 21));
+    CHECK(menu::logo_closed(quick) == (uint64_t)lg::still_from(lg::opening) + 54);
+    // drawn: the box's black in the middle while it opens, the list there once it has gone up
+    std::vector<uint32_t> px(640 * 480, 0);
+    menu::draw(s, "iidx", 60, px.data(), 640, 480);
+    CHECK(px[240 * 640 + 100] == 0xff000000u && px[20 * 640 + 20] == 0xff000000u);   // (and all round it)
+    menu::draw(s, "iidx", 300, px.data(), 640, 480);
+    CHECK(px[240 * 640 + 100] != 0xff000000u && px[24 * 640 + 26] != px[24 * 640 + 300]);   // (the corner: the box)
+}
+
 int main(int argc, char **argv) {
     if (argc < 2) {
         fprintf(stderr, "test_menu GAMES_DIR [SCRATCH_DIR | --ppm FILE FAMILY [wide]]\n");
@@ -442,7 +509,7 @@ int main(int argc, char **argv) {
         s.set(l);
         const int w = argc > 5 ? 848 : 640;
         std::vector<uint32_t> px((size_t)w * 480, 0);
-        const uint64_t frame = getenv("HK_MENU_FRAME") ? strtoull(getenv("HK_MENU_FRAME"), nullptr, 0) : 100;
+        const uint64_t frame = getenv("HK_MENU_FRAME") ? strtoull(getenv("HK_MENU_FRAME"), nullptr, 0) : 300;
         if (getenv("HK_MENU_START")) s.act(menu::Act::start, frame - 4);
         if (getenv("HK_MENU_NOTICE")) s.set_notice(getenv("HK_MENU_NOTICE"));
         if (std::string why; getenv("HK_MENU_FONT") && !menu::set_font(getenv("HK_MENU_FONT"), why)) fprintf(stderr, "%s\n", why.c_str());
@@ -462,6 +529,7 @@ int main(int argc, char **argv) {
     test_state();
     test_cabinets(argv[1]);
     test_draw();
+    test_logo();
     test_picture(argc > 2 ? argv[2] : ".");
     test_font(argc > 2 ? argv[2] : ".");
     test_pads();

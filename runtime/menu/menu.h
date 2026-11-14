@@ -79,6 +79,8 @@ public:
     int shelf_dir() const { return shelf_dir_; }
     uint64_t shelf_at() const { return shelf_at_; }
     uint64_t moved_at() const { return moved_at_; }   // the last move: a long title starts to roll from then
+    // The logo's way up to the top (logo_at below): at the end of its opening, or sooner at a press
+    uint64_t dock_at() const { return dock_at_; }
     void animate();   // once a frame
     // Something to tell the player on opening (--notice: the game just left ended with an error),
     // "a first line|a second, smaller": shown where the controls are said, until the first move
@@ -90,7 +92,7 @@ private:
     int shelf_ = 0;
     std::vector<int> rows_;   // each shelf's row, kept when the shelf is left
     bool chosen_ = false;
-    uint64_t chosen_at_ = 0, shelf_at_ = 0, moved_at_ = 0;
+    uint64_t chosen_at_ = 0, shelf_at_ = 0, moved_at_ = 0, dock_at_ = UINT64_MAX;
     int shelf_dir_ = 0;
     double shown_row_ = 0;
     std::string notice_;
@@ -105,5 +107,20 @@ bool set_font(const std::string &path, std::string &error);
 void set_logo(const std::string &path);
 // A text as the 8x8 font has it: a '?' for each character that isn't ASCII
 std::string ascii_only(const std::string &text);
+
+// HIRAKU's logo over the menu (menu/logo.h): it opens in the middle of a black screen as the menu
+// opens, stands a moment, and glides up into the top's left corner, where it stays, the black
+// fading away quickly as it goes (at once, at the first press). A game chosen, it glides back down
+// to the middle, the screen going black again, and closes; the menu ends on the black.
+constexpr uint64_t kLogoGlide = 18;   // frames, each way
+constexpr uint64_t kLogoFade = 8;     // frames: the black's fade, each way
+struct LogoAt {
+    int anim = -1, frame = 0;   // which of logo.h's animations, and its frame; -1: none drawn
+    int x = 0, y = 0, w = 0, h = 0;   // where, and how big
+    int dark = 0;               // the black over the menu, under the logo: 0 none .. 255 whole
+};
+LogoAt logo_at(const State &s, uint64_t frame, int w, int h);
+// The frame the logo has closed by, once a game is chosen (0 if there is no logo)
+uint64_t logo_closed(const State &s);
 
 }  // namespace hk::menu

@@ -586,9 +586,16 @@ if(SDL3_FOUND)
   endif()
   # hiraku-menu: the game menu, a list of the games chosen from with the cabinet's own controls, as
   # a core of the shell (runtime/menu/menu.h, PLAN.md section 43); the launcher starts it
-  add_library(hiraku_menu STATIC runtime/menu/menu.cpp runtime/menu/nav.cpp runtime/menu/draw.cpp runtime/menu/pads.cpp runtime/menu/font.cpp)
+  # HIRAKU's logo opening and closing (runtime/menu/logo.h): runtime/menu/logo.anim, carried inside
+  set(HK_LOGO_ANIM_CPP ${CMAKE_BINARY_DIR}/generated/logo_anim.cpp)
+  add_custom_command(OUTPUT ${HK_LOGO_ANIM_CPP}
+    COMMAND ${CMAKE_COMMAND} -DIN=${CMAKE_SOURCE_DIR}/runtime/menu/logo.anim -DOUT=${HK_LOGO_ANIM_CPP} -DNAME=hk_logo_anim
+            -P ${CMAKE_SOURCE_DIR}/cmake/embed.cmake
+    DEPENDS ${CMAKE_SOURCE_DIR}/runtime/menu/logo.anim ${CMAKE_SOURCE_DIR}/cmake/embed.cmake VERBATIM)
+  add_library(hiraku_menu STATIC runtime/menu/menu.cpp runtime/menu/nav.cpp runtime/menu/draw.cpp runtime/menu/pads.cpp runtime/menu/font.cpp
+              runtime/menu/logo.cpp ${HK_LOGO_ANIM_CPP})
   target_include_directories(hiraku_menu PUBLIC runtime)
-  target_link_libraries(hiraku_menu PUBLIC SDL3::SDL3)
+  target_link_libraries(hiraku_menu PUBLIC SDL3::SDL3 ZLIB::ZLIB)
   add_executable(hiraku-menu runtime/menu/core.cpp)
   target_link_libraries(hiraku-menu PRIVATE hiraku_main hiraku_built_none hiraku_menu hiraku_host hiraku_shell)
   # hiraku-midi: the launcher's MIDI player, through Keyboardmania's synth card (dev/xt446), a

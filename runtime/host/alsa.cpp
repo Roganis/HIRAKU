@@ -17,6 +17,7 @@
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
+#include <mutex>
 #include <string>
 #include <thread>
 #include <vector>
@@ -235,6 +236,7 @@ void release() {
 
 std::string realtime_thread();   // below
 std::string g_writer;            // how the thread that writes runs (the report)
+std::mutex g_writer_lock;        // ... which the thread sets as it starts and describe() reads from another
 
 // each time a period of the ring is free: that much from the stream (silence for what it lacks:
 // the stream's get callback counts that as a break), written. Real-time where allowed: it sleeps
@@ -242,7 +244,11 @@ std::string g_writer;            // how the thread that writes runs (the report)
 // that is gone ("no such device": pulled out, and no call on it will ever work again) ends it:
 // lost() then says so, for the window to open another way out (host/soundwatch.h)
 void run(SDL_AudioStream *stream) {
-    g_writer = realtime_thread();
+    {
+        std::string how = realtime_thread();
+        std::lock_guard<std::mutex> hold(g_writer_lock);
+        g_writer = std::move(how);
+    }
     std::vector<uint8_t> buf((size_t)g_period * g_frame_bytes);
     const int bytes = (int)buf.size();
     auto gone = [](long e) {   // an error taken up (an underrun: the card started again); true: the card is gone
@@ -403,12 +409,17 @@ bool lost() { return g_lost.load(std::memory_order_relaxed); }
 std::string describe() {
     if (!g_pcm || !g_t0) return "";
     const double secs = (prof::now_ns() - g_t0) / 1e9;
+    std::string writer;
+    {
+        std::lock_guard<std::mutex> hold(g_writer_lock);
+        writer = g_writer;
+    }
     char b[320];
     snprintf(b, sizeof b,
              "audio: the card took %.1f %% of its rate's frames over %.0f s (100: it plays what it's given), %llu underruns; "
              "its writer %s",
              secs > 0 ? 100.0 * (double)g_written.load() / (secs * g_card_rate) : 0.0, secs,
-             (unsigned long long)g_xruns.load(), g_writer.c_str());
+             (unsigned long long)g_xruns.load(), writer.c_str());
     return b;
 }
 

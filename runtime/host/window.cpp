@@ -57,11 +57,15 @@ static void watch_audio();   // below: the sound's way out, opened again if it s
 static void stats_window(statsview::Window &w);   // below: the window's numbers for the performance overlay
 
 namespace {
-uint64_t g_settle_until = 0;   // window/renderer setup right after opening: not a stall
+// (read by the sound device's own thread too, in the callback below: atomic)
+std::atomic<uint64_t> g_settle_until{0};   // window/renderer setup right after opening: not a stall
 std::atomic<uint64_t> g_device_pulls{0}, g_device_short{0};   // the device's pulls, and those the queue fell short of
-hk::sys::Wake g_pulled;   // signalled at each pull, for who waits for the queue to go down (wait_pull)
+// signalled at each pull, for who waits for the queue to go down (wait_pull). Never taken down: the
+// sound device's thread signals it until the process is gone, and a program that ends by exit()
+// (the game menu with its choice made) would otherwise have it destroyed under that thread
+hk::sys::Wake &g_pulled = *new hk::sys::Wake;
 std::atomic<uint64_t> g_device_short_late{0};                  // ... of those, after the game's boot (g_tune_from)
-uint64_t g_tune_from = 0;          // the queue target self-tunes from here on (window_open + 10 s)
+std::atomic<uint64_t> g_tune_from{0};   // the queue target self-tunes from here on (window_open + 10 s)
 
 // window_set_split: each of the frame's monitors (Core::screens) in a window of its own
 bool g_split_wanted = false, g_split = false;
@@ -102,7 +106,7 @@ std::string g_audio_output;       // what it got, for the report
 int g_target_frames = 0;          // audio queued ahead, when audio paces
 int g_target_min = 0;             // ... the starting setting: self-tuning keeps it at least this
 bool g_audio_fixed = false;       // window_set_audio_fixed: no self-tuning
-bool g_fast = false;              // Tab held, or the fast start-up (host/warp.h): run as fast as possible (audio is dropped)
+std::atomic<bool> g_fast{false};  // Tab held, or the fast start-up (host/warp.h): run as fast as possible (audio is dropped); the sound's thread reads it
 bool g_tab = false;               // Tab held
 int g_device_frames = 0;
 bool g_quit = false;
@@ -667,7 +671,7 @@ static void open_audio(int level, int target_ms) {
         g_settle_until = prof::now_ns() + 250'000'000;
         // the queue's target tunes itself once the game has started; a way out opened in a run is
         // left two seconds (the changeover's own late chunks aren't the device's)
-        g_tune_from = target_ms >= 0 ? prof::now_ns() + 10'000'000'000ull : std::max<uint64_t>(g_tune_from, prof::now_ns() + 2'000'000'000ull);
+        g_tune_from = target_ms >= 0 ? prof::now_ns() + 10'000'000'000ull : std::max<uint64_t>(g_tune_from.load(), prof::now_ns() + 2'000'000'000ull);
     }
     g_ratio = 1.0;   // (a new stream plays at the game's own speed until it is steered)
     g_sound_watch.opened(g_audio_opened_ns = prof::now_ns(), g_device_pulls.load(std::memory_order_relaxed));

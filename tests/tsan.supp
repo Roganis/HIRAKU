@@ -1,0 +1,12 @@
+# What ThreadSanitizer reports that isn't HIRAKU's (tools/sanitize.sh thread): libraries that
+# aren't built with it, whose own locks and atomics it can't see.
+#
+# Mesa's OpenGL: its driver thread and the caller share hash tables and its own allocator's blocks
+# under locks of its own (tests/picture: 67 reports, every one with both sides inside libgallium)
+called_from_lib:libgallium
+race:libgallium
+
+# libdbus (the request for real-time threads at a window's start, the lights' and readers' own):
+# its connection and its message queue each have a lock, taken in either order by the one thread
+# that uses it here
+deadlock:libdbus

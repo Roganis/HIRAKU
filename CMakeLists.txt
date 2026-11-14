@@ -63,6 +63,18 @@ if(HK_SANITIZE)
   add_compile_options(-fsanitize=address,undefined -fno-sanitize-recover=undefined -fno-omit-frame-pointer)
   add_link_options(-fsanitize=address,undefined)
 endif()
+# HK_SANITIZE_THREAD: everything built with ThreadSanitizer instead (clang), for ctest and for
+# games run by hand: two threads at the same memory with no lock between them, a lock taken in two
+# orders, end the run with both places (tools/sanitize.sh thread). Not with HK_SANITIZE: the two
+# can't share a build.
+option(HK_SANITIZE_THREAD "build with ThreadSanitizer, for the tests" OFF)
+if(HK_SANITIZE_THREAD)
+  if(HK_SANITIZE)
+    message(FATAL_ERROR "HK_SANITIZE and HK_SANITIZE_THREAD are two builds")
+  endif()
+  add_compile_options(-fsanitize=thread -fno-omit-frame-pointer)
+  add_link_options(-fsanitize=thread)
+endif()
 # HK_FUZZ: the fuzz targets (tests/fuzz/, tools/fuzz.sh): clang's libFuzzer with the same two
 # sanitizers, everything built so that the fuzzer sees which code its inputs reach
 option(HK_FUZZ "build the fuzz targets (clang)" OFF)

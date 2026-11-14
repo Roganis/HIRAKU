@@ -9,6 +9,10 @@
 #   tools/sanitize.sh [BUILD [DEPS]]    BUILD: the build's folder (default out/asan)
 #                                       DEPS:  tools/release-deps-linux.sh's folder, for a PC
 #                                              without the libraries (the workflow's runner)
+#   tools/sanitize.sh thread [BUILD [DEPS]]
+#                                       the same under ThreadSanitizer (HK_SANITIZE_THREAD; default
+#                                       out/tsan): two threads at the same memory with no lock
+#                                       between them. tests/tsan.supp names what isn't HIRAKU's.
 #
 # The same build can run the games' regress cases (several times slower than the main build):
 #   HIRAKU_ROOT=$PWD HK_REGRESS_BIN=$PWD/out/asan HK_REGRESS_OUT=$PWD/out/asan-regress \
@@ -17,9 +21,16 @@
 # must come out identical; the run statistics differ where the main build has a game recompiled.
 set -euo pipefail
 root=$(cd "$(dirname "$0")/.." && pwd)
-build=${1:-$root/out/asan}
+which=-DHK_SANITIZE=ON
+default=$root/out/asan
+if [ "${1:-}" = thread ]; then
+  shift
+  which=-DHK_SANITIZE_THREAD=ON
+  default=$root/out/tsan
+fi
+build=${1:-$default}
 deps=${2:-}
-args=(-G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo -DHK_SANITIZE=ON -DHK_GAME_BINARIES=OFF -DHK_TESTS=ON
+args=(-G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo "$which" -DHK_GAME_BINARIES=OFF -DHK_TESTS=ON
       -DCMAKE_C_COMPILER="${CC:-clang}" -DCMAKE_CXX_COMPILER="${CXX:-clang++}")
 if [ -n "$deps" ]; then
   deps=$(cd "$deps" && pwd)
@@ -34,4 +45,6 @@ cmake --build "$build" -j "${HK_JOBS:-$(nproc)}"
 # a leak ends a test too; an undefined step prints the calls that led to it
 export ASAN_OPTIONS=${ASAN_OPTIONS:-detect_leaks=1} UBSAN_OPTIONS=${UBSAN_OPTIONS:-print_stacktrace=1}
 export LSAN_OPTIONS=${LSAN_OPTIONS:-suppressions=$root/tests/lsan.supp}   # (what a library keeps to the end)
+# (ThreadSanitizer: a report ends the test; a lock's second order is shown with both stacks)
+export TSAN_OPTIONS=${TSAN_OPTIONS:-suppressions=$root/tests/tsan.supp second_deadlock_stack=1 history_size=4}
 ctest --test-dir "$build" --output-on-failure --timeout 600

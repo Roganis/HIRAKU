@@ -170,7 +170,7 @@ if(TARGET hiraku_host AND CMAKE_SYSTEM_NAME STREQUAL "Linux" AND NOT CMAKE_CROSS
   add_library(fake_asound SHARED host/fake_asound.c)
   set_target_properties(fake_asound PROPERTIES PREFIX "lib" OUTPUT_NAME "asound" SUFFIX ".so.2"
                         LIBRARY_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/fake-asound)
-  if(HK_SANITIZE)   # (it stands for the system's library, which isn't built with them either: HIRAKU
+  if(HK_SANITIZE OR HK_SANITIZE_THREAD)   # (it stands for the system's library, which isn't built with them either: HIRAKU
     target_compile_options(fake_asound PRIVATE -fno-sanitize=all)   # calls it by its own declarations)
   endif()
   add_executable(test_alsa_lost host/test_alsa_lost.cpp)

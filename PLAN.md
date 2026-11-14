@@ -152,7 +152,6 @@ Later work has no milestone number: high frame rates (§37), fast start-up (§38
 - (parked) M10/M11: the XT446's H8, ~55 % of the card: see §14.
 - (owner) M11: frame times on a real N100-class PC; none on hand.
 - (owner) M13: hands-on play of DJ Main with a turntable and pop'n buttons.
-- (build) M13: pop'n stage's lamps (`make_djpstage_lamps`) are listed by register, not decoded; `popnstex` is on hand since 2026-10-16, so they can be watched now.
 - (parked) M13: `bscompmx` and `popn1`: no media.
 - (build) M17: all of it: the song list checksum's coverage, the chart format, what else counts the songs.
 
@@ -260,7 +259,6 @@ Full history: docs/PLAN-HISTORY.md §16.
 What it took, found by cycle-stamped traces of both CPUs (`HK_DJ_ITRACE`, `HIRAKU_ITRACE_CYCLES`): Musashi's EC020 with `M68K_EMULATE_010` on; MAME's 68020 costs (no per-bit shift or rotate cost, MOVEM 3 a register, TRAP 24, the reset's 4, the slice checked before the first instruction: opt-in hooks, `third_party/musashi/HIRAKU.md`); the slice ended when an interrupt line changes; MAME's drive (seek from the head, IDX once a rotation, no IRQ at a PIO read's end: `AtaBus::pio_end_irq`); the K054539 status moving only at MAME's stream updates (`commit()`); a script's buttons a frame late as MAME's Lua (`Core::script_button_delay()`); 48 kHz sound handed on as it is (`Core::audio_rate()`).
 
 **Open**
-- (build) pop'n stage's lamps: see §5, M13.
 
 Full history: docs/PLAN-HISTORY.md §17.
 

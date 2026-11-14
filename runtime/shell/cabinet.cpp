@@ -548,11 +548,21 @@ std::vector<Lamp> make_mambo_lamps() {
     };
 }
 
-// pop'n stage: not decoded yet (popnstex can be watched now); listed by register and bit
+// pop'n stage (popnstex), read off its IO TEST, which lights a button's lamp while it is held:
+// the ten buttons and the three selection buttons in the second register, and the four lights
+// its first four buttons are named after ("LEFT R&G HLT"...) in the first. B13-B15 are never
+// lit there; B14 once, in the attract. The first register's bits 4-15 aren't used.
 std::vector<Lamp> make_djpstage_lamps() {
     std::vector<Lamp> l;
-    for (int r = 0; r < 2; r++)
-        for (int b = 0; b < 16; b++) l.push_back({"Light " + std::string(1, (char)('A' + r)) + std::to_string(b), "Lights (undecoded)", r, b});
+    add_run(l, "Button Lamp", "Buttons", 1, {0, 1, 2, 3, 4, 5, 6, 7, 8, 9});
+    l.push_back({"Left Selection Lamp", "Selection", 1, 10});
+    l.push_back({"Middle Selection Lamp", "Selection", 1, 11});
+    l.push_back({"Right Selection Lamp", "Selection", 1, 12});
+    l.push_back({"Left Red-Green Light", "Lights", 0, 2});
+    l.push_back({"Left Yellow-Blue Light", "Lights", 0, 3});
+    l.push_back({"Right Red-Green Light", "Lights", 0, 0});
+    l.push_back({"Right Yellow-Blue Light", "Lights", 0, 1});
+    for (int b = 13; b < 16; b++) l.push_back({"Light B" + std::to_string(b), "Lights (undecoded)", 1, b});
     for (int k = 0; k < 8; k++) l.push_back({"Status LED " + std::to_string(k + 1), "Board (diagnostic)", 2, k, true});
     return l;
 }

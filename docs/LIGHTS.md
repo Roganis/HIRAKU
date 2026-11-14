@@ -32,7 +32,7 @@ The names are the ones lights files and the socket use (table: `runtime/shell/ca
 | beatmania III | none known yet: MAME does not decode its lamp registers |
 | beatmania (DJ Main) | P1 Button Lamp 1–5, P2 Button Lamp 1–5, P1/P2 Start Lamp, Effect Lamp, Left/Right Red/Blue Highlight, Neon (SSR) (as MAME decodes them) |
 | pop'n music 1–3 (DJ Main) | Button Lamp 1–9, Top Lamp 1–5, Side Lamp 1–4: the same names as Firebeat pop'n. Worked out from what pop'n music 1 does with the bits; which top lamp is topmost isn't known |
-| pop'n stage (DJ Main) | not decoded yet: Light A0–A15, B0–B15 (the two registers' bits) |
+| pop'n stage (DJ Main) | Button Lamp 1–10, Left/Middle/Right Selection Lamp, Left/Right Red-Green Light, Left/Right Yellow-Blue Light (the four lights the IO TEST names after buttons 1–4); Light B13–B15 not seen lit in a test |
 | pop'n music 9–14 (Konami Python) | Button Lamp 1–9, Top Lamp 1–5, Side Lamp 1–4: the same names again. Read off the game's LAMP CHECK (test mode, I/O CHECK): SW-LAMP 1–9, HI-LAMP 1–5, LEFT-LAMP 1–2 then RIGHT-LAMP 1–2. Which top lamp is topmost isn't known |
 
 Every cabinet also has **Status LED 1–8**: the board's diagnostic LEDs, which blink while the game runs, except the Konami Python ones (the interface board's LEDs aren't emulated).

@@ -624,6 +624,8 @@ int main(int argc, char **argv) {
     }
     if (!script_path.empty() && !script::load(script_path, out)) return 2;
     if (!macro::load(opt.root + "/games/" + game + "/macros.txt")) return 2;
+    for (const std::string &d : mod_dirs)   // a mod's own codes, after the game's (docs/MODS.md)
+        if (!macro::load(d + "/macros.txt")) return 2;
     for (const auto &m : macro_specs)
         if (!macro::schedule(m)) return 2;
     int script_snaps = 0;

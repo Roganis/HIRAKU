@@ -31,6 +31,15 @@ holds for memory patches too: of two `[[patch]]`es that expect the same bytes, t
 in; one with no `original` (written every frame) is left out where a mod before it patches, and
 the log says so.
 
+## Codes a mod types (`macros.txt`)
+
+A mod's folder can hold a `macros.txt`, the same format as a game's own
+(`games/<game>/macros.txt`, described in `runtime/host/macro.h`): button codes typed for the
+player. With the mod on, its macros come after the game's, the mods' in their order, both in the
+game (Ctrl+1 to Ctrl+9 type the first nine) and on the launcher's **Unlocks…** page, where a
+macro with an `at` line can be ticked to be typed at every start. A mod made of codes alone needs
+no `mod.toml`.
+
 ## The game's files at their own paths (as ifs_layeredfs)
 
 The PC-based BEMANI games are modded with [ifs_layeredfs](https://github.com/mon/ifs_layeredfs):

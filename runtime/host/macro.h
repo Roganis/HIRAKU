@@ -17,6 +17,9 @@
 //                                    default: the games miss shorter taps when they stall)
 //   end
 //
+// A mod can bring a macros.txt of its own: its macros come after the game's, the mods' in their
+// order (runtime/main.cpp, launcher/unlocksdialog.cpp: the same numbering for Ctrl+1..9).
+//
 // Steps run one after another, a tap every `gap` frames. Inputs go through core().set_input,
 // like the input scripts', alongside the player's own.
 #pragma once

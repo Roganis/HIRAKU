@@ -354,7 +354,7 @@ void lay_files(const std::string &dir, const std::string &name, const std::set<s
         }
         if (!it->is_regular_file()) continue;
         std::string rel = utf8(fs::relative(it->path(), root), true);
-        if (rel == "mod.toml" || named.count(rel)) continue;
+        if (rel == "mod.toml" || rel == "macros.txt" || named.count(rel)) continue;   // (macros.txt: its codes, macro.h)
         files.push_back(rel);
     }
     if (files.empty()) return;

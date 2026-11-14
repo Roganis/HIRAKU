@@ -24,29 +24,42 @@
 
 static QString gameFile(const QString &game, const QString &name) { return cfg::rootDir() + "/games/" + game + "/" + name; }
 
-bool UnlocksDialog::available(const QString &game) {
-    return QFileInfo::exists(gameFile(game, "unlocks.toml")) || QFileInfo::exists(gameFile(game, "macros.txt"));
+// The game's macros.txt, then each mod's that is on, in their order: the game numbers them so too
+// (runtime/main.cpp)
+static QStringList macroFiles(const QString &game) {
+    QStringList files{gameFile(game, "macros.txt")};
+    for (const QString &m : cfg::modsOn(game)) files << cfg::modPath(game, m) + "/macros.txt";
+    return files;
 }
 
-// The names, texts and `at` lines of macros.txt; the game itself reads the steps.
+bool UnlocksDialog::available(const QString &game) {
+    if (QFileInfo::exists(gameFile(game, "unlocks.toml"))) return true;
+    for (const QString &f : macroFiles(game))
+        if (QFileInfo::exists(f)) return true;
+    return false;
+}
+
+// The names, texts and `at` lines of the macros.txt files; the game itself reads the steps.
 QList<UnlocksDialog::Macro> UnlocksDialog::macros(const QString &game) {
     QList<Macro> list;
-    QFile f(gameFile(game, "macros.txt"));
-    if (!f.open(QIODevice::ReadOnly | QIODevice::Text)) return list;
     static const QRegularExpression line(R"re(^\s*(\w+)\s*(?:"([^"]*)"|(\S+))?)re");
-    QTextStream in(&f);
-    bool inside = false;
-    while (!in.atEnd()) {
-        auto m = line.match(in.readLine());
-        if (!m.hasMatch()) continue;
-        QString key = m.captured(1), arg = m.captured(2).isEmpty() ? m.captured(3) : m.captured(2);
-        if (key == "macro") {
-            list.push_back({arg, {}, false});
-            inside = true;
-        } else if (!inside) continue;
-        else if (key == "end") inside = false;
-        else if (key == "text") list.back().text = arg;
-        else if (key == "at") list.back().atStart = true;
+    for (const QString &path : macroFiles(game)) {
+        QFile f(path);
+        if (!f.open(QIODevice::ReadOnly | QIODevice::Text)) continue;
+        QTextStream in(&f);
+        bool inside = false;
+        while (!in.atEnd()) {
+            auto m = line.match(in.readLine());
+            if (!m.hasMatch()) continue;
+            QString key = m.captured(1), arg = m.captured(2).isEmpty() ? m.captured(3) : m.captured(2);
+            if (key == "macro") {
+                list.push_back({arg, {}, false});
+                inside = true;
+            } else if (!inside) continue;
+            else if (key == "end") inside = false;
+            else if (key == "text") list.back().text = arg;
+            else if (key == "at") list.back().atStart = true;
+        }
     }
     return list;
 }

@@ -470,12 +470,25 @@ bool sixable(const Node &n) {
     return true;
 }
 
+// Names the format can hold at all: one to 64 bytes (a name's length is a byte, less one, with a
+// flag in it). Text with another is not kbin's to pack: written anyway, it was kbin nothing reads
+// (found by tests/fuzz/fuzz_kbin).
+bool nameable(const Node &n) {
+    auto ok = [](const std::string &s) { return !s.empty() && s.size() <= 64; };
+    if (!ok(n.name)) return false;
+    for (const auto &[k, v] : n.attrs)
+        if (!ok(k)) return false;
+    for (const auto &k : n.kids)
+        if (!nameable(*k)) return false;
+    return true;
+}
+
 }  // namespace
 
 bool from_text(const std::string &xml, std::string &bin) {
     Node root;
     size_t i = 0;
-    if (!parse_xml(xml, i, root)) return false;
+    if (!parse_xml(xml, i, root) || !nameable(root)) return false;
     Writer w;
     w.six = sixable(root);
     if (!w.node(root)) return false;

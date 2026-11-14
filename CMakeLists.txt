@@ -63,6 +63,13 @@ if(HK_SANITIZE)
   add_compile_options(-fsanitize=address,undefined -fno-sanitize-recover=undefined -fno-omit-frame-pointer)
   add_link_options(-fsanitize=address,undefined)
 endif()
+# HK_FUZZ: the fuzz targets (tests/fuzz/, tools/fuzz.sh): clang's libFuzzer with the same two
+# sanitizers, everything built so that the fuzzer sees which code its inputs reach
+option(HK_FUZZ "build the fuzz targets (clang)" OFF)
+if(HK_FUZZ)
+  add_compile_options(-fsanitize=fuzzer-no-link,address,undefined -fno-sanitize-recover=undefined -fno-omit-frame-pointer)
+  add_link_options(-fsanitize=address,undefined)
+endif()
 set(HK_PGO_OK OFF)
 if((HK_PGO_GENERATE OR HK_PGO_DIR) AND NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   message(WARNING "PGO needs clang (tools/pgo.py configures it): building without")

@@ -30,11 +30,14 @@ Fdc37c665 *g_fdc = nullptr;
 std::function<void()> g_fdc_done;
 Timer g_fdc_timer("fdc", [] { if (g_fdc_done) g_fdc_done(); });
 
+// READ DATA (0x06) and READ DELETED DATA (0x0c): the same read, with or without MT/MFM/SK
+bool is_read(uint8_t c) { return (c & 0x1f) == 0x06 || (c & 0x1f) == 0x0c; }
+
 // ---- with a disk: MAME's names for the bits ------------------------------------------------
 enum : uint8_t { MSR_CB = 0x10, MSR_EXM = 0x20, MSR_DIO = 0x40, MSR_RQM = 0x80 };
 enum : uint8_t { ST0_EC = 0x10, ST0_SE = 0x20, ST0_FAIL = 0x40, ST0_UNK = 0x80, ST0_ABRT = 0xc0 };
 enum : uint8_t { ST1_MA = 0x01, ST1_NW = 0x02, ST1_ND = 0x04, ST1_OR = 0x10, ST1_DE = 0x20, ST1_EN = 0x80 };
-enum : uint8_t { ST2_WC = 0x10, ST2_DD = 0x20 };
+enum : uint8_t { ST2_WC = 0x10, ST2_DD = 0x20, ST2_CM = 0x40 };
 enum : uint8_t { ST3_TS = 0x08, ST3_T0 = 0x10, ST3_RY = 0x20, ST3_WP = 0x40 };
 enum : uint8_t { FIF_THR = 0x0f, FIF_POLL = 0x10, FIF_DIS = 0x20, FIF_EIS = 0x40 };
 enum {
@@ -493,6 +496,7 @@ int Fdc37c665::check_command() const {
     switch (c & 0x1f) {
     case 0x05: return n == 9 ? C_WRITE_DATA : C_INCOMPLETE;
     case 0x06: return n == 9 ? C_READ_DATA : C_INCOMPLETE;
+    case 0x0c: return n == 9 ? C_READ_DATA : C_INCOMPLETE;   // READ DELETED DATA
     case 0x0a: return n == 2 ? C_READ_ID : C_INCOMPLETE;
     }
     return C_INVALID;
@@ -507,7 +511,7 @@ void Fdc37c665::fifo_write(uint8_t v) {
         const int cmd = check_command();
         if (cmd == C_INCOMPLETE) break;
         if (cmd == C_INVALID) {
-            // READ TRACK, FORMAT TRACK, the deleted-data and scan commands: no beatmania III uses them
+            // READ TRACK, FORMAT TRACK, WRITE DELETED DATA and the scan commands: no beatmania III uses them
             fprintf(stderr, "fdc: unsupported command %02x\n", command_[0]);
             phase_ = PH_RESULT;
             result_buf_[0] = ST0_UNK;
@@ -691,7 +695,7 @@ void Fdc37c665::command_done() {
     xfer_in_progress_ = false;
     // the chip: "reads require the host to remove the remaining data so that the result phase may
     // be entered" (MAME enters it at once, and what the FIFO still held is gone)
-    if (!mame_fifo_ && (command_[0] & 0x1f) == 0x06 && fifo_pos_ && internal_drq_) {
+    if (!mame_fifo_ && is_read(command_[0]) && fifo_pos_ && internal_drq_) {
         result_waits_ = true;
         return;
     }
@@ -764,7 +768,7 @@ void Fdc37c665::xfer_at(Xfer x, uint64_t when) {
 // The command is taken (and, for a read with implied seeks on, the head on its cylinder): look for the sector
 void Fdc37c665::head_loaded(uint64_t t) {
     Unit &u = unit_[xunit_];
-    if ((command_[0] & 0x1f) == 0x06 && (fifocfg_ & FIF_EIS) && u.pcn != command_[2]) {
+    if (is_read(command_[0]) && (fifocfg_ & FIF_EIS) && u.pcn != command_[2]) {
         u.st0 |= ST0_SE;
         if (xunit_ == 0) step(u.pcn > command_[2]);
         xfer_at(X_STEP_SIGNAL, t + ticks_from_us(2.5));
@@ -834,7 +838,8 @@ bool Fdc37c665::next_sector() {
 void Fdc37c665::xfer_event() {
     const uint64_t t = xt_;
     Unit &u = unit_[xunit_];
-    const int op = command_[0] & 0x1f;                   // 0x06 read, 0x05 write, 0x0a read ID
+    const int op = command_[0] & 0x1f;                   // 0x06 read, 0x0c read deleted, 0x05 write, 0x0a read ID
+    const bool read = is_read(command_[0]);
     switch (x_) {
     case X_STEP_SIGNAL: xfer_at(X_STEP_TIME, t + delay_cycles(500 * (16 - (spec_ >> 12)))); break;
     case X_STEP_TIME:
@@ -860,17 +865,28 @@ void Fdc37c665::xfer_event() {
         st1_ &= ~ST1_MA;
         st1_ |= ST1_ND;
         if (memcmp(id, command_ + 2, 4) != 0) {
-            if (op == 0x06 && id[0] != command_[2]) st2_ |= ST2_WC;
+            if (read && id[0] != command_[2]) st2_ |= ST2_WC;
             scan_next(t + 1);
             break;
         }
         st1_ &= ~ST1_ND;
-        if (op == 0x06) st2_ &= ~ST2_WC;
+        if (read) st2_ &= ~ST2_WC;
+        // every sector of an image has a normal data mark: READ DELETED DATA meets the "other" mark
+        // (control mark). With SK the sector is skipped unread (the data sheet; MAME reads it anyway)
+        if (op == 0x0c) {
+            st2_ |= ST2_CM;
+            if (command_[0] & 0x20) {
+                const uint64_t end = scan_rev_ + (uint64_t)(kFirstSector + (scan_sector_ + 1) * kSectorSpan) * kByteTicks;
+                if (next_sector()) command_done();
+                else scan_begin(end);
+                break;
+            }
+        }
         xfer_in_progress_ = true;
         sector_at_ = scan_rev_ + (uint64_t)(kFirstSector + scan_sector_ * kSectorSpan) * kByteTicks;
         byte_ = 0;
         data_lost_ = false;
-        if (op == 0x06) {
+        if (read) {
             fifo_expect(kSectorBytes, false);
             xfer_at(X_READ, sector_at_ + (uint64_t)(kData + 1) * kByteTicks);   // its first byte, read whole
         } else {
@@ -891,6 +907,12 @@ void Fdc37c665::xfer_event() {
             u.st0 |= ST0_FAIL;
             st1_ |= ST1_DE;
             st2_ |= ST2_DD;
+            command_done();
+        } else if (op == 0x0c && (st2_ & ST2_CM)) {
+            // READ DELETED DATA (no SK) on a normal data mark: this sector read, then the end, the
+            // sector's ID as it was (the data sheet: "address not incremented, next sector not
+            // searched for"; MAME the same). beatmania III The Final reads a player's disk's boot
+            // sector this way (CC 00 00 00 01 02 12 1B FF) before writing over its saves
             command_done();
         } else if (next_sector()) {
             command_done();

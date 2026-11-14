@@ -249,6 +249,13 @@ if(TARGET hiraku-pc-test-vsock AND HK_WINE AND (NOT WIN32 OR CMAKE_CROSSCOMPILIN
   add_test(NAME pc_vsock COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/pc/test_vsock.sh ${CMAKE_BINARY_DIR})
   set_tests_properties(pc_vsock PROPERTIES RESOURCE_LOCK relay_5740 TIMEOUT 120)
 endif()
+# hiraku-pc with a game of HIRAKU's own and no game's data (tests/pc/selfgame.c): the board's DLL
+# hooked into it, its pictures in step, its pad, its sound, its files by drive letters, under
+# Wine. Wine draws through X: skipped where there is no display
+if(TARGET hiraku-pc-selfgame AND TARGET hiraku-pc AND HK_WINE AND (NOT WIN32 OR CMAKE_CROSSCOMPILING))
+  add_test(NAME pc_selfgame COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/pc/test_selfgame.sh ${CMAKE_BINARY_DIR})
+  set_tests_properties(pc_selfgame PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 900 RUN_SERIAL TRUE)
+endif()
 
 # The names a PC game is given for folders its code page can't write (runtime/pc/gamepath.h under
 # Wine; on Windows hk::sys::plain_path, which this checks when run there)

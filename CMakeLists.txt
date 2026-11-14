@@ -359,6 +359,15 @@ if(HK_PC_DLL_CC)
     DEPENDS tests/pc/test_vsock.c runtime/pc/vsock.c runtime/pc/cabinet.h
     COMMENT "pc/test_vsock.exe (32-bit)")
   add_custom_target(hiraku-pc-test-vsock ALL DEPENDS ${CMAKE_BINARY_DIR}/pc/test_vsock.exe)
+  # HIRAKU's own "game" for hiraku-pc, with no game's data (tests/pc/selfgame.c): it loads the
+  # board's DLL, reads the pad, draws with Direct3D 9, plays a sound. tests/pc/test_selfgame.sh
+  # runs it under hiraku-pc and Wine
+  add_custom_command(OUTPUT ${CMAKE_BINARY_DIR}/pc/selfgame.exe
+    COMMAND ${HK_PC_DLL_CC} --target=i686-w64-mingw32 ${HK_PC_DLL_SYS} -O2 -Wall -Wextra -fuse-ld=lld -static
+            -o ${CMAKE_BINARY_DIR}/pc/selfgame.exe ${CMAKE_SOURCE_DIR}/tests/pc/selfgame.c -ld3d9 -ldsound -luser32 -lgdi32
+    DEPENDS tests/pc/selfgame.c
+    COMMENT "pc/selfgame.exe (32-bit)")
+  add_custom_target(hiraku-pc-selfgame ALL DEPENDS ${CMAKE_BINARY_DIR}/pc/selfgame.exe)
   # The 32-bit AVS2 PC games (runtime/pc32/, PLAN.md section 35): hiraku-pc32.exe, the loader that
   # starts Konami's AVS2 and the game's DLL, with the DLLs above as its cabinet. Into pc/.
   add_custom_command(OUTPUT ${CMAKE_BINARY_DIR}/pc/hiraku-pc32.exe

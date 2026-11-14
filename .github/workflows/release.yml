@@ -196,8 +196,9 @@ jobs:
             nasm python p7zip zip curl
       # (before the build is set up: tests/CMakeLists.txt gives the tests to Wine if it finds it; a
       # release's build has no tests, and Wine then tries its package: tools/smoke.sh)
+      # (and a display that isn't one, for the one test where a game draws: tests/pc/test_selfgame.sh)
       - name: Wine, to run the unit tests and try the package
-        run: pacman -S --noconfirm --needed wine
+        run: pacman -S --noconfirm --needed wine xorg-server-xvfb mesa
       - uses: actions/checkout@v7
       - name: Qt's version
         id: qt
@@ -239,6 +240,17 @@ jobs:
         env:   # (Wine's folder where the job's user owns the folder above it: not the runner's temporary one)
           WINEPREFIX: /tmp/hiraku-wine
           WINEDEBUG: -all
+      # hiraku-pc.exe with a game of HIRAKU's own and no game's data (tests/pc/selfgame.c): the
+      # board's DLL hooked into it, its pictures in step, its pad, its sound and its files, as Windows
+      # runs them. Wine's Direct3D draws through X, so on a display made for it (Mesa's software
+      # OpenGL); a step of its own, so that no other test finds a display it didn't expect.
+      - name: The self-test game under hiraku-pc
+        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+        run: xvfb-run -a -s "-screen 0 1280x1024x24" ctest --test-dir build/release-windows -R pc_selfgame --output-on-failure
+        env:
+          WINEPREFIX: /tmp/hiraku-wine
+          WINEDEBUG: -all
+          HK_PC_SELFGAME: 1
       - uses: actions/upload-artifact@v7
         with:
           retention-days: ${{ startsWith(github.ref, 'refs/tags/v') && 90 || 14 }}

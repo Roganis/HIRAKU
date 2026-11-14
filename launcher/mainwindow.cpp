@@ -128,10 +128,13 @@ static QString unitState(const Game &g);
 static QString nvramSeed(const Game &g);
 static bool firstBoot(const Game &g);
 
-// The window's name: "HIRAKU ~completeMIX~" while the newest games are listed (secretKeys)
+// The window's name: "HIRAKU ~completeMIX~" while the newest games are listed (secretKeys). Qt adds
+// " — " and the application's display name to a title that doesn't end with it: that changes too
 static QString mainTitle() {
-    QString t = cfg::settings().value("ui/pc64").toBool() ? "HIRAKU ~completeMIX~" : "HIRAKU";
-    return upd::currentVersion().isEmpty() ? t : t + " " + upd::currentVersion();
+    const bool mix = cfg::settings().value("ui/pc64").toBool();
+    QGuiApplication::setApplicationDisplayName(mix ? "HIRAKU ~completeMIX~" : "HIRAKU");
+    if (mix) return "HIRAKU ~completeMIX~";
+    return upd::currentVersion().isEmpty() ? QString("HIRAKU") : "HIRAKU " + upd::currentVersion();
 }
 
 MainWindow::MainWindow() {

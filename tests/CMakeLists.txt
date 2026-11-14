@@ -344,6 +344,12 @@ if(Python3_Interpreter_FOUND AND Python3_VERSION VERSION_GREATER_EQUAL 3.11)
   endif()
 endif()
 # tools/update.py download: a package the release gives no SHA-256 for, or another's, isn't unpacked
+# tools/unlock.py (it edits a game's saved memory) over every games/*/unlocks.toml and saves made
+# up; tools/mameset.py (which MAME set a file is) against a MAME made up. No game's data.
+if(Python3_Interpreter_FOUND AND Python3_VERSION VERSION_GREATER_EQUAL 3.11 AND NOT CMAKE_CROSSCOMPILING)
+  add_test(NAME tools_unlock COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/tools/test_unlock.py)
+  add_test(NAME tools_mameset COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/tools/test_mameset.py)
+endif()
 # The Python tools read over without being run (tools/lint.py): each compiles, with warnings as
 # errors, and reads no name it doesn't define; and the lint's own test
 if(Python3_Interpreter_FOUND AND NOT CMAKE_CROSSCOMPILING)

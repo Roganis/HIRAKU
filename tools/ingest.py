@@ -1331,7 +1331,7 @@ def main() -> int:
                     "the ROMs are copied either way. Default: linked or copied in")
     ap.add_argument("--nvram-seed", metavar="DIR", help="System 573: a MAME NVRAM folder (nvram/<set>/) with the game "
                     "installed; kept as the game's starting saves (a folder named nvram/<set> is told by itself)")
-    args = ap.parse_args()
+    args = ap.parse_intermixed_args()   # (a file after an option too, with any Python: before 3.12 only the first run of them was taken)
     # a MAME nvram/<set>/ folder among the inputs is the starting saves, not a set of loose ROMs
     for f in list(args.inputs):
         if os.path.isdir(f) and os.path.basename(os.path.dirname(os.path.normpath(f))) == "nvram":

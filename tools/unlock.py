@@ -651,7 +651,7 @@ def main() -> int:
     ap.add_argument("set", nargs="*", metavar="ID=VALUE")
     ap.add_argument("--nvram")
     ap.add_argument("--json", action="store_true")
-    a = ap.parse_args()
+    a = ap.parse_intermixed_args()   # (ID=VALUE after an option too: Python before 3.12 took none there, and the launcher puts them last)
     nvram = a.nvram or default_nvram(a.game)
     try:
         spec = load(a.game)

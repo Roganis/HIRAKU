@@ -36,6 +36,11 @@ int input_binding_event(const std::string &binding, const SDL_Event &e);
 void input_joystick_added(unsigned int instance_id);   // hot-plugged controller
 void input_joystick_removed(unsigned int instance_id); // unplugged
 void input_update(double elapsed_ms);                 // turntable keys, analog axes
+// For the game menu's plain gamepads (runtime/menu/pads.h). Whether the bindings file, not the
+// family's defaults, names this controller: it is then the cabinet's controls. And a controller
+// left out of the bindings from now on (what it held is let go): the menu reads it itself
+bool input_joystick_in_file(unsigned int instance_id);
+void input_joystick_leave(unsigned int instance_id, bool leave);
 std::string input_describe();                         // the active bindings, for --help
 // When the input the core is being given (Core::set_input) happened, on the steady clock: the
 // controller's or keyboard's own event time, so a press between two frames keeps its place

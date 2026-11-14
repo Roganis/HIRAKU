@@ -152,6 +152,9 @@ const std::map<std::string, Family> &families() {
 
 const Family &family_of(const std::string &family) {
     static const Family none{{}, {{"10-key 8 / 2", "choose a game"}, {"10-key 4 / 6", "change shelf"}, {"10-key Enter", "play"}}};
+    // a plain gamepad's (menu/pads.h): no cabinet's controls, read by the menu itself
+    static const Family pad{{}, {{"D-pad up / down", "choose a game"}, {"D-pad left / right", "change shelf"}, {"A or Start", "play"}}};
+    if (family == "gamepad") return pad;
     const auto &all = families();
     const auto f = all.find(family);
     return f != all.end() ? f->second : none;

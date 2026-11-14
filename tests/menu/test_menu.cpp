@@ -13,12 +13,17 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <map>
 #include <set>
 #include <string>
+#include <vector>
 
 #include "host/menukey.h"
 #include "host/menupic.h"
 #include "menu/menu.h"
+#include "menu/pads.h"
+
+#include <SDL3/SDL.h>
 #include "shell/cabinet.h"
 
 using namespace hk;
@@ -265,6 +270,85 @@ static void test_picture(const std::string &dir) {
     std::filesystem::remove(file);
 }
 
+// A plain gamepad (menu/pads.h), one SDL makes up: its d-pad and stick choose and change shelf, A
+// and Start play; what it holds when first seen does nothing until let go; a controller that is
+// the cabinet's is left alone
+static void test_pads() {
+    SDL_SetHint(SDL_HINT_VIDEO_DRIVER, "dummy");
+    if (!SDL_Init(SDL_INIT_JOYSTICK | SDL_INIT_GAMEPAD)) {
+        printf("no SDL gamepads here (%s): the gamepad's part not run\n", SDL_GetError());
+        return;
+    }
+    const auto plug = [](const char *name) {
+        SDL_VirtualJoystickDesc d;
+        SDL_INIT_INTERFACE(&d);
+        d.type = SDL_JOYSTICK_TYPE_GAMEPAD;
+        d.naxes = SDL_GAMEPAD_AXIS_COUNT, d.nbuttons = SDL_GAMEPAD_BUTTON_DPAD_RIGHT + 1;
+        d.name = name;
+        return SDL_AttachVirtualJoystick(&d);
+    };
+    const SDL_JoystickID id = plug("HIRAKU test gamepad"), cabinet = plug("HIRAKU test cabinet controls");
+    SDL_Joystick *joy = id ? SDL_OpenJoystick(id) : nullptr, *cab_joy = cabinet ? SDL_OpenJoystick(cabinet) : nullptr;
+    if (!joy || !cab_joy || !SDL_IsGamepad(id)) {
+        printf("SDL can't make a gamepad up here (%s): the gamepad's part not run\n", SDL_GetError());
+        SDL_Quit();
+        return;
+    }
+    // held when the menu opens: down on the d-pad (as a pop'n controller's adapter holds it)
+    SDL_SetJoystickVirtualButton(joy, SDL_GAMEPAD_BUTTON_DPAD_DOWN, true);
+    SDL_UpdateJoysticks();
+    menu::Pads pads;
+    std::vector<uint32_t> taken;
+    // (only the two made up here: a real controller plugged into this PC is nobody's business)
+    pads.set([&](uint32_t pad) { return pad != id; }, [&](uint32_t pad) { taken.push_back(pad); });
+    std::map<std::string, bool> down;
+    std::map<std::string, menu::Act> acts;
+    const auto poll = [&] {
+        SDL_UpdateJoysticks();
+        SDL_UpdateGamepads();
+        return pads.poll([&](const std::string &name, menu::Act a, bool d) { down[name] = d, acts[name] = a; });
+    };
+    const auto held = [&](menu::Act a) {
+        int n = 0;
+        for (const auto &[name, d] : down) n += d && acts[name] == a;
+        return n;
+    };
+    CHECK(!poll() && pads.count() == 1 && taken == std::vector<uint32_t>{id});   // the cabinet's isn't taken
+    CHECK(held(menu::Act::next) == 0);                                             // what it held at first does nothing
+    SDL_SetJoystickVirtualButton(joy, SDL_GAMEPAD_BUTTON_DPAD_DOWN, false);
+    CHECK(!poll());
+    SDL_SetJoystickVirtualButton(joy, SDL_GAMEPAD_BUTTON_DPAD_DOWN, true);
+    CHECK(poll() && held(menu::Act::next) == 1);   // let go and pressed: a move
+    CHECK(!poll() && held(menu::Act::next) == 1);  // still held: no new press
+    SDL_SetJoystickVirtualButton(joy, SDL_GAMEPAD_BUTTON_DPAD_DOWN, false);
+    SDL_SetJoystickVirtualButton(joy, SDL_GAMEPAD_BUTTON_DPAD_UP, true);
+    CHECK(poll() && held(menu::Act::next) == 0 && held(menu::Act::prev) == 1);
+    SDL_SetJoystickVirtualButton(joy, SDL_GAMEPAD_BUTTON_DPAD_UP, false);
+    SDL_SetJoystickVirtualAxis(joy, SDL_GAMEPAD_AXIS_LEFTX, 30000);   // the stick to the right: the next shelf
+    CHECK(poll() && held(menu::Act::shelf_next) == 1 && held(menu::Act::prev) == 0);
+    SDL_SetJoystickVirtualAxis(joy, SDL_GAMEPAD_AXIS_LEFTX, 4000);    // not half way: nothing
+    CHECK(!poll() && held(menu::Act::shelf_next) == 0);
+    SDL_SetJoystickVirtualAxis(joy, SDL_GAMEPAD_AXIS_LEFTX, -30000);
+    CHECK(poll() && held(menu::Act::shelf_prev) == 1);
+    SDL_SetJoystickVirtualAxis(joy, SDL_GAMEPAD_AXIS_LEFTX, 0);
+    for (const SDL_GamepadButton b : {SDL_GAMEPAD_BUTTON_SOUTH, SDL_GAMEPAD_BUTTON_START}) {
+        SDL_SetJoystickVirtualButton(joy, b, true);
+        CHECK(poll() && held(menu::Act::start) == 1);
+        SDL_SetJoystickVirtualButton(joy, b, false);
+        CHECK(!poll() && held(menu::Act::start) == 0);
+    }
+    SDL_SetJoystickVirtualButton(joy, SDL_GAMEPAD_BUTTON_EAST, true);   // the others do nothing
+    CHECK(!poll());
+    // the cabinet's own controller's buttons aren't the menu's
+    SDL_SetJoystickVirtualButton(cab_joy, SDL_GAMEPAD_BUTTON_SOUTH, true);
+    CHECK(!poll() && held(menu::Act::start) == 0);
+    CHECK(menu::legend(menu::kPadFamily).size() == 3 && menu::legend(menu::kPadFamily)[2].control == "A or Start");
+    SDL_CloseJoystick(joy);
+    SDL_CloseJoystick(cab_joy);
+    SDL_DetachVirtualJoystick(id);
+    SDL_DetachVirtualJoystick(cabinet);
+}
+
 int main(int argc, char **argv) {
     if (argc < 2) {
         fprintf(stderr, "test_menu GAMES_DIR [SCRATCH_DIR | --ppm FILE FAMILY [wide]]\n");
@@ -301,6 +385,7 @@ int main(int argc, char **argv) {
     test_cabinets(argv[1]);
     test_draw();
     test_picture(argc > 2 ? argv[2] : ".");
+    test_pads();
     if (g_failed) {
         fprintf(stderr, "%d checks failed\n", g_failed);
         return 1;

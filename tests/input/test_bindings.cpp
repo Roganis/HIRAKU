@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Host controls (runtime/host/input.h) with a controller SDL makes up: an input bound to a key and
 // to a hat direction or an axis's, held by one, isn't let go by the other; a controller unplugged
-// and plugged back in is the same joy<N>, and what it held is let go.
+// and plugged back in is the same joy<N>, and what it held is let go; a controller left out of the
+// bindings (the game menu's plain gamepad) presses nothing.
 //
 //   test_bindings      exit 0 when all hold (0 with a note where SDL has no joysticks to make up)
 #include <cstdio>
@@ -142,6 +143,29 @@ int main() {
     check(in["P1 Button 3"] == 1, "plugged back in: joy0 again, its button pressed");
     button(pad, 2, false);
     check(in["P1 Button 3"] == 0, "... and released");
+
+    // a controller someone else reads (the game menu's plain gamepad): the bindings leave it alone
+    check(hk::host::input_joystick_in_file(pad), "the bindings file names joy0: it is the cabinet's");
+    {
+        const SDL_JoystickID other = plug();
+        hk::host::input_joystick_added(other);
+        check(other && !hk::host::input_joystick_in_file(other), "a second controller the file doesn't name: nobody's");
+        SDL_DetachVirtualJoystick(other);
+        hk::host::input_joystick_removed(other);
+    }
+    button(pad, 2, true);
+    hk::host::input_joystick_leave(pad, true);
+    check(in["P1 Button 3"] == 0, "left out with a button held: released");
+    button(pad, 2, false);
+    button(pad, 2, true);
+    hat(pad, SDL_HAT_LEFT);
+    check(in["P1 Button 3"] == 0 && in["P1 Button 1"] == 0, "... and what it does is nobody's press");
+    button(pad, 2, false);
+    hat(pad, SDL_HAT_CENTERED);
+    hk::host::input_joystick_leave(pad, false);
+    button(pad, 2, true);
+    check(in["P1 Button 3"] == 1, "taken back: its button pressed again");
+    button(pad, 2, false);
 
     std::remove(file.c_str());
     SDL_Quit();

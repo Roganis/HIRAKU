@@ -18,6 +18,8 @@
 #include "../shell/cabinet.h"
 #include "../shell/core.h"
 #include "menu.h"
+#include "pads.h"
+#include "../host/input.h"
 
 namespace hk {
 
@@ -106,6 +108,7 @@ public:
 
     bool set_input(const std::string &name, int value) override {
         const menu::Act a = menu::action(family_, name);
+        if (a != menu::Act::none && value) by_pad_ = false;   // the cabinet's controls: their legend again
         if (name.find(" Wheel") != std::string::npos && name.find(" Wheel ") == std::string::npos) {   // Keyboardmania's, a position
             wheel_[name] = value;
             return true;
@@ -122,10 +125,11 @@ public:
         std::vector<float> sound((size_t)kFrameSamples * 2);
         for (;;) {
             keyboard();
+            gamepads();
             repeats();
             turns();
             state_.animate();
-            menu::draw(state_, family_, frame_, frame_px_.data(), w_, h_);
+            menu::draw(state_, by_pad_ ? menu::kPadFamily : family_, frame_, frame_px_.data(), w_, h_);
             lamps();
             mix(sound.data());
             if (sink_) sink_(sound.data(), kFrameSamples);
@@ -203,6 +207,19 @@ private:
 #endif
     }
 
+    // a plain gamepad (menu/pads.h): one the family's bindings file doesn't name, read as a gamepad.
+    // Its legend shows once it has been used, the cabinet's again when the cabinet's controls are
+    void gamepads() {
+#ifdef HK_WITH_SDL
+        if (!window_) return;
+        if (!pads_set_) {
+            pads_set_ = true;
+            pads_.set([](uint32_t id) { return host::input_joystick_in_file(id); }, [](uint32_t id) { host::input_joystick_leave(id, true); });
+        }
+        if (pads_.poll([this](const std::string &name, menu::Act a, bool down) { press(name, a, down); })) by_pad_ = true;
+#endif
+    }
+
     // --- lamps and the ticker ----------------------------------------------------
     void lamps() {
         const bool blink = frame_ / 20 % 2 == 0;
@@ -275,6 +292,8 @@ private:
 
     std::string family_ = "iidx", list_path_, choice_path_, notice_;
     bool wide_ = false, window_ = false;
+    menu::Pads pads_;
+    bool pads_set_ = false, by_pad_ = false;   // by_pad_: the last control used was a gamepad's
     int w_ = 640, h_ = 480;
     menu::State state_;
     std::vector<uint32_t> frame_px_;

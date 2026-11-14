@@ -43,6 +43,9 @@ std::vector<std::string> g_joy_dev;                   // each one's name as bind
 std::vector<std::string> g_joy_was;                   // ... and the name an unplugged one had (its slot is its again)
 int16_t g_axis_last[16][16];
 bool g_axis_seen[16][16];
+bool g_left[16];                                      // left out of the bindings (input_joystick_leave)
+std::set<std::string> g_file_devs;                    // the controllers the bindings file names, by name
+std::set<int> g_file_joys;                            // ... and by number
 double g_tt_scale = 1024.0 / 65536.0 * 4;             // turntable counts per axis unit (one wrap = 4 x 256)
 
 bool parse_binding(const std::string &b, Binding &out) {
@@ -100,13 +103,15 @@ bool parse_binding(const std::string &b, Binding &out) {
     return true;
 }
 
-void load_text(const std::string &text, const char *origin) {
+void load_text(const std::string &text, const char *origin, bool file = false) {
     for (auto &en : cab::parse_list_file(text)) {
         std::vector<Binding> list;
         for (auto &b : en.items) {
             Binding bd{};
-            if (parse_binding(b, bd)) list.push_back(bd);
-            else fprintf(stderr, "%s:%d: cannot parse binding '%s'\n", origin, en.line, b.c_str());
+            if (parse_binding(b, bd)) {
+                list.push_back(bd);
+                if (file && bd.src != Src::key) bd.dev.empty() ? (void)g_file_joys.insert(bd.joy) : (void)g_file_devs.insert(bd.dev);
+            } else fprintf(stderr, "%s:%d: cannot parse binding '%s'\n", origin, en.line, b.c_str());
         }
         g_bind[en.name] = list;   // a later definition replaces the default
     }
@@ -235,6 +240,7 @@ void add_joystick(SDL_Joystick *j) {
     g_joy_dev[slot] = dev;
     if (slot < 16) {   // what the slot's last controller rested at, and where its axes were, is not this one's
         g_joy_seen[slot] = false;
+        g_left[slot] = false;
         memset(g_axis_known[slot], 0, sizeof g_axis_known[slot]);
         memset(g_rest_neg[slot], 0, sizeof g_rest_neg[slot]);
         memset(g_rest_pos[slot], 0, sizeof g_rest_pos[slot]);
@@ -253,7 +259,7 @@ void input_init(const std::string &file) {
     load_text(cab::default_bindings(core().family()), "defaults");
     if (!file.empty()) {
         std::ifstream in(file);
-        if (in) load_text(std::string((std::istreambuf_iterator<char>(in)), {}), file.c_str());
+        if (in) load_text(std::string((std::istreambuf_iterator<char>(in)), {}), file.c_str(), true);
         else fprintf(stderr, "input: cannot read %s (using defaults)\n", file.c_str());
     }
     int n = 0;
@@ -283,6 +289,21 @@ void input_joystick_removed(unsigned int id) {
     g_joys[k] = nullptr;
 }
 
+bool input_joystick_in_file(unsigned int id) {
+    const int k = joy_index(id);
+    return k >= 0 && (g_file_joys.count(k) || (!g_joy_dev[k].empty() && g_file_devs.count(g_joy_dev[k])));
+}
+
+void input_joystick_leave(unsigned int id, bool leave) {
+    const int k = joy_index(id);
+    if (k < 0 || k >= 16) return;
+    if (leave && !g_left[k])   // what it holds is let go: no event of its will say so
+        for (auto &[name, list] : g_bind)
+            for (Binding &b : list)
+                if (b.held && b.src != Src::key && bound_joy(b) == k) b.held = false, press(name, false);
+    g_left[k] = leave;
+}
+
 namespace {
 thread_local std::chrono::steady_clock::time_point g_event_time{};   // input_event's, while it runs
 }
@@ -308,6 +329,11 @@ void input_event(const SDL_Event &e) {
     struct Clear {
         ~Clear() { g_event_time = {}; }
     } clear;
+    if (e.type == SDL_EVENT_JOYSTICK_AXIS_MOTION || e.type == SDL_EVENT_JOYSTICK_BUTTON_DOWN ||
+        e.type == SDL_EVENT_JOYSTICK_BUTTON_UP || e.type == SDL_EVENT_JOYSTICK_HAT_MOTION) {
+        // a controller someone else reads (the game menu's plain gamepad): not the bindings'
+        if (const int j = joy_index(e.jbutton.which); j >= 0 && j < 16 && g_left[j]) return;
+    }
     if (e.type == SDL_EVENT_JOYSTICK_AXIS_MOTION) {
         const int j = joy_index(e.jaxis.which), a = e.jaxis.axis;
         if (j >= 0 && j < 16 && a < 16) {
@@ -462,7 +488,7 @@ void input_update(double ms) {
         // analog axis: follow its motion (wrapping, as turntable encoders do)
         for (auto &b : g_bind[base]) {
             int j = bound_joy(b);
-            if (b.src != Src::axis || j < 0 || j >= (int)g_joys.size() || !g_joys[j] || j >= 16 || b.index >= 16) continue;
+            if (b.src != Src::axis || j < 0 || j >= (int)g_joys.size() || !g_joys[j] || j >= 16 || b.index >= 16 || g_left[j]) continue;
             int16_t a = SDL_GetJoystickAxis(g_joys[j], b.index);
             if (g_axis_seen[j][b.index]) {
                 int d = (int)a - g_axis_last[j][b.index];

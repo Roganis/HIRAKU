@@ -558,7 +558,7 @@ if(SDL3_FOUND)
   endif()
   # hiraku-menu: the game menu, a list of the games chosen from with the cabinet's own controls, as
   # a core of the shell (runtime/menu/menu.h, PLAN.md section 43); the launcher starts it
-  add_library(hiraku_menu STATIC runtime/menu/menu.cpp runtime/menu/nav.cpp runtime/menu/draw.cpp)
+  add_library(hiraku_menu STATIC runtime/menu/menu.cpp runtime/menu/nav.cpp runtime/menu/draw.cpp runtime/menu/pads.cpp)
   target_include_directories(hiraku_menu PUBLIC runtime)
   target_link_libraries(hiraku_menu PUBLIC SDL3::SDL3)
   add_executable(hiraku-menu runtime/menu/core.cpp)

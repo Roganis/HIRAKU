@@ -1,0 +1,3 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// HIRAKU's icon (icon.png, as icon.ico) for the launcher's programs on Windows: hiraku.exe and HIRAKU.exe
+1 ICON "icon.ico"

@@ -8,8 +8,9 @@
 # hiraku/user, so its settings and saves stay in that folder (runtime/shell/userdir.h); without
 # one they go in %LOCALAPPDATA%\hiraku.
 #
-# The zip holds hiraku/bin (the games and the launcher hiraku.exe, stripped, with SDL3.dll: the
-# launcher's Qt is linked into it, tools/win-deps.sh), hiraku/games, hiraku/docs and an empty
+# The zip holds hiraku/HIRAKU.exe (which starts the launcher), hiraku/bin (the games and the
+# launcher hiraku.exe, stripped, with SDL3.dll: the launcher's Qt is linked into it,
+# tools/win-deps.sh), hiraku/games, hiraku/docs and an empty
 # hiraku/dumps. The binaries take the folder above them
 # as their root. Game data goes in with tools/pack-data.py, or tools/ingest.py on that PC.
 set -euo pipefail
@@ -28,9 +29,13 @@ mkdir -p "$d/bin" "$d/dumps"
 strip=$(command -v llvm-strip || command -v x86_64-w64-mingw32-strip)
 for f in "$build"/hiraku*.exe; do
   [ -f "$f" ] || continue
-  case $(basename "$f") in hiraku-recomp.exe) continue ;; esac
+  case $(basename "$f") in hiraku-recomp.exe|hiraku-start.exe) continue ;; esac
   "$strip" -o "$d/bin/$(basename "$f")" "$f"
 done
+# HIRAKU.exe in the top folder: starts bin\hiraku.exe (launcher/start.c), so the launcher is the
+# first thing seen on opening the folder (a .lnk names a whole path, which moving the folder breaks)
+if [ -f "$build/hiraku-start.exe" ]; then "$strip" -o "$d/HIRAKU.exe" "$build/hiraku-start.exe"
+else echo "no $build/hiraku-start.exe: the package has no HIRAKU.exe" >&2; fi
 cp "$build"/SDL3.dll "$d/bin/"
 # the PC games' DLLs (runtime/pc/), 32-bit, which hiraku-pc copies beside the game's program
 # (by name: a d3d9.dll there would be the 64-bit loader's Direct3D on Windows too)
@@ -82,7 +87,7 @@ done
 sed 's/$/\r/' > "$d/README.txt" <<'EOF'
 HIRAKU for Windows (64-bit Windows 10 or later): BEMANI arcade machines, for your own game data.
 
-Start the launcher: bin\hiraku.exe
+Start the launcher: HIRAKU.exe, in this folder (it starts bin\hiraku.exe)
 
 Add a game: drop its files on the launcher's window, or File > Add game files, all at once:
 the MAME ROM set (.zip, .7z, or a folder of its files) and its CHDs. HIRAKU tells the game from

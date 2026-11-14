@@ -18,7 +18,8 @@
 # blocks).
 # Faster with profile-guided optimisation: add -DHK_PGO_DIR=<this PC's build/pgo> (tools/pgo.py)
 #
-# The archive holds hiraku/bin (the binaries, stripped, with libSDL3 in bin/lib),
+# The archive holds hiraku/HIRAKU (a link to the launcher), hiraku/bin (the binaries, stripped,
+# with libSDL3 in bin/lib),
 # hiraku/games, hiraku/docs and an empty hiraku/dumps: the binaries take the folder
 # above them as their root. Game data goes in with tools/pack-data.py.
 set -euo pipefail
@@ -123,6 +124,9 @@ if [ -f "$d/bin/hiraku" ]; then
   mv "$d/bin/hiraku" "$d/bin/hiraku.bin"
   bundle_qt
 fi
+# HIRAKU in the top folder: a link to bin/hiraku, so the launcher is the first thing seen on opening
+# the folder (relative: the folder still works moved; bin/hiraku finds bin/ by the link's target)
+[ -f "$d/bin/hiraku" ] && ln -s bin/hiraku "$d/HIRAKU"
 sdl=""
 for f in "$build"/hiraku "$build"/hiraku-*; do   # the first binary that has SDL (hiraku-eamuse hasn't)
   [ -n "$sdl" ] || sdl=$(ldd "$f" 2>/dev/null | awk '/libSDL3/ {print $3}')
@@ -181,7 +185,7 @@ glibc=$(find "$d/bin" -type f \( -perm -u+x -o -name '*.so*' \) -exec objdump -T
 cat > "$d/README.txt" <<EOF
 HIRAKU for Linux (x86-64): BEMANI arcade machines, for your own game data.
 
-Start the launcher:  bin/hiraku
+Start the launcher:  HIRAKU, in this folder (a link to bin/hiraku)
 (a script: it starts bin/hiraku.bin with the Qt in bin/qt)
 
 Add a game: drop its files on the launcher's window, or File > Add game files, all at once:

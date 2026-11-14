@@ -37,15 +37,16 @@
 #include "shell/userdir.h"
 #include "shell/saves.h"
 #include "shell/sys.h"
-#ifdef HK_WITH_SDL
-#include "host/lights.h"
 #include "host/bio2.h"
 #include "host/popnio.h"
 #include "host/readers.h"
+#ifdef HK_WITH_SDL
+#include "host/lights.h"
 #include "host/notice.h"
 #include "host/warp.h"
 #include "host/window.h"
 #include "host/pacing.h"
+#endif
 
 // The options every core takes (--help prints them: a release has no source to read them in)
 static const char COMMON_OPTIONS[] = R"HK(  --frames N        stop after N video frames (default: run until killed)
@@ -168,7 +169,6 @@ static const char COMMON_OPTIONS[] = R"HK(  --frames N        stop after N video
                     Default with --window: 15; otherwise 0, at exit only. The game's results
                     are the same either way
 )HK";
-#endif
 
 #ifndef HK_ROOT
 #define HK_ROOT "."

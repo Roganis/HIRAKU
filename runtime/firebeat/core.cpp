@@ -176,7 +176,9 @@ public:
         }
         cfg.floppy = floppy_;
         cfg.mame_fdc = mame_fdc_;
+#ifdef HK_WITH_SDL
         fb::set_floppy_said([](const std::string &said) { hk::host::notice::hint({said}, 4); });
+#endif
         if (o.trace) cfg.trace_dir = o.out;
         cfg.ata_log = o.ata_log;
         fb::init(cfg);

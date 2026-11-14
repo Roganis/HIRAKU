@@ -429,7 +429,7 @@ public:
 
     bool init(const Options &o) override {
         if (autoplay_ && !has_autoplay(o.game.c_str()))
-            fprintf(stderr, "autoplay: not available for %s yet (pop'n music 9 only)\n", o.game.c_str());
+            fprintf(stderr, "autoplay: not available for %s yet (pop'n music 9-12 only)\n", o.game.c_str());
         opt_ = o;
         auto m = read_kv(o.root + "/dumps/" + o.game + "/machine.txt");
         if (m.empty() || m["core"] != "python") {
@@ -1207,13 +1207,20 @@ private:
     // flag (0x257084) to "mode == attract demo" (FUN_0010e570); while it is set, every note that
     // reaches the line is judged GREAT (FUN_0010cbe8). The play screen's button reader
     // (FUN_0010dd80) gives nothing in the demo, by its own test of the mode. The mod makes both
-    // behave as in the demo, outside it too. Written as PCSX2's patches are, at a vsync on the CPU
+    // behave as in the demo, outside it too. pop'n 10-12 have the same two tests, found by the code
+    // around them (10's demo is mode 3); 13 and 14 were compiled anew and aren't found that way yet. Written as PCSX2's patches are, at a vsync on the CPU
     // thread through the TLB, so the recompiler drops the blocks; checked each vsync, because the
     // program is loaded from the disk after boot.
     struct CodePatch { const char *game; uint32_t addr, was, now; };
     static constexpr CodePatch AUTOPLAY[] = {
         {"popn9", 0x10e644, 0x54430003, 0x00000000},   // bnel v0,v1 (mode != 2: flag = 0) -> nop
         {"popn9", 0x10dd9c, 0x10430036, 0x10000036},   // beq v0,v1 (mode == 2: no buttons) -> b
+        {"popn10", 0x113064, 0x54430003, 0x00000000},
+        {"popn10", 0x11256c, 0x10430036, 0x10000036},
+        {"popn11", 0x11362c, 0x54430003, 0x00000000},
+        {"popn11", 0x112b14, 0x10430036, 0x10000036},
+        {"popn12", 0x112394, 0x54430003, 0x00000000},
+        {"popn12", 0x111824, 0x10430036, 0x10000036},
     };
     static bool has_autoplay(const std::string &game) {
         for (const CodePatch &p : AUTOPLAY)

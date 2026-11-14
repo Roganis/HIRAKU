@@ -440,16 +440,36 @@ void PlayerVideo::composite(double t, uint32_t *rgb, int w, int h, const Picture
             m_want_pic = pic;
         }
     }
-    if (m_col.size() != (size_t)w || (w && m_col.back() != (uint32_t)((uint64_t)(w - 1) * c.w / w))) {
+    // Where the player's picture is on the screen (issue 16, measured on a beatmania IIDX 4th style
+    // cabinet's footage): as an NTSC picture, its 704 active samples a line (a Video CD's 352 pixels
+    // two each) 704 of the PlayStation's 640 pixels wide, starting 43 to the left of its picture,
+    // and its lines 3 above it, so its left and right edges and its last 3 lines are off the screen.
+    // A DVD's 720 pixels are a sample each, the 704 from the 8th (the same signal, not checked on a
+    // DVD cabinet). For another screen size, the same in proportion to 640 x 240.
+    if (m_col_for[0] != (unsigned)w || m_col_for[1] != (unsigned)h || m_col_for[2] != c.w || m_col_for[3] != c.h) {
+        m_col_for[0] = (unsigned)w, m_col_for[1] = (unsigned)h, m_col_for[2] = c.w, m_col_for[3] = c.h;
+        constexpr double kLeft = 43, kUp = 3;            // the 704 samples' start and the first line, off the screen
+        const double spp = c.w >= 704 ? 1.0 : 704.0 / c.w;   // samples a video pixel
+        const double first = (704 - c.w * spp) / 2;          // its first pixel's sample (a DVD's: -8)
         m_col.resize((size_t)w);
-        for (int x = 0; x < w; x++) m_col[(size_t)x] = (uint32_t)((uint64_t)x * c.w / w);
+        for (int x = 0; x < w; x++) {
+            const double sample = (x + 0.5) * 640.0 / w + kLeft;
+            const double vx = std::floor((sample - first) / spp);
+            m_col[(size_t)x] = vx >= 0 && vx < c.w ? (int32_t)vx : -1;
+        }
+        m_row.resize((size_t)h);
+        for (int y = 0; y < h; y++) {
+            const double vy = std::floor(((y + 0.5) * 240.0 / h + kUp) * c.h / 240.0);
+            m_row[(size_t)y] = vy >= 0 && vy < c.h ? (int32_t)vy : -1;
+        }
     }
-    // where the PlayStation's picture is black, the video (nearest pixel, scaled to the frame)
+    // where the PlayStation's picture is black, the video (nearest pixel)
     for (int y = 0; y < h; y++) {
-        const uint32_t *src = &m_rgb[(size_t)((uint64_t)y * c.h / h) * c.w];
+        if (m_row[(size_t)y] < 0) continue;
+        const uint32_t *src = &m_rgb[(size_t)m_row[(size_t)y] * c.w];
         uint32_t *row = rgb + (size_t)y * w;
         for (int x = 0; x < w; x++)
-            if (!(row[x] & 0x00ffffffu)) row[x] = src[m_col[(size_t)x]];
+            if (!(row[x] & 0x00ffffffu) && m_col[(size_t)x] >= 0) row[x] = src[m_col[(size_t)x]];
     }
 }
 

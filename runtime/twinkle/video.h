@@ -54,8 +54,8 @@ public:
         int hue = 0;            // signed, ~0.35 degree a step
     };
 
-    // Put the video at machine time t into rgb (w x h, 0xffRRGGBB) wherever it is black, scaled to
-    // the whole frame. Nothing when the player shows no picture.
+    // Put the video at machine time t into rgb (w x h, 0xffRRGGBB) wherever it is black, placed as
+    // a real cabinet shows it (place()). Nothing when the player shows no picture.
     void composite(double t, uint32_t *rgb, int w, int h, const Picture &pic);
 
     // for the exit report: commands taken, frames shown (the worker may have decoded a few more)
@@ -111,7 +111,8 @@ private:
     Picture m_want_pic;
     int64_t m_rgb_index = -1;
     Picture m_rgb_pic;
-    std::vector<uint32_t> m_col;       // each screen column's source column (for the last width)
+    std::vector<int32_t> m_col, m_row;  // each screen column's and row's source one, -1 none (for m_col_for)
+    unsigned m_col_for[4] = {};         // the screen's and the video's sizes they were made for
 
     // The worker decodes into m_queue; the emulation takes frames from it in order, waiting for
     // the one it needs if the worker hasn't got there, so the picture is the same on every run.

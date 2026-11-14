@@ -536,6 +536,40 @@ void SettingsDialog::audioPage(QVBoxLayout *v) {
     m_soundfont->setToolTip("The instruments of Keyboardmania's MIDI out (its keyboards' sound when a song plays them).");
     fk->addRow("SoundFont:", withBrowse(m_soundfont, false, this));
     v->addWidget(kbm);
+    // the launcher's music (launcher/music.h, runtime/midi/player.cpp)
+    auto *music = new QGroupBox("Music in the launcher");
+    auto *fm = new QFormLayout(music);
+    music->setToolTip("A small MIDI player, the Music panel under the details and the log (View > Music). It waits "
+                      "while a game or the game menu runs, and goes on afterwards.");
+    m_musicFolder = new QLineEdit(s.value("music/folder").toString());
+    m_musicFolder->setPlaceholderText(QDir::toNativeSeparators(cfg::musicDir()));
+    m_musicFolder->setToolTip("Where its MIDI files are (.mid, .midi, .kar, .rmi), its folders too. MIDI files dropped "
+                              "on the launcher's window play as well.");
+    fm->addRow("Folder:", withBrowse(m_musicFolder, true, this));
+    m_musicSynth = new QComboBox;
+    m_musicSynth->addItem("The first there is", "auto");
+    m_musicSynth->addItem("Keyboardmania's synth card", "card");
+    m_musicSynth->addItem("A SoundFont", "font");
+#ifdef Q_OS_WIN
+    m_musicSynth->addItem("Windows' own synth", "windows");
+#endif
+    m_musicSynth->setCurrentIndex(std::max(0, m_musicSynth->findData(s.value("music/synth", "auto").toString())));
+    m_musicSynth->setToolTip("What plays the notes. Keyboardmania's synth card: the Yamaha MU100B in its cabinet, "
+                             "emulated, once a Keyboardmania game is added (about a quarter of a CPU core while it "
+                             "plays). A SoundFont: the one below, else Keyboardmania's above, else the system's."
+#ifdef Q_OS_WIN
+                             " Windows' own synth: Microsoft GS Wavetable Synth, always there."
+#endif
+                             " The first there is: in that order.");
+    fm->addRow("Synth:", m_musicSynth);
+    m_musicFont = new QLineEdit(s.value("music/soundfont").toString());
+    m_musicFont->setPlaceholderText("default: Keyboardmania's above");
+    m_musicFont->setToolTip("A General MIDI SoundFont (.sf2) for the music.");
+    fm->addRow("SoundFont:", withBrowse(m_musicFont, false, this, "Choose a SoundFont", "SoundFonts (*.sf2);;All files (*)"));
+    m_musicShuffle = new QCheckBox("Shuffle");
+    m_musicShuffle->setChecked(s.value("music/shuffle", true).toBool());
+    fm->addRow(m_musicShuffle);
+    v->addWidget(music);
 }
 
 // The e-AMUSEMENT tab: the server, the PCBID and cards, the card readers
@@ -834,6 +868,10 @@ void SettingsDialog::accept() {
     if (m_audioExclusive) s.setValue("audio/exclusive", m_audioExclusive->isChecked());
     s.setValue("audio/buffer", m_audioBuffer->currentData().toInt());
     s.setValue("audio/soundfont", m_soundfont->text().trimmed());
+    s.setValue("music/folder", m_musicFolder->text().trimmed());
+    s.setValue("music/synth", m_musicSynth->currentData().toString());
+    s.setValue("music/soundfont", m_musicFont->text().trimmed());
+    s.setValue("music/shuffle", m_musicShuffle->isChecked());
     s.setValue("lights/socket", m_socket->isChecked());
     s.setValue("lights/overlay", m_lightsOverlay->isChecked());
     s.setValue("paths/root", m_root->text().trimmed());

@@ -353,6 +353,20 @@ It needs the launcher: a game started on its own just ends when the keys are hel
 
 Not yet checked on a cabinet: whether a real reader's 10-key tells three keys held at once (5, 7 and 3 share no row or column, which is what such keypads need), and the menu driven through a BIO2 or a pop'n I/O board.
 
+## Music in the launcher
+
+A small MIDI player, the **Music** panel under the details and the log (**View > Music** shows or hides it): the song, the 16 parts' level meters (as the MU100's own), where it is (drag the bar to move in it), previous / play-pause / next, shuffle, **Autoplay** (on by default: the music starts when the launcher opens, a new song each time when shuffled), the music folder and the volume. It plays the MIDI files (`.mid`, `.midi`, `.kar`, `.rmi`) in the music folder and its folders, `music` in the saves' folder (`~/.local/share/hiraku/music`, `%LOCALAPPDATA%\hiraku\music`, a portable install's `user/data/music`); play with the folder empty and it offers to open it. MIDI files dropped on the window play at once (they aren't added as games). HIRAKU comes with no music; a build can name a shared folder of MIDI files (`local/music-source.txt`: its link, or `-DHK_MUSIC_SOURCE=`) that the launcher gets into the music folder on its first launch (`tools/musicfetch.py`), trying again on the next two launches if it can't, then never again.
+
+What plays the notes, the first there is:
+
+1. **Keyboardmania's synth card**, the Yamaha MU100B in the cabinet, the same emulation the games use, once a Keyboardmania game is added (its set's `rom` files). It takes about a second to start (its own start-up, 6 s of it, run ahead), and about a quarter of a CPU core while it plays.
+2. **A SoundFont** (a General MIDI `.sf2`): the music's own in **Settings > Audio > Music in the launcher**, else Keyboardmania's (**Settings > Audio > Keyboardmania**), else the system's (`/usr/share/soundfonts`, e.g. `sudo pacman -S soundfont-fluid`). Played by TinySoundFont, which is part of HIRAKU.
+3. **Windows' own synth** (Microsoft GS Wavetable Synth), on Windows: always there.
+
+**Settings > Audio > Music in the launcher** picks one of them instead, and another folder. Closing the panel pauses the music. The music stops while a game or the game menu runs, and goes on where it was two seconds after the last of them ends. It goes to the system's default output (on Windows, the games' output when Settings > Audio names one), shared, never a card alone.
+
+The player is a program of its own, `hiraku-midi`, which the launcher talks to: `bin/hiraku-midi --play FILE` plays a file from the command line, `--synth card --rom dumps/kbm/rom` or `--synth font --soundfont FILE` picks the synth, `--help` gives the rest.
+
 ## Latency
 
 **In the game:** HIRAKU measures it as the time from a key press to the RF5C400 starting the keysound. beatmania III scans its keys once per video frame (59.94 Hz), so this is **2–20 ms, mean about 9.5 ms**, exactly as on a real cabinet. Everything above that is the PC.

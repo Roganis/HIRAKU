@@ -589,6 +589,7 @@ if(Qt6_FOUND AND TARGET hiraku_hidout)
     launcher/lightsdialog.cpp
     launcher/dipsdialog.cpp
     launcher/modsdialog.cpp
+    launcher/music.cpp
     launcher/settingsdialog.cpp
     launcher/fit.cpp
     launcher/picturedialog.cpp
@@ -600,6 +601,21 @@ if(Qt6_FOUND AND TARGET hiraku_hidout)
   qt_add_resources(hiraku "launcher_res" PREFIX "/" BASE launcher/res
     FILES launcher/res/icon.png launcher/res/logo.png)
   target_compile_definitions(hiraku PRIVATE ${HK_ROOT_DEFINE})
+  # the launcher's first songs (launcher/music.cpp, tools/musicfetch.py): a folder named by the build,
+  # never by the repository: HK_MUSIC_SOURCE, else local/music-source.txt's first line (git-ignored).
+  # Empty (as in a release made from the repository alone): none
+  set(HK_MUSIC_SOURCE "" CACHE STRING "the launcher's first songs: a shared folder's link (launcher/music.cpp)")
+  set(HK_MUSIC_LINK "${HK_MUSIC_SOURCE}")
+  if(NOT HK_MUSIC_LINK AND EXISTS ${CMAKE_SOURCE_DIR}/local/music-source.txt)
+    file(STRINGS ${CMAKE_SOURCE_DIR}/local/music-source.txt HK_MUSIC_LINK LIMIT_COUNT 1)
+    # (a change to it configures again; a build without it has no dependency on a file that isn't there)
+    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/local/music-source.txt)
+  endif()
+  string(STRIP "${HK_MUSIC_LINK}" HK_MUSIC_LINK)
+  if(HK_MUSIC_LINK MATCHES "^https://[A-Za-z0-9./?=&_%-]+$")
+    set_property(SOURCE launcher/music.cpp APPEND PROPERTY COMPILE_DEFINITIONS "HK_MUSIC_SOURCE=\"${HK_MUSIC_LINK}\"")
+    message(STATUS "hiraku: the launcher gets its first songs from the folder the build names")
+  endif()
   target_link_libraries(hiraku PRIVATE Qt6::Widgets Qt6::Network hiraku_cabinet hiraku_hidout)
   # Windows: a window program, so that no console window opens behind the launcher (what it prints
   # when started from a console still goes there: launcher/main.cpp, use_parent_console). The games

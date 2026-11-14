@@ -37,6 +37,9 @@ private:
     QComboBox *m_statsOverlay;              // the performance overlay from the start (runtime/host/statsview.h)
     QDoubleSpinBox *m_beamGamma, *m_beamGain;
     QLineEdit *m_soundfont, *m_root, *m_bin, *m_nvram, *m_extra;
+    QCheckBox *m_musicShuffle;               // the launcher's music (music.h)
+    QLineEdit *m_musicFolder, *m_musicFont;
+    QComboBox *m_musicSynth;
     QComboBox *m_place;                     // games' files when added: ask, move into the HIRAKU folder, leave
     // e-AMUSEMENT, as spicecfg's Network page (runtime/shell/eaoptions.h)
     QCheckBox *m_smartea, *m_autopin;

@@ -20,6 +20,7 @@ class QPlainTextEdit;
 class QTreeWidget;
 class QTreeWidgetItem;
 class UpdateCheck;
+class MusicPlayer;
 
 class MainWindow : public QMainWindow {
     Q_OBJECT
@@ -70,6 +71,8 @@ private:
     QLabel *m_details;
     QLineEdit *m_filter;
     QPlainTextEdit *m_log;
+    MusicPlayer *m_music;          // the music (music.h), in its dock under the details and the log
+    QDockWidget *m_musicDock;
     QFile *m_runLog = nullptr;   // the running game's log file (cfg::logsDir): what the log pane gets
     QString m_lastRunLog;        // ... its path, kept after the game ends
     QString m_runOutput;         // the running game's output (its tail), for why it stopped

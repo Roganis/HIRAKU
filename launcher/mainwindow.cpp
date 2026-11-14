@@ -67,6 +67,7 @@
 #include "dipsdialog.h"
 #include "lightsdialog.h"
 #include "modsdialog.h"
+#include "music.h"
 #include "picturedialog.h"
 #include "unlocksdialog.h"
 #include "settingsdialog.h"
@@ -193,7 +194,10 @@ MainWindow::MainWindow() {
     });
     connect(settings, &QAction::triggered, this, [this] {
         SettingsDialog d(this);
-        if (d.exec() == QDialog::Accepted) refresh();
+        if (d.exec() == QDialog::Accepted) {
+            refresh();
+            m_music->settingsChanged();
+        }
     });
     connect(refreshAct, &QAction::triggered, this, &MainWindow::refresh);
     connect(m_showAll, &QAction::toggled, this, [this](bool on) {
@@ -379,6 +383,21 @@ MainWindow::MainWindow() {
     splitDockWidget(m_detailsDock, m_logDock, Qt::Vertical);
     m_logDock->hide();
 
+    // ---- music ----
+    // under the two, its own height (music.h); it waits while a game or the game menu runs, and a
+    // closed panel leaves no music playing
+    m_music = new MusicPlayer;
+    m_music->watch(&m_proc);
+    m_music->watch(&m_menu);
+    m_musicDock = new QDockWidget("Music", this);
+    m_musicDock->setObjectName("music");
+    m_musicDock->setWidget(m_music);
+    addDockWidget(Qt::RightDockWidgetArea, m_musicDock);
+    splitDockWidget(m_logDock, m_musicDock, Qt::Vertical);
+    connect(m_musicDock->toggleViewAction(), &QAction::toggled, this, [this](bool on) {
+        if (!on) m_music->pause();
+    });
+
     // ---- menus ----
     auto *file = menuBar()->addMenu("&File");
     file->addAction(m_play);
@@ -410,6 +429,7 @@ MainWindow::MainWindow() {
     view->addAction(m_showAll);
     view->addAction(m_detailsDock->toggleViewAction());
     view->addAction(m_logDock->toggleViewAction());
+    view->addAction(m_musicDock->toggleViewAction());
     view->addAction(refreshAct);
     auto *help = menuBar()->addMenu("&Help");
     help->addAction("How to play (docs/PLAY.md)", this, [] {
@@ -552,6 +572,8 @@ MainWindow::MainWindow() {
     // no layout of this version saved: the panel beside the list starts at about a third of the window
     if (!restoreState(cfg::settings().value("ui/state").toByteArray(), kLayout))
         QTimer::singleShot(0, this, [this] { resizeDocks({m_detailsDock}, {std::max(300, width() / 3)}, Qt::Horizontal); });
+    if (!m_musicDock->isHidden()) m_music->autoplay();   // (when its panel is there)
+    m_music->firstSongs();
     qApp->installEventFilter(this);
     refresh();
     // a cabinet that starts in the game menu (Settings > General)
@@ -1571,13 +1593,12 @@ void MainWindow::dragEnterEvent(QDragEnterEvent *e) {
 }
 
 void MainWindow::dropEvent(QDropEvent *e) {
-    QStringList paths;
+    QStringList paths, music;
     for (const QUrl &u : e->mimeData()->urls())
-        if (u.isLocalFile()) paths << u.toLocalFile();
-    if (!paths.isEmpty()) {
-        e->acceptProposedAction();
-        addGameFiles(paths);
-    }
+        if (u.isLocalFile()) (MusicPlayer::isMidi(u.toLocalFile()) ? music : paths) << u.toLocalFile();
+    if (!paths.isEmpty() || !music.isEmpty()) e->acceptProposedAction();
+    if (!music.isEmpty()) m_music->playFiles(music);   // MIDI files: played, not added as a game
+    if (!paths.isEmpty()) addGameFiles(paths);
 }
 
 void MainWindow::addGameFiles(const QStringList &paths) {

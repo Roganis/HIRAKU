@@ -37,6 +37,7 @@ const Licence kLicences[] = {
     {"crt-royale: GNU GPL v2", "third_party/slang-shaders/crt/shaders/crt-royale/LICENSE.TXT", 0},
     {"crt-guest-advanced-fast: GNU GPL v2 or later", "third_party/slang-shaders/crt/shaders/guest/fast/bloom_horizontal.slang", 22},
     {"Lola Retro: MIT", "third_party/lola-retro/LICENSE", 0},
+    {"TinySoundFont (the launcher's music): MIT", "third_party/tinysoundfont/LICENSE", 0},
     {"Blur Busters CRT Beam Simulator: MIT", "third_party/crt-beam-simulator/LICENSE", 0},
     {"Wayland presentation-time: MIT", "third_party/wayland/presentation-time.xml", 26},
     {"Wayland fifo-v1: MIT", "third_party/wayland/fifo-v1.xml", 24},

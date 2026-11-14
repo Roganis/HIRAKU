@@ -109,6 +109,7 @@ static QString dataBase() {
 
 QString logsDir() { return dataBase() + "/logs"; }
 QString menuPicturesDir() { return dataBase() + "/menu-pictures"; }
+QString musicDir() { return dataBase() + "/music"; }
 
 QString modPath(const QString &game, const QString &mod) {
     const QString own = modsDir(game) + "/" + mod;

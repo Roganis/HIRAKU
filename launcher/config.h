@@ -36,6 +36,8 @@ QString logsDir();
 // <id>.png (.jpg, .bmp); auto/ holds what HIRAKU made (a title screen a run kept, runtime/host/menupic.h,
 // and the player's own as the menu reads them)
 QString menuPicturesDir();
+// The launcher's music (launcher/music.h) when Settings > Audio names no folder: <data>/music
+QString musicDir();
 constexpr int kRunLogs = 10;
 QString controlsFile(const QString &family);  // the family's controls set's file
 void mergeControls();                       // once: a set's members' old files joined into the set's

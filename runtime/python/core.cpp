@@ -429,7 +429,7 @@ public:
 
     bool init(const Options &o) override {
         if (autoplay_ && !has_autoplay(o.game.c_str()))
-            fprintf(stderr, "autoplay: not available for %s yet (pop'n music 9-12 only)\n", o.game.c_str());
+            fprintf(stderr, "autoplay: not available for %s yet (pop'n music 9-14 only)\n", o.game.c_str());
         opt_ = o;
         auto m = read_kv(o.root + "/dumps/" + o.game + "/machine.txt");
         if (m.empty() || m["core"] != "python") {
@@ -1208,7 +1208,8 @@ private:
     // reaches the line is judged GREAT (FUN_0010cbe8). The play screen's button reader
     // (FUN_0010dd80) gives nothing in the demo, by its own test of the mode. The mod makes both
     // behave as in the demo, outside it too. pop'n 10-12 have the same two tests, found by the code
-    // around them (10's demo is mode 3); 13 and 14 were compiled anew and aren't found that way yet. Written as PCSX2's patches are, at a vsync on the CPU
+    // around them (10's demo is mode 3). 13 and 14 were compiled anew: the flag is at a fixed address
+    // (13 0x1908018, 14 0x18ff6a8, read where the judge reads 9's) and its test a bne over "flag = 1". Written as PCSX2's patches are, at a vsync on the CPU
     // thread through the TLB, so the recompiler drops the blocks; checked each vsync, because the
     // program is loaded from the disk after boot.
     struct CodePatch { const char *game; uint32_t addr, was, now; };
@@ -1221,6 +1222,10 @@ private:
         {"popn11", 0x112b14, 0x10430036, 0x10000036},
         {"popn12", 0x112394, 0x54430003, 0x00000000},
         {"popn12", 0x111824, 0x10430036, 0x10000036},
+        {"popn13", 0x174f688, 0x14430005, 0x00000000},   // bne v0,v1 (mode != 2: flag = 0) -> nop
+        {"popn13", 0x174ea7c, 0x10430036, 0x10000036},
+        {"popn14", 0x1740ae8, 0x14430005, 0x00000000},   // (14's demo is mode 3)
+        {"popn14", 0x173fedc, 0x10430036, 0x10000036},
     };
     static bool has_autoplay(const std::string &game) {
         for (const CodePatch &p : AUTOPLAY)

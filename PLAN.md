@@ -589,7 +589,6 @@ Full history: docs/PLAN-HISTORY.md §23.
 - (build) GuitarFreaks V2 and its session with DrumMania; waits on the owner's copy of the game.
 - (build) DrumMania V's gametop `musicdata` (answered without it so far).
 - (build) DrumMania V ingested from MAME's set (only Reliquary's `.py2` now).
-- (build) `--autoplay` for pop'n 13 and 14 (9–12 have it): their judge and button code was compiled anew, so pop'n 9's two tests aren't found by the code around them; the button reader's is (13 `0x174ea7c`, 14 `0x173fedc`), the flag's isn't.
 - (build) docs/EAMUSE3.md, "Not known yet": no INTERNET RANKING place with a KONAMI ID; a few statuses.
 - (build) Watch: under heavy disk I/O (2026-10-15) five Python cases differed; where was not captured.
 - (parked) Dancing Stage Fusion: edited media; needs a clean dump or a documented repair.

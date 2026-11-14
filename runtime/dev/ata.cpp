@@ -190,17 +190,27 @@ bool DiscImage::read_sectors(uint32_t lba, uint32_t n, uint8_t *out) const {
 // READ_AHEAD bytes of the image. Nearly all of a game's READs continue the
 // previous one (bm3: 600 of 615), so the next is then cached or on its way,
 // rather than read in one go when the game's CPU asks for its first sector.
+// A READ inside the range last asked for, with half of READ_AHEAD still ahead of its end, asks for
+// nothing new: the call walks the whole range's pages each time (8 MB of them, for a READ of a few
+// sectors: pop'n music 7 makes hundreds a second while it loads a song).
 constexpr uint64_t READ_AHEAD = 8ull << 20;
+
+static void advise(FILE *f, uint64_t off, uint64_t n, uint64_t &from, uint64_t &to) {
+    if (off >= from && off + n + READ_AHEAD / 2 <= to) return;
+    from = off;
+    to = off + n + READ_AHEAD;
+    sys::will_need(fileno(f), off, n + READ_AHEAD);
+}
 
 void DiscImage::prefetch(uint32_t lba, uint32_t count) const {
     if (!count || lba >= nsectors_) return;
     const Track &t = tracks_[track_of(lba)];
     uint64_t off = t.offset + (uint64_t)(lba - t.start) * t.size;
-    sys::will_need(fileno(f_), off, (uint64_t)count * t.size + READ_AHEAD);
+    advise(f_, off, (uint64_t)count * t.size, advised_from_, advised_to_);
 }
 
 void DiskImage::prefetch(uint32_t lba, uint32_t count) const {
-    if (count) sys::will_need(fileno(f_), (uint64_t)lba * 512, (uint64_t)count * 512 + READ_AHEAD);
+    if (count) advise(f_, (uint64_t)lba * 512, (uint64_t)count * 512, advised_from_, advised_to_);
 }
 
 bool DiskImage::read_sectors(uint32_t lba, uint32_t n, uint8_t *out) const {

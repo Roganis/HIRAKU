@@ -136,7 +136,8 @@ static const char COMMON_OPTIONS[] = R"HK(  --frames N        stop after N video
   --fast-boot       with --window, the game's start-up as fast as the machine can go (no sound,
                     its pictures with a box over them) until its ready point (games/<id>/game.toml
                     boot_seconds: the machine's seconds to its title or attract), or until a
-                    player presses one of its buttons. host/warp.h
+                    player presses one of its buttons; with --menu-picture, to just before its
+                    title_seconds, the picture kept then. host/warp.h
   --fast-boot-seconds S  ... up to S seconds of the machine's time instead (implies --fast-boot)
   --game-menu on|off  with --window (on by default): 5, 7 and 3 of an e-AMUSEMENT reader's 10-key
                     held together (either player's), or the Test and Service switches held
@@ -598,6 +599,14 @@ int main(int argc, char **argv) {
     if (fast_boot && window_scale) {   // the ready point: --fast-boot-seconds, else the game's
         double s = fast_boot_seconds;
         if (s <= 0) s = manifest_seconds(opt.root + "/games/" + game + "/game.toml", "boot_seconds");
+        // no picture of the game for the game menu yet (--menu-picture): on to just before its title
+        // screen, which is kept before a player can be past it (a player who plays at once never
+        // left it untouched: host/menupic.h)
+        if (!menu_picture.empty() && fast_boot_seconds <= 0) {
+            const double title = menu_picture_at > 0 ? menu_picture_at
+                                                     : manifest_seconds(opt.root + "/games/" + game + "/game.toml", "title_seconds");
+            if (title > 0) s = std::max(s, title - 0.5);
+        }
         if (s > 0) host::warp::set(s);
         else fprintf(stderr, "fast start-up: games/%s/game.toml has no boot_seconds: the start-up at its own speed\n", game.c_str());
     }

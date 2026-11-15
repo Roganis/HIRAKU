@@ -1616,6 +1616,41 @@ void MainWindow::fillGameMenu(QMenu *menu, const Game &g) {
         PictureDialog d(id, title, true, this);
         if (d.exec() == QDialog::Accepted) showDetails();
     });
+    // its picture in the game menu and on its card (menuPicture): one of the player's own, or the
+    // title screen a run kept (again, if the one kept isn't good)
+    {
+        const QString dir = cfg::menuPicturesDir();
+        const QFileInfoList own = QDir(dir).entryInfoList({id + ".*"}, QDir::Files);
+        const QString kept = dir + "/auto/" + id + ".bmp";
+        auto *pic = menu->addMenu(QIcon::fromTheme("image-x-generic"), "Picture in the game menu");
+        pic->setToolTipsVisible(true);
+        pic->addAction("Choose a picture…", this, [this, id, title, dir] {
+            const QString f = QFileDialog::getOpenFileName(this, "A picture for " + title + " in the game menu", QString(),
+                                                           "Pictures (*.png *.jpg *.jpeg *.bmp *.webp);;All files (*)");
+            if (f.isEmpty()) return;
+            if (QImage(f).isNull()) {
+                QMessageBox::warning(this, "HIRAKU", "That file isn't a picture HIRAKU can read.");
+                return;
+            }
+            QDir().mkpath(dir);
+            for (const QFileInfo &o : QDir(dir).entryInfoList({id + ".*"}, QDir::Files)) QFile::remove(o.filePath());
+            QFile::remove(dir + "/auto/" + id + "-own.bmp");   // (made from the one before)
+            const QString to = dir + "/" + id + "." + QFileInfo(f).suffix().toLower();
+            if (!QFile::copy(f, to)) QMessageBox::warning(this, "HIRAKU", "The picture couldn't be copied to " + QDir::toNativeSeparators(dir) + ".");
+            fillCards();
+        })->setToolTip("Shown in the game menu behind the list, and on the game's card");
+        if (!own.isEmpty())
+            pic->addAction(QFileInfo::exists(kept) ? "Back to its title screen" : "Remove the picture chosen", this, [this, id, dir] {
+                for (const QFileInfo &o : QDir(dir).entryInfoList({id + ".*"}, QDir::Files)) QFile::remove(o.filePath());
+                QFile::remove(dir + "/auto/" + id + "-own.bmp");
+                fillCards();
+            });
+        if (QFileInfo::exists(kept))
+            pic->addAction("Keep its title screen again at the next start", this, [this, kept] {
+                QFile::remove(kept);
+                fillCards();
+            })->setToolTip("The next start keeps a new one, if no control is touched before the title screen");
+    }
     if (DipsDialog::available(id))
         menu->addAction("DIP switches…", this, [this, id, title] {
             DipsDialog d(id, title, this);

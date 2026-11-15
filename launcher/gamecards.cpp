@@ -116,7 +116,7 @@ public:
             p->setFont(f);
             p->setPen(QColor(255, 255, 255, 200));
             p->drawText(pic.adjusted(4, 0, -4, -8), Qt::AlignHCenter | Qt::AlignBottom,
-                        !c->ready ? "not added yet" : c->keepsPicture ? "its picture: its title screen, left untouched" : "no picture yet");
+                        !c->ready ? "not added yet" : c->keepsPicture ? "its title screen, at its next start" : "right-click to choose a picture");
         }
         p->restore();
         // the title, the line under it, the status

@@ -939,8 +939,6 @@ Card MainWindow::cardOf(const Game &g) const {
     const QString st = statusOf(g, &c.notable);
     if (!c.ready || c.notable) c.status = st.section(", ", 0, 0);   // (the first: what the next start does)
     c.picture = menuPicture(g.id);
-    c.keepsPicture = g.titleSeconds > 0 && cfg::settings().value("menu/pictures", true).toBool() &&
-                     cfg::settings().value("menu/enabled", true).toBool();
     return c;
 }
 
@@ -1271,6 +1269,8 @@ QStringList MainWindow::arguments(const Game &g) const {
         // (runtime/host/menupic.h); asked for until there is one
         if (g.titleSeconds > 0 && s.value("menu/pictures", true).toBool())
             if (const QString kept = cfg::menuPicturesDir() + "/auto/" + g.id + ".bmp"; !QFileInfo::exists(kept)) a << "--menu-picture" << kept;
+        // F12 in the game: the screen as its picture, the player's own (menuPicture: the newest of those)
+        a << "--menu-picture-own" << cfg::menuPicturesDir() + "/" + g.id + ".bmp";
     }
     if (s.value("lights/overlay", false).toBool()) a << "--lights-overlay";   // runtime/host/lampview.h
     if (const QString o = s.value("video/statsOverlay", "off").toString(); o != "off") a << "--stats-overlay" << o;   // host/statsview.h
@@ -1482,7 +1482,7 @@ QString MainWindow::lastGame() const { return cfg::settings().value("ui/lastGame
 // title screen a run of the game kept (runtime/host/menupic.h)
 static QString menuPicture(const QString &id) {
     const QString dir = cfg::menuPicturesDir();
-    for (const QFileInfo &own : QDir(dir).entryInfoList({id + ".*"}, QDir::Files, QDir::Name)) {
+    for (const QFileInfo &own : QDir(dir).entryInfoList({id + ".*"}, QDir::Files, QDir::Time)) {   // (the newest: F12's, or one chosen)
         const QString made = dir + "/auto/" + id + "-own.bmp";
         if (QFileInfo(made).exists() && QFileInfo(made).lastModified() >= own.lastModified()) return made;
         QImage img(own.filePath());

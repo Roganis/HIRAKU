@@ -23,7 +23,6 @@ struct Card {
     QString status;    // said on the card: a game not ready's, or a ready one's when its next start is special; "" none
     bool ready = false, notable = false;
     QString picture;   // its title screen's file, "" none yet
-    bool keepsPicture = false;   // its next run keeps one: its title screen (game.toml title_seconds; runtime/host/menupic.h)
 };
 
 class GameCards : public QWidget {

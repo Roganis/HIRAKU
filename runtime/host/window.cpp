@@ -225,6 +225,7 @@ double g_last_vsec = -1;
 void (*g_glFlush)() = nullptr;
 auto g_last_poll = std::chrono::steady_clock::now();
 uint64_t g_pointer_until = 0;     // full screen: the pointer shown until then (the mouse moved with the performance overlay up)
+std::atomic<bool> g_picture_asked{false};   // F12 (window_picture_asked)
 
 // Poll controls: called every few milliseconds of emulated time.
 void poll() {
@@ -273,6 +274,10 @@ void poll() {
                 menukey::input(menukey::OWN_KEY, r > 0);
                 continue;
             }
+        if (e.type == SDL_EVENT_KEY_DOWN && !e.key.repeat && e.key.key == SDLK_F12) {   // F12: this screen, the game's picture
+            g_picture_asked = true;   // (after the player's own way out: a key:F12 there is theirs)
+            continue;
+        }
         if (e.type == SDL_EVENT_KEY_DOWN && !e.key.repeat && e.key.key == SDLK_F10 && g_gl)   // F10: off, light, full, lola
             g_mode = g_mode == picture::Mode::off     ? picture::Mode::light
                    : g_mode == picture::Mode::light ? picture::Mode::full
@@ -344,6 +349,7 @@ void window_set_picture(const std::string &mode, const std::string &shaders_dir,
 
 void window_set_display_sync(bool on) { g_display_sync = on; }
 void window_set_lights_overlay(bool on) { lampview::set_shown(on); }
+bool window_picture_asked() { return g_picture_asked.exchange(false); }
 bool window_set_stats_overlay(const std::string &level, const std::string &store) {
     statsview::Level l;
     if (!statsview::parse_level(level, l)) return false;

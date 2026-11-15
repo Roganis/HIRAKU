@@ -99,7 +99,7 @@ void paintPicture(QPainter *p, const QRectF &pic, const Card &c, const QFont &fo
         p->setFont(f);
         p->setPen(QColor(255, 255, 255, 200));
         p->drawText(pic.adjusted(4, 0, -4, big ? -12 : -8), Qt::AlignHCenter | Qt::AlignBottom,
-                    !c.ready ? "not added yet" : c.keepsPicture ? "its title screen, at its next start" : "right-click to choose a picture");
+                    !c.ready ? "not added yet" : "F12 in the game: its picture");
     }
     p->restore();
 }

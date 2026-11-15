@@ -16,7 +16,7 @@ void put32(uint8_t *p, uint32_t v) { p[0] = (uint8_t)v, p[1] = (uint8_t)(v >> 8)
 
 }  // namespace
 
-bool save(const std::string &path, const uint32_t *rgb, int w, int h, double aspect) {
+bool save(const std::string &path, const uint32_t *rgb, int w, int h, double aspect, bool any) {
     if (!rgb || w <= 0 || h <= 0 || path.empty()) return false;
     const int th = kLines;
     const int tw = std::clamp((int)std::lround(th * (aspect > 0 ? aspect : (double)w / h)), th / 2, th * 3);
@@ -46,7 +46,7 @@ bool save(const std::string &path, const uint32_t *rgb, int w, int h, double asp
     uint32_t covered = 0;
     int colours = 0;
     while (covered < (uint32_t)tw * th / 100 * 97) covered += shades[(size_t)colours++];
-    if (colours < kColours) return false;
+    if (colours < kColours && !any) return false;
     out[0] = 'B', out[1] = 'M';
     put32(&out[2], (uint32_t)out.size());
     put32(&out[10], 54);

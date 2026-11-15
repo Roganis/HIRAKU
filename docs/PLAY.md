@@ -232,7 +232,8 @@ A reader's 10-key works on any cabinet (**8**/**2** choose, **4**/**6** change s
 plays), and so do a keyboard's arrows and a plain gamepad. Escape brings the launcher back.
 **Settings > General > Game menu** also has "Every game", the hold time, an off switch and
 **HIRAKU starts in the game menu**. The menu shows a game's title screen, kept from your own game
-(not the PC games), or your own picture (**Game > Picture in the game menu**). The launcher's
+(not the PC games), the screen you pressed **F12** on in the game, or your own picture
+(**Game > Picture in the game menu**). The launcher's
 **Cards** view shows the same pictures.
 
 It needs the launcher. Not yet checked on a cabinet's reader, BIO2 or pop'n I/O board.

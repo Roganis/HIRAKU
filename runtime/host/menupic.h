@@ -19,7 +19,8 @@ constexpr int kColours = 8;   // fewer colours than this for 97 % of it: text, n
 
 // The frame (0x00RRGGBB, w x h) at the monitor's shape (width over height; 0: square pixels),
 // scaled to kLines and written as a 24-bit BMP, whole or not at all, its folder made if need be.
-// false if the frame is blank or a screen of text (nothing to show), or the file can't be written.
-bool save(const std::string &path, const uint32_t *rgb, int w, int h, double aspect);
+// false if the frame is blank or a screen of text (nothing to show; `any`: kept whatever it shows,
+// the player's own choice by F12), or the file can't be written.
+bool save(const std::string &path, const uint32_t *rgb, int w, int h, double aspect, bool any = false);
 
 }  // namespace hk::host::menupic

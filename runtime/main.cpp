@@ -136,8 +136,7 @@ static const char COMMON_OPTIONS[] = R"HK(  --frames N        stop after N video
   --fast-boot       with --window, the game's start-up as fast as the machine can go (no sound,
                     its pictures with a box over them) until its ready point (games/<id>/game.toml
                     boot_seconds: the machine's seconds to its title or attract), or until a
-                    player presses one of its buttons; with --menu-picture, to just before its
-                    title_seconds, the picture kept then. host/warp.h
+                    player presses one of its buttons. host/warp.h
   --fast-boot-seconds S  ... up to S seconds of the machine's time instead (implies --fast-boot)
   --game-menu on|off  with --window (on by default): 5, 7 and 3 of an e-AMUSEMENT reader's 10-key
                     held together (either player's), or the Test and Service switches held
@@ -151,6 +150,8 @@ static const char COMMON_OPTIONS[] = R"HK(  --frames N        stop after N video
                     the machine has run for the game's title_seconds (its game.toml), unless a
                     control was pressed before then (host/menupic.h)
   --menu-picture-at S  ... after S seconds of the machine's time instead
+  --menu-picture-own FILE  with --window, F12 writes the screen to FILE as the game's picture (the
+                    player's own: the launcher's menu-pictures/<id>.bmp), whatever it shows
   --volume DB       the sound out of the window, louder or quieter (e.g. 6 or -3; 0 by default):
                     what the speakers get, not what --wav and --digest record
   --audio-exclusive Windows: the output (--audio-device's, else the default one) in WASAPI exclusive
@@ -363,7 +364,7 @@ int main(int argc, char **argv) {
     std::string stats_overlay = "off";
     bool game_menu = true;
     double game_menu_hold = 2.0;
-    std::string game_menu_key, menu_picture;
+    std::string game_menu_key, menu_picture, menu_picture_own;
     double menu_picture_at = 0;
     for (int k = 1; k < argc; k++) {
         std::string a = argv[k];
@@ -420,6 +421,7 @@ int main(int argc, char **argv) {
         else if (a == "--game-menu-key") game_menu_key = val();
         else if (a == "--menu-picture") menu_picture = val();
         else if (a == "--menu-picture-at") menu_picture_at = std::stod(val());
+        else if (a == "--menu-picture-own") menu_picture_own = val();
         else if (a == "--audio-asio") audio_asio = val();
         else if (a == "--audio-buffer") audio_buffer = std::stoi(val());
         else if (a == "--window") window_scale = (k + 1 < argc && argv[k + 1][0] != '-') ? std::stoi(val()) : 2;
@@ -599,14 +601,6 @@ int main(int argc, char **argv) {
     if (fast_boot && window_scale) {   // the ready point: --fast-boot-seconds, else the game's
         double s = fast_boot_seconds;
         if (s <= 0) s = manifest_seconds(opt.root + "/games/" + game + "/game.toml", "boot_seconds");
-        // no picture of the game for the game menu yet (--menu-picture): on to just before its title
-        // screen, which is kept before a player can be past it (a player who plays at once never
-        // left it untouched: host/menupic.h)
-        if (!menu_picture.empty() && fast_boot_seconds <= 0) {
-            const double title = menu_picture_at > 0 ? menu_picture_at
-                                                     : manifest_seconds(opt.root + "/games/" + game + "/game.toml", "title_seconds");
-            if (title > 0) s = std::max(s, title - 0.5);
-        }
         if (s > 0) host::warp::set(s);
         else fprintf(stderr, "fast start-up: games/%s/game.toml has no boot_seconds: the start-up at its own speed\n", game.c_str());
     }
@@ -654,6 +648,16 @@ int main(int argc, char **argv) {
     if (!menu_picture.empty() && menu_picture_at <= 0) menu_picture_at = manifest_seconds(opt.root + "/games/" + game + "/game.toml", "title_seconds");
     if (menu_picture_at <= 0) menu_picture.clear();
     auto title_picture = [&](const uint32_t *rgb, int w, int h) {
+#ifdef HK_WITH_SDL
+        // F12 in the window: this screen is the game's picture, the player's own (--menu-picture-own)
+        if (host::window_picture_asked()) {
+            const bool kept = !menu_picture_own.empty() && host::menupic::save(menu_picture_own, rgb, w, h, machine.display_aspect(), true);
+            if (kept) printf("game menu: this screen kept as the game's picture (F12), %.1f s in\n", machine.seconds());
+            host::notice::hint({kept ? "Picture kept: this screen, the game's in the game menu" :
+                                menu_picture_own.empty() ? "No picture kept: the game wasn't started from the launcher" :
+                                                           "No picture kept: it couldn't be written"}, 4);
+        }
+#endif
         if (menu_picture.empty() || machine.seconds() < menu_picture_at) return;
         if (!host::menukey::touched() && host::menupic::save(menu_picture, rgb, w, h, machine.display_aspect()))
             printf("game menu: this game's picture kept, %.1f s in\n", machine.seconds());

@@ -56,6 +56,8 @@ bool window_smooth_motion();   // --smooth-motion asked for
 void window_set_beam(bool on, float gamma = 2.2f, float gain = 0.7f);
 // --lights-overlay: the game's lights over its picture from the start (F9 toggles it; host/lampview.h)
 void window_set_lights_overlay(bool on);
+// F12 pressed since the last call: the screen asked for as the game's picture (main.cpp, --menu-picture-own)
+bool window_picture_asked();
 // --stats-overlay LEVEL: the performance overlay (host/statsview.h) from the start: "off", "line",
 // "panel" or "full" (F7 goes through them). store: the file its place on the picture is kept in
 // ("": not kept). False: no such level.

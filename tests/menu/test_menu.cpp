@@ -257,6 +257,9 @@ static void test_picture(const std::string &dir) {
         for (int x = 0; x < 640; x++)
             text[(size_t)y * 640 + x] = y >= 200 && y < 360 && x >= 40 && x < 600 ? (x % 8 < 2 && y % 16 < 8 ? 0xffffffu : 0x2020a0u) : y < 120 && x % 16 < 3 && y % 12 < 7 ? (x < 320 ? 0xffffffu : 0xff2020u) : 0;
     CHECK(!host::menupic::save(blank_file, text.data(), 640, 480, 4.0 / 3.0) && !std::filesystem::exists(blank_file));
+    // F12's (the player's own choice): kept whatever it shows
+    CHECK(host::menupic::save(blank_file, text.data(), 640, 480, 4.0 / 3.0, true) && std::filesystem::exists(blank_file));
+    std::filesystem::remove(blank_file);
 
     const auto drawn = [](const std::string &picture, uint64_t at) {
         menu::List l;

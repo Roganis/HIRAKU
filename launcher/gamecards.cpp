@@ -11,6 +11,7 @@
 #include <QListWidget>
 #include <QPainter>
 #include <QPainterPath>
+#include <QPushButton>
 #include <QStyledItemDelegate>
 #include <QVBoxLayout>
 
@@ -68,6 +69,41 @@ QPixmap picture(const QString &path, QSize size, qreal dpr) {
     return pm;
 }
 
+// A game's picture in `pic` (rounded), or a stand-in in its series' colour: its badge and a word on
+// when there'll be one. `big`: the chosen game's (GameHead), its badge and words larger
+void paintPicture(QPainter *p, const QRectF &pic, const Card &c, const QFont &font, const QPalette &pal, bool big) {
+    QPainterPath clip;
+    clip.addRoundedRect(pic, radius() + (big ? 4 : 0), radius() + (big ? 4 : 0));
+    p->save();
+    p->setRenderHint(QPainter::Antialiasing);
+    p->setClipPath(clip);
+    if (!c.ready) p->setOpacity(0.45);
+    const qreal dpr = p->device()->devicePixelRatioF();
+    const QPixmap pm = c.picture.isEmpty() ? QPixmap() : picture(c.picture, pic.size().toSize(), dpr);
+    if (!pm.isNull()) {
+        p->drawPixmap(pic.topLeft(), pm);
+    } else {
+        const QColor col = against(familyColour(c.family), pal.color(QPalette::Base));
+        QLinearGradient g(pic.topLeft(), pic.bottomRight());
+        g.setColorAt(0, col);
+        g.setColorAt(1, col.darker(170));
+        p->fillRect(pic, g);
+        p->setPen(Qt::NoPen);
+        p->setBrush(QColor(255, 255, 255, 34));
+        p->drawEllipse(QPointF(pic.right() - pic.width() * 0.12, pic.top() + pic.height() * 0.1), pic.width() * 0.45, pic.width() * 0.45);
+        const int b = big ? 84 : 52;
+        p->drawPixmap(QRectF(pic.center().x() - b / 2.0, pic.center().y() - b / 2.0 - (big ? 14 : 10), b, b),
+                      familyIcon(c.family).pixmap(QSize(b, b), dpr), QRectF());
+        QFont f = font;
+        f.setPointSizeF(f.pointSizeF() * (big ? 0.95 : 0.8));
+        p->setFont(f);
+        p->setPen(QColor(255, 255, 255, 200));
+        p->drawText(pic.adjusted(4, 0, -4, big ? -12 : -8), Qt::AlignHCenter | Qt::AlignBottom,
+                    !c.ready ? "not added yet" : c.keepsPicture ? "its title screen, at its next start" : "right-click to choose a picture");
+    }
+    p->restore();
+}
+
 class CardPainter : public QStyledItemDelegate {
 public:
     CardPainter(GameCards *cards) : QStyledItemDelegate(cards), m_cards(cards) {}
@@ -89,36 +125,8 @@ public:
             p->setBrush(sel ? between(pal.color(QPalette::Base), accent, 0.12) : between(pal.color(QPalette::Base), pal.color(QPalette::Text), 0.06));
             p->drawRoundedRect(box.adjusted(1, 1, -1, -1), radius() + 2, radius() + 2);
         }
-        // the picture, or a stand-in in the series' colour: its badge and a word on when there'll be one
         const QRectF pic(box.left() + kPad - 2, box.top() + kPad - 2, kPicW, kPicH);
-        QPainterPath clip;
-        clip.addRoundedRect(pic, radius(), radius());
-        p->save();
-        p->setClipPath(clip);
-        if (!c->ready) p->setOpacity(0.45);
-        const QPixmap pm = c->picture.isEmpty() ? QPixmap() : picture(c->picture, pic.size().toSize(), p->device()->devicePixelRatioF());
-        if (!pm.isNull()) {
-            p->drawPixmap(pic.topLeft(), pm);
-        } else {
-            const QColor col = against(familyColour(c->family), pal.color(QPalette::Base));
-            QLinearGradient g(pic.topLeft(), pic.bottomRight());
-            g.setColorAt(0, col);
-            g.setColorAt(1, col.darker(170));
-            p->fillRect(pic, g);
-            p->setPen(Qt::NoPen);
-            p->setBrush(QColor(255, 255, 255, 34));
-            p->drawEllipse(QPointF(pic.right() - pic.width() * 0.12, pic.top() + pic.height() * 0.1), pic.width() * 0.45, pic.width() * 0.45);
-            const int b = 52;
-            p->drawPixmap(QRectF(pic.center().x() - b / 2.0, pic.center().y() - b / 2.0 - 10, b, b),
-                          familyIcon(c->family).pixmap(QSize(b, b), p->device()->devicePixelRatioF()), QRectF());
-            QFont f = o.font;
-            f.setPointSizeF(f.pointSizeF() * 0.8);
-            p->setFont(f);
-            p->setPen(QColor(255, 255, 255, 200));
-            p->drawText(pic.adjusted(4, 0, -4, -8), Qt::AlignHCenter | Qt::AlignBottom,
-                        !c->ready ? "not added yet" : c->keepsPicture ? "its title screen, at its next start" : "right-click to choose a picture");
-        }
-        p->restore();
+        paintPicture(p, pic, *c, o.font, pal, false);
         // the title, the line under it, the status
         const QFontMetrics fm(o.font);
         QFont bold = o.font;
@@ -207,6 +215,82 @@ public:
         p->setPen(pal.color(QPalette::PlaceholderText));
         p->drawText(QRectF(r.right() - cw, r.top(), cw - 6, r.height()), Qt::AlignRight | Qt::AlignVCenter, count);
         p->restore();
+    }
+};
+
+// The chosen game's picture, title, line and chips, laid out for a width (painted, or only measured)
+class HeadArt : public QWidget {
+public:
+    const Head *h = nullptr;
+    // its height for its width, set as its own (a scroll area's layout doesn't ask again when only
+    // the chips change: the Play under them covered them)
+    void fit() {
+        const int hh = place(width() > 0 ? width() : 300, nullptr);
+        if (height() != hh || minimumHeight() != hh) setFixedHeight(hh);
+        update();
+    }
+protected:
+    void resizeEvent(QResizeEvent *) override { fit(); }
+    void paintEvent(QPaintEvent *) override {
+        QPainter p(this);
+        p.setRenderHint(QPainter::Antialiasing);
+        place(width(), &p);
+    }
+private:
+    int place(int w, QPainter *p) const {
+        if (!h || w <= 0) return 0;
+        const QPalette pal = palette();
+        const QRectF pic(0, 0, w, std::round(w * 0.75));
+        if (p) paintPicture(p, pic, h->card, font(), pal, true);
+        double y = pic.bottom() + 12;
+        auto text = [&](const QFont &f, const QColor &c, const QString &t, double after) {
+            const QRect r = QFontMetrics(f).boundingRect(QRect(0, 0, w, 100000), Qt::TextWordWrap, t);
+            if (p) {
+                p->setFont(f);
+                p->setPen(c);
+                p->drawText(QRectF(0, y, w, r.height()), Qt::TextWordWrap, t);
+            }
+            y += r.height() + after;
+        };
+        QFont title = font();
+        title.setPointSizeF(title.pointSizeF() * 1.45);
+        title.setBold(true);
+        text(title, h->card.ready ? pal.color(QPalette::Text) : pal.color(QPalette::Disabled, QPalette::Text), h->card.title, 2);
+        text(font(), pal.color(QPalette::PlaceholderText), h->line, 10);
+        // the chips: what its next start does (when special), then the mods on, each its colour
+        struct Chip { QString t; QColor c; };
+        QList<Chip> chips;
+        if (h->card.notable && !h->card.status.isEmpty()) chips << Chip{h->card.status, theme::notable()};
+        for (int k = 0; k < h->mods.size(); k++)
+            chips << Chip{h->mods[k], theme::pop() ? theme::rainbow((k * 5) % 6) : pal.color(QPalette::Highlight)};
+        if (!chips.isEmpty()) {
+            QFont f = font();
+            f.setBold(true);
+            f.setPointSizeF(f.pointSizeF() * 0.9);
+            const QFontMetrics fm(f);
+            const double ch = fm.height() + 8, gap = 6;
+            double x = 0;
+            for (const Chip &c : chips) {
+                const QString t = fm.elidedText(c.t, Qt::ElideRight, w - 20);
+                const double cw = fm.horizontalAdvance(t) + 20;
+                if (x > 0 && x + cw > w) x = 0, y += ch + gap;
+                if (p) {
+                    const QColor ink = against(c.c, pal.color(QPalette::Base));
+                    QColor bg = ink;
+                    bg.setAlphaF(0.17);
+                    p->setPen(Qt::NoPen);
+                    p->setBrush(bg);
+                    const double r = theme::pop() ? ch / 2 : 3;
+                    p->drawRoundedRect(QRectF(x, y, cw, ch), r, r);
+                    p->setFont(f);
+                    p->setPen(ink);
+                    p->drawText(QRectF(x, y, cw, ch), Qt::AlignCenter, t);
+                }
+                x += cw + gap;
+            }
+            y += ch + 4;
+        }
+        return int(std::ceil(y));
     }
 };
 
@@ -413,4 +497,68 @@ void GameCards::fitGrid() {
 bool GameCards::eventFilter(QObject *o, QEvent *e) {
     if (o == m_grid->viewport() && e->type() == QEvent::Resize) fitGrid();
     return QWidget::eventFilter(o, e);
+}
+
+GameHead::GameHead(QWidget *parent) : QWidget(parent) {
+    auto *v = new QVBoxLayout(this);
+    v->setContentsMargins(10, 10, 10, 2);
+    v->setSpacing(10);
+    auto *art = new HeadArt;
+    art->h = &m_h;
+    m_art = art;
+    v->addWidget(m_art);
+    m_play = new QPushButton("Play");
+    m_play->setCursor(Qt::PointingHandCursor);
+    m_play->setToolTip("Play this game (Enter)");
+    v->addWidget(m_play);
+    auto *row = new QHBoxLayout;
+    row->setSpacing(6);
+    m_controls = new QPushButton(QIcon::fromTheme("input-gaming"), "Controls");
+    m_unlocks = new QPushButton(QIcon::fromTheme("unlock", QIcon::fromTheme("object-unlocked")), "Unlocks…");
+    m_mods = new QPushButton("Mods…");
+    for (QPushButton *b : {m_controls, m_unlocks, m_mods}) row->addWidget(b);
+    row->addStretch(1);
+    v->addLayout(row);
+    connect(m_play, &QPushButton::clicked, this, &GameHead::play);
+    connect(m_controls, &QPushButton::clicked, this, &GameHead::controls);
+    connect(m_unlocks, &QPushButton::clicked, this, &GameHead::unlocks);
+    connect(m_mods, &QPushButton::clicked, this, &GameHead::mods);
+}
+
+void GameHead::set(const Head &h) {
+    m_h = h;
+    m_play->setEnabled(h.canPlay);
+    m_unlocks->setVisible(h.unlocks);
+    themeChanged();
+    static_cast<HeadArt *>(m_art)->fit();
+}
+
+void GameHead::setPlayable(bool on) {
+    m_h.canPlay = on;
+    m_play->setEnabled(on);
+}
+
+// Play in the series' colour (the look's corners: round in Pop, as the system's otherwise)
+void GameHead::themeChanged() {
+    const QPalette pal = palette();
+    const QColor c = against(familyColour(m_h.card.family), pal.color(QPalette::Base));
+    const bool pop = theme::pop();
+    m_play->setIcon(theme::glyph("play", Qt::white));
+    m_play->setIconSize(QSize(22, 22));
+    QFont f = font();
+    f.setPointSizeF(f.pointSizeF() * 1.3);
+    f.setBold(true);
+    m_play->setFont(f);
+    m_play->setStyleSheet(QString("QPushButton { background: %1; color: white; border: none; border-bottom: %2px solid %3; "
+                                  "border-radius: %4px; padding: 10px 14px; font-weight: 700; }"
+                                  "QPushButton:hover { background: %5; }"
+                                  "QPushButton:pressed { background: %3; }"
+                                  "QPushButton:disabled { background: %6; color: %7; border-bottom-color: %6; }")
+                              .arg(c.name())
+                              .arg(pop ? 4 : 0)
+                              .arg(c.darker(135).name())
+                              .arg(pop ? 16 : 4)
+                              .arg(c.lighter(112).name())
+                              .arg(between(pal.color(QPalette::Base), pal.color(QPalette::Text), 0.12).name())
+                              .arg(pal.color(QPalette::PlaceholderText).name()));
 }

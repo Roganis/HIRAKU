@@ -22,6 +22,8 @@ class QTreeWidget;
 class QTreeWidgetItem;
 class UpdateCheck;
 class GameCards;
+class GameHead;
+struct Card;
 class MusicPlayer;
 
 class MainWindow : public QMainWindow {
@@ -72,6 +74,8 @@ private:
     QTreeWidget *m_list;
     QStackedWidget *m_listStack;   // the list, the page shown while no game is added, or the cards
     GameCards *m_cards;            // the games as cards: the list stays the one picked from, behind them
+    GameHead *m_head;              // ... and the chosen one large, over its details
+    Card cardOf(const Game &g) const;
     QAction *m_asCards, *m_asList;
     QWidget *m_detailsPane;        // the details beside the list (in m_detailsDock; hidden with that page)
     QStringList m_collapsed;     // the series and systems the player closed (ui/collapsed)

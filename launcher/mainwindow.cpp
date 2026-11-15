@@ -326,10 +326,37 @@ MainWindow::MainWindow() {
     });
     m_details->setAlignment(Qt::AlignTop | Qt::AlignLeft);
     m_details->setMargin(8);
+    // in the cards view the chosen game large over them (gamecards.h)
+    m_head = new GameHead;
+    m_head->hide();
+    connect(m_head, &GameHead::play, this, [this] {
+        if (const Game *g = selected()) play(g->id);
+    });
+    connect(m_head, &GameHead::controls, this, [this] {
+        if (const Game *g = selected()) controls(g->family);
+    });
+    connect(m_head, &GameHead::unlocks, this, [this] {
+        if (const Game *g = selected()) {
+            UnlocksDialog d(g->id, g->title, m_running == g->id, this);
+            d.exec();
+        }
+    });
+    connect(m_head, &GameHead::mods, this, [this] {
+        if (const Game *g = selected()) {
+            ModsDialog d(g->id, g->title, this);
+            if (d.exec() == QDialog::Accepted) gameChanged();
+        }
+    });
+    auto *detailsBox = new QWidget;
+    auto *dv = new QVBoxLayout(detailsBox);
+    dv->setContentsMargins(0, 0, 0, 0);
+    dv->setSpacing(0);
+    dv->addWidget(m_head);
+    dv->addWidget(m_details, 1);
     auto *details = new QScrollArea;
     details->setWidgetResizable(true);
     details->setFrameShape(QFrame::NoFrame);
-    details->setWidget(m_details);
+    details->setWidget(detailsBox);
     m_detailsPane = details;
 
     // with no game added, the list's place says how to add one
@@ -705,6 +732,7 @@ void MainWindow::themeChanged() {
     m_stop->setIcon(pop ? theme::glyph("stop", Qt::white) : QIcon::fromTheme("media-playback-stop"));
     m_music->themeChanged();
     m_cards->themeChanged();
+    m_head->themeChanged();
     if (m_list->topLevelItemCount()) refresh();   // the badges and the statuses' colours
 }
 
@@ -899,27 +927,30 @@ void MainWindow::refreshStatuses() {
     fillCards();
 }
 
+Card MainWindow::cardOf(const Game &g) const {
+    const Shelf sh = shelf(g);
+    Card c;
+    c.id = g.id;
+    c.title = g.title;
+    c.detail = QStringList{g.year, sh.system}.filter(QRegularExpression(".")).join(" · ");
+    c.series = sh.series;
+    c.family = g.family;
+    c.ready = g.status == Game::Ready;
+    const QString st = statusOf(g, &c.notable);
+    if (!c.ready || c.notable) c.status = st.section(", ", 0, 0);   // (the first: what the next start does)
+    c.picture = menuPicture(g.id);
+    c.keepsPicture = g.titleSeconds > 0 && cfg::settings().value("menu/pictures", true).toBool() &&
+                     cfg::settings().value("menu/enabled", true).toBool();
+    return c;
+}
+
 void MainWindow::fillCards() {
     QList<Card> cards;
     for (int k : m_order) {
         if (k >= m_games.size()) continue;
         const Game &g = m_games[k];
         const QTreeWidgetItem *it = itemFor(g.id);
-        if (!it || it->isHidden()) continue;
-        const Shelf sh = shelf(g);
-        Card c;
-        c.id = g.id;
-        c.title = g.title;
-        c.detail = QStringList{g.year, sh.system}.filter(QRegularExpression(".")).join(" · ");
-        c.series = sh.series;
-        c.family = g.family;
-        c.ready = g.status == Game::Ready;
-        const QString st = statusOf(g, &c.notable);
-        if (!c.ready || c.notable) c.status = st.section(", ", 0, 0);   // (the first: what the next start does)
-        c.picture = menuPicture(g.id);
-        c.keepsPicture = g.titleSeconds > 0 && cfg::settings().value("menu/pictures", true).toBool() &&
-                         cfg::settings().value("menu/enabled", true).toBool();
-        cards << c;
+        if (it && !it->isHidden()) cards << cardOf(g);
     }
     m_cards->setCards(cards);
     m_cards->select(selected() ? selected()->id : QString());
@@ -933,6 +964,7 @@ void MainWindow::showAsCards(bool on) {
         if (on) m_cards->select(g->id);
         else if (QTreeWidgetItem *it = itemFor(g->id)) selectGame(it);
     }
+    showDetails();
     if (on) m_cards->focusCards();
     else m_list->setFocus();
 }
@@ -982,6 +1014,7 @@ void MainWindow::updateActions() {
     bool running = !m_running.isEmpty();
     m_play->setEnabled(g && g->status == Game::Ready && !running);
     m_stop->setEnabled(running);
+    m_head->setPlayable(m_play->isEnabled());
 }
 
 static bool installCassette(const Game &g);
@@ -1009,6 +1042,7 @@ static bool copyTree(const QString &from, const QString &to) {
 void MainWindow::showDetails() {
     const Game *g = selected();
     if (!g) {
+        m_head->hide();
         bool any = false;
         for (QTreeWidgetItem *it : gameItems()) any = any || !it->isHidden();
         const QString f = m_filter->text().trimmed();
@@ -1020,9 +1054,21 @@ void MainWindow::showDetails() {
                                           : QString());   // no game added: the list's place says how (showEmpty)
         return;
     }
-    QString h = "<b>" + g->title.toHtmlEscaped() + "</b>";
-    if (!g->maker.isEmpty()) h += " · " + g->maker.toHtmlEscaped() + " " + g->year;
-    h += " · " + g->statusText();
+    // the cards view: the game large over its details (gamecards.h), which then start after its title
+    const bool large = m_asCards->isChecked();
+    m_head->setVisible(large);
+    if (large) {
+        Head head;
+        head.card = cardOf(*g);
+        head.line = QStringList{g->maker, g->year, shelf(*g).system, g->statusText()}.filter(QRegularExpression(".")).join(" · ");
+        for (const QString &m : cfg::modsOn(g->id)) head.mods << ModsDialog::read(cfg::modPath(g->id, m)).name;
+        head.canPlay = m_play->isEnabled();
+        head.unlocks = g->status == Game::Ready && UnlocksDialog::available(g->id);
+        m_head->set(head);
+    }
+    QString h = large ? QString() : "<b>" + g->title.toHtmlEscaped() + "</b>";
+    if (!large && !g->maker.isEmpty()) h += " · " + g->maker.toHtmlEscaped() + " " + g->year;
+    if (!large) h += " · " + g->statusText();
     if (g->status != Game::Ready) {
         QString how = g->howTo().toHtmlEscaped();
         int pre = how.indexOf("\n\n", how.indexOf("\n\n") + 2);   // the commands, after the second paragraph break

@@ -14,6 +14,7 @@
 
 class QLabel;
 class QListWidget;
+class QPushButton;
 
 struct Card {
     QString id, title;
@@ -51,4 +52,33 @@ private:
     QString m_shelf;      // its series, "" all the games (ui/shelf)
     QString m_current;    // the game picked
     bool m_quiet = false;
+};
+
+// The chosen game, large, over its details in the cards view: its picture, its title and a line
+// (maker, year, system, status), the mods on as chips, Play in its series' colour, and its Controls,
+// Unlocks and Mods
+struct Head {
+    Card card;
+    QString line;          // "Konami · 2004 · Konami Python · Ready"
+    QStringList mods;      // the mods on, by name
+    bool canPlay = false;  // ready, and no game running
+    bool unlocks = false;  // it has unlocks or codes (UnlocksDialog::available)
+};
+
+class GameHead : public QWidget {
+    Q_OBJECT
+public:
+    explicit GameHead(QWidget *parent = nullptr);
+    void set(const Head &h);
+    void setPlayable(bool on);   // (a game started or ended)
+    void themeChanged();
+signals:
+    void play();
+    void controls();
+    void unlocks();
+    void mods();
+private:
+    QWidget *m_art;   // the picture, title, line and chips, painted (gamecards.cpp: HeadArt)
+    QPushButton *m_play, *m_controls, *m_unlocks, *m_mods;
+    Head m_h;
 };

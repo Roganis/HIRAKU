@@ -464,7 +464,7 @@ minutes from power-on) and goes to attract. Two coins make a credit.
    and a 4-digit password.
 
 The server runs inside HIRAKU unless **Settings > e-AMUSEMENT** names one (`hiraku-eamuse`:
-[EAMUSE3.md](EAMUSE3.md)).
+[EAMUSE.md](EAMUSE.md)).
 
 Details: [PLAY-NOTES.md](PLAY-NOTES.md#system-573-drummania-10th-mix-further-than-mame)
 
@@ -621,7 +621,7 @@ OPTIONS from pop'n 10).
   PIN bring back your player.
 - The server runs inside HIRAKU. To share players and rankings between PCs, run
   `hiraku-eamuse --port 8080` on one and put `that-pc:8080` in **Settings > e-AMUSEMENT > EA
-  Service URL**; give it a key before it's reachable from outside ([EAMUSE3.md](EAMUSE3.md)).
+  Service URL**; give it a key before it's reachable from outside ([EAMUSE.md](EAMUSE.md)).
 - spice2x's options and setups work as they are. **Pick** next to a card offers the cards HIRAKU
   has, or a new number.
 - **One card for all the pop'n games:** set **Settings > e-AMUSEMENT > Player 1 Card** once. A
@@ -660,8 +660,8 @@ controls and cards around it.
 
 **pop'n music 15–18:** e-AMUSEMENT on in test mode > NETWORK OPTIONS; the title says NETWORK OK.
 Cards, the PIN and players work; clear marks and best scores are shared with pop'n 9–14. NET
-TAISEN: point every cabinet at one `hiraku-eamuse` (lobby port 5741, relay TCP 5740); alone, the
-credit plays as CHALLENGE. A second cabinet on one PC needs its own `--nvram FOLDER`. Not yet:
+TAISEN: point every cabinet at one `hiraku-eamuse` (lobby port 5741, relay TCP 5740); alone,
+pop'n 15 plays the credit as CHALLENGE, 16–18 wait at CUSTOMIZE. A second cabinet on one PC needs its own `--nvram FOLDER`. Not yet:
 pop'n 18's boss battles, mods that replace data files, a real board or reader. On Windows 10 they
 start and run.
 

@@ -23,7 +23,7 @@ What each game needs, its first start and its quirks: [docs/PLAY.md](docs/PLAY.m
 
 ## Highlights
 
-- **e-AMUSEMENT, back.** A server of HIRAKU's own: register a card, keep your player, scores and rankings. One card follows a player from pop'n music 9 to 18. Share it between PCs with `hiraku-eamuse`. ([docs/EAMUSE3.md](docs/EAMUSE3.md))
+- **e-AMUSEMENT, back.** A server of HIRAKU's own: register a card, keep your player, scores and rankings. One card follows a player from pop'n music 9 to 18. Share it between PCs with `hiraku-eamuse`. ([docs/EAMUSE.md](docs/EAMUSE.md))
 - **NET TAISEN.** pop'n music 12–18's online battles between HIRAKU cabinets, on a LAN or online.
 - **Events and unlocks.** Right-click a game > **Unlocks…** to set the event phases and see their progress.
 - **The game menu.** Hold 5, 7 and 3 on the cabinet's 10-key to change games without a keyboard.
@@ -59,7 +59,7 @@ The Konami Python core builds inside PCSX2 Reliquary's own build: `oracle/pcsx2/
 
 ## Documentation
 
-- **Players:** [PLAY.md](docs/PLAY.md) (games, settings, controls, latency), [MODS.md](docs/MODS.md), [SMOOTH.md](docs/SMOOTH.md), [LIGHTS.md](docs/LIGHTS.md), [EAMUSE3.md](docs/EAMUSE3.md)
+- **Players:** [PLAY.md](docs/PLAY.md) (games, settings, controls, latency), [MODS.md](docs/MODS.md), [SMOOTH.md](docs/SMOOTH.md), [LIGHTS.md](docs/LIGHTS.md), [EAMUSE.md](docs/EAMUSE.md) (e-AMUSEMENT and NET TAISEN)
 - **Developers:** [PLAN.md](PLAN.md) (status and plans), [docs/README.md](docs/README.md) (every document), [oracle/README.md](oracle/README.md) (the MAME oracle)
 
 ## How it works

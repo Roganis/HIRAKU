@@ -1,4 +1,7 @@
-# e-AMUSEMENT and NET TAISEN in HIRAKU
+# e-AMUSEMENT: the protocol and the full notes
+
+This is the complete reference: the protocol, each game's calls, the records the server keeps,
+and how each was checked. The player's guide is [EAMUSE.md](EAMUSE.md).
 
 pop'n music 9 (2003, `C00:J:A:A`, Konami Python 1) was the first pop'n on e-AMUSEMENT. Konami's
 servers for it closed in August 2003. HIRAKU plays the cabinet's card reader/writer, its 10-key,

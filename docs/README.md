@@ -9,7 +9,7 @@
 | [MODS.md](MODS.md) | Mods: what they can change and how to write one; high frame rates; beatmania III's IIDX-style turntable |
 | [SMOOTH.md](SMOOTH.md) | Smooth notes on 120–240 Hz displays: smooth motion and true high frame rates, game by game |
 | [LIGHTS.md](LIGHTS.md) | The cabinet's lamps on controller LEDs and other lights |
-| [EAMUSE3.md](EAMUSE3.md) | e-AMUSEMENT and NET TAISEN: the server, cards, players, events, battles between cabinets |
+| [EAMUSE.md](EAMUSE.md) | e-AMUSEMENT and NET TAISEN: turning it on, cards, one card for all, sharing a server between PCs, battles between cabinets |
 | [SONGS-BACK.md](SONGS-BACK.md) | Songs brought back from an Omnimix pack |
 | [POPN-IO.md](POPN-IO.md) | pop'n music's USB I/O board on a real cabinet |
 | [bindings-bm3.example](bindings-bm3.example) | An example controls file |
@@ -20,6 +20,7 @@
 |---|---|
 | [../PLAN.md](../PLAN.md) | Where each board stands, the plans, and a section per piece of work |
 | [PLAN-HISTORY.md](PLAN-HISTORY.md) | The plan's full history up to 2026-11-14 (not kept up to date) |
+| [EAMUSE3.md](EAMUSE3.md) | e-AMUSEMENT's protocol, each game's calls and records |
 | [RECOMP.md](RECOMP.md) | How the Firebeat recompiler works |
 | [KERNEL.md](KERNEL.md) | The Firebeat games' own kernel |
 | [M2.md](M2.md), [M3.md](M3.md), [M4.md](M4.md), [M5.md](M5.md) | The first milestones' results (beatmania III The Final, October 2026) |

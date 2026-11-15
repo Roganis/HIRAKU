@@ -1047,11 +1047,30 @@ hiraku_game(kbm3rd 0x80002018)
 # Every executable made above gets the manifest; a new one gets it without being named here. The PC
 # games' loaders and DLLs and hiraku-ezusb.exe are made by custom commands, not targets, and stay
 # as they are: they run a game's own code, written for the PC's code page.
+# ... and says what it is: a version resource with the checkout's last release tag (utf8.rc says why).
 if(WIN32 AND NOT MSVC)
   enable_language(RC)
+  set(HK_VERSION_TAG "$ENV{GITHUB_REF_NAME}")
+  if(NOT HK_VERSION_TAG MATCHES "^v[0-9]+\\.[0-9]+\\.[0-9]+")
+    find_program(HK_GIT git)
+    if(HK_GIT)
+      execute_process(COMMAND "${HK_GIT}" -c safe.directory=* -C "${CMAKE_SOURCE_DIR}" describe --tags --abbrev=0 --match "v[0-9]*"
+                      OUTPUT_VARIABLE HK_VERSION_TAG OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
+    endif()
+  endif()
+  if(HK_VERSION_TAG MATCHES "^v([0-9]+)\\.([0-9]+)\\.([0-9]+)")
+    set(HK_VERSION_NUMBERS "${CMAKE_MATCH_1},${CMAKE_MATCH_2},${CMAKE_MATCH_3},0")
+    set(HK_VERSION_TEXT "${CMAKE_MATCH_1}.${CMAKE_MATCH_2}.${CMAKE_MATCH_3}")
+  else()
+    set(HK_VERSION_NUMBERS "0,0,0,0")
+    set(HK_VERSION_TEXT "0.0.0")
+  endif()
+  file(CONFIGURE OUTPUT ${CMAKE_BINARY_DIR}/hk_version/hk_version.h CONTENT
+       "#define HK_VERSION_NUMBERS @HK_VERSION_NUMBERS@\n#define HK_VERSION_TEXT \"@HK_VERSION_TEXT@\"\n" @ONLY)
   add_library(hiraku_utf8 OBJECT cmake/windows/utf8.rc)
-  target_include_directories(hiraku_utf8 PRIVATE cmake/windows)
-  set_source_files_properties(cmake/windows/utf8.rc PROPERTIES OBJECT_DEPENDS ${CMAKE_SOURCE_DIR}/cmake/windows/utf8.manifest)
+  target_include_directories(hiraku_utf8 PRIVATE cmake/windows ${CMAKE_BINARY_DIR}/hk_version)
+  set_source_files_properties(cmake/windows/utf8.rc PROPERTIES
+                              OBJECT_DEPENDS "${CMAKE_SOURCE_DIR}/cmake/windows/utf8.manifest;${CMAKE_BINARY_DIR}/hk_version/hk_version.h")
   get_property(HK_ALL_TARGETS DIRECTORY PROPERTY BUILDSYSTEM_TARGETS)
   foreach(t ${HK_ALL_TARGETS})
     get_target_property(HK_TARGET_TYPE ${t} TYPE)

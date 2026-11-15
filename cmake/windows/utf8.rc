@@ -1,3 +1,40 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+// What every program of HIRAKU's own carries on Windows.
+//
 // The application manifest (resource 1 of type 24) that makes a program's code page UTF-8: utf8.manifest
+//
+// And a version resource: the file's properties say it is HIRAKU and which release (hk_version.h,
+// written by CMake from the checkout's last release tag; 0.0.0 without one). Without it Microsoft
+// Defender's machine-learnt guess took a build of hiraku-midi.exe for malware and removed it
+// ("Trojan:Win32/Bearfoos.B!ml", 2026-11-15: the same code with this resource, or unstripped, passed).
+// It is a guess about the file as a whole, so this is no promise: a program for others' PCs is
+// tried against Defender first (PLAN.md section 46).
+#include <winver.h>
+#include "hk_version.h"
+
 1 24 "utf8.manifest"
+
+1 VERSIONINFO
+FILEVERSION HK_VERSION_NUMBERS
+PRODUCTVERSION HK_VERSION_NUMBERS
+FILEFLAGSMASK 0x3fL
+FILEOS VOS_NT_WINDOWS32
+FILETYPE VFT_APP
+BEGIN
+  BLOCK "StringFileInfo"
+  BEGIN
+    BLOCK "040904b0"
+    BEGIN
+      VALUE "CompanyName", "HIRAKU"
+      VALUE "FileDescription", "HIRAKU"
+      VALUE "FileVersion", HK_VERSION_TEXT
+      VALUE "LegalCopyright", "GPL-3.0-or-later"
+      VALUE "ProductName", "HIRAKU"
+      VALUE "ProductVersion", HK_VERSION_TEXT
+    END
+  END
+  BLOCK "VarFileInfo"
+  BEGIN
+    VALUE "Translation", 0x409, 1200
+  END
+END

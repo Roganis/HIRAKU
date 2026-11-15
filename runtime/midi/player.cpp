@@ -52,6 +52,7 @@
 
 #include "dev/xt446.h"
 #include "midi/smf.h"
+#include "midi/part_volume.h"
 
 #define TSF_IMPLEMENTATION
 #include "tsf.h"
@@ -163,6 +164,11 @@ struct FontSynth : Synth {
 // Windows' own General MIDI synth: messages straight to it, as their times come
 struct WinSynth : Synth {
     HMIDIOUT h = nullptr;
+    hk::midi::PartVolume parts;   // the player's volume, in each part's own (part_volume.h)
+    void short_message(uint8_t a, uint8_t b, uint8_t c) { midiOutShortMsg(h, (DWORD)a | (DWORD)b << 8 | (DWORD)c << 16); }
+    void send_parts() {
+        for (int ch = 0; ch < 16; ch++) short_message((uint8_t)(0xb0 | ch), 7, parts.part(ch));
+    }
     ~WinSynth() override {
         if (h) midiOutReset(h), midiOutClose(h);
     }
@@ -178,13 +184,16 @@ struct WinSynth : Synth {
             if (midiOutLongMsg(h, &hdr, sizeof hdr) == MMSYSERR_NOERROR)
                 for (int k = 0; k < 1000 && !(hdr.dwFlags & MHDR_DONE); k++) Sleep(1);
             midiOutUnprepareHeader(h, &hdr, sizeof hdr);
+            if (parts.afresh(b, n)) send_parts();   // (the synth's parts are back at 100)
             return;
         }
-        midiOutShortMsg(h, (DWORD)b[0] | (DWORD)(n > 1 ? b[1] : 0) << 8 | (DWORD)(n > 2 ? b[2] : 0) << 16);
+        if (uint8_t v; parts.volume(b, n, v)) return short_message(b[0], 7, v);
+        short_message(b[0], n > 1 ? b[1] : 0, n > 2 ? b[2] : 0);
     }
+    // (not midiOutSetVolume: through the MIDI mapper on Windows 10 it changed nothing)
     void set_volume(float v) override {
-        const DWORD x = (DWORD)std::lround(std::clamp(v, 0.0f, 1.0f) * 0xffff);
-        midiOutSetVolume(h, x | x << 16);
+        parts.set(v);
+        send_parts();
     }
 };
 #endif
@@ -249,6 +258,7 @@ std::unique_ptr<Synth> open_synth(const std::string &want, const std::vector<std
     if (want == "auto" || want == "windows") {
         auto s = std::make_unique<WinSynth>();
         if (midiOutOpen(&s->h, MIDI_MAPPER, 0, 0, CALLBACK_NULL) == MMSYSERR_NOERROR) {
+            midiOutSetVolume(s->h, 0xffffffff);   // (the device's own volume full, where an earlier HIRAKU turned it down)
             kind = "windows", what = "Windows' own synth";
             return s;
         }

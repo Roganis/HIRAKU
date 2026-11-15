@@ -147,6 +147,10 @@ endif()
 add_executable(test_smf midi/test_smf.cpp)
 target_link_libraries(test_smf PRIVATE hiraku_midi)
 add_test(NAME midi_files COMMAND test_smf)
+# ... and its volume for a synth that plays on its own (Windows'): in each part's volume controller
+add_executable(test_part_volume midi/test_part_volume.cpp)
+target_include_directories(test_part_volume PRIVATE ${CMAKE_SOURCE_DIR}/runtime)
+add_test(NAME midi_part_volume COMMAND test_part_volume)
 
 # The performance overlay (runtime/host/statsview.h): what it reads of the system's files (made-up
 # ones), its panel from made-up frames, its levels, and its place: the corners, a drag with the

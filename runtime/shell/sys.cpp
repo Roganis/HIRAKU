@@ -12,6 +12,7 @@
 #include <chrono>
 #include <condition_variable>
 #include <fstream>
+#include <map>
 #include <mutex>
 #include <thread>
 #include <utility>
@@ -223,7 +224,100 @@ ssize_t pread(int fd, void *buf, size_t n, uint64_t off) {
     return (ssize_t)got;
 }
 
-void will_need(int, uint64_t, uint64_t) {}
+// will_need: what posix_fadvise(WILLNEED) has Linux's kernel do, done by a thread of HIRAKU's own.
+// It reads the range through a handle of its own (a synchronous handle's reads queue one behind the
+// other: on the game's, the game's next read would wait for it), so the range is in the system's
+// cache when the emulation reads it. Without it a disk image on a drive the cache doesn't hold yet
+// was read where the game asked for it, the machine waiting (beatmania III's sound disk: reads of
+// 28 ms, breaks in the sound, issue 15). Per file only the latest range asked for is kept.
+namespace {
+struct ReadAhead {
+    std::mutex mu;
+    std::condition_variable cv;
+    std::map<std::wstring, std::pair<uint64_t, uint64_t>> wanted;   // file: [from, to)
+    std::map<std::pair<int, intptr_t>, std::wstring> names;          // an fd (and its handle): its file
+    std::atomic<uint64_t> done{0};
+    bool running = false;
+};
+ReadAhead &read_ahead() {
+    static ReadAhead *r = new ReadAhead;   // (never destroyed: its thread may still run at exit)
+    return *r;
+}
+
+void read_ahead_thread() {
+    ReadAhead &r = read_ahead();
+    SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_BELOW_NORMAL);
+    std::map<std::wstring, HANDLE> open;
+    std::vector<char> buf(1 << 20);
+    for (;;) {
+        std::wstring name;
+        uint64_t at, to;
+        {
+            std::unique_lock<std::mutex> lk(r.mu);
+            r.cv.wait(lk, [&] { return !r.wanted.empty(); });
+            auto it = r.wanted.begin();
+            name = it->first, at = it->second.first, to = it->second.second;
+            r.wanted.erase(it);
+        }
+        HANDLE &h = open[name];
+        if (!h) {
+            h = CreateFileW(name.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr,
+                            OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+            if (h == INVALID_HANDLE_VALUE) h = nullptr;
+            if (!h) continue;
+        }
+        while (at < to) {
+            {   // a newer range for this file: that one instead
+                std::lock_guard<std::mutex> lk(r.mu);
+                if (r.wanted.count(name)) break;
+            }
+            OVERLAPPED o{};
+            o.Offset = (DWORD)at;
+            o.OffsetHigh = (DWORD)(at >> 32);
+            DWORD got = 0;
+            if (!ReadFile(h, buf.data(), (DWORD)std::min<uint64_t>(buf.size(), to - at), &got, &o) || !got) break;
+            at += got;
+            r.done += got;
+        }
+    }
+}
+
+std::wstring handle_name(HANDLE h) {
+    std::wstring w(1024, L'\0');
+    DWORD n = GetFinalPathNameByHandleW(h, w.data(), (DWORD)w.size(), FILE_NAME_NORMALIZED);
+    if (n >= w.size()) {
+        w.resize(n + 1);
+        n = GetFinalPathNameByHandleW(h, w.data(), (DWORD)w.size(), FILE_NAME_NORMALIZED);
+    }
+    if (!n || n >= w.size()) return {};
+    w.resize(n);
+    return w;
+}
+}  // namespace
+
+void will_need(int fd, uint64_t off, uint64_t n) {
+    HANDLE h = (HANDLE)_get_osfhandle(fd);
+    if (h == INVALID_HANDLE_VALUE || !n) return;
+    ReadAhead &r = read_ahead();
+    std::unique_lock<std::mutex> lk(r.mu);
+    const auto key = std::make_pair(fd, (intptr_t)h);
+    auto it = r.names.find(key);
+    if (it == r.names.end()) {
+        lk.unlock();
+        std::wstring name = handle_name(h);   // (once per file: not on the emulation's every read)
+        lk.lock();
+        it = r.names.emplace(key, std::move(name)).first;
+    }
+    if (it->second.empty()) return;
+    r.wanted[it->second] = {off, off + n};
+    if (!r.running) {
+        r.running = true;
+        std::thread(read_ahead_thread).detach();
+    }
+    r.cv.notify_one();
+}
+
+uint64_t will_need_read() { return read_ahead().done.load(); }
 
 bool make_dir(const std::string &path) {
     struct _stat64 st;
@@ -619,6 +713,7 @@ void unmap_file(const void *p, uint64_t size) {
 ssize_t pread(int fd, void *buf, size_t n, uint64_t off) { return ::pread(fd, buf, n, (off_t)off); }
 
 void will_need(int fd, uint64_t off, uint64_t n) { posix_fadvise(fd, (off_t)off, (off_t)n, POSIX_FADV_WILLNEED); }
+uint64_t will_need_read() { return 0; }   // (the kernel reads it)
 
 bool make_dir(const std::string &path) {
     struct stat st;

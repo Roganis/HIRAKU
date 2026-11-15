@@ -272,6 +272,10 @@ set_tests_properties(pc_game_process PROPERTIES TIMEOUT 120)
 
 # Saves written whole or not at all (runtime/shell/sys.h, write_file): NVRAM, cards, the e-AMUSEMENT
 # server's files
+add_executable(test_will_need sys/test_will_need.cpp)
+target_link_libraries(test_will_need PRIVATE hiraku_sys Threads::Threads)
+add_test(NAME sys_will_need COMMAND test_will_need)
+
 add_executable(test_write_file sys/test_write_file.cpp)
 target_link_libraries(test_write_file PRIVATE hiraku_sys)
 add_test(NAME save_write_file COMMAND test_write_file)

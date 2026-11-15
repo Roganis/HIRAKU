@@ -277,7 +277,7 @@ Keyboardmania at 58.51.
 - **Settings > Display > Motion** (needs Wayland with KWin 6.7, or Windows, checked under Wine
   only): **Smooth motion** shows the notes where they are at each refresh, on any display; **CRT
   beam** simulates a CRT's beam on 120 Hz and up: set **Display gamma** to your display's, use
-  SDR, and turn off the display's ABL/APL and strobing. See [SMOOTH.md](SMOOTH.md).
+  SDR, and turn off the display's ABL/APL and strobing. See [MOTION.md](MOTION.md).
 
 Details: [PLAY-NOTES.md](PLAY-NOTES.md#frame-pacing)
 

@@ -7,7 +7,7 @@
 | [PLAY.md](PLAY.md) | The short guide: adding games, updating, the picture, controls, the game menu, latency, frame pacing, logs; then each board's games: what to add, their first start, their controls |
 | [PLAY-NOTES.md](PLAY-NOTES.md) | Every setting in detail, measurements, test switches |
 | [MODS.md](MODS.md) | Mods: what they can change and how to write one; high frame rates; beatmania III's IIDX-style turntable |
-| [SMOOTH.md](SMOOTH.md) | Smooth notes on 120–240 Hz displays: smooth motion and true high frame rates, game by game |
+| [MOTION.md](MOTION.md) | Smooth notes on 120–240 Hz displays: smooth motion, high frame rate mods, the CRT beam |
 | [LIGHTS.md](LIGHTS.md) | The cabinet's lamps on controller LEDs and other lights |
 | [EAMUSE.md](EAMUSE.md) | e-AMUSEMENT and NET TAISEN: turning it on, cards, one card for all, sharing a server between PCs, battles between cabinets |
 | [SONGS-BACK.md](SONGS-BACK.md) | Songs brought back from an Omnimix pack |
@@ -21,6 +21,7 @@
 | [../PLAN.md](../PLAN.md) | Where each board stands, the plans, and a section per piece of work |
 | [PLAN-HISTORY.md](PLAN-HISTORY.md) | The plan's full history up to 2026-11-14 (not kept up to date) |
 | [EAMUSE3.md](EAMUSE3.md) | e-AMUSEMENT's protocol, each game's calls and records |
+| [SMOOTH.md](SMOOTH.md) | How smooth motion, the high frame rates and the CRT beam work on each board, and how to check a game |
 | [RECOMP.md](RECOMP.md) | How the Firebeat recompiler works |
 | [KERNEL.md](KERNEL.md) | The Firebeat games' own kernel |
 | [M2.md](M2.md), [M3.md](M3.md), [M4.md](M4.md), [M5.md](M5.md) | The first milestones' results (beatmania III The Final, October 2026) |

@@ -28,7 +28,7 @@ What each game needs, its first start and its quirks: [docs/PLAY.md](docs/PLAY.m
 - **Events and unlocks.** Right-click a game > **Unlocks…** to set the event phases and see their progress.
 - **The game menu.** Hold 5, 7 and 3 on the cabinet's 10-key to change games without a keyboard.
 - **Low latency.** The sound is the clock and tunes itself to your PC; ALSA, WASAPI exclusive and ASIO outputs.
-- **The picture.** Each game at its monitor's shape, CRT shaders (F10), a CRT beam simulator, and smooth motion or true high frame rates on 120–240 Hz displays. ([docs/SMOOTH.md](docs/SMOOTH.md))
+- **The picture.** Each game at its monitor's shape, CRT shaders (F10), a CRT beam simulator, and smooth motion or true high frame rates on 120–240 Hz displays. ([docs/MOTION.md](docs/MOTION.md))
 - **Controls and lights.** Keyboards, IIDX/pop'n controllers and turntables, card readers and cabinet I/O boards; the cabinet's lamps on your controller's LEDs. ([docs/LIGHTS.md](docs/LIGHTS.md))
 - **Mods.** Patches, replaced files and text on every board, turned on per game in **Mods…**. ([docs/MODS.md](docs/MODS.md))
 - **Light on the PC.** Made for N100-class mini PCs, and checked frame by frame against MAME.
@@ -59,7 +59,7 @@ The Konami Python core builds inside PCSX2 Reliquary's own build: `oracle/pcsx2/
 
 ## Documentation
 
-- **Players:** [PLAY.md](docs/PLAY.md) (games, settings, controls, latency), [MODS.md](docs/MODS.md), [SMOOTH.md](docs/SMOOTH.md), [LIGHTS.md](docs/LIGHTS.md), [EAMUSE.md](docs/EAMUSE.md) (e-AMUSEMENT and NET TAISEN)
+- **Players:** [PLAY.md](docs/PLAY.md) (games, settings, controls, latency), [MODS.md](docs/MODS.md), [MOTION.md](docs/MOTION.md), [LIGHTS.md](docs/LIGHTS.md), [EAMUSE.md](docs/EAMUSE.md) (e-AMUSEMENT and NET TAISEN)
 - **Developers:** [PLAN.md](PLAN.md) (status and plans), [docs/README.md](docs/README.md) (every document), [oracle/README.md](oracle/README.md) (the MAME oracle)
 
 ## How it works

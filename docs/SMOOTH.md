@@ -1,4 +1,7 @@
-# Smooth notes on fast displays
+# Smooth notes on fast displays: how they work
+
+The complete notes: how each way works on each board, what was measured and checked, and how to
+check a new game. The player's guide is [MOTION.md](MOTION.md).
 
 A 120 or 240 Hz display can show notes moving two or four times as smoothly as the cabinet's
 60 Hz monitor. A game draws one picture per vsync, though, so the extra smoothness has to come

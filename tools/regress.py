@@ -61,7 +61,7 @@ CASES = {
     "bm3final-floppy-change": ("bm3final", 4400, ["--script", "oracle/scripts/bm3final-floppy-change.his",
                                                   "--floppy", "out/regress/work/bm3final-floppy-change/floppy.img"]),
     # ... and the second credit played to its end: a player's saves written over (READ DELETED DATA first)
-    "bm3final-floppy-again": ("bm3final", 27000, ["--script", "oracle/scripts/bm3final-floppy-again.his",
+    "bm3final-floppy-again": ("bm3final", 27200, ["--script", "oracle/scripts/bm3final-floppy-again.his",
                                                   "--floppy", "out/regress/work/bm3final-floppy-again/floppy.img"]),
     "popn7-attract": ("popn7", 3600, []),
     # pop'n music Mickey Tunes! from a blank NVRAM: the boot checks, the warm-up, attract to How to Play

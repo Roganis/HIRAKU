@@ -36,5 +36,5 @@ at 16900 press "P1 Button 1" 8
 at 17200 press "P1 Button 1" 8
 # the stage fails, CONTINUE? and the name entry (kept, AAAA) run out; the boot sector read, the saves written
 at 26480 snap                              # FD WRITING
-at 26800 snap                              # the score list: no disk error
-at 27000 quit
+at 27100 snap                              # the score list: no disk error
+at 27200 quit

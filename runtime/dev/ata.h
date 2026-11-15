@@ -113,9 +113,11 @@ public:
     std::function<void(bool)> dmarq;  // DMA request (READ DMA): the host pulls words with read_dma()
     uint16_t read_dma();
     bool log = false;
-    // A hard disk's PIO read raises an interrupt when its last word has been read.
-    // MAME and the ATA spec don't; the Firebeat SPU's oracle-matched timing does.
-    bool pio_end_irq = true;
+    // A hard disk's PIO read raises an interrupt when its last word has been read, if on.
+    // MAME and the ATA spec don't, and neither board with a hard disk wants it: DJ Main's
+    // matches MAME's drive, and on the Firebeat sound board the extra one left the program's
+    // "done" flag set for its next READ DMA (issue 15).
+    bool pio_end_irq = false;
     // CD audio: `sync` renders the bus's audio up to the present (called before
     // playback state changes or is reported); cdda_render adds n 44.1 kHz stereo
     // frames of unit `unit`'s playback to lr, scaled by gain.

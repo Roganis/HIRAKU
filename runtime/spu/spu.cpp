@@ -257,6 +257,11 @@ bool init(const Config &cfg) {
 
     g_ata = std::make_unique<AtaBus>();
     g_ata->log = cfg.log;
+    // A sector-by-sector (PIO) read ends without an interrupt, as in the ATA spec and MAME. The
+    // sound program waits for one interrupt per sector; one more after the last left its "done"
+    // flag set, so its next READ DMA didn't wait for the one before it: the stage's music landed
+    // in the wrong bank and the song's channels began on what was left there (issue 15)
+    g_ata->pio_end_irq = false;
     if (!cfg.hdd.empty()) {
         auto d = std::make_unique<AtaDevice>("spu-hdd", false);
         d->disk = std::make_unique<DiskImage>();

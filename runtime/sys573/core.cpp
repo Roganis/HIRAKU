@@ -197,8 +197,8 @@ public:
     void overlay_lines(std::vector<std::string> &lines) override {   // the performance overlay (host/statsview.h)
         const double s = k573::mips::share();
         char b[64];
-        if (s >= 0) snprintf(b, sizeof b, "the game's CPU: %.0f %% of cycles in built-in code", s), lines.push_back(b);
-        else if (s == -2) lines.push_back("the game's CPU: interpreted (no code built in)");
+        if (s >= 0) snprintf(b, sizeof b, "the game's CPU: %.0f %% of cycles as host code", s), lines.push_back(b);
+        else if (s == -2) lines.push_back("the game's CPU: interpreted");
     }
 
     double seconds() const override { return k573::seconds(); }

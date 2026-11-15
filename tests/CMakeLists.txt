@@ -411,6 +411,11 @@ endif()
 add_executable(test_meg_jit jit/test_meg_jit.cpp)
 target_link_libraries(test_meg_jit PRIVATE hiraku_xt446)
 add_test(NAME meg_jit COMMAND test_meg_jit)
+# ... and the PlayStation R3000's blocks made at run time (runtime/sys573/mipsjit.cpp) against MAME's
+# interpreter: random programs on two bare CPUs, compared every 1/2000 s. No game needed
+add_executable(test_r3000_jit jit/test_r3000_jit.cpp)
+target_link_libraries(test_r3000_jit PRIVATE hiraku_sys573 hiraku_sys573_blocks)   # (the blocks no game has: empty tables)
+add_test(NAME r3000_jit COMMAND test_r3000_jit)
 
 # The GCU's rows (runtime/dev/k057714_rows.h): copied, blended and filled eight pixels at a time,
 # against the pixel-by-pixel loops, on runs drawn at random

@@ -8,6 +8,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <deque>
 #include <fstream>
 #include <map>
 #include <sstream>
@@ -15,6 +16,7 @@
 #include <vector>
 
 #include "sys573/mips_ops.h"
+#include "sys573/mipsjit.h"
 #include "machine/ram.h"
 
 #include "shell/sys.h"
@@ -33,9 +35,10 @@ constexpr int MAX_LEN = 128;              // the longest block the recorder make
 
 struct Node {
     uint32_t pc, len, nwords;
-    void (*fn)(psxcpu_device &);
+    void (*fn)(psxcpu_device &);  // a built-in block's function
     const hk573_block *b;
     const Node *next;             // other blocks at the same index: other code at this pc, or another mirror
+    void *jit = nullptr;          // a block made at run time (mipsjit.h): its code, in place of fn
     mutable uint64_t epoch = 0;   // the code matched at this epoch (0: check it on every run)
     // the blocks that ran after this one, by their pc (the two exits of a conditional branch)
     mutable uint32_t link_pc[2] = {1, 1};
@@ -132,13 +135,32 @@ struct Rec {
 
 struct Stats {
     uint64_t runs = 0, insns = 0, short_slice = 0, not_fast = 0, mismatch = 0, checked = 0, unwatched = 0;
+    uint64_t made = 0, not_made = 0;
 };
+
+// Blocks made at run time (mipsjit.h), for the code no built-in block covers: all of it in a
+// release. A place the interpreter keeps arriving at other than from the instruction before
+// (a block's start, as the recorder has it) is counted, and at the HOT-th arrival the code from
+// there is made a block and joins the table, to be found, checked against memory and run as a
+// built-in one is.
+struct Seen {
+    uint32_t pc, count;
+};
+constexpr uint32_t SEEN_SIZE = 1u << 16;   // counters, by (pc >> 2): a newcomer takes a slot over
+constexpr uint32_t HOT = 4, TRIED = 0xffffffffu;
+constexpr int MAX_VERSIONS = 4;            // blocks kept for one pc (other code loaded at the same place)
 
 struct State {
     psxcpu_device *cpu = nullptr;
     std::vector<const void *> tab;
     std::vector<Node> nodes;
     size_t nblocks = 0;
+    // made at run time
+    bool jit = false;
+    std::vector<Seen> seen;
+    std::deque<Node> made;                       // (a deque: the table points into it as it grows)
+    std::deque<hk573_block> made_blocks;
+    std::deque<std::vector<uint32_t>> made_words;
     bool stats_on = false;
     bool count_on = false;   // the blocks' runs and cycles counted (stats_on, or share() asked)
     Stats st;
@@ -218,6 +240,7 @@ void map_changed(const address_space &space) {
     const bool whole = r && r == w && space.mem_ptr(X::SP_BASE + X::SP_MASK, false) == r + X::SP_MASK &&
                        space.mem_ptr(X::SP_BASE + X::SP_MASK, true) == r + X::SP_MASK;
     X::sp = whole ? r : nullptr;
+    if (g.jit) jit::map_changed(*g.cpu, X::sp);
 }
 
 // the block for the code at pc among head's, if its code is there
@@ -227,6 +250,8 @@ const Node *find(psxcpu_device &d, const Node *head, uint32_t pc) {
         if (n->epoch == g_epoch || check(d, n)) return n;
         if (g.stats_on) g.st.mismatch++;
     }
+    // other code is at pc now than any block's: count its arrivals afresh, to make it one too
+    if (g.jit && head) g.seen[(pc >> 2) & (SEEN_SIZE - 1)] = Seen{pc, 0};
     return nullptr;
 }
 
@@ -251,7 +276,8 @@ bool run(psxcpu_device &d, const void *p) {
         X::bailed = false;
         const int before = X::icount(d);
         const int stolen = d.m_cycles_stolen;
-        n->fn(d);
+        if (n->jit) jit::enter(d, n->jit, g_epoch);
+        else n->fn(d);
         if (g.count_on) {   // what it ran: the cycles it took, less any a device cut from the timeslice
             g.st.runs++;
             g.st.insns += before - X::icount(d) - (d.m_cycles_stolen - stolen);
@@ -276,15 +302,9 @@ bool run(psxcpu_device &d, const void *p) {
     }
 }
 
-// ---- recording ----
-void record(psxcpu_device &d) {
-    const uint32_t pc = X::pc(d);
-    const bool start = pc != g.last + 4 || pc >= g.cur_end;
-    g.last = pc;
-    if (!start) return;
-    g.cur_end = 0;
-    if (X::delayr(d) >= (uint32_t)X::DELAY_PC || !X::fast_mode(d)) return;   // blocks never start here
-    uint32_t w[MAX_LEN + 1];
+// The words of the block that starts at pc, as the recorder forms one: to a jump's delay slot, an
+// instruction a block hands to the interpreter, or MAX_LEN; on past conditional branches
+int block_words(psxcpu_device &d, uint32_t pc, uint32_t *w) {
     int n = 0;
     while (n < MAX_LEN && words_at(d, pc + 4 * n, &w[n], 1)) {
         const Kind k = kind(w[n++]);
@@ -299,6 +319,67 @@ void record(psxcpu_device &d) {
         if (!conditional || slot == TERMINAL) break;
         // a conditional branch: the block runs on where it isn't taken
     }
+    return n;
+}
+
+// ---- blocks made at run time ----
+void make_block(psxcpu_device &d, uint32_t pc) {
+    uint32_t w[MAX_LEN + 1];
+    const int n = block_words(d, pc, w);
+    if (n == 0) return;
+    const void *&slot = g.tab[(pc >> 2) & (TAB_SIZE - 1)];
+    int versions = 0;
+    for (const Node *o = static_cast<const Node *>(slot); o; o = o->next) {
+        if (o->pc != pc) continue;
+        if (o->nwords <= (uint32_t)n && memcmp(o->b->words, w, 4 * o->nwords) == 0) return;   // this code has its block
+        versions++;
+    }
+    jit::Made m;
+    if (versions >= MAX_VERSIONS || !jit::make(d, pc, w, n, m)) {
+        g.st.not_made++;
+        return;
+    }
+    g.made_words.emplace_back(w, w + m.nwords);
+    g.made_blocks.push_back(hk573_block{pc, m.len, m.nwords, g.made_words.back().data(), nullptr, 0, nullptr});
+    Node node{pc, m.len, m.nwords, nullptr, &g.made_blocks.back(), static_cast<const Node *>(slot)};
+    node.jit = m.entry;
+    g.made.push_back(node);
+    slot = &g.made.back();
+    g.st.made++;
+    g.nblocks++;
+}
+
+// MAME's execute_run() is about to run the instruction at m_pc, or the block there (m_hk_rec)
+uint32_t g_last_pc = 0;
+void discover(psxcpu_device &d) {
+    const uint32_t pc = X::pc(d);
+    const bool start = pc != g_last_pc + 4;
+    g_last_pc = pc;
+    if (!start) return;
+    Seen &s = g.seen[(pc >> 2) & (SEEN_SIZE - 1)];
+    if (s.pc != pc) {
+        s = Seen{pc, 1};
+        return;
+    }
+    if (s.count == TRIED || ++s.count < HOT) return;
+    if (X::delayr(d) >= (uint32_t)X::DELAY_PC || !X::fast_mode(d)) {   // blocks never start here: at a later arrival
+        s.count = HOT - 1;
+        return;
+    }
+    s.count = TRIED;
+    make_block(d, pc);
+}
+
+// ---- recording ----
+void record(psxcpu_device &d) {
+    const uint32_t pc = X::pc(d);
+    const bool start = pc != g.last + 4 || pc >= g.cur_end;
+    g.last = pc;
+    if (!start) return;
+    g.cur_end = 0;
+    if (X::delayr(d) >= (uint32_t)X::DELAY_PC || !X::fast_mode(d)) return;   // blocks never start here
+    uint32_t w[MAX_LEN + 1];
+    const int n = block_words(d, pc, w);
     if (n == 0) return;
     g.cur_end = pc + 4 * n;
     auto &v = g.rec[pc];
@@ -353,11 +434,13 @@ void init(psxcpu_device &cpu) {
     idle_init(cpu);               // waiting loops counted, with blocks or without (idle.cpp)
     if (const char *b = getenv("HK_573_BLOCKS"); b && strcmp(b, "0") == 0) return;
     size_t total = 0;
-    for (uint32_t i = 0; i < hk573_nparts; i++) total += hk573_part_sizes[i];
-    if (!total) return;
+    if (const char *b = getenv("HK_573_BLOCKS"); !(b && strcmp(b, "jit") == 0))   // HK_573_BLOCKS=jit: made ones only
+        for (uint32_t i = 0; i < hk573_nparts; i++) total += hk573_part_sizes[i];
+    g.jit = jit::available();
+    if (!total && !g.jit) return;
     g.tab.assign(TAB_SIZE, nullptr);
     g.nodes.reserve(total);
-    for (uint32_t i = 0; i < hk573_nparts; i++)
+    for (uint32_t i = 0; total && i < hk573_nparts; i++)
         for (uint32_t j = 0; j < hk573_part_sizes[i]; j++) {
             const hk573_block *b = &hk573_parts[i][j];
             const void *&slot = g.tab[(b->pc >> 2) & (TAB_SIZE - 1)];
@@ -375,6 +458,11 @@ void init(psxcpu_device &cpu) {
         gd.faults.assign(gd.size / gd.page_size, 0);
         gd.prot.assign(gd.size / gd.page_size, 0);
         sys::catch_write_faults(on_write);
+    }
+    if (g.jit) {
+        jit::init(cpu);
+        g.seen.assign(SEEN_SIZE, Seen{1, 0});   // (1: no instruction's address)
+        cpu.m_hk_rec = discover;
     }
     map_changed(X::program(cpu));
     cpu.m_hk_tab = g.tab.data();
@@ -405,7 +493,7 @@ void finish() {
 
 double share() {
     static uint64_t insns0 = 0, total0 = 0;
-    if (!g.cpu || !g.nblocks) return -2;
+    if (!g.cpu || (!g.nblocks && !g.jit)) return -2;
     const bool counted = g.count_on;
     g.count_on = true;
     const uint64_t total = static_cast<cpu_device *>(g.cpu)->total_cycles();
@@ -419,7 +507,7 @@ std::string report() {
     char b[400];
     const uint64_t total = g.cpu ? static_cast<cpu_device *>(g.cpu)->total_cycles() : 0;
     snprintf(b, sizeof b,
-             "mips: %zu blocks built in; %" PRIu64 " runs, %" PRIu64 " instructions (%.1f %% of %" PRIu64
+             "mips: %zu blocks; %" PRIu64 " runs, %" PRIu64 " instructions (%.1f %% of %" PRIu64
              "); refused: %" PRIu64 " short slice, %" PRIu64 " mode, %" PRIu64 " other code; %" PRIu64
              " code pages protected, %" PRIu64 " written",
              g.nblocks, g.st.runs, g.st.insns, total ? 100.0 * (double)g.st.insns / (double)total : 0.0, total,
@@ -427,6 +515,11 @@ std::string report() {
     std::string out = b;
     snprintf(b, sizeof b, "\nmips: code checked %" PRIu64 " times, %" PRIu64 " of them unwatched", g.st.checked, g.st.unwatched);
     out += b;
+    if (g.jit) {
+        snprintf(b, sizeof b, "\nmips: %" PRIu64 " blocks made at run time (%zu KiB of code), %" PRIu64 " not made",
+                 g.st.made, jit::code_bytes() >> 10, g.st.not_made);
+        out += b;
+    }
     std::map<uint32_t, uint64_t> by64k;
     uint64_t all = 0;
     for (auto &[a, n] : g_slow) { by64k[a >> 16] += n; all += n; }

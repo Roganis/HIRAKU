@@ -172,6 +172,18 @@ struct hk_psx {
         if (!d.m_gte.docop2(pc, fun)) d.m_hook_pc = pc;   // MAME's stop(): a debugger break, and the hook
     }
 
+    // ---- for blocks made at run time (mipsjit.cpp): where MAME keeps what their code works on,
+    // from the device's start, and its table of pointers ----
+    struct Offsets { int64_t r, pc, delayr, delayv, icount, hook_pc, cp0r, hi, lo, mop, mop1, mop2, jit; };
+    static Offsets offsets(D &d) {
+        const char *b = reinterpret_cast<const char *>(&d);
+        const auto o = [b](const void *p) { return (int64_t)(static_cast<const char *>(p) - b); };
+        return {o(&d.m_r[0]), o(&d.m_pc), o(&d.m_delayr), o(&d.m_delayv), o(&d.m_icount), o(&d.m_hook_pc), o(&d.m_cp0r[0]),
+                o(&d.m_hi), o(&d.m_lo), o(&d.m_multiplier_operation), o(&d.m_multiplier_operand1), o(&d.m_multiplier_operand2),
+                o(&d.m_hk_jit[0])};
+    }
+    static constexpr size_t JIT_SLOTS = sizeof(D::m_hk_jit) / sizeof(void *);
+
     // ---- for the dispatcher (mips.cpp) ----
     static HK_INLINE bool fast_mode(D &d) {
         // kernel mode, caches not isolated, no hardware breakpoints, no pending bus error

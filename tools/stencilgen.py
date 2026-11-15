@@ -6,8 +6,8 @@
 
 OBJECT is a stencil source (runtime/jit/*_stencils.c) compiled by clang for ELF with
 -ffunction-sections: each function is a stencil, and each relocation the compiler left in it is a
-hole (the symbols H0..H3: a value given when the stencil is copied) or the jump to the stencil
-copied after it (HK_CONTINUE). OUT.inc gets, in namespace hk::jit::NAMESPACE, the stencils' bytes,
+hole (the symbols H0..H11: a value given when the stencil is copied), the jump to the stencil
+copied after it (HK_CONTINUE) or a jump to a place given when it is copied (HK_TARGET0, 1). OUT.inc gets, in namespace hk::jit::NAMESPACE, the stencils' bytes,
 their relocations and an enum of their names, in the source's order.
 
 The script refuses what the copying could not honour: a relocation against anything else (a
@@ -20,8 +20,9 @@ import sys
 EM_X86_64 = 62
 SHT_SYMTAB, SHT_RELA = 2, 4
 STT_FUNC = 2
-HOLES = ['H0', 'H1', 'H2', 'H3']
+HOLES = [f'H{i}' for i in range(12)]
 CONTINUE = 'HK_CONTINUE'
+TARGETS = ['HK_TARGET0', 'HK_TARGET1']
 # relocation type -> the copier's kind (runtime/jit/jit.h, Kind)
 X86_64 = {10: 'ABS32', 11: 'ABS32S', 2: 'REL32', 4: 'REL32'}   # R_X86_64_32, _32S, _PC32, _PLT32
 
@@ -76,17 +77,19 @@ def read(path):
             if typ not in X86_64:
                 die(f"{sym['name']}: relocation type {typ} against {target}: not one the copier knows")
             kind = X86_64[typ]
-            if target == CONTINUE:
+            if target == CONTINUE or target in TARGETS:
                 if kind != 'REL32':
-                    die(f"{sym['name']}: {CONTINUE} is not reached by a jump")
+                    die(f"{sym['name']}: {target} is not reached by a jump")
                 hole = 0
+                if target in TARGETS:
+                    kind, hole = 'REL32T', TARGETS.index(target)
             elif target in HOLES:
                 if kind == 'REL32':
                     die(f"{sym['name']}: {target} used as a place in the code")
                 hole = HOLES.index(target)
             else:
-                die(f"{sym['name']}: a relocation against {target!r}: a stencil may only name its holes and {CONTINUE} "
-                    '(a constant in a data section, a switch table or a call by name cannot be copied)')
+                die(f"{sym['name']}: a relocation against {target!r}: a stencil may only name its holes, {CONTINUE} and its "
+                    'targets (a constant in a data section, a switch table or a call by name cannot be copied)')
             rs.append((off - sym['value'], kind, hole, addend))
         # the jump to the next stencil, where it is the last instruction: dropped when copied
         tail = 0

@@ -174,25 +174,29 @@ target_include_directories(hiraku_jit PUBLIC runtime)
 set(HK_JIT_GEN ${CMAKE_BINARY_DIR}/genjit)
 function(hk_stencils name target)
   if(NOT CMAKE_C_COMPILER_ID MATCHES "Clang" OR NOT CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|AMD64|amd64)$")
-    message(STATUS "no ${name} stencils for ${CMAKE_SYSTEM_PROCESSOR} with ${CMAKE_C_COMPILER_ID}: interpreted")
+    message(STATUS "no ${name} stencils for ${CMAKE_SYSTEM_PROCESSOR} with ${CMAKE_C_COMPILER_ID}: ${target} interprets")
     return()
   endif()
   set(src ${CMAKE_SOURCE_DIR}/runtime/jit/${name}_stencils.c)
   set(obj ${HK_JIT_GEN}/${name}_stencils.o)
   set(inc ${HK_JIT_GEN}/hk_${name}_stencils.inc)
-  add_custom_command(
-    OUTPUT ${inc}
-    COMMAND ${CMAKE_COMMAND} -E make_directory ${HK_JIT_GEN}
-    # (no red zone: Windows has none; general registers only; no tables or constants outside the
-    # functions: the copier takes each function's bytes and nothing else)
-    COMMAND ${CMAKE_C_COMPILER} --target=x86_64-unknown-linux-gnu -ffreestanding -O2 -fno-pic -mcmodel=small
-            -mno-red-zone -mgeneral-regs-only -fno-asynchronous-unwind-tables -fno-stack-protector
-            -fcf-protection=none -ffunction-sections -fno-jump-tables -fomit-frame-pointer
-            -Wall -Wextra -Wno-unused-parameter -Werror -c ${src} -o ${obj}
-    COMMAND python3 ${CMAKE_SOURCE_DIR}/tools/stencilgen.py ${obj} ${inc} ${name}
-    DEPENDS ${src} ${CMAKE_SOURCE_DIR}/runtime/jit/stencil.h ${CMAKE_SOURCE_DIR}/tools/stencilgen.py
-    COMMENT "stencils: ${name}" VERBATIM)
-  target_sources(${target} PRIVATE ${inc})
+  if(NOT TARGET hk_stencils_${name})   # (made once, whichever targets use them)
+    file(GLOB heads ${CMAKE_SOURCE_DIR}/runtime/jit/*.h)
+    add_custom_command(
+      OUTPUT ${inc}
+      COMMAND ${CMAKE_COMMAND} -E make_directory ${HK_JIT_GEN}
+      # (no red zone: Windows has none; general registers only; no tables or constants outside the
+      # functions: the copier takes each function's bytes and nothing else)
+      COMMAND ${CMAKE_C_COMPILER} --target=x86_64-unknown-linux-gnu -ffreestanding -O2 -fno-pic -mcmodel=small
+              -mno-red-zone -mgeneral-regs-only -fno-asynchronous-unwind-tables -fno-stack-protector
+              -fcf-protection=none -ffunction-sections -fno-jump-tables -fomit-frame-pointer
+              -Wall -Wextra -Wno-unused-parameter -Werror -c ${src} -o ${obj}
+      COMMAND python3 ${CMAKE_SOURCE_DIR}/tools/stencilgen.py ${obj} ${inc} ${name}
+      DEPENDS ${src} ${heads} ${CMAKE_SOURCE_DIR}/tools/stencilgen.py
+      COMMENT "stencils: ${name}" VERBATIM)
+    add_custom_target(hk_stencils_${name} DEPENDS ${inc})
+  endif()
+  add_dependencies(${target} hk_stencils_${name})
   target_include_directories(${target} PRIVATE ${HK_JIT_GEN})
   string(TOUPPER ${name} upper)
   target_compile_definitions(${target} PRIVATE HK_${upper}_STENCILS=1)
@@ -818,10 +822,11 @@ target_link_libraries(hiraku_mame573 PUBLIC hiraku_image)   # CHDs read in place
 target_compile_options(hiraku_mame573 PRIVATE -w ${HK_573_OPT_LIST})
 target_link_libraries(hiraku_mame573 PUBLIC hk_softfloat3)
 
-add_library(hiraku_sys573 STATIC runtime/sys573/board.cpp runtime/sys573/core.cpp runtime/sys573/mips.cpp runtime/sys573/idle.cpp runtime/sys573/npu.cpp runtime/sys573/link.cpp
+add_library(hiraku_sys573 STATIC runtime/sys573/board.cpp runtime/sys573/core.cpp runtime/sys573/mips.cpp runtime/sys573/mipsjit.cpp runtime/sys573/idle.cpp runtime/sys573/npu.cpp runtime/sys573/link.cpp
   runtime/sys573/cardunit.cpp runtime/sys573/rental.cpp runtime/sys573/mcal.cpp)
 target_include_directories(hiraku_sys573 PUBLIC runtime)
-target_link_libraries(hiraku_sys573 PUBLIC hiraku_mame573 hiraku_cabinet hiraku_eamuse)
+target_link_libraries(hiraku_sys573 PUBLIC hiraku_mame573 hiraku_cabinet hiraku_eamuse hiraku_jit)
+hk_stencils(r3000 hiraku_sys573)
 # hiraku-eamuse: the e-AMUSEMENT server on the network, for several cabinets (tools/eamuse/server.cpp):
 # the System 573's and the Python core's (docs/EAMUSE3.md); plain C++, no emulator
 add_executable(hiraku-eamuse tools/eamuse/server.cpp)
@@ -890,8 +895,10 @@ target_compile_options(hiraku_mametw PRIVATE -w -O2)
 # the PS1's R3000 recompiled as on the 573 (runtime/sys573/mips.h: the same code, built in here too)
 # and the 573's session cable (runtime/sys573/link.h), which joins a club kit's IIDX cabinet to its DDR one
 add_library(hiraku_twinkle STATIC runtime/twinkle/board.cpp runtime/twinkle/core.cpp runtime/sys573/mips.cpp
-  runtime/sys573/idle.cpp runtime/sys573/link.cpp)
+  runtime/sys573/mipsjit.cpp runtime/sys573/idle.cpp runtime/sys573/link.cpp)
 target_include_directories(hiraku_twinkle PUBLIC runtime)
+target_link_libraries(hiraku_twinkle PUBLIC hiraku_jit)
+hk_stencils(r3000 hiraku_twinkle)
 # the background video (runtime/twinkle/video.h): the Video CD decoded with FFmpeg's libraries,
 # when there are any (without them, Twinkle runs with MAME's picture)
 find_package(PkgConfig QUIET)

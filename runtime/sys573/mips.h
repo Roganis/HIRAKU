@@ -15,6 +15,8 @@
 //   HK_573_RECORD=FILE   interpret, and add the blocks this run executes to FILE (counts are
 //                        summed over runs; tools/mipsgen.py reads it)
 //   HK_573_BLOCKS=0      interpret everything, even with recompiled blocks built in
+//   HK_573_BLOCKS=jit    leave the built-in blocks out: only those made at run time (mipsjit.h)
+//   HK_573_JIT=0         make no blocks at run time
 //   HK_573_MIPS_STATS=1  print what the blocks covered at exit
 //   HK_573_IDLE=0        run waiting loops turn by turn (below)
 #pragma once
@@ -28,9 +30,9 @@ namespace hk::k573::mips {
 void init(psxcpu_device &cpu);
 void finish();            // writes the recording (HK_573_RECORD)
 std::string report();     // "" unless HK_573_MIPS_STATS is set
-// The share of the CPU's cycles run as built-in blocks since the last asking, percent, for the
-// performance overlay (Core::overlay_lines); the first asking starts the count (an add a block run)
-// and says -1; -2 with no blocks built in for the game
+// The share of the CPU's cycles run as blocks (built in, or made at run time: mipsjit.h) since
+// the last asking, percent, for the performance overlay (Core::overlay_lines); the first asking
+// starts the count (an add a block run) and says -1; -2 where there are no blocks to have
 double share();
 
 // Waiting loops (runtime/sys573/idle.cpp): a loop that only waits (the library's VSync(): a

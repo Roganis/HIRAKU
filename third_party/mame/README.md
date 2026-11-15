@@ -68,7 +68,8 @@ with a port of `twinkle.cpp`'s driver class.
   - the body of `execute_run()`'s loop is `execute_one()`, so a block can hand a single instruction back to the interpreter;
   - `execute_run()` first offers the instruction to `m_hk_run` when `m_hk_tab` has a block for its address and the CPU isn't in a branch delay slot. `m_hk_rec` sees every instruction, for recording;
   - `friend struct hk_psx` (`runtime/sys573/mips_ops.h`) gives the blocks MAME's registers and pipeline.
-  - With no table (`HK_573_BLOCKS=0`, or a game without a recording) the loop is MAME's.
+  - With no table (`HK_573_BLOCKS=0`) the loop is MAME's.
+  - `m_hk_jit`: a table of pointers for the blocks made at run time (`runtime/sys573/mipsjit.cpp`, `runtime/jit/r3000_layout.h`: the page table, the scratchpad, the calls their code makes). MAME's code never reads it. Those blocks are found and run through the same `m_hk_tab`/`m_hk_run`, and where to make one is noticed through `m_hk_rec`.
 - `psx.cpp` / `psx.h`, for the interpreter's own speed (a release has no recorded blocks; 2026-11-11):
   - `execute_run()` first calls `m_hk_idle` (`runtime/sys573/idle.cpp`): a waiting loop's turns for the rest of the timeslice counted instead of run, to the same state. `HK_573_IDLE=0` leaves it out.
   - the instruction's body is `hk_one()`, compiled into `execute_run()`'s loop (`execute_one()` calls it, for the blocks), and the pipeline's and the bus's small steps (`advance_pc`, `load`, `delayed_load`, the branches, `readword` and the others, the breakpoint tests) are compiled into each instruction's case (`HK_HOT`): MAME called them, about a dozen host instructions a call. The same code in the same order.

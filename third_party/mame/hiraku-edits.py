@@ -821,6 +821,9 @@ public:
 	// waiting loops counted instead of run (runtime/sys573/idle.cpp), at the start of a
 	// timeslice: true when it used the timeslice up
 	bool ( *m_hk_idle )( psxcpu_device & ) = nullptr;
+	// what blocks made at run time work from (runtime/sys573/mipsjit.cpp): the page table, the
+	// scratchpad, the calls out, by runtime/jit/r3000_layout.h's numbers
+	void *m_hk_jit[ 24 ] = {};
 protected:
 ''', 'hk members')
     return s

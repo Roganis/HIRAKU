@@ -5,28 +5,39 @@
 //
 //   HK_STENCIL(name) { ...; HK_NEXT; }
 //
-// s is the state the code works on, p, x and y three values kept in processor registers from one
-// stencil to the next (what each means is the user's: the MEG keeps its accumulator in p).
+// s is the state the code works on; a few more values are kept in processor registers from one
+// stencil to the next (by default three, p, x and y; what each means is the user's: the MEG keeps
+// its accumulator in p).
 // A hole is a value unknown until run time: HK_DISP(Hn) an offset from s, HK_IMM(Hn) a small
 // number. To the compiler a hole is the address of a symbol nobody defines, so it leaves a
 // relocation where the value goes, and tools/stencilgen.py turns the object file's functions and
 // relocations into tables. HK_NEXT runs the stencil copied after this one: a jump the copying
-// drops where it is the stencil's last instruction.
+// drops where it is the stencil's last instruction. HK_GOTO(n) goes to a place the copier is told
+// (jit.h, labels); a stencil may also simply return, which ends the program.
 //
 // Freestanding C, integers only: no calls but through HK_FN (a function pointer kept in the
 // state), no switch (its table would be data outside the function), no statics.
 #pragma once
 #include <stdint.h>
 
-typedef int64_t (*hk_stencil_fn)(char *s, int64_t p, int64_t x, int64_t y);
-int64_t HK_CONTINUE(char *s, int64_t p, int64_t x, int64_t y);   // never defined: the next stencil
+// The values kept in registers: a set of stencils may name its own before including this (as the
+// R3000's does, which keeps five), the same for every stencil of the set.
+#ifndef HK_ARGS_DECL
+#define HK_ARGS_DECL char *s, int64_t p, int64_t x, int64_t y
+#define HK_ARGS s, p, x, y
+#endif
 
-extern char H0[], H1[], H2[], H3[];   // never defined: the holes
+int64_t HK_CONTINUE(HK_ARGS_DECL);   // never defined: the next stencil
+// ... and places elsewhere in the program, given when the stencil is copied (a way out kept
+// out of line, a loop's start)
+int64_t HK_TARGET0(HK_ARGS_DECL);
+int64_t HK_TARGET1(HK_ARGS_DECL);
 
-#define HK_STENCIL(name) int64_t name(char *s, int64_t p, int64_t x, int64_t y)
-#define HK_NEXT __attribute__((musttail)) return HK_CONTINUE(s, p, x, y)
-// ... where x and y hold nothing the next stencil wants (after a call they need not be kept)
-#define HK_NEXT_PLAIN __attribute__((musttail)) return HK_CONTINUE(s, p, 0, 0)
+extern char H0[], H1[], H2[], H3[], H4[], H5[], H6[], H7[], H8[], H9[], H10[], H11[];   // never defined: the holes
+
+#define HK_STENCIL(name) int64_t name(HK_ARGS_DECL)
+#define HK_NEXT __attribute__((musttail)) return HK_CONTINUE(HK_ARGS)
+#define HK_GOTO(n) __attribute__((musttail)) return HK_TARGET##n(HK_ARGS)
 
 #define HK_DISP(h) ((intptr_t)(h))
 #define HK_IMM(h) ((int32_t)(intptr_t)(h))

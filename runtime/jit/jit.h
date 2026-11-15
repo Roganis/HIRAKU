@@ -17,6 +17,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <initializer_list>
 #include <vector>
 
 // How code made here is called, and how it calls out: one convention on every x86-64 system (the
@@ -42,11 +43,12 @@ enum Kind : uint8_t {
     ABS32,    // 32 bits, a number (zero-extended by the instruction)
     ABS32S,   // 32 bits, an offset (sign-extended by the instruction)
     REL32,    // 32 bits: the next stencil's distance from here (a jump to it)
+    REL32T,   // 32 bits: the distance to a label given when the stencil is copied (hole: which)
 };
 struct Reloc {
     uint16_t at;      // from the stencil's start
     Kind kind;
-    uint8_t hole;     // which of the stencil's holes (ABS32, ABS32S)
+    uint8_t hole;     // which of the stencil's holes (ABS32, ABS32S) or targets (REL32T)
     int32_t addend;
 };
 struct Stencil {
@@ -70,14 +72,25 @@ class Code {
 public:
     explicit Code(const Set &set) : set_(set) {}
     // the stencil `st` next, its holes given these values
-    void put(int st, int64_t h0 = 0, int64_t h1 = 0, int64_t h2 = 0, int64_t h3 = 0);
+    void put(int st, int64_t h0 = 0, int64_t h1 = 0, int64_t h2 = 0, int64_t h3 = 0) { put(st, {h0, h1, h2, h3}, {}); }
+    // ... and its targets these labels
+    void put(int st, std::initializer_list<int64_t> holes, std::initializer_list<int> targets);
+    // A label is a place in the program a stencil's target can be: made first, bound (once) to
+    // where the next stencil will start, before or after the stencils that go there.
+    int label();
+    void bind(int label);
     size_t size() const { return bytes_.size(); }   // where the next stencil will start: a place to enter at
-    bool ok() const { return ok_; }                 // false: a value did not fit its hole
+    // false: a value did not fit its hole, or a label used was never bound
+    bool ok() const { return ok_ && pending_.empty(); }
     const std::vector<unsigned char> &bytes() const { return bytes_; }
+    void clear();   // empty again, for the next program
 
 private:
+    struct Fix { size_t at; int32_t addend; int label; };
     const Set &set_;
     std::vector<unsigned char> bytes_;
+    std::vector<int64_t> labels_;    // a label's place, -1 until bound
+    std::vector<Fix> pending_;       // jumps to labels not bound yet
     bool ok_ = true;
 };
 
@@ -85,6 +98,26 @@ private:
 // caller keeps interpreting). Never written again once it can run.
 void *executable(const std::vector<unsigned char> &code);
 void release(void *mem, size_t size);
+
+// Many small programs in few pieces of executable memory (a game's thousands of blocks). A
+// piece can be run, and is opened for writing only while a program is added to it, by the thread
+// that adds: so the thread that runs the programs must be the one that adds them.
+class Arena {
+public:
+    explicit Arena(size_t limit) : limit_(limit) {}
+    ~Arena();
+    Arena(const Arena &) = delete;
+    Arena &operator=(const Arena &) = delete;
+    // the code's place, 16-aligned; nullptr when the limit is reached or the system gives no memory
+    void *add(const std::vector<unsigned char> &code);
+    size_t used() const { return used_; }
+
+private:
+    struct Piece { unsigned char *base; size_t size, at; };
+    std::vector<Piece> pieces_;
+    size_t limit_, used_ = 0, reserved_ = 0;
+    bool failed_ = false;
+};
 
 // False with HK_JIT=0 in the environment: every user then interprets, as where this processor
 // has no stencils. For comparing the two and for ruling the generator out of a problem.

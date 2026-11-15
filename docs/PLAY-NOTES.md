@@ -567,7 +567,7 @@ goes through its levels; `--stats-overlay line|panel|full` (or the launcher's Se
   frame's start to its sound entering the sound device plus the device's buffer), HIRAKU's
   busiest threads, the graphics card, the processors' clock, and the core's own lines: a PC game's
   pictures a second and its process's processor time (the game's work is in a process of its own),
-  the share of a System 573 or Twinkle game's CPU run as built-in code, the Konami Python games'
+  the share of a System 573 or Twinkle game's CPU run as the PC's own code, the Konami Python games'
   GS and the frames that waited for it.
 
 **Late** is the display's own word where it gives one (display sync on Wayland, or on Windows

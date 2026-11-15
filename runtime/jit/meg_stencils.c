@@ -6,6 +6,9 @@
 // result, y the ALU's second operand.
 #include "stencil.h"
 
+// ... where x and y hold nothing the next stencil wants (after a call they need not be kept)
+#define HK_NEXT_PLAIN __attribute__((musttail)) return HK_CONTINUE(s, p, 0, 0)
+
 typedef int64_t s64;
 typedef int32_t s32;
 typedef uint32_t u32;

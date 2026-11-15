@@ -1,0 +1,32 @@
+name = "IIDX-style turntable"
+version = "0.1"
+game = "bm3final"
+description = "The turntable as beatmania IIDX's: a scratch ends 2 frames after the turntable stops (the game's own: 8), so quick scratches one after the other each count, and turning back counts as a new scratch from 4 counts on (the game's: 16). For fast scratching (VOIDDD's start, TOKAI) on an analog turntable. For the program HIKARU.EXE of GCC01-JC."
+
+# The game's scratch (each frame, each player; the function at 0x80042fd8): the turntable's move
+# this frame goes into a ring of the last 8 frames' moves (0x80255d40, 32 bytes a player; its index
+# at 0x80255d80), and the ring is summed. With no scratch going on, a frame's move of more than 4
+# counts starts one (judged, its keysound played; the direction at 0x80255d88). During one, the
+# ring's sum turned the other way by more than 16 is a new one; the scratch ends when the ring's
+# sum is 0: 8 frames after the turntable stops, and until then another the same way doesn't count.
+# Here the ring is the last 2 frames.
+
+[[patch]]                      # the ring's index: (index + 1) mod 2, not mod 8 (srawi r0, r10, 3 -> 1)
+address = 0x800431ec
+original = "7d401e70"
+replace = "7d400e70"
+
+[[patch]]                      # ... (mulli r0, r0, 8 -> 2)
+address = 0x800431f4
+original = "1c000008"
+replace = "1c000002"
+
+[[patch]]                      # the sum over the ring's first 2 entries (cmpwi r23, 8 -> 2)
+address = 0x80043210
+original = "2c170008"
+replace = "2c170002"
+
+[[patch]]                      # turned back: a new scratch when the sum is over 4 the other way (cmpwi r18, 16 -> 4)
+address = 0x800433d4
+original = "2c120010"
+replace = "2c120004"

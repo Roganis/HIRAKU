@@ -438,6 +438,20 @@ for every game on them, with no mod.
 Only the Python, DJ Main and PC (32-bit) cores change their rate so far; elsewhere `[[rate]]` says so in the
 log and does nothing.
 
+## beatmania III's turntable (`games/bm3final/mods/iidx-turntable`)
+
+The Final judges a scratch from the turntable's moves over the last 8 frames (issue 15, 2026-11-15:
+the function at 0x80042fd8). Each frame's move goes into a ring of 8 (0x80255d40, 32 bytes a
+player, its index at 0x80255d80) and the ring is summed. With no scratch going on, a frame's move
+of more than 4 counts starts one; during one, the sum turned the other way by more than 16 starts
+another; the scratch ends when the sum is 0, 8 frames after the turntable stops. Until then a
+second scratch the same way doesn't count, and a quick turn back and forth sums to nothing and only
+ends it: fast scratching (VOIDDD's start) falls through. The mod makes the ring 2 frames (its
+index `mod 2`, the sum over 2 entries) and the turn back 4 counts, as beatmania IIDX's turntable
+feels. Checked in a scripted stage, the scratch state read each frame: three flicks 5 frames apart
+were one scratch for 18 frames, now three of 2; a flick, one back and one forward 2 frames apart
+were a scratch that ended at the turn back, now three. Not checked on real hardware or by ear.
+
 ## How the layers work
 
 - **Patches:** every frame, before the game's frame runs, each patch looks at its address: with

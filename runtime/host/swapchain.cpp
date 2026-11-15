@@ -666,7 +666,7 @@ std::string describe() {
     // the queue's thread: how near their times its pictures went
     Locked l;
     if (n_queued || n_no_room || n_dropped) {
-        snprintf(b, sizeof b, "\nvideo: of them %llu in-between pictures presented at their times by the swap chain's own thread "
+        snprintf(b, sizeof b, "\nvideo: of them %llu pictures presented at their times by the swap chain's own thread "
                  "(%.2f ms after on average, %llu over 1 ms, the worst %.1f ms); %llu more left out with no texture free, "
                  "%llu given up (a resize, the end)",
                  (unsigned long long)n_queued, n_queued ? (double)g_queue_late_sum / (double)n_queued / 1e6 : 0.0,

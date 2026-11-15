@@ -491,7 +491,8 @@ Wine only). See docs/SMOOTH.md.
 - **Smooth motion** (`--smooth-motion`): the game runs at its exact speed on any display (144 Hz
   too), and every refresh shows the notes and other moving things where they are at that
   refresh's moment, carried on along their move, instead of a frame held for 2 or 3 refreshes
-  unevenly.
+  unevenly. The game itself keeps its own even pace under it: its controls are read and its sound
+  made every frame period, not on the display's refreshes (docs/SMOOTH.md).
 - **CRT beam** (`--crt-beam`): the Blur Busters CRT Beam Simulator. On 120 Hz and up (best at
   240), each refresh lights the part of the tube the electron beam sweeps then and lets the rest
   fade, so moving notes stay as sharp as on a CRT. Set **Display gamma** to your display's (2.2

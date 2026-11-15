@@ -95,6 +95,13 @@ if(WIN32 AND TARGET hiraku_host)
   set_target_properties(test_swapchain PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})   # (beside SDL3.dll)
   add_test(NAME swapchain_queue COMMAND test_swapchain queue)
   add_test(NAME swapchain_wait COMMAND test_swapchain wait)
+  # ... and, at the game's own speed, a 58 Hz game on a 120 Hz display: the frames' work (the controls
+  # read, the sound made) at the game's even pace, their pictures on the display's refreshes
+  add_test(NAME swapchain_even COMMAND test_swapchain even 120 1.0)
+  # ... the frames' own pictures presented by the game's thread (HK_DXGI_QUEUE_OWN=0), and the
+  # cabinet's tight case: a frame's work, a refresh and its pictures' drawing more than a frame
+  add_test(NAME swapchain_own COMMAND test_swapchain own)
+  add_test(NAME swapchain_tight COMMAND test_swapchain tight 120 5.0 900)
 endif()
 
 # beatmania III's floppy controller and drive (runtime/dev/fdc.h) against a made-up disk: an empty

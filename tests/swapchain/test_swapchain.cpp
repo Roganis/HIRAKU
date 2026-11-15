@@ -4,10 +4,11 @@
 // window_present and window_next, smooth motion on) against a pretend Direct3D device, swap chain,
 // display and OpenGL (fake_d3d.h): no graphics card is needed, so it runs under Wine.
 //
-//   test_swapchain queue|wait [HZ [WORK_MS [FRAMES [strict]]]]
+//   test_swapchain queue|own|wait [HZ [WORK_MS [FRAMES [strict]]]]
 //
-// queue: the pictures queued for the swap chain's own thread; wait: HK_DXGI_NO_QUEUE, each waited
-// for on the game's thread, as before. A frame's emulation (WORK_MS, default 6) comes after its
+// queue: the pictures queued for the swap chain's own thread, the frames' own too; own:
+// HK_DXGI_QUEUE_OWN=0, the frames' own waited for and presented by the game's thread, the others
+// queued; wait: HK_DXGI_NO_QUEUE, each waited for on the game's thread. A frame's emulation (WORK_MS, default 6) comes after its
 // picture, as on Twinkle: longer than a refresh at 240 Hz (HZ's default), so `wait` isn't ready in
 // time for most frames and `queue` is.
 //
@@ -25,6 +26,7 @@
 #include <cstring>
 #include <set>
 #include <string>
+#include <vector>
 
 #include "core/prof.h"
 #include "host/dwm.h"
@@ -85,8 +87,22 @@ int main(int argc, char **argv) {
     const double work_ms = argc > 3 ? atof(argv[3]) : 6.0;
     const int frames = argc > 4 ? atoi(argv[4]) : 600;
     const bool strict = argc > 5 && !strcmp(argv[5], "strict");
-    const bool queue = mode == "queue";
+    // "even": a 58 Hz game, the frame's work done before its pictures are shown (as the window does at
+    // the game's own speed for a core whose picture comes first): the work must end at the game's even
+    // pace, not on the display's refreshes. "uneven": the same with HK_PACING_EVEN=0 and the pictures
+    // first, as it was, to see the difference (nothing checked)
+    // "tight": beatmania III on the IIDX cabinet: a 59.95 Hz game on 120 Hz, 5 ms of work and 1.7 ms
+    // of this thread for each picture's drawing, so that the budget, a refresh and the second
+    // picture's drawing are more than a frame: the work must still end at the game's even pace.
+    // "tight-own": the same with HK_DXGI_QUEUE_OWN=0, as it was, to see the difference (nothing checked)
+    const bool tight = mode == "tight", tight_own = mode == "tight-own";
+    const bool even = mode == "even" || tight, uneven = mode == "uneven", as_was = tight_own;
+    const bool queue = mode == "queue" || mode == "own" || even || uneven || as_was;
+    const bool own_queued = queue && mode != "own" && !tight_own;   // the frames' own pictures queued too
     _putenv(queue ? "HK_DXGI_NO_QUEUE=" : "HK_DXGI_NO_QUEUE=1");
+    if (queue && !own_queued) _putenv("HK_DXGI_QUEUE_OWN=0");
+    if (uneven) _putenv("HK_PACING_EVEN=0");
+    const double draw_ms = tight || tight_own ? 1.7 : 0.0;   // this thread held by a picture's drawing
     setvbuf(stdout, nullptr, _IONBF, 0);
 
     fake_display(hz, 1'500'000);
@@ -100,7 +116,8 @@ int main(int argc, char **argv) {
     pacing::set_smooth_motion(true);
 
     const DWORD game_thread = GetCurrentThreadId();
-    const double period = 1.0 / 59.94;
+    const double period = tight || tight_own ? 1.0 / 59.95 : even || uneven ? 1.0 / 58.0 : 1.0 / 59.94;
+    std::vector<double> work_done;   // when each frame's work ended, ms, less its even place
     std::set<long long> own;   // the frames' own pictures (the others: their other refreshes')
     long long stamp = 0, extras = 0;
     bool sync = false;
@@ -112,15 +129,24 @@ int main(int argc, char **argv) {
         // window_present
         sync = pacing::frame(f ? period : 0.0);
         if (sync && pacing::refreshes_per_frame() == 0) continue;
+        if (even || as_was) busy(work_ms);   // the frame's work, its pictures kept for after it
+        if ((even || uneven || as_was) && sync && f > frames / 4) {
+            if (uneven) busy(0.1);   // (as it was: the work after the pictures, timed below)
+            else work_done.push_back((double)prof::now_ns() / 1e6 - (double)f * period * 1e3);
+        }
+        busy(draw_ms);
         fake_drawn = ++stamp;
         own.insert(stamp);
-        if (sync) pacing::wait_commit(), pacing::commit();
-        else pacing::observe();
-        dxgi::present(sync);
+        // (window.cpp's show_frame: queued for its commit time where it can be, else waited for)
+        if (!(sync && pacing::commit_queued())) {
+            if (sync) pacing::wait_commit(), pacing::commit();
+            else pacing::observe();
+            dxgi::present(sync);
+        }
         const int k = sync ? pacing::refreshes_per_frame() : 1;
         if (sync) pacing::committed(false);
         for (int i = 1; i < k; i++) {   // the frame's other refreshes: a picture each
-            busy(0.2);
+            busy(0.2 + draw_ms);
             fake_drawn = ++stamp;
             extras++;
             if (!pacing::commit_extra(i)) dxgi::present(true, true);
@@ -128,7 +154,8 @@ int main(int argc, char **argv) {
         // half way: the window's size changes with pictures still queued
         if (f == frames / 2) dxgi::resize(800, 600);
         // back at the machine: most of the frame's emulation comes after its picture
-        busy(work_ms);
+        if (!even && !as_was) busy(work_ms);
+        if (uneven && sync && f > frames / 4) work_done.push_back((double)prof::now_ns() / 1e6 - (double)f * period * 1e3);
     }
     dxgi::settle();
     Sleep(100);
@@ -145,8 +172,10 @@ int main(int argc, char **argv) {
         if (i && log[i].stamp <= log[i - 1].stamp) out_of_order++;
         const bool mine = log[i].thread == game_thread;
         if (!mine) by_thread++;
-        // queued: the frames' own by the game's thread, the others by the swap chain's
-        if (queue ? mine != (own.count(log[i].stamp) > 0) : !mine) wrong_thread++;
+        // queued: the others by the swap chain's thread, and the frames' own too (own_queued; but
+        // for one that found no texture free) or by the game's thread
+        const bool is_own = own.count(log[i].stamp) > 0;
+        if (!queue ? !mine : own_queued ? mine && !is_own : mine != is_own) wrong_thread++;
     }
     long long refresh;   // every refresh a picture: each present shown a refresh after the last
     fake_last_vblank_ns(&refresh);
@@ -168,10 +197,13 @@ int main(int argc, char **argv) {
     check(chain_presented == n, "the swap chain's count of presents isn't the device's");
     check(committed == extras, "the other refreshes' pictures committed aren't those drawn");
     // every one of them shown, left out or given up, but for the last few still on their way
-    check(shown + gone <= committed && shown + gone >= committed - 16, "the other refreshes' pictures don't add up");
+    // (own_queued: a frame's own picture can be left out too, so `gone` isn't the others' alone)
+    check(shown + (own_queued ? 0 : gone) <= committed && shown + gone >= committed - 16, "the other refreshes' pictures don't add up");
     check((long long)own.size() + extras - gone == n, "the presents aren't the pictures drawn less those left out");
-    check(presented <= (long long)own.size() && presented >= (long long)own.size() - 16, "the frames presented aren't the frames drawn");
-    if (queue) check(by_thread == extras - gone, "the swap chain's own thread didn't present the other refreshes' pictures");
+    check(presented <= (long long)own.size() && presented >= (long long)own.size() - 16 - (own_queued ? gone : 0),
+          "the frames presented aren't the frames drawn");
+    if (queue && !own_queued) check(by_thread == extras - gone, "the swap chain's own thread didn't present the other refreshes' pictures");
+    if (own_queued) check(by_thread >= n - 16, "the swap chain's own thread didn't present the pictures");
 
     printf("%s at %.0f Hz, %.1f ms a frame's emulation: %d frames, %lld not ready in time, %lld held their refreshes; "
            "%lld other pictures, %lld shown, %lld late, %lld left out or given up; %d of %d presents a refresh after the last\n",
@@ -181,6 +213,16 @@ int main(int argc, char **argv) {
         check(held * 10 >= presented * 9, "strict: under 90 % of the frames held their refreshes");
         check(late * 20 <= shown, "strict: more than 5 % of the other pictures came a refresh late");
         check(a_refresh_on * 10 >= (n - 1) * 9, "strict: under 90 % of the presents came a refresh after the last");
+    }
+    if (even || uneven || as_was) {
+        // each frame's work ended where the game's clock puts it, give or take: all but the outer
+        // twentieths within 3 ms of each other (on the refreshes, they spread over one: 8 ms at 120 Hz)
+        std::sort(work_done.begin(), work_done.end());
+        const size_t n = work_done.size();
+        const double spread = n > 40 ? work_done[n - 1 - n / 20] - work_done[n / 20] : 1e9;
+        printf("%s: the frames' work ended within %.2f ms of the game's even pace (%zu frames, the outer twentieths left out)\n",
+               mode.c_str(), spread, n);
+        if (even) check(spread < (tight ? 1.5 : 3.0), "the frames' work doesn't end at the game's even pace");
     }
     pacing::shutdown();
     dxgi::stop();

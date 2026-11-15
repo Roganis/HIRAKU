@@ -25,6 +25,8 @@
 // with Wayland's fifo, where the compositor holds them: waiting there, a frame's emulation had one
 // refresh to fit in whatever the frame's length (7 ms at 120 Hz, 3 at 240). The thread reads the
 // frame statistics before each of its presents and keeps them for display pacing (seen(), went()).
+// The frame's own picture goes the same way (pacing::commit_queued): the game's thread waits for no
+// picture's time. HK_DXGI_QUEUE_OWN=0: that one waited for and presented by the game's thread.
 // HK_DXGI_NO_QUEUE: the old way, each picture waited for on the game's thread (to compare).
 #pragma once
 

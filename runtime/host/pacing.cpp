@@ -7,6 +7,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <ctime>
 #include <unordered_set>
 #include <vector>
@@ -496,7 +497,7 @@ static bool frame_exact(double period, double hz) {
     char b[256];
     snprintf(b, sizeof b, "on: %.2f Hz display, smooth motion: every refresh a picture of its own moment, the game at its "
              "own %.2f Hz (exact speed)", hz, 1.0 / period);
-    announce("exact " + std::to_string(std::lround(hz * 10)) + " " + std::to_string(std::lround(10.0 / period)), b);
+    announce("exact " + std::to_string(std::lround(hz * 10)) + " " + std::to_string(std::lround(2.0 / period)), b);
     const int64_t now = (int64_t)prof::now_ns();
     if (!g_lead_set) g_lead = g_T / 2, g_lead_set = true;
     // the first refresh this frame can make: the one after the last frame's (g_target + g_k * T)
@@ -585,8 +586,10 @@ bool frame(double period) {
     // said again when the game changes its video mode (pop'n boots at 59.94 Hz, then runs at 58.49)
     snprintf(b, sizeof b, "on: %.2f Hz display, %d refresh%s per frame, the game's %.2f Hz at %+.1f %% speed", hz, k,
              k == 1 ? "" : "es", 1.0 / period, (1e9 / ((double)k * (double)g_T) * period - 1.0) * 100.0);
+    // (by the half hertz: beatmania III's frames come 59.93 to 59.95 a second, and by the tenth the
+    // line was said again at every change between them, hundreds of times a run)
     announce("on " + std::to_string(std::lround(hz * 10)) + " " + std::to_string(k) + " " +
-                 std::to_string(std::lround(10.0 / period)), b);
+                 std::to_string(std::lround(2.0 / period)), b);
 
     const int64_t now = (int64_t)prof::now_ns();
     if (!g_lead_set) g_lead = g_T / 2, g_lead_set = true;   // then later and later (presented())
@@ -614,20 +617,57 @@ bool active() { return g_active; }
 double refresh_hz() { return g_T > 0 ? 1e9 / (double)g_T : 0.0; }
 double speed() { return g_active ? g_speed : 1.0; }
 
+// The burst has ended (its picture is drawn): how long it took, for the budget. Once a burst.
+static void burst_done(int64_t now) {
+    if (!g_burst_start) return;
+    g_samples[g_sample_at++ % g_samples.size()] = now - g_burst_start;
+    g_burst_start = 0;
+    if (g_sample_at % 64 == 0) {   // the burst's budget: the 99th percentile of recent ones, plus 1 ms
+        std::vector<int64_t> s(g_samples.begin(), g_samples.begin() + (long)std::min(g_sample_at, g_samples.size()));
+        std::nth_element(s.begin(), s.begin() + (long)(s.size() * 99 / 100), s.end());
+        g_budget = std::clamp(s[s.size() * 99 / 100] + MS, MS, (int64_t)std::max(g_k, 1) * g_T);
+    }
+}
+
 void wait_commit() {
     const int64_t now = (int64_t)prof::now_ns();
-    if (g_burst_start) {
-        g_samples[g_sample_at++ % g_samples.size()] = now - g_burst_start;
-        if (g_sample_at % 64 == 0) {   // the burst's budget: the 99th percentile of recent ones, plus 1 ms
-            std::vector<int64_t> s(g_samples.begin(), g_samples.begin() + (long)std::min(g_sample_at, g_samples.size()));
-            std::nth_element(s.begin(), s.begin() + (long)(s.size() * 99 / 100), s.end());
-            g_budget = std::clamp(s[s.size() * 99 / 100] + MS, MS, (int64_t)std::max(g_k, 1) * g_T);
-        }
-    }
+    burst_done(now);
     const int64_t at = g_target - g_lead;
     g_overrun = now > at + MS / 5;
     if (g_overrun) n_overrun++;
     sleep_until(at);
+}
+
+// The frame's own picture to the swap chain's own thread (Windows, the DXGI queue), which presents
+// it at its commit time as it does the frame's other pictures: this thread doesn't wait for that
+// time. Waiting here (wait_commit), with the game at its own speed, the commit came anywhere in a
+// refresh after the burst's budget, and the other pictures' drawing after it: on the IIDX cabinet
+// (120 Hz, crt-royale: 2 ms of this thread a picture) that ran past the next burst's start whenever
+// budget + a refresh + the drawing was more than a frame (beatmania III: 8.0 + 8.3 + 3.4 ms of
+// 16.7), for some 200 frames of every 600 as the game's 59.95 Hz drifts across the display's 120:
+// each of those bursts 1-3 ms late, its sound with it, and a 5 ms queue ran dry (400-900 breaks a
+// run), its picture not ready at its own time. HK_DXGI_QUEUE_OWN=0: waited for here, as it was.
+bool commit_queued(int64_t *at_ns) {
+#ifdef _WIN32
+    static const bool wanted = !getenv("HK_DXGI_QUEUE_OWN") || strcmp(getenv("HK_DXGI_QUEUE_OWN"), "0") != 0;
+    if (!wanted || !g_dxgi || !g_dwm || !dxgi::queues()) return false;
+    const int64_t at = g_target - g_lead;
+    if (!++g_ticket) ++g_ticket;
+    if (!dxgi::queue(at, g_ticket)) return false;   // (no texture for it: wait_commit, and the swap)
+    // (the burst's end is here: OpenGL's copy to the shared texture waits for the picture's drawing)
+    const int64_t now = (int64_t)prof::now_ns();
+    burst_done(now);
+    g_overrun = now > at + MS / 5;
+    if (g_overrun) n_overrun++;
+    g_sent.push_back({0, g_ticket, g_target, std::max(at, now), g_overrun, g_k});
+    if (g_sent.size() > 64) g_sent.erase(g_sent.begin());
+    dxgi_feedback();
+    if (at_ns) *at_ns = at;
+    return true;
+#else
+    (void)at_ns;
+    return false;
+#endif
 }
 
 void commit() {
@@ -712,8 +752,21 @@ bool commit_extra(int i) {
     return false;
 }
 
+// At the game's own speed (frame_exact) the next frame's burst starts a fixed time before that
+// frame's moment, which comes one game period after this one's: the controls are read, and the
+// frame's sound made, at the game's even pace. Started before the frame's first refresh instead
+// (the refresh at or after its moment, 0 to 1 refresh later), the bursts came 2 or 3 refreshes
+// apart for a 58 Hz game at 120 Hz: a press was taken up to a refresh sooner or later than the
+// game's clock said, and the sound of a frame held a third refresh came 8 ms late (the IIDX
+// cabinet's breaks with a short queue). The picture's own wait is the same refresh either way; what
+// it costs is the frame's own picture read from controls up to a refresh older (half on average).
+// HK_PACING_EVEN=0: before the first refresh, as it was.
+const bool g_even = !getenv("HK_PACING_EVEN") || strcmp(getenv("HK_PACING_EVEN"), "0") != 0;
+
 void wait_next() {
-    const int64_t start = g_target + (int64_t)g_k * g_T - g_lead - g_budget;
+    int64_t start = g_target + (int64_t)g_k * g_T - g_lead - g_budget;
+    if (g_active && g_exact && g_even && g_period_ns > 0)
+        start = std::min(start, (int64_t)(g_frame_at + g_period_ns) - g_lead - g_budget);
     sleep_until(start);
     g_burst_start = std::max(start, (int64_t)prof::now_ns());
 }

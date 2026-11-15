@@ -119,6 +119,7 @@ public:
     int script_button_delay() const override { return 1; }
     int audio_rate() const override { return dj::K054539::RATE; }
     bool audio_per_frame() const override { return true; }   // board.cpp run(): sound_flush()
+    bool picture_after_sound() const override { return true; }   // (a frame's 68EC020 work: a third of a millisecond)
     void turntable_add(int player, int delta) override { dj::turntable_add(player, delta); }
     const std::vector<uint8_t> &lamp_state() const override { return dj::lamp_state(); }
     uint64_t lamp_changes() const override { return dj::lamp_changes(); }

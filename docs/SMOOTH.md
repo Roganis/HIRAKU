@@ -35,6 +35,25 @@ Every refresh shows the frame with what moves carried on to that refresh's momen
 a frame along its last move (the first refresh too: it comes after the frame's moment, up to a
 refresh):
 
+- a frame's burst of work starts a fixed time before the frame's own moment
+  (`pacing::wait_next`), so the controls are read and the sound made at the game's even pace,
+  as the machine did, whatever the display's rate. The pictures go out on the display's
+  refreshes, the first 0 to 1 refresh after the moment. (Until 2026-11-15 the burst started a
+  fixed time before that first refresh instead: on a 120 Hz display a 58 Hz game's bursts came 2
+  or 3 refreshes apart, a press was taken up to a refresh sooner or later than the game's clock
+  said, and the sound of a frame held a third refresh came 8 ms late, which a short sound queue
+  did not cover. What the even pace costs: what a press changes on screen comes up to a refresh
+  later, half of one on average, 4 ms at 120 Hz. `HK_PACING_EVEN=0` is the old way, to compare.)
+  A core that hands its picture over before the frame's work (the present hook: DJ Main,
+  Firebeat, the PlayStation boards) has all of the frame's pictures made then, from the machine
+  as it is, and shown after that work and its sound (window.cpp, `g_shot`; under display sync
+  of either kind): the wait for the refresh would otherwise stand before the sound
+  (`HK_PICTURE_AFTER_SOUND=0`: shown first). The sound's queue is steered at its lowest, as the
+  frame's first sound comes, not at the burst's start. On Windows the game's thread waits for no
+  picture's time: the frame's own picture too goes to the swap chain's own thread with its commit
+  time (`pacing::commit_queued`; `HK_DXGI_QUEUE_OWN=0`: waited for, as it was), so a commit that
+  falls late in the frame, and the other pictures' drawing after it, no longer push the next
+  frame's start (and its sound) late;
 - `Core::render_between(t)` (runtime/shell/core.h) draws the last frame again, each moving thing
   `t` of a frame further along, into a picture of its own;
 - the window (runtime/host/window.cpp) shows them on those refreshes through the same picture

@@ -62,6 +62,11 @@ double speed();
 // committed() right after it.
 void wait_commit();
 void commit();
+// Instead of the two and the swap, where it can be (Windows, the DXGI swap chain's queue): the frame's
+// own picture, drawn, taken to be presented at its commit time (*at_ns, prof::now_ns()'s clock) by
+// the swap chain's own thread. true: taken (committed() follows, no swap). false: wait_commit(),
+// commit() and the swap, as ever
+bool commit_queued(int64_t *at_ns = nullptr);
 void committed(bool hold = true);   // hold: the frame's other refreshes empty (it stays up)
 // Display pacing: refreshes per frame (k), and whether each refresh can be given a picture of
 // its own (fifo-v1, or DWM's vblank on Windows: committed(false), then for each of the frame's

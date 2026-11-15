@@ -124,6 +124,13 @@ public:
     // the sound before letting the next frame run, not before showing this one
     // (runtime/host/window.cpp, window_frame), so the picture comes a frame sooner.
     virtual bool audio_per_frame() const { return false; }
+    // With audio_per_frame and a picture shown at the end of vertical blank (set_present_hook): the
+    // frame's own work, between that picture and the frame's sound, is short (a board whose
+    // processor mostly waits). When the sound paces the machine, the window then hands the picture
+    // on after the frame's sound instead of before it: showing a picture can take milliseconds (a
+    // picture mode's passes, the display taking it), which would stand between a frame's start and
+    // its sound, and a short sound queue runs dry there (window.cpp, g_kept).
+    virtual bool picture_after_sound() const { return false; }
     // A real card reader read this card (16 hex digits, E004...): it is now `player`'s (0, 1) card,
     // put to the game's reader as the player would. false for a machine without that reader.
     virtual bool card_read(int /*player*/, const std::string & /*number*/) { return false; }

@@ -131,6 +131,22 @@ double g_ratio = 1.0;             // the audio stream's frequency ratio: the gam
 // controls being read to the picture, where display sync takes a few milliseconds.
 bool g_frame_paced = false;
 uint64_t g_frame_start_ns = 0;    // when the window last let a frame run (the controls just read)
+int g_low_frames = -1;            // display sync: the queue at its least as the frame's chunks came (-1: none yet), for steer_audio
+// ... and with a core whose picture comes at the end of vertical blank, near the frame's start,
+// with the frame's work and its sound still to come (Core::picture_after_sound: DJ Main), the
+// picture is kept here until that sound has been handed on (next_frame shows it, before it waits).
+// Shown at once, its draw, its hold and the display taking it stood between the frame's start and
+// its sound: on the IIDX cabinet (crt-royale on a GTX 1650, a 4 ms ASIO buffer, a 5 ms queue kept
+// fixed) the sound came 4-8 ms after the frame's start on a third of the frames, the queue ran
+// dry each time, and beatmania 7th MIX ran at 55 frames a second instead of 58: what the device
+// plays as silence, a machine paced by its sound never makes up.
+struct KeptPicture {
+    std::vector<uint32_t> rgb;
+    int w = 0, h = 0;
+    double vsec = 0;
+    bool has = false;
+} g_kept;
+uint64_t g_kept_shown = 0;        // pictures shown that way (the exit report)
 uint64_t g_last_push_end = 0;     // the host's work since then is what must fit (push_chunk)
 int g_queued_after = 0;           // frames queued at g_last_push_end
 bool g_log_stalls = getenv("HK_LOG_STALLS") != nullptr;   // each stall, break and second's lead, to stderr
@@ -587,6 +603,10 @@ static void start_dxgi() {
 // sync: display pacing's (each picture in turn); extra: one of a frame's other refreshes' pictures
 // (dxgi::present may leave it out)
 static void swap_window(bool sync, bool extra = false) {
+    // HK_WINDOW_SWAP_MS=N: each swap takes N ms more, as a display that takes its pictures slowly
+    // does (a cabinet's present was 2-8 ms): for trying the pacing around it on a PC that swaps at once
+    static const double slow_ms = getenv("HK_WINDOW_SWAP_MS") ? atof(getenv("HK_WINDOW_SWAP_MS")) : 0;
+    if (slow_ms > 0) SDL_DelayPrecise((Uint64)(slow_ms * 1e6));
 #ifdef _WIN32
     if (dxgi::on()) {
         dxgi::present(sync, extra);
@@ -801,8 +821,9 @@ struct PresentStats {
 struct StartToPicture {
     uint64_t hist[501] = {}, n = 0;
     double sum = 0;
-    void add(uint64_t start_ns) {
-        const uint64_t t = prof::now_ns();
+    // at_ns: the picture goes to the display then (queued for that time), not now
+    void add(uint64_t start_ns, int64_t at_ns = 0) {
+        const uint64_t t = std::max(prof::now_ns(), (uint64_t)std::max<int64_t>(at_ns, 0));
         if (!start_ns || g_fast || t < g_settle_until) return;
         const double ms = (t - start_ns) / 1e6;
         hist[std::min(500, (int)(ms * 10))]++, n++, sum += ms;
@@ -844,6 +865,14 @@ double g_steer_i = 0;
 void steer_audio() {
     if (!g_audio) return;
     double q_ms = queued_bytes() / 8 * 1000.0 / (g_rate * g_ratio);
+    // The queue is lowest as a frame's first sound comes, some way into the burst: after the whole
+    // frame's work for a core that hands its sound on once a frame (DJ Main), after the frame's
+    // in-between pictures are made for one that makes them first (Twinkle: 3-4 ms on the IIDX
+    // cabinet). Steered at the burst's start, a 5 ms queue was down to 1 ms by then, under what the
+    // card takes at a time (4 ms), and dry at the first frame a little late. What was left at the
+    // lowest as the last frame's sound came is what is steered
+    if (g_low_frames >= 0) q_ms = g_low_frames * 1000.0 / (g_rate * g_ratio);
+    g_low_frames = -1;
     double target_ms = g_target_frames * 1000.0 / g_rate;
     if (q_ms < target_ms / 2) {   // starting, or after a stall: fill up at once, not over seconds
         std::vector<float> silence((size_t)((target_ms - q_ms) * g_rate * g_ratio / 1000) * 2, 0.0f);
@@ -1088,11 +1117,98 @@ static void stats_frame() {
     for (int c = 0; c < prof::NCAT; c++) g_sf.part[c] = part(c);
 }
 
-void window_present(const uint32_t *rgb, int w, int h, double vsec) {
-    struct DrawTime {   // (every way out of here)
-        uint64_t t0 = prof::ticks(), w0 = prof::g_wait_ticks;
-        ~DrawTime() { g_sf.draw_ticks += (prof::ticks() - t0) - (prof::g_wait_ticks - w0); }
-    } draw_time;
+struct DrawTime {   // the window's own work, for the slow-frame lines (every way out of where it stands)
+    uint64_t t0 = prof::ticks(), w0 = prof::g_wait_ticks;
+    ~DrawTime() { g_sf.draw_ticks += (prof::ticks() - t0) - (prof::g_wait_ticks - w0); }
+};
+
+// HK_PICTURE_AFTER_SOUND=0: every picture shown where the core hands it over, as before (g_kept, g_shot)
+const bool g_after_sound = !getenv("HK_PICTURE_AFTER_SOUND") || strcmp(getenv("HK_PICTURE_AFTER_SOUND"), "0") != 0;
+
+static void present_now(const uint32_t *rgb, int w, int h, double vsec, bool before_work);
+static void show_frame(const uint32_t *rgb, int w, int h, double frame_aspect, bool sync, double vsec);
+
+// before_work: the core hands its picture over at the end of vertical blank (its present hook), with
+// the frame's work and sound still to come; else at the frame's end (window_frame)
+static void present(const uint32_t *rgb, int w, int h, double vsec, bool before_work) {
+    // the sound paces this frame and is still to come: the picture after it (g_kept)
+    if (before_work && g_after_sound && g_frame_paced && !g_fast && g_audio && core().picture_after_sound()) {
+        g_kept.rgb.assign(rgb, rgb + (size_t)w * h);
+        g_kept.w = w, g_kept.h = h, g_kept.vsec = vsec, g_kept.has = true;
+        return;
+    }
+    present_now(rgb, w, h, vsec, before_work);
+}
+
+void window_present(const uint32_t *rgb, int w, int h, double vsec) { present(rgb, w, h, vsec, true); }
+
+// A frame's pictures as the core gave them, under display sync, from a core that hands its picture
+// over before the frame's work: kept until that work and its sound are done (next_frame shows them).
+// A picture is committed at its time, a burst budget after the frame's start (the slow end of recent
+// frames, 5-8 ms on the IIDX cabinet with crt-royale), and shown first, that wait stood before the
+// frame's work and so before its sound, which a short sound queue did not cover. At the game's own
+// speed (pacing::exact_speed) display sync also starts a frame a fixed time before its own moment
+// (pacing::wait_next), the controls read and the sound made at the game's even pace, while the
+// pictures go out on the display's refreshes, 0 to 1 refresh after the moment: shown first, a 58 Hz
+// game's sound on a 120 Hz display came 8 ms late every frame held a third refresh (the cabinet:
+// 300 to 1300 breaks a run with a queue of 5-10 ms). The in-between pictures are drawn from the
+// machine as it is, so they are all made here, before the work, and only shown after it.
+struct Shot {
+    static constexpr int MOST = 8;   // refreshes a frame
+    struct Picture {
+        std::vector<uint32_t> px;
+        int w = 0, h = 0;
+        bool has = false;
+    } frame, between[MOST];
+    double frame_aspect = 0, vsec = 0;
+    uint64_t number = 0;
+    bool has = false;
+} g_shot;
+const Shot *g_showing = nullptr;   // show_frame is showing these (else what the core gives now)
+uint64_t g_shots_shown = 0;
+
+// the core's in-between picture for the frame's refresh i (nullptr: nothing moved), or the kept one
+static const uint32_t *between_picture(int i, int &w, int &h) {
+    if (!g_showing) return core().render_between(pacing::phase(i), w, h);
+    const Shot::Picture &b = g_showing->between[i];
+    if (!b.has) return nullptr;
+    w = b.w, h = b.h;
+    return b.px.data();
+}
+
+static bool beam_now(bool sync) {
+    return g_beam && g_beam_ok && sync && !g_split && (sync ? pacing::refreshes_in_frame() : 1) >= 1.9 && pacing::can_fill_refreshes();
+}
+
+// the frame's pictures made now, in the order show_frame asks for them (a core's in-between pictures
+// follow what moved from one call to the next)
+static void keep_shot(const uint32_t *rgb, int w, int h, double frame_aspect, double vsec) {
+    Shot &s = g_shot;
+    s.frame.px.assign(rgb, rgb + (size_t)w * h);
+    s.frame.w = w, s.frame.h = h, s.frame_aspect = frame_aspect, s.vsec = vsec;
+    s.number = core().frame_count();
+    for (Shot::Picture &b : s.between) b.has = false;
+    const int k = pacing::refreshes_per_frame();
+    if (!beam_now(true) && g_smooth_motion) {
+        auto ask = [&](int i) {
+            int bw = w, bh = h;
+            const uint32_t *px = core().render_between(pacing::phase(i), bw, bh);
+            Shot::Picture &b = s.between[i];
+            b.has = px != nullptr;
+            if (px) b.px.assign(px, px + (size_t)bw * bh), b.w = bw, b.h = bh;
+            return b.has;
+        };
+        ask(0);
+        const bool can = k > 1 && pacing::can_fill_refreshes();
+        bool fill = can && ask(1);
+        if (can && !fill && k > 2) fill = ask(k - 1);
+        for (int i = 2; fill && i < k; i++) ask(i);
+    }
+    s.has = true;
+}
+
+static void present_now(const uint32_t *rgb, int w, int h, double vsec, bool before_work) {
+    DrawTime draw_time;
 #ifdef _WIN32
     cpu_speed_sample();
 #endif
@@ -1125,6 +1241,16 @@ void window_present(const uint32_t *rgb, int w, int h, double vsec) {
     // --smooth-motion at the game's own speed (pacing::exact_speed): a frame that falls between two
     // refreshes, the game faster than the display, isn't shown
     if (sync && pacing::refreshes_per_frame() == 0) return;
+    // display sync, the frame's work still to come: its pictures after it (g_shot)
+    if (before_work && g_after_sound && sync && g_gl && !g_split && pacing::refreshes_per_frame() <= Shot::MOST) {
+        keep_shot(rgb, w, h, frame_aspect, vsec);
+        return;
+    }
+    show_frame(rgb, w, h, frame_aspect, sync, vsec);
+}
+
+// The frame's picture drawn and handed to the display at its time, and its other refreshes' pictures.
+static void show_frame(const uint32_t *rgb, int w, int h, double frame_aspect, bool sync, double vsec) {
     if (g_gl) {
         prof::Scope ps(prof::PRESENT);
         int ww = 0, wh = 0;
@@ -1165,25 +1291,31 @@ void window_present(const uint32_t *rgb, int w, int h, double vsec) {
         // (at its moment too: what scrolls is drawn on the scroll's steady line, up to a pixel off
         // the frame's own place: hiraku/scroll_guess.h)
         if (exact)
-            if (const uint32_t *b = core().render_between(pacing::phase(0), fw, fh)) first = b;
+            if (const uint32_t *b = between_picture(0, fw, fh)) first = b;
         // the game's frame number: the shaders' FrameCount, and what makes the in-between pictures
         // below refreshes of this frame for them (picture.h)
-        const uint64_t number = core().frame_count();
+        const uint64_t number = g_showing ? g_showing->number : core().frame_count();
         picture::Mode shown = picture::draw(first, first == rgb ? w : fw, first == rgb ? h : fh, (ww - vw) / 2, (wh - vh) / 2,
                                             vw, vh, ww, wh, g_mode, 0, number, beam ? pacing::phase(0) : -1, beam_fph);
         draw_overlays(ww, wh);
         picture::after_overlays(ww, wh, number);
+        // (Windows: the picture handed to the swap chain's own thread for its commit time, where it
+        // can be: no wait for that time here, and no swap: pacing::commit_queued)
+        int64_t queued_for = 0;
+        bool queued = false;
         if (sync) {
             if (g_glFlush) g_glFlush();   // the GPU draws while we wait for the commit time
-            pacing::wait_commit();
-            pacing::commit();
+            if (!(queued = pacing::commit_queued(&queued_for))) {
+                pacing::wait_commit();
+                pacing::commit();
+            }
         } else if (g_frame_paced && !g_fast) {
             if (g_glFlush) g_glFlush();
             g_frame_budget.hold(g_frame_start_ns);
         }
         if (!sync) pacing::observe();
-        swap_window(sync);
-        g_start_to_picture.add(g_frame_start_ns);
+        if (!queued) swap_window(sync);
+        g_start_to_picture.add(g_frame_start_ns, queued_for);
         // --smooth-motion: the frame's other refreshes each with a picture of its own, the core's
         // in-between one (what moves further along its move), instead of the frame held
         const int k = sync ? pacing::refreshes_per_frame() : 1;
@@ -1193,11 +1325,11 @@ void window_present(const uint32_t *rgb, int w, int h, double vsec) {
         // (the furthest on) has anything moved, or the core can't
         int bw = w, bh = h;
         const bool can = !beam && g_smooth_motion && !g_split && k > 1 && pacing::can_fill_refreshes();
-        const uint32_t *between = can ? core().render_between(pacing::phase(1), bw, bh) : nullptr;
+        const uint32_t *between = can ? between_picture(1, bw, bh) : nullptr;
         bool fill = beam || between != nullptr;
         if (can && !fill && k > 2) {
             int lw, lh;
-            fill = core().render_between(pacing::phase(k - 1), lw, lh) != nullptr;
+            fill = between_picture(k - 1, lw, lh) != nullptr;
         }
         if (sync) pacing::committed(!fill);
         for (int i = 1; fill && i < k; i++) {
@@ -1207,7 +1339,7 @@ void window_present(const uint32_t *rgb, int w, int h, double vsec) {
                 if (!pacing::commit_extra(i)) swap_window(true, true);
                 continue;
             }
-            if (i > 1) bw = w, bh = h, between = core().render_between(pacing::phase(i), bw, bh);
+            if (i > 1) bw = w, bh = h, between = between_picture(i, bw, bh);
             if (between) g_in_between++;
             else between = rgb, bw = w, bh = h;
             picture::draw(between, bw, bh, (ww - vw) / 2, (wh - vh) / 2, vw, vh, ww, wh, g_mode, 0, number);
@@ -1406,6 +1538,21 @@ static void sound_lag(double vsec) {
 }
 
 static bool next_frame(double vsec) {
+    // the picture kept for after its frame's sound (g_kept): the sound has gone, and what follows
+    // here is the wait for it to play
+    if (g_kept.has) {
+        g_kept.has = false;
+        g_kept_shown++;
+        present_now(g_kept.rgb.data(), g_kept.w, g_kept.h, g_kept.vsec, false);
+    }
+    if (g_shot.has) {   // (g_shot: the frame's work and sound are done)
+        DrawTime draw_time;
+        g_shot.has = false;
+        g_shots_shown++;
+        g_showing = &g_shot;
+        show_frame(g_shot.frame.px.data(), g_shot.frame.w, g_shot.frame.h, g_shot.frame_aspect, true, g_shot.vsec);
+        g_showing = nullptr;
+    }
     const bool sync = g_sync;
     if (warp::on() && !warp::frame(vsec)) g_fast = g_tab;   // the fast start-up's end
     poll();
@@ -1468,7 +1615,7 @@ bool window_next(double vsec) {
 }
 
 bool window_frame(const uint32_t *rgb, int w, int h, double vsec) {
-    window_present(rgb, w, h, vsec);
+    present(rgb, w, h, vsec, false);
     return window_next(vsec);
 }
 
@@ -1528,6 +1675,12 @@ void push_chunk(const float *lr, int frames) {
     }
     g_breaks = g_device_short.load(std::memory_order_relaxed);
     g_breaks_late = g_device_short_late.load(std::memory_order_relaxed);
+    if (g_audio && pacing::active()) {   // (the least of the frame's chunks: steer_audio)
+        const int q = queued_bytes() / 8;
+        g_low_frames = g_low_frames < 0 ? q : std::min(g_low_frames, q);
+    } else {
+        g_low_frames = -1;
+    }
     if (g_audio) SDL_PutAudioStreamData(g_audio, lr, frames * 8);
     // audio is the clock: wait while more than the target is queued, polling controls
     // (with display pacing, the display is the clock, and with a core whose sound comes once
@@ -1612,6 +1765,13 @@ std::string audio_describe() {
             n += snprintf(b + n, sizeof b - n, ")");
         }
     }
+    // a queue kept fixed that kept running dry: what it cost (nothing above says the game slowed)
+    if (g_audio_fixed && g_breaks_late > std::max<uint64_t>(20, g_device_pulls.load() / 200))
+        n += snprintf(b + n, sizeof b - n,
+                      "\naudio: the queue was kept at %.1f ms (fixed) and ran dry %llu times after the first 10 s%s: a longer "
+                      "queue, or one that tunes itself (Settings > Audio), holds",
+                      g_target_frames * 1000.0 / g_rate, (unsigned long long)g_breaks_late,
+                      pacing::active() ? "" : "; the sound paces the game here, so each break also put the game behind (it ran slower than it should)");
 #ifdef _WIN32
     if (wasapi::active()) n += snprintf(b + n, sizeof b - n, "\n%s", wasapi::describe().c_str());
     if (asio::active()) n += snprintf(b + n, sizeof b - n, "\n%s", asio::describe().c_str());
@@ -1669,7 +1829,8 @@ std::string audio_describe() {
                  "\nvideo: from a frame starting (the controls read) to its picture handed to the display: mean %.1f ms, "
                  "p50 %.1f, p99 %.1f (%s)",
                  l.sum / (double)l.n, l.percentile(0.5), l.percentile(0.99),
-                 pacing::active() ? "display sync"
+                 pacing::active() ? g_shots_shown ? "display sync; shown after the frame's work and sound" : "display sync"
+                 : g_kept_shown   ? "the sound once per frame: the frame's sound handed on, then its picture, then the wait"
                  : g_frame_paced  ? "the sound once per frame: waited for after the picture"
                                   : "the sound paces the machine as it comes");
         out += b;

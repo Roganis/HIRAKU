@@ -20,7 +20,7 @@ msu_rtc = "m48t58y.6t"          # ... and its M48T58Y
 io_board = "digital"            # GX894-PWB(B): FPGA + MAS3507D MP3
 cassette = "zi"                 # MAME's cassette variant: ZS01 + DS2401 (casszi)
 # Not playable yet: no dump of the multi-session unit's CD exists (MAME's set lists none), and
-# HIRAKU fits the unit only with its CD; kept as MAME configures it (PLAN.md section 24, CATALOGUE.md).
+# HIRAKU fits the unit only with its CD; kept as MAME configures it (PLAN.md section 24).
 msu = true                      # the multi-session unit (GXA25)
 
 [cd]

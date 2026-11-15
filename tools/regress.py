@@ -227,7 +227,7 @@ CASES = {
     "bmiidx8-boot": ("bmiidx8", 10000, ["--rtc", "1792053239", "--video", "off", "--script", "oracle/scripts/bmiidx8-boot.his"]),
     "bmiidx8-play": ("bmiidx8", 11300, ["--rtc", "1792054162", "--video", "off", "--script", "oracle/scripts/bmiidx8-play.his"],
                      "bmiidx8-boot"),
-    # the club kits' IIDX cabinets, no DDR cabinet on the link (docs/CATALOGUE.md, Phase 6): Club
+    # the club kits' IIDX cabinets, no DDR cabinet on the link (PLAN.md section 24, phase 6): Club
     # Version 1 on the 1st style's board (test mode's backup clear and NETWORK CHECK, then the 1st
     # style's scripted game; against the SIO1-patched MAME), Club Version 2 on Substream's (stock MAME)
     "bmiidxc-clear": ("bmiidxc", 10800, ["--rtc", "1792260779", "--video", "off", "--script", "oracle/scripts/bmiidxc-clear.his"]),
@@ -295,7 +295,7 @@ for _c, (_game, _frames, _args, *_rest) in list(CASES.items()):
         if _c.endswith("-play"):
             CASES[_c + "-drive"] = (_game, _frames, _args, *_rest)
 
-# The club kits (docs/CATALOGUE.md, Phase 6): a DDR 2nd Club Version 573 and its IIDX cabinet in a
+# The club kits (PLAN.md section 24, phase 6): a DDR 2nd Club Version 573 and its IIDX cabinet in a
 # club session, two processes on one serial cable (runtime/sys573/link.h), each pair at once. The
 # DDR sides from their install CD's install; the IIDX sides on the 4x drive, as a cabinet plays
 CASES.update({
@@ -311,7 +311,7 @@ CASES.update({
                                           "--session-host", "out/regress/work/club2.sock"], "bmiidxc2-boot", "ddr2mc2-club"),
 })
 
-# Dance Maniax and Mambo a GoGo (docs/CATALOGUE.md, Phase 5; digital board, ZS01 cassette): each
+# Dance Maniax and Mambo a GoGo (PLAN.md section 24, phase 5; digital board, ZS01 cassette): each
 # set's first-boot install from blank NVRAM, then a song from what it left, in lockstep with MAME
 # (out/oracle/<set>/{install,play}); the rental Mambo to its RTCRAM error (no e-Amusement device)
 CASES.update({
@@ -330,7 +330,7 @@ CASES.update({
     "mamboagga-install": ("mamboagga", 9300, ["--rtc", "1792330345", "--script", "oracle/scripts/mamboagga-install.his"]),
     "mamboagga-boot": ("mamboagga", 4800, ["--rtc", "1792330438", "--script", "oracle/scripts/mamboagga-boot.his"], "mamboagga-install"),
     # the rental Mambo with the rental unit's presence (--rental) and Konami's Master Calendar
-    # (--master-calendar): HIRAKU only, MAME fits neither (docs/CATALOGUE.md, Phase 5)
+    # (--master-calendar): HIRAKU only, MAME fits neither (PLAN.md section 24, phase 5)
     "mamboagga-rental-install": ("mamboagga", 9300, ["--rtc", "1792330345", "--rental", "--script",
                                                      "oracle/scripts/mamboagga-rental-install.his"]),
     "mamboagga-factory": ("mamboagga", 3000, ["--rtc", "1792330438", "--rental", "--master-calendar", "7", "--script",

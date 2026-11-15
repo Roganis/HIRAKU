@@ -1135,7 +1135,7 @@ So player 1 plays with the left hand on W and S and the right hand on O and L. O
 | Centre | Y | G | H | buttons 3, 4, 5 |
 | Right | O | K | L | buttons 6, 7, 8 |
 
-On the keyboard each conga is a triangle, the far pad's key above the near pads' two. Start is 1 or Return (button 9); coin, test and service are 5, F2 and 9 on both games. The launcher's **Controls** dialog has both cabinets, with these defaults. Three Taiko-style drums can stand in for the congas (`docs/CATALOGUE.md`, Phase 5: the hardware options).
+On the keyboard each conga is a triangle, the far pad's key above the near pads' two. Start is 1 or Return (button 9); coin, test and service are 5, F2 and 9 on both games. The launcher's **Controls** dialog has both cabinets, with these defaults. Three Taiko-style drums can stand in for the congas.
 
 **The rental version** (`mamboagga`) needs Konami's e-Amusement rental unit and its rental service. MAME has neither, and stops at ERROR 198 (Start goes on), then after the install at HARD-WARE ERROR +02H, RTCRAM INITIALIZE ERROR. HIRAKU's `--rental` (the unit's presence) and one boot with `--master-calendar 7` (Konami's factory device, which formats the rental records) take it as far as a real rental cabinet with no plays bought: "remaining plays used up, please replenish". Buying plays (Konami's encrypted per-cabinet codes) isn't emulated. Play `mamboagg`: the same game.
 
@@ -1215,7 +1215,7 @@ ninja -C build/cmake hiraku-bmiidx6
 
 ### The club kits: beatmania IIDX × DDR 2nd Club Version (further than MAME)
 
-A club kit turned a beatmania IIDX cabinet and a DDR cabinet into one session: a DJ on the IIDX and a dancer on the DDR play the same song. HIRAKU runs each cabinet in its own process, a Twinkle and a System 573, joined by a serial cable (MAME has no such cable on the 573; docs/CATALOGUE.md, Phase 6).
+A club kit turned a beatmania IIDX cabinet and a DDR cabinet into one session: a DJ on the IIDX and a dancer on the DDR play the same song. HIRAKU runs each cabinet in its own process, a Twinkle and a System 573, joined by a serial cable (MAME has no such cable on the 573; PLAN.md section 24, phase 6).
 
 | Kit | IIDX cabinet | DDR cabinet | Cable |
 |---|---|---|---|

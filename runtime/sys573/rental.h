@@ -4,7 +4,7 @@
 // ("a5 c0"; the answer echoes it and gives three characters). Only that: the unit's presence. MAME
 // has no such device (ksys573.cpp: "TODO: Rental serial device needs to be attached here"), so
 // the game stops at ERROR 198 there; this is a departure from MAME (--rental), found from the
-// game's own driver (docs/CATALOGUE.md, Phase 5). The rental billing the unit carried (topping up
+// game's own driver (PLAN.md section 24, phase 5). The rental billing the unit carried (topping up
 // the cabinet's play count) is not emulated.
 //
 // HK_573_RENTAL_LOG=1 prints the bytes each way.

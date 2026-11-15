@@ -28,7 +28,7 @@ oracle/pcsx2/run.py popn9 --frames 3000 --snap-every 0 --interp          # the s
   - the GS's memory as an anonymous memory file (`GS.cpp`, Linux): stock PCSX2 opens a shared-memory object of a fixed name, `/GS.mem`, and unlinks it straight after, so two emulators starting their GS at the same moment (parallel regress runs) could collide: "Failed to allocate GS memory storage.", then "Aborting application." (21 of 3,200 simultaneous starts in a test);
   - the derived MagicGate keystore is printed only with `PCSX2_PRINT_KEYSTORE` set (stock Reliquary always prints it to stdout);
   - `-DHIRAKU_DIR=<checkout>` in the top `CMakeLists.txt` adds `runtime/python/`.
-- `run.py`: one run of a `.py1` set from the collection (`HK_PYTHON_SETS`, default `~/Downloads/konami-python-1-collection`).
+- `run.py`: one run of a `.py1` set from the collection (the folder named by `HK_PYTHON_SETS`, which must be set; `HK_PYTHON2_SETS` for a `.py2` set).
   - **Pristine media:** the set's small files (BBSRAM, dongles, boot ROM, memory-card dongle) are copied fresh, the CHD is linked, and the CHD write overlay starts empty. Reliquary writes all of these back.
   - **Pinned settings:** RTC 2003-06-01 12:00, MTVU off, game patches off, no audio device, memory-card slot 2 off (as on the cabinet, and as in the core), software GS (`--renderer 14` for Vulkan).
   - **Capped:** 6 GB of memory, and a timeout.

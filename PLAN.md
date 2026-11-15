@@ -131,7 +131,7 @@ Each milestone's exit test is in the archive. M0–M5, the first plan, were esti
 | M11 | Efficiency for N100-class PCs | done on the desktop (bm3final ~3.4× MAME); never measured on an N100 | §14, §40, §41 |
 | M12 | The core split (`runtime/shell/core.h`) | done 2026-10-12 | §17 |
 | M13 | DJ Main core | done: all 25 sets on hand cycle-exact with MAME (2026-10-16) | §17 |
-| M14 | System 573 core | done for the media on hand: 90 manifests, analog and digital boards in lockstep with MAME, MIPS recompiler, e-AMUSEMENT, sessions | §19, docs/CATALOGUE.md |
+| M14 | System 573 core | done for the media on hand: 90 manifests, analog and digital boards in lockstep with MAME, MIPS recompiler, e-AMUSEMENT, sessions | §19, §24 |
 | M15 | Twinkle core (IIDX 1st–8th) | done, all 18 sets: lockstep with MAME, the background videos MAME lacks | §21 |
 | M16 | Konami Python 1/2 | pop'n 9–14 play with e-AMUSEMENT and NET TAISEN; DrumMania V/V2 run | §23 |
 | M17 | A new song added to pop'n 14 by a mod | not started | §20 |
@@ -146,7 +146,7 @@ Later work has no milestone number: high frame rates (§37), fast start-up (§38
 **Open**
 - (owner) M5–M8: hands-on play of the Firebeat games with real controllers and sound hardware.
 - (build) M7: the SPU's DVD drive answers at once; modelling its read times is the next suspect for pop'n 7's second piece of music starting 5 ms late (§18).
-- (build) M7: `popnmt` (Mickey Tunes, not the `!`): its program CD is in the owner's archive (docs/CATALOGUE.md, B) but not ingested; a new program CD is a new recompile.
+- (build) M7: `popnmt` (Mickey Tunes, not the `!`): its program CD is on hand but not ingested; a new program CD is a new recompile.
 - (parked) M8: `ppp2nd` is other hardware, out of scope.
 - (parked) M10: autoplay in Keyboardmania 2nd and 3rd Mix needs a hook at a code address, which scripts lack (their demo's switch must be set when play starts).
 - (parked) M10/M11: the XT446's H8, ~55 % of the card: see §14.
@@ -246,7 +246,7 @@ Full history: docs/PLAN-HISTORY.md §15.
 
 ## 16. DJ Main, System 573 and Twinkle media (2026-10-12)
 
-The first sets were the owner's non-merged MAME sets, all passing `-verifyroms` (MAME flags the 573 digital sets' cassette chips BAD_DUMP, as every copy is). In MAME, DJ Main costs ~5 % of a desktop core (a core is worth it for latency and I/O, not speed); 573 and Twinkle 15–18 % (~30 % of an N100 core: speed matters). Every new platform needs its first-boot steps; the oracle keeps a seeded NVRAM per game. The full catalogue is docs/CATALOGUE.md.
+The first sets were the owner's non-merged MAME sets, all passing `-verifyroms` (MAME flags the 573 digital sets' cassette chips BAD_DUMP, as every copy is). In MAME, DJ Main costs ~5 % of a desktop core (a core is worth it for latency and I/O, not speed); 573 and Twinkle 15–18 % (~30 % of an N100 core: speed matters). Every new platform needs its first-boot steps; the oracle keeps a seeded NVRAM per game. The rest of the catalogue: §24.
 
 Full history: docs/PLAN-HISTORY.md §16.
 
@@ -284,8 +284,8 @@ slots, the analog and digital I/O boards with FPGA and MAS3507D), the R3000 inte
 with MAME cycle for cycle; `third_party/mame/README.md` lists every change to MAME's files. There
 are 90 manifests: the analog-board games, the DDR digital line to EXTREME with Solo, GuitarFreaks
 3rd–11th and DrumMania 2nd–10th with their sessions, Dance Maniax and Mambo a GoGo. Almost all run
-in lockstep with MAME at the pin from the first-boot install to a song; the per-set record is
-`docs/CATALOGUE.md` (§24). How to play them: `docs/PLAY.md`.
+in lockstep with MAME at the pin from the first-boot install to a song (§24). How to play them:
+`docs/PLAY.md`.
 
 **Decisions (owner, 2026-10-12).** The first set was `ddr2m`, which MAME runs. Where MAME doesn't
 support a game, go as far as the documentation allows (psx-spx, the 573 hardware notes, the chips'
@@ -434,8 +434,7 @@ lockstep with MAME; then the background video MAME doesn't show, as a documented
 `hiraku_mametw` on top of `hiraku_mame573`), including MAME's generated cycle-exact 68000 for the
 SPU board (owner's decision, 2026-10-13: the mailbox makes its timing visible to the PS1, so
 Musashi wouldn't do). Every style plays: 1st, 2nd, 3rd, 4th–8th, Substream, the club kits and the
-revisions, 18 sets in all (docs/PLAY.md; the catalogue and club sessions in docs/CATALOGUE.md,
-Phases 1 and 6). Each is in lockstep with MAME over a boot and a scripted game (main RAM every
+revisions, 18 sets in all (docs/PLAY.md; the club sessions in §24). Each is in lockstep with MAME over a boot and a scripted game (main RAM every
 frame, every snapshot; for the main sets also traced device accesses and sound lag 0). The main
 sets and the club kits are regress cases (`tools/regress.py`: `<set>-boot`/`-clear`, `-play`,
 `-video`, `-club`, and a `-play-drive` twin of each play case).
@@ -604,8 +603,7 @@ Full history: docs/PLAN-HISTORY.md §23.
 
 ## 24. The rest of the catalogue (2026-10-15)
 
-The plan for the rest of the owner's MAME 0.243 BEMANI archive, in seven phases, with the progress
-of each, is `docs/CATALOGUE.md`. Phase 0 (`tools/catalogue.py`, `tools/mameset.py`, older MAME
+The rest of MAME's BEMANI sets, in seven phases. Phase 0 (`tools/catalogue.py`, `tools/mameset.py`, older MAME
 names and split sets in ingest, NVRAM seeds, CHDs read in place through `runtime/dev/image.h`)
 was done 2026-10-16; reading CHDs in place is now what the launcher does (`--copy-chd`). Phases
 1–4 are done as far as the media allows: DJ Main's whole catalogue cycle-exact, the Twinkle
@@ -620,7 +618,7 @@ Full history: docs/PLAN-HISTORY.md §24.
 - (build) GuitarFreaks 9th × DrumMania 8th session: GF 9th runs since 3c1ddf3, the session isn't done.
 - (build) Sessions from the launcher (GF×DM and the club kits): it would start the second process with its socket.
 - (build) Club play: the IIDX side's mix peaks at 1.6 of full scale and clips at the default gain.
-- (owner) Hands-on play of the new sets, and controllers for Dance Maniax's sensors and Mambo's congas (options in `docs/CATALOGUE.md`).
+- (owner) Hands-on play of the new sets, and controllers for Dance Maniax's sensors and Mambo's congas.
 - (parked) Sets waiting on media: older cassette dumps (`dsem`, `dsem2`, `dsfdr`, `dsfdct`, `dsfdcta`, `ddr4ms`, `ddr4msj`, `ddrs2k`, `ddrs2kj`), GF/DM 1st's other regions, `ddrjb`, `ddr2ml`, `drmna`, `ddr2mlb`, `dmxa`, the unit's CD for `pcnfrk4mk`–`pcnfrk10m`.
 - (parked) `mamboagga` stops at its plays-used-up screen: emulating the rental replenishment would get round Konami's licensing.
 - (parked) Martial Beat, Punch Mania / Fighting Mania, DDR Karaoke: the owner's call per game.

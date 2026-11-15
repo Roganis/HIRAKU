@@ -21,11 +21,12 @@ RAM (from the state zip) are kept in DIR/snap-<t>.{png,ee.bin}.
 """
 import argparse, os, shutil, socket, struct, subprocess, sys, time, zipfile, glob, hashlib
 
-COLL = os.environ.get("HK_PYTHON_SETS", os.path.expanduser("~/Downloads/konami-python-1-collection"))
+# the folders of your sets: Python 1 (kpython1/, bios/, keys/, PCSX2/inis/) and Python 2 (<game>.py2, bios/)
+COLL = os.environ.get("HK_PYTHON_SETS", "")
 # default: Python-work beside the HIRAKU checkout
 WORK = os.environ.get("HK_PYTHON_WORK", os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))), "Python-work"))
 BIN = os.environ.get("HK_RELIQUARY", f"{WORK}/pcsx2-reliquary/build/bin/pcsx2-qt")
-COLL2 = os.environ.get("HK_PYTHON2_SETS", os.path.expanduser("~/Downloads/konami-python-2"))
+COLL2 = os.environ.get("HK_PYTHON2_SETS", "")
 TEMPLATE = f"{COLL}/PCSX2/inis/PCSX2.ini"
 
 
@@ -54,7 +55,9 @@ def prepare(game, data, interp, slot, renderer=13):
     root = f"{data}/PCSX2"   # -datapath D keeps everything in D/PCSX2
     os.makedirs(f"{root}/inis")
     os.makedirs(f"{data}/bios")
-    py2 = os.path.exists(f"{COLL2}/{game}.py2")
+    py2 = bool(COLL2) and os.path.exists(f"{COLL2}/{game}.py2")
+    if not py2 and not COLL:
+        sys.exit("run.py: set HK_PYTHON_SETS to the folder of your Python 1 sets (and HK_PYTHON2_SETS for Python 2's)")
     sets, ext = (COLL2, "py2") if py2 else (f"{COLL}/kpython1", "py1")
     # Python 2 boots a retail PS2 BIOS (Reliquary's retail BIOS path); Python 1 the COH-H31000
     bios = os.environ.get("HK_PY2_BIOS", "ps2-0190j-20030822.bin") if py2 else "COH-H31000.BIN"

@@ -4,7 +4,7 @@
 // null modem: msu_port2 to the GuitarFreaks' rs232_network). Each process is one cabinet, with
 // its own game and recompiled code.
 //
-// The same cable joins a club kit's two cabinets (docs/CATALOGUE.md, Phase 6): a DDR 2nd Club
+// The same cable joins a club kit's two cabinets (PLAN.md section 24, phase 6): a DDR 2nd Club
 // Version 573's SIO1 to a Twinkle's network port (runtime/twinkle/board.cpp: Club Version 1's
 // super I/O 16550, Club Version 2's SIO1). Either side's UART is on the far side's line levels as
 // it would be on a wire: a 16550 samples TXD by its own bit clock, the fork's SIO1 takes a bit per

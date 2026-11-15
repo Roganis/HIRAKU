@@ -7,7 +7,7 @@ core = "twinkle"        # Twinkle (runtime/twinkle/, PLAN.md section 21)
 boot_seconds = 35       # fast start-up's ready point: the machine's seconds to the end of its start-up (host/warp.h)
 title_seconds = 86      # the game menu's picture: the machine's seconds to its title screen (host/menupic.h)
 # The club kit's other program CD (896 JA A01) is the DDR cabinet's: MAME's ddr2mc installs it on a
-# System 573. The two cabinets link over serial (docs/CATALOGUE.md, Phase 6); this one is the 1st
+# System 573. The two cabinets link over serial (PLAN.md section 24, phase 6); this one is the 1st
 # style's board, with the session port on the super I/O's second 16550.
 # MAME flags this set NOT_WORKING: its DVD player check needs CTS on the PS1's SIO1, which MAME's
 # SIO doesn't have (E600 DVD INIT ERROR). HIRAKU's SIO1 has it here (TW-5).

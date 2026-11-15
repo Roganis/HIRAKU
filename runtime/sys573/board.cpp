@@ -685,7 +685,7 @@ void sys573_state::atapi_xfer_end(s32) {
     // an interrupt 18 ms late), the timer moves the block itself and the game's count is a block
     // short (error -8: "DATA 7 : INITIALIZING" halts). A departure from MAME for that game only:
     // re-arm only when the DMA stopped inside a block. Other games rely on the re-arm after a whole
-    // block (DDR 3rd Mix and Dancing Stage differ from MAME without it) (docs/CATALOGUE.md, Phase 4;
+    // block (DDR 3rd Mix and Dancing Stage differ from MAME without it) (PLAN.md section 24, phase 4;
     // oracle/mame-patches/ksys573-dma.patch)
     if ((m_ata->cs1_r(6) & 8) != 0 && !(m_hk_exact_dma && m_hk_block_raised))
         m_atapi_timer->adjust(m_maincpu->cycles_to_attotime(ATAPI_CYCLES_PER_SECTOR * (m_atapi_xfersize / 64)));

@@ -24,5 +24,4 @@
 | [M2.md](M2.md), [M3.md](M3.md), [M4.md](M4.md), [M5.md](M5.md) | The first milestones' results (beatmania III The Final, October 2026) |
 | [PYTHON.md](PYTHON.md) | Konami Python 1/2: the hardware, the media, the reference emulator |
 | [BIO2-BI2A.md](BIO2-BI2A.md), [BIO2-BI2X.md](BIO2-BI2X.md) | beatmania IIDX's BIO2 cabinet board, as the games drive it |
-| [CATALOGUE.md](CATALOGUE.md) | The MAME sets compared with what HIRAKU ran (October 2026) |
 | [../oracle/README.md](../oracle/README.md) | The MAME oracle runs are checked against |

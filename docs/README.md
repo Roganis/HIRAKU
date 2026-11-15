@@ -4,7 +4,8 @@
 
 | Document | What's in it |
 |---|---|
-| [PLAY.md](PLAY.md) | Adding games, updating, the picture, controls, the game menu, latency, frame pacing, logs; then each board's games: what they need, their first start, their quirks |
+| [PLAY.md](PLAY.md) | The short guide: adding games, updating, the picture, controls, the game menu, latency, frame pacing, logs; then each board's games: what to add, their first start, their controls |
+| [PLAY-NOTES.md](PLAY-NOTES.md) | Every setting in detail, measurements, test switches |
 | [MODS.md](MODS.md) | Mods: what they can change and how to write one; high frame rates; beatmania III's IIDX-style turntable |
 | [SMOOTH.md](SMOOTH.md) | Smooth notes on 120–240 Hz displays: smooth motion and true high frame rates, game by game |
 | [LIGHTS.md](LIGHTS.md) | The cabinet's lamps on controller LEDs and other lights |

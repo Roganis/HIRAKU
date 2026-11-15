@@ -675,6 +675,7 @@ MainWindow::MainWindow() {
     // no layout of this version saved: the panel beside the list starts at about a third of the window
     if (!restoreState(cfg::settings().value("ui/state").toByteArray(), kLayout))
         QTimer::singleShot(0, this, [this] { resizeDocks({m_detailsDock}, {std::max(300, width() / 3)}, Qt::Horizontal); });
+    placeMusic(m_asCards->isChecked());   // (where the view puts it, whatever the saved layout had)
     if (!m_musicDock->isHidden()) m_music->autoplay();   // (when its panel is there)
     m_music->firstSongs();
     qApp->installEventFilter(this);
@@ -954,9 +955,36 @@ void MainWindow::fillCards() {
     m_cards->select(selected() ? selected()->id : QString());
 }
 
+// The music with the cards: a bar along the window's bottom, under the cards and the details, with
+// no title; with the list, its panel under the details and the log, as before. Shown or closed as
+// the player left it (View > Music)
+void MainWindow::placeMusic(bool bar) {
+    const bool shown = !m_musicDock->isHidden();
+    m_music->arrange(bar);
+    if (bar) {
+        if (dockWidgetArea(m_musicDock) != Qt::BottomDockWidgetArea || m_musicDock->isFloating()) {
+            m_musicDock->setFloating(false);
+            addDockWidget(Qt::BottomDockWidgetArea, m_musicDock);
+        }
+        if (!m_musicDock->titleBarWidget()) m_musicDock->setTitleBarWidget(new QWidget);
+    } else {
+        if (dockWidgetArea(m_musicDock) == Qt::BottomDockWidgetArea) {
+            addDockWidget(Qt::RightDockWidgetArea, m_musicDock);
+            if (dockWidgetArea(m_logDock) == Qt::RightDockWidgetArea && !m_logDock->isFloating())
+                splitDockWidget(m_logDock, m_musicDock, Qt::Vertical);
+        }
+        if (QWidget *t = m_musicDock->titleBarWidget()) {
+            m_musicDock->setTitleBarWidget(nullptr);
+            delete t;
+        }
+    }
+    m_musicDock->setVisible(shown);
+}
+
 void MainWindow::showAsCards(bool on) {
     cfg::settings().setValue("ui/view", on ? "cards" : "list");
     (on ? m_asCards : m_asList)->setChecked(true);
+    placeMusic(on);
     showEmpty();
     if (const Game *g = selected()) {
         if (on) m_cards->select(g->id);

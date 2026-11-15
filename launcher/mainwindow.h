@@ -66,6 +66,7 @@ private:
     void showEmpty();                                // no game added: the list's place says how to add one
     void fillCards();                                // the cards (gamecards.h): the list's games shown, as it has them
     void showAsCards(bool on);                       // View > Cards / List (ui/view)
+    void placeMusic(bool bar);                       // ... the music as a bar along the bottom, or its panel
     void exitReport(const QString &title, int code, QProcess::ExitStatus st);   // why a game stopped, and its log
     void controls(const QString &family);   // the Controls dialog, which can end by starting a game to try them
     void log(const QString &text);

@@ -107,10 +107,7 @@ bool MusicPlayer::isMidi(const QString &path) {
 
 MusicPlayer::MusicPlayer(QWidget *parent) : QWidget(parent) {
     // the song (bold), the line under it (which song of how many, the synth; or what went wrong),
-    // where it is, the buttons and the volume
-    auto *v = new QVBoxLayout(this);
-    v->setContentsMargins(8, 4, 8, 6);
-    v->setSpacing(2);
+    // where it is, the buttons and the volume: made here, laid out by arrange (a panel or a bar)
     m_title = new QLabel;
     QFont bold = m_title->font();
     bold.setBold(true);
@@ -127,27 +124,13 @@ MusicPlayer::MusicPlayer(QWidget *parent) : QWidget(parent) {
     QFont small = m_status->font();
     small.setPointSizeF(small.pointSizeF() * 0.9);
     m_status->setFont(small);
-    v->addWidget(m_title);
-    v->addWidget(m_status);
     m_levels = new MusicLevels;
-    v->addSpacing(2);
-    v->addWidget(m_levels);
-
-    auto *times = new QHBoxLayout;
-    times->setSpacing(6);
     m_timeLabel = new QLabel("0:00");
     m_lengthLabel = new QLabel("0:00");
     for (QLabel *l : {m_timeLabel, m_lengthLabel}) l->setFont(small), l->setPalette(grey), l->setProperty("hkMuted", true);
     m_position = new QSlider(Qt::Horizontal);
     m_position->setRange(0, 0);
     m_position->setToolTip("Where the song is: drag to move in it");
-    times->addWidget(m_timeLabel);
-    times->addWidget(m_position, 1);
-    times->addWidget(m_lengthLabel);
-    v->addLayout(times);
-
-    auto *row = new QHBoxLayout;
-    row->setSpacing(0);
     m_prev = button(this, style()->standardIcon(QStyle::SP_MediaSkipBackward), "|<", "Previous song (or this one again)");
     m_toggle = button(this, style()->standardIcon(QStyle::SP_MediaPlay), ">", "Play");
     m_next = button(this, style()->standardIcon(QStyle::SP_MediaSkipForward), ">|", "Next song");
@@ -159,25 +142,13 @@ MusicPlayer::MusicPlayer(QWidget *parent) : QWidget(parent) {
     m_autoplay->setFont(small);
     m_autoplay->setChecked(cfg::settings().value("music/autoplay", true).toBool());
     m_folder = button(this, style()->standardIcon(QStyle::SP_DirOpenIcon), "...", "Open the music folder");
-    auto *speaker = m_speaker = new QLabel;
+    m_speaker = new QLabel;
     m_volume = new QSlider(Qt::Horizontal);
     m_volume->setRange(0, 100);
     m_volume->setFixedWidth(64);
     m_volume->setValue(cfg::settings().value("music/volume", 45).toInt());
     m_volume->setToolTip("Volume");
-    row->addWidget(m_prev);
-    row->addWidget(m_toggle);
-    row->addWidget(m_next);
-    row->addSpacing(6);
-    row->addWidget(m_shuffle);
-    row->addWidget(m_autoplay);
-    row->addWidget(m_folder);
-    row->addStretch(1);
-    row->addWidget(speaker);
-    row->addSpacing(4);
-    row->addWidget(m_volume);
-    v->addLayout(row);
-    setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);   // (the docks above take the height)
+    arrange(false);
 
     connect(m_prev, &QToolButton::clicked, this, &MusicPlayer::previous);
     connect(m_toggle, &QToolButton::clicked, this, &MusicPlayer::toggle);
@@ -311,6 +282,72 @@ void MusicPlayer::pause() {
     if (m_ready) send("pause");
     m_levels->clear();
     updateButtons();
+}
+
+// The panel (the song over its meters, where it is, the buttons under them) or the bar along the
+// window's bottom (all on one line: the buttons, the song, the meters, where it is, the volume)
+void MusicPlayer::arrange(bool bar) {
+    if (layout() && bar == m_bar) return;
+    m_bar = bar;
+    delete layout();   // (its widgets stay: laid out again below)
+    auto *row = new QHBoxLayout;
+    row->setSpacing(0);
+    if (bar) {
+        auto *h = new QHBoxLayout(this);
+        h->setContentsMargins(10, 4, 12, 4);
+        h->setSpacing(6);
+        for (QToolButton *b : {m_prev, m_toggle, m_next}) h->addWidget(b);
+        h->addSpacing(8);
+        auto *song = new QVBoxLayout;
+        song->setSpacing(0);
+        song->addWidget(m_title);
+        song->addWidget(m_status);
+        for (QLabel *l : {m_title, m_status}) l->setFixedWidth(260);
+        h->addLayout(song);
+        m_levels->setFixedWidth(150);
+        h->addWidget(m_levels, 0, Qt::AlignVCenter);
+        h->addSpacing(10);
+        h->addWidget(m_timeLabel);
+        h->addWidget(m_position, 1);
+        h->addWidget(m_lengthLabel);
+        h->addSpacing(10);
+        for (QToolButton *b : {m_shuffle, m_autoplay, m_folder}) h->addWidget(b);
+        h->addSpacing(6);
+        h->addWidget(m_speaker);
+        h->addWidget(m_volume);
+        delete row;
+    } else {
+        auto *v = new QVBoxLayout(this);
+        v->setContentsMargins(8, 4, 8, 6);
+        v->setSpacing(2);
+        for (QLabel *l : {m_title, m_status}) l->setMinimumWidth(1), l->setMaximumWidth(QWIDGETSIZE_MAX);
+        m_levels->setMinimumWidth(0);
+        m_levels->setMaximumWidth(QWIDGETSIZE_MAX);
+        v->addWidget(m_title);
+        v->addWidget(m_status);
+        v->addSpacing(2);
+        v->addWidget(m_levels);
+        auto *times = new QHBoxLayout;
+        times->setSpacing(6);
+        times->addWidget(m_timeLabel);
+        times->addWidget(m_position, 1);
+        times->addWidget(m_lengthLabel);
+        v->addLayout(times);
+        row->addWidget(m_prev);
+        row->addWidget(m_toggle);
+        row->addWidget(m_next);
+        row->addSpacing(6);
+        row->addWidget(m_shuffle);
+        row->addWidget(m_autoplay);
+        row->addWidget(m_folder);
+        row->addStretch(1);
+        row->addWidget(m_speaker);
+        row->addSpacing(4);
+        row->addWidget(m_volume);
+        v->addLayout(row);
+    }
+    setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);   // (the docks above take the height)
+    showSong();
 }
 
 void MusicPlayer::resizeEvent(QResizeEvent *e) {

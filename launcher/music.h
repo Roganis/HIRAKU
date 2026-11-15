@@ -35,6 +35,7 @@ public:
     void firstSongs();                         // ... and on its first launches, the first songs (music.cpp)
     void pause();                              // (the panel closed: no music nobody can stop)
     void themeChanged();                       // View > Look (theme.h): its icons again
+    void arrange(bool bar);                    // a panel, or a bar along the window's bottom (the cards view)
 
 protected:
     void resizeEvent(QResizeEvent *e) override;   // (the title elided to the width)
@@ -69,6 +70,7 @@ private:
     QList<QPointer<QProcess>> m_watched;
     QTimer m_resume;                     // the moment after a hold ends
     bool m_held = false;
+    bool m_bar = false;                  // laid out as a bar (arrange)
 
     QStringList m_songs;                 // the order they play in
     int m_index = -1;                    // the one playing or paused (-1: none)

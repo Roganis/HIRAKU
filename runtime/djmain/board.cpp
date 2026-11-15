@@ -53,7 +53,6 @@ uint16_t g_turntable_pos[2]{};
 // Inputs as MAME's ports: DSW3 BTN3 BTN2 BTN1 DSW1 DSW2 (input_r's order), active low
 uint8_t g_in[6] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
 uint8_t g_dial[2]{};                                   // TT1/TT2: MAME's 8-bit dial ports
-int g_dial_frac[2]{};
 
 // interrupts: MAME HOLD_LINE (cleared when the CPU acknowledges)
 bool g_hold4 = false, g_hold1 = false;
@@ -943,14 +942,18 @@ bool set_input(const std::string &name, int value) {
     return false;
 }
 
-// Host turntables arrive in Firebeat units (1024 counts a turn); MAME's dial
-// port has 256. (MAME then scales each dial step by 70 into the board's counter.)
+// Host turntables arrive in Firebeat units (1024 counts a turn), and a turn of one is a turn of
+// the game's 8-bit position: 64 of the board's counter a count (the game reads its high byte).
+// Until 2026-11-15 they went through MAME's dial port (256 a turn, each step 70 of the counter:
+// its scale for a mouse or a key), which made a whole turn 70 of the game's counts. The game reads
+// the position each frame, takes a change of one count for none and of two or more for a turn of
+// the table (0xEB90 in beatmania 1st MIX: -1, 0 and +1 are 0), so a scratch had to move 10 degrees
+// within a frame, a fast flick: on an IIDX cabinet (its board gives 256 a turn) slow scratches
+// were lost. Now 3 degrees, and a count of the cabinet's board is one of the game's: its noise
+// stays inside what the game ignores. The oracle scripts' "TT1/Dial" is MAME's port, as it was.
 void turntable_add(int player, int delta) {
     if (player < 0 || player > 1 || g_cfg.family != "djbm") return;
-    g_dial_frac[player] += delta;
-    const int whole = g_dial_frac[player] / 4;
-    g_dial_frac[player] -= whole * 4;
-    g_dial[player] = (uint8_t)(g_dial[player] + whole);
+    g_turntable_pos[player] = (uint16_t)(g_turntable_pos[player] + delta * 64);
 }
 
 }  // namespace hk::dj

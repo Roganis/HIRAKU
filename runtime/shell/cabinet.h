@@ -24,6 +24,7 @@ struct Lamp {
     std::string group;
     int reg = 0, bit = 0;
     bool active_low = false;
+    int width = 1;          // a level of that many bits from `bit` up (a dimmed lamp): lit unless it is 0
 };
 
 const std::vector<Control> &controls(const std::string &family);

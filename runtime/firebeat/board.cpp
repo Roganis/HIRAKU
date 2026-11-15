@@ -324,11 +324,21 @@ std::vector<uint8_t> g_lamps;
 uint64_t g_lamp_changes = 0;
 
 void lamp_write(int reg, uint32_t data, uint32_t mask) {
+    // HK_FB_LAMP_LOG=1: each change of an output register (0: 0x7d000804, 1: 0x7d000320, 2: 0x7d000324,
+    // 3 to 6: 0x7d000330 to 0x7d00033c), to find a game's lamps by what it lights when
+    static const bool log = getenv("HK_FB_LAMP_LOG") != nullptr;
+    if (log) {
+        static uint32_t was[7] = {};
+        const uint32_t now = (was[reg] & ~mask) | (data & mask);
+        if (now != was[reg]) fprintf(stderr, "lamps: frame %llu reg %d %08x (changed %08x)\n", (unsigned long long)g_frame, reg, now, now ^ was[reg]);
+        was[reg] = now;
+    }
     auto &defs = cab::lamps(g_cfg.family);
     for (size_t k = 0; k < defs.size(); k++) {
         auto &l = defs[k];
-        if (l.reg != reg || !((mask >> l.bit) & 1)) continue;
-        uint8_t on = (uint8_t)(((data >> l.bit) & 1) ^ (l.active_low ? 1 : 0));
+        const uint32_t field = ((1u << l.width) - 1) << l.bit;   // (one bit, or a dimmed lamp's level)
+        if (l.reg != reg || !(mask & field)) continue;
+        uint8_t on = (uint8_t)(((data & field) != 0) ^ (l.active_low ? 1 : 0));
         if (g_lamps[k] != on) {
             g_lamps[k] = on;
             g_lamp_changes++;
@@ -509,6 +519,8 @@ void bus_write(uint32_t p, uint32_t v, int size) {
         return;
     }
     if (p >= 0x7d000320 && p <= 0x7d000327) { lamp_write(1 + ((p >> 2) & 1), v << lane_shift(p, size), size_mask(size) << lane_shift(p, size)); return; }
+    // beatmania III: the cabinet's lamps (C-RAY, LAMP 1-3 and neon, a side at 0x330 and at 0x338)
+    if (p >= 0x7d000330 && p <= 0x7d00033f) { lamp_write(3 + ((p >> 2) & 3), v << lane_shift(p, size), size_mask(size) << lane_shift(p, size)); return; }
     if (p >= 0x7d000804 && p <= 0x7d000807) { lamp_write(0, v << lane_shift(p, size), size_mask(size) << lane_shift(p, size)); return; }   // lamps, status LEDs
     if (p >= 0x7d000400 && p <= 0x7d000401) {
         bytes_write(p, size, v, 0x7d000400, [](uint32_t o, uint8_t b) { g_ymz->write((int)o, b); });

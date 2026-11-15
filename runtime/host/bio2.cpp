@@ -41,6 +41,7 @@ void sleep_ms(int ms) {
 void run() {
     AcioPort port(g_path);
     bool told = false;
+    int unanswered = 0;   // start-ups in a row the board didn't answer
     while (g_running) {
         if (!port.open()) {
             if (!told) fprintf(stderr, "bio2 %s: cannot open it (%s); trying again every 5 s\n", g_path.c_str(), strerror(errno));
@@ -56,11 +57,15 @@ void run() {
         uint8_t node = 1;
         if (!port.handshake_bio2([] { return g_running.load(); }) || !port.ask_one(0, 0x0001, {0x00}, m, 500, 3) ||
             !(node = m.payload.empty() || !m.payload[0] ? 1 : m.payload[0]) || !port.ask_one(node, 0x0002, {}, m, 500, 3)) {
-            fprintf(stderr, "bio2 %s: no answer as an ACIO board\n", g_path.c_str());
+            // (the IIDX cabinet, a start or two in twenty on 2026-11-15: no answer to the first start-up,
+            // right after the program before this one let the port go, and the next one answered. The
+            // first few tries come half a second apart, so the controls aren't dead for 5 s)
+            if (!unanswered) fprintf(stderr, "bio2 %s: no answer as an ACIO board; trying again\n", g_path.c_str());
             port.close();
-            sleep_ms(5000);
+            sleep_ms(++unanswered <= 4 ? 500 : 5000);
             continue;
         }
+        unanswered = 0;
         const std::string model = m.payload.size() >= 12 ? std::string((const char *)&m.payload[8], 4) : "?";
         if (model != "BI2A") {
             fprintf(stderr, "bio2 %s: the board says it is \"%s\", not BI2A (a BIO2 with the BI2X firmware of IIDX 27 and "
@@ -111,6 +116,20 @@ std::vector<Button> buttons() {
     return b;
 }
 
+// An IIDX cabinet's controls a game has no use for, as another of the game's: beatmania III has five
+// keys a side, a foot pedal and its service panel's A and B (the test mode's buttons), so a side's
+// keys 6 and 7 are its pedal, and EFFECT and VEFX are A and B. "" if the game takes `name` itself
+// or the family has nothing for it.
+std::string other_name(const std::string &family, const std::string &name) {
+    if (family == "bm3") {
+        if (name == "P1 Button 6" || name == "P1 Button 7") return "P1 Foot";
+        if (name == "P2 Button 6" || name == "P2 Button 7") return "P2 Foot";
+        if (name == "Effect") return "A";
+        if (name == "VEFX") return "B";
+    }
+    return "";
+}
+
 // Where a lamp of the game's goes: its byte of the board's 0x30, or -1
 int lamp_byte(const std::string &name) {
     static const std::regex key(R"(P([12]) (Key|Button) Lamp ([1-7]))"), spot(R"(Spotlight ([1-8]))");
@@ -122,6 +141,12 @@ int lamp_byte(const std::string &name) {
     }
     if (name == "P1 Start Lamp") return 0x03;
     if (name == "P2 Start Lamp") return 0x04;
+    // beatmania III on this cabinet: its four effect LEDs on the two panel lamps, a side's three
+    // lamps and its C-RAY tubes on that side's four spotlights (its neons are the neon, below)
+    static const std::regex effect(R"(Effect LED ([1-4]))"), lamp(R"((Left|Right) Lamp ([1-3]))"), cray(R"((Left|Right) C-RAY [12])");
+    if (std::regex_match(name, m, effect)) return std::stoi(m[1]) % 2 ? 0x05 : 0x06;
+    if (std::regex_match(name, m, lamp)) return m[1] == "Left" ? 0x20 + std::stoi(m[2]) - 1 : 0x25 + std::stoi(m[2]);
+    if (std::regex_match(name, m, cray)) return m[1] == "Left" ? 0x23 : 0x25;
     if (name == "VEFX Lamp") return 0x05;
     if (name == "Effect Lamp") return 0x06;
     if (name.compare(0, 4, "Neon") == 0) return 0x24;
@@ -196,14 +221,20 @@ void bio2_frame(hk::Core &core) {
     for (auto &b : all)
         if (bit(in, b.bit) != bit(last, b.bit)) {
             menukey::input(b.name, bit(in, b.bit));   // (Test and Service held: the way out to the game menu)
-            core.set_input(b.name, bit(in, b.bit));
+            const std::string other = other_name(core.family(), b.name);
+            core.set_input(other.empty() ? b.name : other, bit(in, b.bit));
             if (bit(in, b.bit)) warp::pressed();   // the fast start-up ends (host/warp.h)
         }
     for (int p = 0; p < 2; p++)
         if (int8_t d = (int8_t)(in[16 + p] - last[16 + p])) core.turntable_add(p, d * 4);   // 256 a turn, to 1024
     const int sliders[5] = {0, 2, 4, 6, 7};
     for (int k = 0; k < 5; k++)
-        if ((in[sliders[k]] ^ last[sliders[k]]) & 0xf0) core.set_input("Volume " + std::to_string(k + 1), in[sliders[k]] >> 4);
+        if ((in[sliders[k]] ^ last[sliders[k]]) & 0xf0) {
+            const int v = in[sliders[k]] >> 4;
+            // (beatmania III's effector: seven values of 0 to 31, the first five from the cabinet's sliders)
+            if (core.family() == "bm3") core.set_input("Effect " + std::to_string(k + 1), (v * 31 + 7) / 15);
+            else core.set_input("Volume " + std::to_string(k + 1), v);
+        }
     // coins: the count goes up by one a coin; each a press of a few frames
     static int coins = 0, coin_frames = 0;
     if (uint8_t d = (uint8_t)((in[8] - last[8]) & 0x3f); d && d < 16) coins += d;   // a 6-bit count (IIDX 27)

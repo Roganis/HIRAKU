@@ -466,8 +466,36 @@ std::vector<Lamp> make_kbm_lamps() {
 }
 
 // beatmania III: MAME decodes no cabinet lamps (lamp_output2_w/3_w only log)
+// beatmania III: MAME names none of its lamps. From the game's own test mode (I/O (LAMP), I/O
+// (SERIAL)) with every write to the I/O board logged (HK_FB_LAMP_LOG, 2026-11-15). The board's
+// outputs are 16-bit registers from 0x7d000320; the regs here are 32-bit words of them (reg 1 =
+// 0x320 and 0x322, 2 = 0x324, 3 = 0x330 and 0x332, 4 = 0x334, 5 = 0x338 and 0x33a, 6 = 0x33c):
+//   0x320, 0x324   a side's control panel: its five key LEDs (lit while a key is pressed in a
+//                  stage), its start LED (blinking with a credit in), an effect LED
+//   0x322          two more effect LEDs (and bit 0, the coin lock: not a lamp)
+//   0x330, 0x338   a side's C-RAY 1 and 2, a level each (the test's 1 and 2: a nibble)
+//   0x332, 0x33a   a side's LAMP 1 to 3
+//   0x334, 0x33c   a side's neon: a level from bit 2 up (the test steps it 1, 2, 3...; in a stage
+//                  it flashes to 59 and fades to 3 on the beat). Lit here from 16 up, so the fade shows
+// Player 2's key LEDs are by player 1's layout (its start LED and effect LED fit it).
 std::vector<Lamp> make_bm3_lamps() {
     std::vector<Lamp> l;
+    add_run(l, "P1 Key Lamp", "Player 1", 1, {16, 17, 18, 19, 20});
+    add_run(l, "P2 Key Lamp", "Player 2", 2, {16, 17, 18, 19, 20});
+    l.push_back({"P1 Start Lamp", "Player 1", 1, 21});
+    l.push_back({"P2 Start Lamp", "Player 2", 2, 21});
+    l.push_back({"Effect LED 1", "Effector", 1, 22});
+    l.push_back({"Effect LED 2", "Effector", 1, 6});
+    l.push_back({"Effect LED 3", "Effector", 1, 7});
+    l.push_back({"Effect LED 4", "Effector", 2, 22});
+    const char *side[2] = {"Left", "Right"};
+    for (int s = 0; s < 2; s++) {
+        const std::string S = side[s];
+        l.push_back({"Neon " + S, "Cabinet", 4 + 2 * s, 22, false, 2});
+        l.push_back({S + " C-RAY 1", "Cabinet", 3 + 2 * s, 16, false, 4});
+        l.push_back({S + " C-RAY 2", "Cabinet", 3 + 2 * s, 20, false, 4});
+        for (int k = 0; k < 3; k++) l.push_back({S + " Lamp " + std::to_string(k + 1), "Cabinet", 3 + 2 * s, 5 + k});
+    }
     add_status(l);
     return l;
 }

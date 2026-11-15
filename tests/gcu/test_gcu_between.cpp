@@ -2,9 +2,11 @@
 // The GCU's in-between pictures (K057714::draw_between, --smooth-motion) on a made-up game drawn
 // through the GCU's own registers: two frame buffers by turns, a note falling 2 rows a frame, and
 // beside it two translucent strips the way beatmania III draws its lane covers (issue 15): the top
-// one from row 0, 20 and 24 rows tall by turns, the next one under it another picture each frame. The
-// note is carried on; the strips stay as the frame has them (resized from their top edge, not
-// moved: carried on, the top one went over the next one and those rows were blended twice).
+// one from row 0, 20 and 24 rows tall by turns, the next one under it another picture each frame;
+// and on the right a stack of them as its lanes on SEPARATE fade, 6 rows tall, 16 apart, each its
+// own picture, the stack 8 rows on by turns. The note is carried on; the strips stay as the frame
+// has them (resized from their top edge, or another picture: not moved. Carried on, they went over
+// each other and those rows were blended twice).
 #include <cstdint>
 #include <cstdio>
 #include <vector>
@@ -52,9 +54,10 @@ int main() {
     fill_vram(g, 0, TEX_Y, 32, 32, 0x8000);       // the strips' pictures: black (two places)
     fill_vram(g, 128, TEX_Y, 64, 32, 0x8000);
     fill_vram(g, 64, TEX_Y, 4, 4, 0xfc00);        // the note: red
+    fill_vram(g, 192, TEX_Y, 64, 32, 0x8000);     // the stack's pictures: black
 
     std::vector<uint32_t> frame(W * H), between(W * H);
-    int checked = 0, strip_wrong = 0, note_moved = 0;
+    int checked = 0, strip_wrong = 0, stack_wrong = 0, note_moved = 0;
     for (int n = 0; n < 40; n++) {
         // the vblank: the frame drawn last goes on show
         g.vblank(true);
@@ -66,6 +69,8 @@ int main() {
                 checked++;
                 for (int y = 0; y < H; y++)
                     for (int x = 0; x < 32; x++) strip_wrong += frame[y * W + x] != between[y * W + x];
+                for (int y = 0; y < H; y++)
+                    for (int x = 48; x < 64; x++) stack_wrong += frame[y * W + x] != between[y * W + x];
                 for (int y = 0; y < H; y++)
                     for (int x = 40; x < 44; x++) note_moved += frame[y * W + x] != between[y * W + x];
             } else {
@@ -79,8 +84,10 @@ int main() {
         object(g, 0, 0, 0, 32, top, true);
         object(g, n & 1 ? 160 : 128, 0, top, 32, n & 1 ? 7 : 8, true);   // (another picture and height by turns, as the game's)
         object(g, 64, 40, 2 * n % 48, 4, 4, false);
+        for (int i = 0; i < 3; i++)   // (each strip from its own place in the pictures: another by turns)
+            object(g, 192 + 16 * i + (n & 1) * 8, 48, 4 + 16 * i + (n & 1) * 8, 16, 6, true);
     }
-    printf("test_gcu_between: %d in-between pictures, %d strip pixels not as the frame has them, %d note pixels moved\n",
-           checked, strip_wrong, note_moved);
-    return checked > 20 && strip_wrong == 0 && note_moved > 0 ? 0 : 1;
+    printf("test_gcu_between: %d in-between pictures, %d strip pixels and %d stack pixels not as the frame has them, %d note pixels moved\n",
+           checked, strip_wrong, stack_wrong, note_moved);
+    return checked > 20 && strip_wrong == 0 && stack_wrong == 0 && note_moved > 0 ? 0 : 1;
 }

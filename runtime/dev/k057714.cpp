@@ -609,6 +609,11 @@ bool K057714::draw_between(uint32_t *out, int width, int height, double t) {
                 if ((b[1] & 0x3ff) == (c[1] & 0x3ff)) dx = 0;
                 if (((b[1] >> 10) & 0x3fff) == ((c[1] >> 10) & 0x3fff)) dy = 0;
             }
+            // a blended object only moves as the same picture: one only as tall as another isn't it
+            // moved. beatmania III's lanes on SEPARATE fade in strips of their own pictures, 15 or 16
+            // rows apart, the stack 8 rows on by turns; each paired with the frame before's next
+            // strip, all were carried 8 rows, went over each other, and those rows showed darker
+            if (((c[1] >> 28) & 3) && b[0] != c[0]) dx = dy = 0;
             cands.push_back({(int)k, (int)kb, dx, dy, (b[0] != c[0] ? 8 : 0) + (b[3] != c[3] ? 8 : 0) + (b[2] != c[2] ? 4 : 0), true});
         }
     }

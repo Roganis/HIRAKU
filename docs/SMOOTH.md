@@ -161,6 +161,11 @@ this:
   next strip halfway, and those rows were blended twice, a dark line flickering at the strips' edge
   (issue 15, 2026-11-14; tests/gcu/test_gcu_between.cpp). pop'n music 8's How to Play cuts an arrow
   off from the right this way: it now stays where it is as it goes, as the game draws it;
+- and a blended object only moves as the same picture: paired with one of another picture (only
+  as tall), it stays where the frame has it. beatmania III's lanes on FRAME SEPARATE with
+  TRANS-LUCENT on fade in a stack of strips, 6 rows tall and 15 or 16 apart, each its own picture,
+  the stack 8 rows on by turns: each strip paired with the frame before's next one, all were carried
+  8 rows and blended twice where they met, dark bands flickering on the lanes (issue 15, 2026-11-15);
 - where it reaches the screen: pop'n 8 draws its notes into a strip of VRAM (x 608-760) that a
   later object copies onto the lanes, the strip a few pixels sideways from frame to frame. An object
   inside a later one's source rectangle is placed through that copy (its offset turned back into

@@ -159,8 +159,47 @@ protected:
 	// Fixed specifics
 	memory_access<24, 1, 0, ENDIANNESS_BIG>::specific m_r_program, m_r_opcodes, m_r_uprogram, m_r_uopcodes, m_cpu_space;
 
+	// HIRAKU: turns of a waiting loop counted instead of run (runtime/dev/m68000_loops.h,
+	// loop_counter.h). While a
+	// turn is being learned (m_hk_noting) every bus cycle is told to m_hk_note: a read after it,
+	// with what it read; a write before it is made, with what it writes. `plain` says the cycle
+	// was memory's own (bit 0) and that the memory can be written (bit 1): anything else is a
+	// device's, and such a turn is not counted. The accesses themselves are MAME's.
+	struct hk_noted : memory_access<24, 1, 0, ENDIANNESS_BIG>::specific {
+		using base = memory_access<24, 1, 0, ENDIANNESS_BIG>::specific;
+		m68000_device *m_cpu = nullptr;
+		hk_noted &operator=(const base &b) { base::operator=(b); return *this; }
+		int hk_plain(offs_t a) const {
+			if(!m_pages || m_space->m_waits)
+				return 0;
+			const auto &pg = m_pages[(a & 0xffffff) >> 8];
+			return pg.direct_r ? (pg.direct_w ? 3 : 1) : 0;
+		}
+		u16 read_interruptible(offs_t a, u16 mask = 0xffff) {
+			const u16 v = base::read_interruptible(a, mask);
+			if(m_cpu->m_hk_noting) [[unlikely]]
+				m_cpu->m_hk_note(*m_cpu, a, v, mask, false, hk_plain(a));
+			return v;
+		}
+		void write_interruptible(offs_t a, u16 d, u16 mask = 0xffff) {
+			if(m_cpu->m_hk_noting) [[unlikely]]
+				m_cpu->m_hk_note(*m_cpu, a, d, mask, true, hk_plain(a));
+			base::write_interruptible(a, d, mask);
+		}
+	};
+	friend struct hk_m68000;
+	bool m_hk_noting = false;
+	void (*m_hk_note)(m68000_device &, offs_t address, u16 data, u16 mask, bool write, int plain) = nullptr;
+	// m_hk_loop is called at the start of an instruction whose address agrees with m_hk_loop_pc
+	// in the bits of m_hk_loop_mask (none does until something is attached), and may take whole
+	// turns' cycles off m_icount; m_hk_runs counts execute_run()s
+	void (*m_hk_loop)(m68000_device &) = nullptr;
+	u32 m_hk_loop_pc = 1, m_hk_loop_mask = 0xffffffff;
+	u32 m_hk_runs = 0;
+	void *m_hk_loops = nullptr;
+
 	// Dynamic specifics, depending on supervisor state
-	memory_access<24, 1, 0, ENDIANNESS_BIG>::specific m_program, m_opcodes;
+	hk_noted m_program, m_opcodes; // HIRAKU: MAME's memory_access<24, 1, 0, ENDIANNESS_BIG>::specific
 
 	// MMU, if one present, plus the default one
 	mmu_disabled m_mmu_disabled;

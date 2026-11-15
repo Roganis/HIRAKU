@@ -146,6 +146,7 @@ u16 m68000_device::get_fc() const noexcept
 
 void m68000_device::execute_run()
 {
+	m_hk_runs++; // HIRAKU
 	m_icount -= m_count_before_instruction_step;
 	if(m_icount < 0) {
 		m_count_before_instruction_step = -m_icount;
@@ -161,6 +162,10 @@ void m68000_device::execute_run()
 			if(m_inst_state >= S_first_instruction) {
 				m_ipc = m_pc - 2;
 				m_irdi = m_ird;
+				// HIRAKU: a waiting loop's head (runtime/dev/m68000_loops.h)
+				// (it leaves a cycle at least: this instruction starts as it would have)
+				if(((m_ipc ^ m_hk_loop_pc) & m_hk_loop_mask) == 0) [[unlikely]]
+					m_hk_loop(*this);
 
 				if(debugger_enabled())
 					debugger_instruction_hook(m_ipc);
@@ -234,6 +239,8 @@ void m68000_device::device_start()
 		m_s_cpu_space = &space(m_cpu_space_id);
 	}
 
+	m_program.m_cpu = this; // HIRAKU
+	m_opcodes.m_cpu = this;
 	if(!(m_disable_specifics || m_disable_spaces)) {
 		m_s_program->specific(m_r_program);
 		m_s_opcodes->specific(m_r_opcodes);

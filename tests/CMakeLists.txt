@@ -442,6 +442,23 @@ add_executable(test_idle_model sys573/test_idle_model.cpp)
 target_include_directories(test_idle_model PRIVATE ${CMAKE_SOURCE_DIR}/runtime)
 add_test(NAME sys573_waiting_loops COMMAND test_idle_model)
 
+# The PlayStation GPU's textured rows (runtime/sys573/psx_spans.h) against the pixel-by-pixel loop
+# of MAME's psx.cpp, on rows drawn at random (`test_psx_spans --bench` times the two)
+add_executable(test_psx_spans sys573/test_psx_spans.cpp)
+target_include_directories(test_psx_spans PRIVATE ${CMAKE_SOURCE_DIR}/runtime)
+add_test(NAME psx_spans COMMAND test_psx_spans)
+
+# A waiting loop's turn judged from its bus cycles (runtime/dev/loop_turns.h) ...
+add_executable(test_loop_turns dev/test_loop_turns.cpp)
+target_include_directories(test_loop_turns PRIVATE ${CMAKE_SOURCE_DIR}/runtime)
+add_test(NAME loop_turns COMMAND test_loop_turns)
+# ... and MAME's 68000 with such turns counted (runtime/dev/m68000_loops.h) against the same
+# processor running every turn: a small program on two bare 68000s. No game needed
+add_executable(test_m68000_loops dev/test_m68000_loops.cpp)
+target_link_libraries(test_m68000_loops PRIVATE hiraku_twinkle hiraku_twinkle_blocks)   # (the blocks no game has: empty tables)
+target_compile_options(test_m68000_loops PRIVATE -Wno-unused-parameter)   # (the shim's stand-ins)
+add_test(NAME m68000_loops COMMAND test_m68000_loops)
+
 # Windows: the tests' programs take paths as UTF-8, as HIRAKU's own do (the manifest the root file
 # gives to its programs: utf8_paths is about it), and SDL3.dll is beside those that load it
 if(WIN32 AND NOT MSVC)

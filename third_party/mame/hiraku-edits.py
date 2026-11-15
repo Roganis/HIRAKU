@@ -883,6 +883,106 @@ def mdec_h(s):
     return s
 
 
+SPANS = r'''/* HIRAKU: rows that stay on one row of the texture (sys573/psx_spans.h) */
+#include "sys573/psx_spans.h"
+#include <algorithm>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <vector>
+
+static const int hk_spans = [] {
+	const char *e = getenv( "HK_GPU_SPANS" ); // 0: MAME's loop; check: both, compared
+	return e == nullptr ? 1 : strcmp( e, "0" ) == 0 ? 0 : strcmp( e, "check" ) == 0 ? 2 : 1;
+}();
+
+[[noreturn]] static void hk_span_differs( const char *routine, int kind, int tp, int n, int at )
+{
+	fprintf( stderr, "HK_GPU_SPANS=check: %s: a row of %d pixels (kind %d, depth %d) differs from MAME's loop at pixel %d\n", routine, n, kind & 7, tp, at );
+	abort();
+}
+
+/* what this routine's rows are drawn by: 0 MAME's loop, 1 the texels as they are, 2 shaded, 3 with
+   semi-transparency (+8: checked against MAME's loop) */
+#define HK_SPANSETUP \
+	int hk_kind = 0; \
+	hk::psxspan::Shade hk_shade; \
+	hk::psxspan::Blend hk_blend; \
+	const hk::psxspan::Shade *hk_shaded = nullptr; \
+	if( hk_spans != 0 && n_ti == 0 && n_twh == 255 && n_tww == 255 && n_twx == 0 && n_twy == 0 && !m_check_stp && n_tp < 3 ) \
+	{ \
+		if( !HK_NEUTRAL ) \
+		{ \
+			for( int hk_l = 0; hk_l < 32; hk_l++ ) \
+			{ \
+				hk_shade.r[ hk_l ] = p_n_redshade[ ( hk_l << 8 ) | n_r.w.h ]; \
+				hk_shade.g[ hk_l ] = p_n_greenshade[ ( hk_l << 8 ) | n_g.w.h ]; \
+				hk_shade.b[ hk_l ] = p_n_blueshade[ ( hk_l << 8 ) | n_b.w.h ]; \
+			} \
+			hk_shaded = &hk_shade; \
+		} \
+		hk_kind = ( n_cmd & 0x02 ) != 0 ? 3 : hk_shaded != nullptr ? 2 : 1; \
+		hk_blend = { p_n_f, p_n_redb, p_n_greenb, p_n_blueb, p_n_redtrans, p_n_greentrans, p_n_bluetrans }; \
+		if( hk_spans == 2 ) \
+			hk_kind |= 8; \
+	}
+
+#define HK_SPANDRAW( U, DU, SHIFT ) \
+	switch( hk_kind & 7 ) \
+	{ \
+	case 1: \
+		hk::psxspan::row_plain<SHIFT>( n_tp, hk_d, hk_n, hk_row, U, DU, p_clut, hk_stp ); \
+		break; \
+	case 2: \
+		hk::psxspan::row_shaded<SHIFT>( n_tp, hk_d, hk_n, hk_row, U, DU, p_clut, hk_stp, hk_shade ); \
+		break; \
+	default: \
+		hk::psxspan::row_mixed<SHIFT>( n_tp, hk_d, hk_n, hk_row, U, DU, p_clut, hk_stp, hk_shaded, hk_blend, n_r.w.h, n_g.w.h, n_b.w.h ); \
+		break; \
+	}
+
+/* a row: ONEROW says its texels are all on the texture's row TXV; U, DU the texel's place and step
+   as a fixed-point number whose bits from SHIFT up are TXU */
+#define HK_SPANFILL( PIXELUPDATE, TXU, TXV, ONEROW, U, DU, SHIFT ) \
+	if( hk_kind == 0 || !( ONEROW ) ) \
+	{ \
+		TEXTUREFILL( PIXELUPDATE, TXU, TXV ) \
+	} \
+	else \
+	{ \
+		if( n_distance > ( (int32_t)n_drawarea_x2 - drawx ) + 1 ) \
+		{ \
+			n_distance = ( n_drawarea_x2 - drawx ) + 1; \
+		} \
+		if( n_distance > 0 ) \
+		{ \
+			uint16_t *hk_d = p_p_vram[ drawy ] + drawx; \
+			const uint16_t *hk_row = p_p_vram[ n_ty + ( TXV ) ] + n_tx; \
+			const uint16_t hk_stp = m_draw_stp ? 0x8000 : 0; \
+			const int hk_n = n_distance; \
+			if( ( hk_kind & 8 ) == 0 ) \
+			{ \
+				HK_SPANDRAW( U, DU, SHIFT ) \
+			} \
+			else \
+			{ \
+				std::vector<uint16_t> hk_before( hk_d, hk_d + hk_n ); \
+				HK_SPANDRAW( U, DU, SHIFT ) \
+				std::vector<uint16_t> hk_made( hk_d, hk_d + hk_n ); \
+				std::copy( hk_before.begin(), hk_before.end(), hk_d ); \
+				{ \
+					TEXTUREFILL( PIXELUPDATE, TXU, TXV ) \
+				} \
+				for( int hk_i = 0; hk_i < hk_n; hk_i++ ) \
+					if( hk_made[ hk_i ] != hk_d[ hk_i ] ) \
+						hk_span_differs( __func__, hk_kind, n_tp, hk_n, hk_i ); \
+			} \
+		} \
+	}
+
+'''
+
+
 def video_psx_cpp(s):
     # textured pixels: the level tables are (component << 8), computed instead of read from three
     # 128 KiB tables; and shading at 0x80 (raw textures, most sprites) gives the texel back unchanged
@@ -991,6 +1091,54 @@ void psxgpu_device::FlatRectangle8x8()""", """			if( ( (int32_t)n_drawarea_x1 - 
 }
 
 void psxgpu_device::FlatRectangle8x8()""", "video/psx.cpp FlatRectangle fill")
+    # textured rows that stay on one row of the texture (runtime/sys573/psx_spans.h): three quarters to
+    # nine tenths of what a game draws. A routine decides once what its rows can be drawn by
+    # (HK_SPANSETUP), and each row then goes to the row routine instead of TEXTUREFILL's loop
+    # (HK_SPANFILL). HK_GPU_SPANS=0: MAME's loop for all; =check: both, compared.
+    s = edit(s, '#define TEXTUREFILL( PIXELUPDATE, TXU, TXV ) \\\n', SPANS + '#define TEXTUREFILL( PIXELUPDATE, TXU, TXV ) \\\n',
+             'video/psx.cpp spans')
+    for f in ('FlatTexturedPolygon', 'FlatTexturedRectangle', 'Sprite8x8', 'Sprite16x16'):
+        s = edit(s, f'\tPAIR n_b; n_b.w.h = n_cmd & 0x01 ? 0x80 : BGR_B( m_packet.{f}.n_bgr ); n_b.w.l = 0;\n',
+                 f'\tPAIR n_b; n_b.w.h = n_cmd & 0x01 ? 0x80 : BGR_B( m_packet.{f}.n_bgr ); n_b.w.l = 0;\n\tHK_SPANSETUP\n',
+                 f'video/psx.cpp {f} span setup')
+    s = edit(s, '\t\t\tTEXTUREFILL( FLATTEXTUREDPOLYGONUPDATE, n_u.w.h, n_v.w.h );\n',
+             '\t\t\tHK_SPANFILL( FLATTEXTUREDPOLYGONUPDATE, n_u.w.h, n_v.w.h, n_dv == 0, n_u.d, (uint32_t)n_du, 16 );\n',
+             'video/psx.cpp polygon rows')
+    # the frame buffer fill (a picture cleared before it is drawn: a whole screen of pixels a frame):
+    # the colour worked out once and each row filled at once, the same pixels (columns wrap at 1024)
+    s = edit(s, """		while( n_distance > 0 )
+		{
+			p_p_vram[ n_y & 1023 ][ n_x & 1023 ] =
+				p_n_redshade[ MID_LEVEL | n_r.w.h ] |
+				p_n_greenshade[ MID_LEVEL | n_g.w.h ] |
+				p_n_blueshade[ MID_LEVEL | n_b.w.h ];
+			n_x++;
+			n_distance--;
+		}
+""", """		/* HIRAKU: the row filled at once */
+		if( n_distance > 0 )
+		{
+			const uint16_t hk_colour =
+				p_n_redshade[ MID_LEVEL | n_r.w.h ] |
+				p_n_greenshade[ MID_LEVEL | n_g.w.h ] |
+				p_n_blueshade[ MID_LEVEL | n_b.w.h ];
+			uint16_t *const hk_row = p_p_vram[ n_y & 1023 ];
+			const int32_t hk_x = n_x & 1023;
+			if( n_distance >= 1024 )
+				std::fill_n( hk_row, 1024, hk_colour );
+			else if( hk_x + n_distance <= 1024 )
+				std::fill_n( hk_row + hk_x, n_distance, hk_colour );
+			else
+			{
+				std::fill_n( hk_row + hk_x, 1024 - hk_x, hk_colour );
+				std::fill_n( hk_row, hk_x + n_distance - 1024, hk_colour );
+			}
+		}
+""", 'video/psx.cpp frame buffer fill')
+    old = '\t\t\tTEXTUREFILL( FLATTEXTUREDRECTANGLEUPDATE, n_u, n_v );\n'
+    if s.count(old) != 3:
+        sys.exit('hiraku-edits: video/psx.cpp sprite rows: anchor not found three times')
+    s = s.replace(old, '\t\t\tHK_SPANFILL( FLATTEXTUREDRECTANGLEUPDATE, n_u, n_v, true, (uint32_t)n_u << 24, (uint32_t)n_du << 24, 24 );\n')
     return video_psx_cpp_worker(s)
 
 

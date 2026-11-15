@@ -23,6 +23,7 @@
 #include "bus/rs232/xvd701.h"
 #include "cpu/m68000/m68000.h"
 #include "cpu/psx/psx.h"
+#include "dev/m68000_loops.h"
 #include "imagedev/cdromimg.h"
 #include "imagedev/harddriv.h"
 #include "machine/fdc37c665gt.h"
@@ -772,6 +773,7 @@ bool init(const Config &cfg) {
     st.cfg = cfg;
     st.m_screen->m_hk_frame = [](screen_device &screen) {
         g.frames++;
+        hk::m68000_loops::frame(*g.state->m_audiocpu);
         if (!g.frame_hook) return;
         int w, h;
         if (!g.frame_picture) {   // nobody looks at it: the present hook's is the one shown
@@ -788,6 +790,7 @@ bool init(const Config &cfg) {
     };
     m.start();
     m.reset();
+    hk::m68000_loops::attach(*st.m_audiocpu);   // the sound board's waiting loop, counted
     g_link.attach(m);
 
     // the game's R3000 blocks, recompiled as on the 573 (HK_573_RECORD, HK_573_BLOCKS: sys573/mips.h)

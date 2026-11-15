@@ -1156,6 +1156,103 @@ void psxgpu_device::raster::decode_tpage( uint32_t tpage )
 		n_distance--; \
 	TEXTURE_ENDLOOP
 
+/* HIRAKU: rows that stay on one row of the texture (sys573/psx_spans.h) */
+#include "sys573/psx_spans.h"
+#include <algorithm>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <vector>
+
+static const int hk_spans = [] {
+	const char *e = getenv( "HK_GPU_SPANS" ); // 0: MAME's loop; check: both, compared
+	return e == nullptr ? 1 : strcmp( e, "0" ) == 0 ? 0 : strcmp( e, "check" ) == 0 ? 2 : 1;
+}();
+
+[[noreturn]] static void hk_span_differs( const char *routine, int kind, int tp, int n, int at )
+{
+	fprintf( stderr, "HK_GPU_SPANS=check: %s: a row of %d pixels (kind %d, depth %d) differs from MAME's loop at pixel %d\n", routine, n, kind & 7, tp, at );
+	abort();
+}
+
+/* what this routine's rows are drawn by: 0 MAME's loop, 1 the texels as they are, 2 shaded, 3 with
+   semi-transparency (+8: checked against MAME's loop) */
+#define HK_SPANSETUP \
+	int hk_kind = 0; \
+	hk::psxspan::Shade hk_shade; \
+	hk::psxspan::Blend hk_blend; \
+	const hk::psxspan::Shade *hk_shaded = nullptr; \
+	if( hk_spans != 0 && n_ti == 0 && n_twh == 255 && n_tww == 255 && n_twx == 0 && n_twy == 0 && !m_check_stp && n_tp < 3 ) \
+	{ \
+		if( !HK_NEUTRAL ) \
+		{ \
+			for( int hk_l = 0; hk_l < 32; hk_l++ ) \
+			{ \
+				hk_shade.r[ hk_l ] = p_n_redshade[ ( hk_l << 8 ) | n_r.w.h ]; \
+				hk_shade.g[ hk_l ] = p_n_greenshade[ ( hk_l << 8 ) | n_g.w.h ]; \
+				hk_shade.b[ hk_l ] = p_n_blueshade[ ( hk_l << 8 ) | n_b.w.h ]; \
+			} \
+			hk_shaded = &hk_shade; \
+		} \
+		hk_kind = ( n_cmd & 0x02 ) != 0 ? 3 : hk_shaded != nullptr ? 2 : 1; \
+		hk_blend = { p_n_f, p_n_redb, p_n_greenb, p_n_blueb, p_n_redtrans, p_n_greentrans, p_n_bluetrans }; \
+		if( hk_spans == 2 ) \
+			hk_kind |= 8; \
+	}
+
+#define HK_SPANDRAW( U, DU, SHIFT ) \
+	switch( hk_kind & 7 ) \
+	{ \
+	case 1: \
+		hk::psxspan::row_plain<SHIFT>( n_tp, hk_d, hk_n, hk_row, U, DU, p_clut, hk_stp ); \
+		break; \
+	case 2: \
+		hk::psxspan::row_shaded<SHIFT>( n_tp, hk_d, hk_n, hk_row, U, DU, p_clut, hk_stp, hk_shade ); \
+		break; \
+	default: \
+		hk::psxspan::row_mixed<SHIFT>( n_tp, hk_d, hk_n, hk_row, U, DU, p_clut, hk_stp, hk_shaded, hk_blend, n_r.w.h, n_g.w.h, n_b.w.h ); \
+		break; \
+	}
+
+/* a row: ONEROW says its texels are all on the texture's row TXV; U, DU the texel's place and step
+   as a fixed-point number whose bits from SHIFT up are TXU */
+#define HK_SPANFILL( PIXELUPDATE, TXU, TXV, ONEROW, U, DU, SHIFT ) \
+	if( hk_kind == 0 || !( ONEROW ) ) \
+	{ \
+		TEXTUREFILL( PIXELUPDATE, TXU, TXV ) \
+	} \
+	else \
+	{ \
+		if( n_distance > ( (int32_t)n_drawarea_x2 - drawx ) + 1 ) \
+		{ \
+			n_distance = ( n_drawarea_x2 - drawx ) + 1; \
+		} \
+		if( n_distance > 0 ) \
+		{ \
+			uint16_t *hk_d = p_p_vram[ drawy ] + drawx; \
+			const uint16_t *hk_row = p_p_vram[ n_ty + ( TXV ) ] + n_tx; \
+			const uint16_t hk_stp = m_draw_stp ? 0x8000 : 0; \
+			const int hk_n = n_distance; \
+			if( ( hk_kind & 8 ) == 0 ) \
+			{ \
+				HK_SPANDRAW( U, DU, SHIFT ) \
+			} \
+			else \
+			{ \
+				std::vector<uint16_t> hk_before( hk_d, hk_d + hk_n ); \
+				HK_SPANDRAW( U, DU, SHIFT ) \
+				std::vector<uint16_t> hk_made( hk_d, hk_d + hk_n ); \
+				std::copy( hk_before.begin(), hk_before.end(), hk_d ); \
+				{ \
+					TEXTUREFILL( PIXELUPDATE, TXU, TXV ) \
+				} \
+				for( int hk_i = 0; hk_i < hk_n; hk_i++ ) \
+					if( hk_made[ hk_i ] != hk_d[ hk_i ] ) \
+						hk_span_differs( __func__, hk_kind, n_tp, hk_n, hk_i ); \
+			} \
+		} \
+	}
+
 #define TEXTUREFILL( PIXELUPDATE, TXU, TXV ) \
 	if( n_distance > ( (int32_t)n_drawarea_x2 - drawx ) + 1 ) \
 	{ \
@@ -1601,6 +1698,7 @@ void psxgpu_device::raster::FlatTexturedPolygon( int n_points )
 	PAIR n_r; n_r.w.h = n_cmd & 0x01 ? 0x80 : BGR_R( m_packet.FlatTexturedPolygon.n_bgr ); n_r.w.l = 0;
 	PAIR n_g; n_g.w.h = n_cmd & 0x01 ? 0x80 : BGR_G( m_packet.FlatTexturedPolygon.n_bgr ); n_g.w.l = 0;
 	PAIR n_b; n_b.w.h = n_cmd & 0x01 ? 0x80 : BGR_B( m_packet.FlatTexturedPolygon.n_bgr ); n_b.w.l = 0;
+	HK_SPANSETUP
 
 	FINDTOPLEFT( FlatTexturedPolygon )
 
@@ -1711,7 +1809,7 @@ void psxgpu_device::raster::FlatTexturedPolygon( int n_points )
 				drawx = n_drawarea_x1;
 			}
 
-			TEXTUREFILL( FLATTEXTUREDPOLYGONUPDATE, n_u.w.h, n_v.w.h );
+			HK_SPANFILL( FLATTEXTUREDPOLYGONUPDATE, n_u.w.h, n_v.w.h, n_dv == 0, n_u.d, (uint32_t)n_du, 16 );
 		}
 
 		n_cx1.d += n_dx1;
@@ -2330,14 +2428,24 @@ void psxgpu_device::raster::FrameBufferRectangleDraw()
 		int16_t n_x = COORD_X( m_packet.FlatRectangle.n_coord );
 		int32_t n_distance = SIZE_W( m_packet.FlatRectangle.n_size );
 
-		while( n_distance > 0 )
+		/* HIRAKU: the row filled at once */
+		if( n_distance > 0 )
 		{
-			p_p_vram[ n_y & 1023 ][ n_x & 1023 ] =
+			const uint16_t hk_colour =
 				p_n_redshade[ MID_LEVEL | n_r.w.h ] |
 				p_n_greenshade[ MID_LEVEL | n_g.w.h ] |
 				p_n_blueshade[ MID_LEVEL | n_b.w.h ];
-			n_x++;
-			n_distance--;
+			uint16_t *const hk_row = p_p_vram[ n_y & 1023 ];
+			const int32_t hk_x = n_x & 1023;
+			if( n_distance >= 1024 )
+				std::fill_n( hk_row, 1024, hk_colour );
+			else if( hk_x + n_distance <= 1024 )
+				std::fill_n( hk_row + hk_x, n_distance, hk_colour );
+			else
+			{
+				std::fill_n( hk_row + hk_x, 1024 - hk_x, hk_colour );
+				std::fill_n( hk_row, hk_x + n_distance - 1024, hk_colour );
+			}
 		}
 
 		n_y++;
@@ -2531,6 +2639,7 @@ void psxgpu_device::raster::FlatTexturedRectangle()
 	PAIR n_r; n_r.w.h = n_cmd & 0x01 ? 0x80 : BGR_R( m_packet.FlatTexturedRectangle.n_bgr ); n_r.w.l = 0;
 	PAIR n_g; n_g.w.h = n_cmd & 0x01 ? 0x80 : BGR_G( m_packet.FlatTexturedRectangle.n_bgr ); n_g.w.l = 0;
 	PAIR n_b; n_b.w.h = n_cmd & 0x01 ? 0x80 : BGR_B( m_packet.FlatTexturedRectangle.n_bgr ); n_b.w.l = 0;
+	HK_SPANSETUP
 
 	int16_t n_x = S11_COORD_X( m_packet.FlatTexturedRectangle.n_coord );
 	int16_t n_y = S11_COORD_Y( m_packet.FlatTexturedRectangle.n_coord );
@@ -2554,7 +2663,7 @@ void psxgpu_device::raster::FlatTexturedRectangle()
 				drawx = n_drawarea_x1;
 			}
 
-			TEXTUREFILL( FLATTEXTUREDRECTANGLEUPDATE, n_u, n_v );
+			HK_SPANFILL( FLATTEXTUREDRECTANGLEUPDATE, n_u, n_v, true, (uint32_t)n_u << 24, (uint32_t)n_du << 24, 24 );
 		}
 
 		n_v += n_dv;
@@ -2588,6 +2697,7 @@ void psxgpu_device::raster::Sprite8x8()
 	PAIR n_r; n_r.w.h = n_cmd & 0x01 ? 0x80 : BGR_R( m_packet.Sprite8x8.n_bgr ); n_r.w.l = 0;
 	PAIR n_g; n_g.w.h = n_cmd & 0x01 ? 0x80 : BGR_G( m_packet.Sprite8x8.n_bgr ); n_g.w.l = 0;
 	PAIR n_b; n_b.w.h = n_cmd & 0x01 ? 0x80 : BGR_B( m_packet.Sprite8x8.n_bgr ); n_b.w.l = 0;
+	HK_SPANSETUP
 
 	int16_t n_x = S11_COORD_X( m_packet.Sprite8x8.n_coord );
 	int16_t n_y = S11_COORD_Y( m_packet.Sprite8x8.n_coord );
@@ -2612,7 +2722,7 @@ void psxgpu_device::raster::Sprite8x8()
 				drawx = n_drawarea_x1;
 			}
 
-			TEXTUREFILL( FLATTEXTUREDRECTANGLEUPDATE, n_u, n_v );
+			HK_SPANFILL( FLATTEXTUREDRECTANGLEUPDATE, n_u, n_v, true, (uint32_t)n_u << 24, (uint32_t)n_du << 24, 24 );
 		}
 
 		n_v += n_dv;
@@ -2646,6 +2756,7 @@ void psxgpu_device::raster::Sprite16x16()
 	PAIR n_r; n_r.w.h = n_cmd & 0x01 ? 0x80 : BGR_R( m_packet.Sprite16x16.n_bgr ); n_r.w.l = 0;
 	PAIR n_g; n_g.w.h = n_cmd & 0x01 ? 0x80 : BGR_G( m_packet.Sprite16x16.n_bgr ); n_g.w.l = 0;
 	PAIR n_b; n_b.w.h = n_cmd & 0x01 ? 0x80 : BGR_B( m_packet.Sprite16x16.n_bgr ); n_b.w.l = 0;
+	HK_SPANSETUP
 
 	int16_t n_x = S11_COORD_X( m_packet.Sprite16x16.n_coord );
 	int16_t n_y = S11_COORD_Y( m_packet.Sprite16x16.n_coord );
@@ -2670,7 +2781,7 @@ void psxgpu_device::raster::Sprite16x16()
 				drawx = n_drawarea_x1;
 			}
 
-			TEXTUREFILL( FLATTEXTUREDRECTANGLEUPDATE, n_u, n_v );
+			HK_SPANFILL( FLATTEXTUREDRECTANGLEUPDATE, n_u, n_v, true, (uint32_t)n_u << 24, (uint32_t)n_du << 24, 24 );
 		}
 
 		n_v += n_dv;

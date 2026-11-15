@@ -1,4 +1,8 @@
-# Playing beatmania III The Final with HIRAKU
+# Playing with HIRAKU
+
+How to add games and play them, the settings, and then a section per board and game: what each
+needs, its first start, its controls and quirks. beatmania III The Final serves as the example
+where a game is needed.
 
 ## Adding a game
 
@@ -88,7 +92,7 @@ asks GitHub in the background; it shows only if the answer arrives within the ga
 seconds, and the same setting turns it off (or `HK_UPDATE_NOTICE=0`). Games the launcher starts
 never show it, and it changes nothing the game computes.
 
-## Once: build and ingest your dumps
+## From source: beatmania III The Final as its own binary
 
 ```bash
 cmake -S . -B build/cmake -G Ninja -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++
@@ -104,7 +108,7 @@ The ingester writes `dumps/bm3final/`: the unpacked program, `machine.txt` (disc
 - the MAME `bm3final` ROM set;
 - the raw HDD image.
 
-## Play
+## Play (beatmania III The Final as the example)
 
 The launcher is the easy way:
 
@@ -633,7 +637,7 @@ build/cmake/hiraku-bm3final --script oracle/scripts/bm3final-practice.his --wav 
 build/cmake/hiraku-bm3final --frames 3600 --snap-every 300                                         # PPM snapshots
 ```
 
-## beatmania III, APPEND CORE REMIX, 6th MIX and 7th MIX (M6)
+## beatmania III, APPEND CORE REMIX, 6th MIX and 7th MIX
 
 The other four beatmania III games run like The Final: the same board, controls and options.
 Each needs its MAME ROM set and its two CHDs, the program CD (`01`) and the sound hard disk (`02`):
@@ -664,7 +668,7 @@ build/cmake/hiraku-bm36th --window
 - **7th MIX's disk** has few zero runs: it takes 18 GB. If it doesn't fit beside the others,
   unpack it on another drive and give its path with `--hdd`: `machine.txt` takes any path.
 
-## pop'n music 4–8, Animelo 1/2 and Mickey Tunes! (in progress, M7)
+## pop'n music 4–8, Animelo 1/2 and Mickey Tunes!
 
 Each game needs its program CD (Disc 1), its data DVD (Disc 2) and its MAME ROM set (`popn4` … `popn7`). The ROM set holds three things:
 - the dongle image;
@@ -762,7 +766,7 @@ usual. Several can be entered for one credit, about two seconds each.
 credits in, then START and choose EXCITE. NON STOP mode isn't there: this version (JAC) still
 checks its code but never turns it on.
 
-## ParaParaParadise (in progress, M8)
+## ParaParaParadise
 
 You need the program CD (`a11jaa01`), the audio CD (`a11jaa02`) and the MAME `ppp1mp` ROM set, which holds the dongle image `gqa11-ja`. To unpack MAME's CHDs:
 
@@ -789,7 +793,7 @@ With `--window` both are saved to `~/.local/share/hiraku/ppp1mp`.
 | 5 | coin |
 | F2 / 9 | test / service |
 
-## Keyboardmania 1st/2nd/3rd, Keyboardheaven (in progress, M10)
+## Keyboardmania 1st/2nd/3rd, Keyboardheaven
 
 Each game needs its two discs (the program CD and a second disc with CD audio) and its MAME ROM set (`kbm`, `kbh`, `kbm2nd`, `kbm3rd`):
 
@@ -845,7 +849,7 @@ Each asks three times. Answer "YES?" and "ARE YOU SURE?" with **1** (move to YES
 - **Playing PRESSURE:** once it's unlocked, hold the wheel down on SELECT PLAY MODE until
   PRESSURE appears below FREE.
 
-## DJ Main: beatmania, pop'n music 1 (in progress, M13)
+## DJ Main: beatmania, pop'n music 1, pop'n stage
 
 DJ Main games aren't recompiled: the board's 68EC020 runs at 16 MHz and is interpreted (Musashi), which costs about 1 ms of host time per frame. Each game needs its MAME ROM set (program, sprite and tile ROMs) and its hard disk as a raw image:
 
@@ -910,7 +914,7 @@ oracle/snapcmp.py out/run/bm1stmix-boot out/oracle/bm1stmix/boot
 
 The same with `bm1stmix-play.his` or `popn1j-play.his` checks a game played through.
 
-## System 573: Dance Dance Revolution 2ndMIX (in progress, M14)
+## System 573: Dance Dance Revolution 2ndMIX
 
 DDR 2ndMIX (`ddr2m`) runs on HIRAKU's System 573 core: MAME's PS1 devices with the CPU interpreted, about 2–3.5 ms of host time a frame. It needs MAME's `ddr2m` set (BIOS, the cassette's X76F041) and the CD `895jaa02`:
 
@@ -954,7 +958,7 @@ A dance pad is bound in the launcher's Controls (Dance Dance Revolution page): c
 
 **Not yet:** a hands-on test with a pad.
 
-## System 573: Dance Dance Revolution 3rdMIX (in progress, M14)
+## System 573: Dance Dance Revolution 3rdMIX
 
 DDR 3rdMIX (`ddr3mj`) is the first game on the 573's **digital I/O board**: the music is MP3, decrypted by the board's FPGA and decoded by its MAS3507D. It needs MAME's `ddr3mj` set and the CD `887jaa02`. The set carries the BIOS, both cassettes (the game's and the install one, each an X76F100 plus a DS2401) and the board's DS2401.
 
@@ -990,7 +994,7 @@ Controls, coins and lamps are DDR's, as for 2ndMIX above. The lamps come from th
 
 **Not yet:** a hands-on test. MAME flags this set NOT_WORKING without saying why; so far it plays as MAME does.
 
-## System 573: DrumMania 10th Mix (M14, further than MAME)
+## System 573: DrumMania 10th Mix (further than MAME)
 
 DrumMania 10th Mix (`drmn10m`) needs MAME's `drmn10m` set, the runtime CD `d40jaa02` and the multi-session unit's CD `d40jba02`:
 
@@ -1137,7 +1141,7 @@ On the keyboard each conga is a triangle, the far pad's key above the near pads'
 
 **Lamps:** Dance Maniax's sensor lamps (blue and red), spotlights and start lamps; Mambo a GoGo's conga lamps, fire lamps and fans, start and select lamps, as MAME names them (`--lights`).
 
-## Twinkle: beatmania IIDX (in progress, M15)
+## Twinkle: beatmania IIDX
 
 beatmania IIDX 3rd style (`bmiidx3`) runs on HIRAKU's Twinkle core in lockstep with MAME (PLAN.md section 21). It needs MAME's `bmiidx3` set and its three CHDs: the program CD `gc992-jac01`, the Video CD `gc992-jaa04` and the sound board's hard disk `992hdda01` (unpacked to about 4 GB):
 
@@ -1237,7 +1241,7 @@ hiraku-ddr2mc --session-join /tmp/club.sock
 
 The regress pairs `ddr2mc-club` + `bmiidxc-club` and `ddr2mc2-club` + `bmiidxc2-club` play a club stage each (after `ddr2mc-install`, `ddr2mc2-install`, `bmiidxc-clear`, `bmiidxc2-boot`).
 
-## Konami Python 1: pop'n music 9–14 (in progress, M16)
+## Konami Python 1: pop'n music 9–14
 
 pop'n music 9 (`popn9`) runs on HIRAKU's Python core, and so do 10 (`popn10`), 11 (`popn11`), 12 Iroha (`popn12`), 13 Carnival (`popn13`) and 14 FEVER! (`popn14`): PCSX2 Reliquary's emulator hosted by HIRAKU's shell (PLAN.md §23, docs/PYTHON.md). It is built inside Reliquary's own build. You need:
 - Reliquary's source, `pcsx2-reliquary-1.9.4-reliquary.zip`, unpacked to `$HK_PYTHON_WORK/pcsx2-reliquary` (default `Python-work` beside the HIRAKU checkout);
@@ -1246,7 +1250,7 @@ pop'n music 9 (`popn9`) runs on HIRAKU's Python core, and so do 10 (`popn10`), 1
 ```bash
 oracle/pcsx2/build-reliquary.sh all     # once: Reliquary with HIRAKU's patch, and hiraku-popn9 … hiraku-popn14 (memory-capped)
 tools/build-libchdr.sh                  # once: the CHD reader the ingester uses
-tools/ingest.py ~/Downloads/konami-python-1-collection/kpython1/popn9.py1
+tools/ingest.py /path/to/popn9.py1
 build/cmake/hiraku-popn9 --window --renderer vk
 ```
 
@@ -1325,7 +1329,7 @@ In test mode, blue (buttons 4/6) moves and red (5) selects; I/O CHECK > INPUT CH
 
 **Not yet:** the board's own CPU (Reliquary answers its FireWire commands directly), Python games other than pop'n 9–14 (they need their own `games/<id>/game.toml`; the ingester tells you the program's SHA-1).
 
-## BEMANI PC: pop'n music 15 ADVENTURE to 18 せんごく列伝 (PLAN.md §30)
+## BEMANI PC: pop'n music 15–18, beatmania IIDX 9th style to EMPRESS
 
 From pop'n music 15 on, the games are Windows programs. HIRAKU runs Konami's own program as it is, under Wine on Linux and directly on Windows, and puts its cabinet around it with `hiraku-pc` and two DLLs of its own (`bin/pc/`): the controls, the lamps, the card, and HIRAKU's own window for the pictures.
 

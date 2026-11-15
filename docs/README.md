@@ -1,0 +1,28 @@
+# HIRAKU's documents
+
+## For players
+
+| Document | What's in it |
+|---|---|
+| [PLAY.md](PLAY.md) | Adding games, updating, the picture, controls, the game menu, latency, frame pacing, logs; then each board's games: what they need, their first start, their quirks |
+| [MODS.md](MODS.md) | Mods: what they can change and how to write one; high frame rates; beatmania III's IIDX-style turntable |
+| [SMOOTH.md](SMOOTH.md) | Smooth notes on 120–240 Hz displays: smooth motion and true high frame rates, game by game |
+| [LIGHTS.md](LIGHTS.md) | The cabinet's lamps on controller LEDs and other lights |
+| [EAMUSE3.md](EAMUSE3.md) | e-AMUSEMENT and NET TAISEN: the server, cards, players, events, battles between cabinets |
+| [SONGS-BACK.md](SONGS-BACK.md) | Songs brought back from an Omnimix pack |
+| [POPN-IO.md](POPN-IO.md) | pop'n music's USB I/O board on a real cabinet |
+| [bindings-bm3.example](bindings-bm3.example) | An example controls file |
+
+## For developers
+
+| Document | What's in it |
+|---|---|
+| [../PLAN.md](../PLAN.md) | Where each board stands, the plans, and a section per piece of work |
+| [PLAN-HISTORY.md](PLAN-HISTORY.md) | The plan's full history up to 2026-11-14 (not kept up to date) |
+| [RECOMP.md](RECOMP.md) | How the Firebeat recompiler works |
+| [KERNEL.md](KERNEL.md) | The Firebeat games' own kernel |
+| [M2.md](M2.md), [M3.md](M3.md), [M4.md](M4.md), [M5.md](M5.md) | The first milestones' results (beatmania III The Final, October 2026) |
+| [PYTHON.md](PYTHON.md) | Konami Python 1/2: the hardware, the media, the reference emulator |
+| [BIO2-BI2A.md](BIO2-BI2A.md), [BIO2-BI2X.md](BIO2-BI2X.md) | beatmania IIDX's BIO2 cabinet board, as the games drive it |
+| [CATALOGUE.md](CATALOGUE.md) | The MAME sets compared with what HIRAKU ran (October 2026) |
+| [../oracle/README.md](../oracle/README.md) | The MAME oracle runs are checked against |

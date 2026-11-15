@@ -1,7 +1,7 @@
 # Konami Python 1/2: what the hardware, the media and the reference emulator are
 
 Groundwork for a future HIRAKU core (PLAN.md §23). Written 2026-10-13 from:
-- the owner's Python 1 collection (`~/Downloads/konami-python-1-collection/`);
+- dumps of the Python 1 games;
 - PCSX2 Reliquary 1.9.4 source, a GPL-3.0+ PCSX2 fork with Python 1/2 support;
 - PS2Recomp (ran-j/PS2Recomp, GPLv3);
 - MAME master's `kpython.cpp` and `kpython2.cpp`, fetched 2026-10-13.

@@ -406,6 +406,12 @@ if(Python3_Interpreter_FOUND AND Python3_VERSION VERSION_GREATER_EQUAL 3.11 AND 
   add_test(NAME ingest_disks COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/tools/test_ingest_disks.py $<TARGET_FILE:hiraku-chdcat>)
 endif()
 
+# The XT446's MEG programs made into the host's code at run time (runtime/jit/, PLAN.md section 45)
+# against their interpreter, on programs and states drawn at random: no ROM needed
+add_executable(test_meg_jit jit/test_meg_jit.cpp)
+target_link_libraries(test_meg_jit PRIVATE hiraku_xt446)
+add_test(NAME meg_jit COMMAND test_meg_jit)
+
 # The GCU's rows (runtime/dev/k057714_rows.h): copied, blended and filled eight pixels at a time,
 # against the pixel-by-pixel loops, on runs drawn at random
 add_executable(test_gcu_rows gcu/test_gcu_rows.cpp)

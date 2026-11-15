@@ -46,6 +46,11 @@ public:
 
 	// HIRAKU: called after each sample with the four DAC outputs (MAME's stream outputs 0-3)
 	std::function<void(const std::array<s32, 4> &)> hk_on_sample;
+	// HIRAKU: the MEG's interpreter (this device's) against its made code (other's, a second
+	// device in a machine of its own) on programs and states drawn from seed
+	// (runtime/dev/xt446_meg.cpp; tests/jit). "" when they agree, "skip: ..." where this build
+	// makes no code, else what differed. Neither device is of any use afterwards.
+	std::string hk_meg_selftest(swp30_device &other, u32 seed, int rounds);
 
 protected:
 	virtual void device_start() override ATTR_COLD;
@@ -348,6 +353,23 @@ private:
 		int m_record_samples = 0;       // samples the program has run unchanged; -1: recorded
 		bool run_compiled(int n);
 		void record_program();
+		// HIRAKU: programs made into the host's own code as they run (runtime/dev/xt446_meg.cpp,
+		// runtime/jit/jit.h): what a release has in place of the compiled ones
+		struct jit_prog;                    // a program's code and where each step starts in it
+		const jit_prog *m_jit = nullptr;    // the current program's, once it has stayed unchanged a while
+		int m_jit_samples = 0;              // samples the program has run unchanged
+		struct jit_side;                    // what that code's calls work from (the delay memory as mapped now)
+		jit_side *m_jit_side = nullptr;
+		~meg_state();
+		void *m_jit_fn[4] = {};             // what that code calls: the random number, an LFO, the delay memory's write and read
+		void jit_arm();
+		bool run_jit(int n);
+		const jit_prog *jit_make(int k0);
+		void jit_side_update();
+		void jit_mem_w(int pc);
+		void jit_mem_r(int pc, int d2);
+		std::string jit_selftest(meg_state &made, u32 seed, int rounds);
+		static inline u64 s_steps[3] = {};  // steps run as made code, compiled, interpreted (HK_MEG_STATS=1)
 		void reset();
 	};
 
@@ -376,6 +398,7 @@ private:
 
 	meg_state *m_meg;
 	// HIRAKU: DRC state removed
+	std::unique_ptr<meg_state> m_hk_meg;   // HIRAKU: m_meg's owner (MAME's lives in its DRC cache)
 
 	bool m_meg_program_changed;
 	bool m_meg_drc_active;

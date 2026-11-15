@@ -90,6 +90,8 @@ void swp30_device::meg_state::decode()
 		}
 	m_record_samples = 0;
 	m_compiled_armed = false;   // the delay slots still hold the old program's steps
+	m_jit = nullptr;            // made again once the program has stayed (runtime/dev/xt446_meg.cpp)
+	m_jit_samples = 0;
 }
 
 template<int D3, int D2> inline __attribute__((always_inline)) void swp30_device::meg_state::step_decoded(s64 &p)
@@ -454,6 +456,7 @@ bool swp30_device::meg_state::run_compiled(int n)
 void swp30_device::meg_state::record_program()
 {
 	m_compiled_armed = true;
+	jit_arm();
 	static FILE *f = getenv("HK_MEG_RECORD") ? fopen(getenv("HK_MEG_RECORD"), "a") : nullptr;
 	if(!f || m_compiled || m_record_samples < 0 || ++m_record_samples < 256)
 		return;
@@ -477,7 +480,8 @@ def swp30_cpp(s):
 {''', '''
 {''', 'drccache member init')
     s = edit(s, '''	m_drccache.allocate_cache(mconfig().options().drc_rwx());
-	m_meg = m_drccache.alloc_near<meg_state>();''', '''	m_meg = new meg_state();   // HIRAKU: no DRC cache to allocate it in''', 'meg allocation')
+	m_meg = m_drccache.alloc_near<meg_state>();''', '''	m_hk_meg = std::make_unique<meg_state>();   // HIRAKU: no DRC cache to allocate it in
+	m_meg = m_hk_meg.get();''', 'meg allocation')
     s = cut(s, '	// SWP30 compiles the entire MEG program as one block', '	m_meg_program_changed = true;\n\tm_meg_drc_active',
             '', 'drcuml setup')
     s = edit(s, '	m_meg_drc_active = allow_drc();', '	m_meg_drc_active = false;   // HIRAKU', 'drc active')
@@ -518,8 +522,16 @@ def swp30_cpp(s):
 			m_meg->step();
 		else {
 			const int n = std::min<int>(m_meg->m_icount, 0x180 - m_meg->m_pc);
-			if(!m_meg->run_compiled(n))
+			// the program as the host's own code where it has been made (runtime/dev/xt446_meg.cpp),
+			// else as compiled with HIRAKU (a development build's), else interpreted
+			if(m_meg->run_jit(n))
+				meg_state::s_steps[0] += n;
+			else if(m_meg->run_compiled(n))
+				meg_state::s_steps[1] += n;
+			else {
 				m_meg->run_decoded(n);
+				meg_state::s_steps[2] += n;
+			}
 			if(m_meg->m_pc == 0x180)
 				m_meg->m_pc = 0;
 		}
@@ -554,6 +566,11 @@ protected:''', '''	void map(address_map &map) ATTR_COLD;
 
 	// HIRAKU: called after each sample with the four DAC outputs (MAME's stream outputs 0-3)
 	std::function<void(const std::array<s32, 4> &)> hk_on_sample;
+	// HIRAKU: the MEG's interpreter (this device's) against its made code (other's, a second
+	// device in a machine of its own) on programs and states drawn from seed
+	// (runtime/dev/xt446_meg.cpp; tests/jit). "" when they agree, "skip: ..." where this build
+	// makes no code, else what differed. Neither device is of any use afterwards.
+	std::string hk_meg_selftest(swp30_device &other, u32 seed, int rounds);
 
 protected:''', 'hook member')
     s = edit(s, '''		void drc(drcuml_block &block, u16 pc);
@@ -586,6 +603,23 @@ protected:''', 'hook member')
 		int m_record_samples = 0;       // samples the program has run unchanged; -1: recorded
 		bool run_compiled(int n);
 		void record_program();
+		// HIRAKU: programs made into the host's own code as they run (runtime/dev/xt446_meg.cpp,
+		// runtime/jit/jit.h): what a release has in place of the compiled ones
+		struct jit_prog;                    // a program's code and where each step starts in it
+		const jit_prog *m_jit = nullptr;    // the current program's, once it has stayed unchanged a while
+		int m_jit_samples = 0;              // samples the program has run unchanged
+		struct jit_side;                    // what that code's calls work from (the delay memory as mapped now)
+		jit_side *m_jit_side = nullptr;
+		~meg_state();
+		void *m_jit_fn[4] = {};             // what that code calls: the random number, an LFO, the delay memory's write and read
+		void jit_arm();
+		bool run_jit(int n);
+		const jit_prog *jit_make(int k0);
+		void jit_side_update();
+		void jit_mem_w(int pc);
+		void jit_mem_r(int pc, int d2);
+		std::string jit_selftest(meg_state &made, u32 seed, int rounds);
+		static inline u64 s_steps[3] = {};  // steps run as made code, compiled, interpreted (HK_MEG_STATS=1)
 ''', 'drc decls')
     s = edit(s, '''	drc_cache m_drccache;
 	std::unique_ptr<drcuml_state> m_drcuml;
@@ -593,6 +627,7 @@ protected:''', 'hook member')
 	uml::code_handle *m_meg_drc_nocode;
 	uml::code_handle *m_meg_drc_out_of_cycles;
 ''', '''	// HIRAKU: DRC state removed
+	std::unique_ptr<meg_state> m_hk_meg;   // HIRAKU: m_meg's owner (MAME's lives in its DRC cache)
 ''', 'drc members')
     return s
 

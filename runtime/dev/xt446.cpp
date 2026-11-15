@@ -192,6 +192,20 @@ bool Xt446::load(const std::string &dir, std::string &err) {
     return true;
 }
 
+std::string Xt446::meg_selftest(unsigned seed, int rounds) {
+    // two cards with blank ROMs, each in its own machine: started and reset, never run
+    Impl a, b;
+    for (Impl *s : {&a, &b}) {
+        s->machine.add_region("maincpu", std::vector<u8>(0x200000, 0));
+        s->machine.add_region("swp30", std::vector<u8>(0x1800000, 0));
+        s->machine.add_region("sintab", swp30_sin_table());
+        s->dev = &XT446(s->machine.config(), "xt446");
+        s->machine.start();
+        s->machine.reset();
+    }
+    return a.dev->m_swp30->hk_meg_selftest(*b.dev->m_swp30, seed, rounds);
+}
+
 void Xt446::midi(uint8_t b) {
     Impl &s = *m;
     if (!s.dev) return;

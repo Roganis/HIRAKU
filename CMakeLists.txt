@@ -163,15 +163,52 @@ set(HK_H8_SRC h8 h8h h8s2000 h8s2600 h8s2655 h8d h8hd h8s2000d h8s2600d
   h8_adc h8_dma h8_dtc h8_intc h8_port h8_sci h8_timer16 h8_timer8 h8_watchdog)
 list(TRANSFORM HK_H8_SRC PREPEND ${HK_MAME}/src/devices/cpu/h8/)
 list(TRANSFORM HK_H8_SRC APPEND .cpp)
+# --- code for the player's processor, made at run time (runtime/jit/jit.h, PLAN.md section 45) ---
+add_library(hiraku_jit STATIC runtime/jit/jit.cpp)
+target_include_directories(hiraku_jit PUBLIC runtime)
+# hk_stencils(<name> <target>): runtime/jit/<name>_stencils.c compiled to machine code and made
+# into tables (hk_<name>_stencils.inc, tools/stencilgen.py) for <target>, which gets
+# HK_<NAME>_STENCILS defined. For x86-64 so far, built by clang: one set of stencils for Linux and
+# Windows (compiled for ELF and the System V convention whatever HIRAKU is built for: only their
+# bytes are used). Elsewhere <target> gets nothing and keeps interpreting.
+set(HK_JIT_GEN ${CMAKE_BINARY_DIR}/genjit)
+function(hk_stencils name target)
+  if(NOT CMAKE_C_COMPILER_ID MATCHES "Clang" OR NOT CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|AMD64|amd64)$")
+    message(STATUS "no ${name} stencils for ${CMAKE_SYSTEM_PROCESSOR} with ${CMAKE_C_COMPILER_ID}: interpreted")
+    return()
+  endif()
+  set(src ${CMAKE_SOURCE_DIR}/runtime/jit/${name}_stencils.c)
+  set(obj ${HK_JIT_GEN}/${name}_stencils.o)
+  set(inc ${HK_JIT_GEN}/hk_${name}_stencils.inc)
+  add_custom_command(
+    OUTPUT ${inc}
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${HK_JIT_GEN}
+    # (no red zone: Windows has none; general registers only; no tables or constants outside the
+    # functions: the copier takes each function's bytes and nothing else)
+    COMMAND ${CMAKE_C_COMPILER} --target=x86_64-unknown-linux-gnu -ffreestanding -O2 -fno-pic -mcmodel=small
+            -mno-red-zone -mgeneral-regs-only -fno-asynchronous-unwind-tables -fno-stack-protector
+            -fcf-protection=none -ffunction-sections -fno-jump-tables -fomit-frame-pointer
+            -Wall -Wextra -Wno-unused-parameter -Werror -c ${src} -o ${obj}
+    COMMAND python3 ${CMAKE_SOURCE_DIR}/tools/stencilgen.py ${obj} ${inc} ${name}
+    DEPENDS ${src} ${CMAKE_SOURCE_DIR}/runtime/jit/stencil.h ${CMAKE_SOURCE_DIR}/tools/stencilgen.py
+    COMMENT "stencils: ${name}" VERBATIM)
+  target_sources(${target} PRIVATE ${inc})
+  target_include_directories(${target} PRIVATE ${HK_JIT_GEN})
+  string(TOUPPER ${name} upper)
+  target_compile_definitions(${target} PRIVATE HK_${upper}_STENCILS=1)
+endfunction()
+
 add_library(hiraku_xt446 STATIC
   ${HK_MAME}/shim/emu.cpp
   ${HK_H8_SRC}
   ${HK_MAME}/src/devices/sound/swp30.cpp
   runtime/dev/xt446.cpp
+  runtime/dev/xt446_meg.cpp
   ${HK_H8_GEN})
 target_include_directories(hiraku_xt446 PRIVATE ${HK_MAME}/shim ${HK_MAME}/src/devices ${HK_MAME_GEN})
 target_include_directories(hiraku_xt446 PUBLIC runtime)
-target_link_libraries(hiraku_xt446 PUBLIC hiraku_sys)
+target_link_libraries(hiraku_xt446 PUBLIC hiraku_sys hiraku_jit)
+hk_stencils(meg hiraku_xt446)
 # The MEG's effect programs compiled to C++ from a recording (HK_MEG_RECORD=build/xt446/meg.txt,
 # never committed: it holds the firmware's programs). Every build: meggen.py does nothing unless
 # the output would change; with no recording the table is empty and the MEG is interpreted.

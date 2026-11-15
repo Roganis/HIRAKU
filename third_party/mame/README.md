@@ -55,13 +55,14 @@ with a port of `twinkle.cpp`'s driver class.
 
 - `swp30.cpp` / `swp30.h`:
   - removed the MEG's DRC (UML recompiler) back-end: the `drc*()` code generators, DRC cache and state, and the DRC branch of `execute_run()`. The MEG runs on MAME's interpreter path, which is the same code MAME uses when `-nodrc` is set.
-  - `m_meg` is a plain allocation (MAME's came from the DRC cache).
+  - `m_meg` is a plain allocation the device owns and frees (`m_hk_meg`; MAME's came from the DRC cache).
   - added `hk_on_sample`, called after each sample with the four DAC values that MAME's stream outputs 0–3 carry.
   - **speed (same results):**
     - the MEG reads its program array directly. MAME's `read_qword` goes through the address map to `meg_prg_map_r`, which returns the same word.
     - `meg_state::step_decoded()` is `step()` with the instruction fields extracted once, when a program word changes, rather than on every one of the 17 M steps per second.
     - `step_decoded()` keeps the pipeline's 3- and 2-step delay slots as template constants: `run_decoded()` runs a whole sample's steps, cycling through the 6 phases. It picks the multiplier's operands through pointers set at decode time and keeps the accumulator in a register. About 8 % faster than the first pre-decoded version.
     - `HK_XT446_MEG_REF=1` runs MAME's `step()` instead. The two give bit-identical output.
+    - Programs made into the host's own code as they run (`runtime/dev/xt446_meg.cpp`, `runtime/jit/`; PLAN.md section 45): `decode()` drops the current program's code, `record_program()` asks for it at each sample's start (`jit_arm()`), `execute_run()` tries it first (`run_jit()`), and `meg_state` carries what it needs (the code, the calls' addresses, `hk_meg_selftest()` for `tests/jit`). The members are declared here; all of their code is HIRAKU's file.
     - Compiled programs: the firmware loads a handful of effect programs. `HK_MEG_RECORD=file` appends each one that has run unchanged for 256 samples (`record_program()`), and `tools/meggen.py` turns the recording (`build/xt446/meg.txt`, never committed) into `hk_meg_programs.inc`: per program a `run_prog<hash, phase>()` of 384 `step_fixed<>()` calls, `step_decoded()` with the fields, the program counter and what the steps 3 and 2 before left in the delay slots as compile-time constants. `decode()` finds a program by its FNV-1a hash; the compiled code runs from the first sample start after a program change (the slots then hold that program's own steps) and only in the pipeline phase it was recorded in; anything else runs in `step_decoded()`. Bit-identical; the card about 25 % faster.
 - `psx.cpp` / `psx.h` (the PS1 CPU), for the 573's recompiled R3000 blocks (`runtime/sys573/mips.h`):
   - the body of `execute_run()`'s loop is `execute_one()`, so a block can hand a single instruction back to the interpreter;

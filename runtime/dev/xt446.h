@@ -28,6 +28,11 @@ public:
     void render(float *lr, int frames, float gain);   // add 44.1 kHz stereo (full scale = 1.0)
     void take(float *lr, int frames);                 // the same samples, written rather than added
 
+    // The SWP30's effect programs as made into the host's code (xt446_meg.cpp) against their
+    // interpreter, on programs and states drawn from seed, with no ROM: "" when they agree,
+    // "skip: ..." where this build makes no code, else what differed (tests/jit).
+    static std::string meg_selftest(unsigned seed, int rounds);
+
     // statistics
     uint64_t samples() const;
     uint64_t midi_bytes() const;

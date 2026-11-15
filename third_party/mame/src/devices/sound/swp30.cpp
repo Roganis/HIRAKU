@@ -1744,7 +1744,8 @@ void swp30_device::device_start()
 	m_wave->cache(m_wave_cache);
 	m_reverb->cache(m_reverb_cache);
 
-	m_meg = new meg_state();   // HIRAKU: no DRC cache to allocate it in
+	m_hk_meg = std::make_unique<meg_state>();   // HIRAKU: no DRC cache to allocate it in
+	m_meg = m_hk_meg.get();
 	m_meg->m_swp = this;
 	m_meg->reset();
 
@@ -3711,6 +3712,8 @@ void swp30_device::meg_state::decode()
 		}
 	m_record_samples = 0;
 	m_compiled_armed = false;   // the delay slots still hold the old program's steps
+	m_jit = nullptr;            // made again once the program has stayed (runtime/dev/xt446_meg.cpp)
+	m_jit_samples = 0;
 }
 
 template<int D3, int D2> inline __attribute__((always_inline)) void swp30_device::meg_state::step_decoded(s64 &p)
@@ -4075,6 +4078,7 @@ bool swp30_device::meg_state::run_compiled(int n)
 void swp30_device::meg_state::record_program()
 {
 	m_compiled_armed = true;
+	jit_arm();
 	static FILE *f = getenv("HK_MEG_RECORD") ? fopen(getenv("HK_MEG_RECORD"), "a") : nullptr;
 	if(!f || m_compiled || m_record_samples < 0 || ++m_record_samples < 256)
 		return;
@@ -4104,8 +4108,16 @@ void swp30_device::execute_run()
 			m_meg->step();
 		else {
 			const int n = std::min<int>(m_meg->m_icount, 0x180 - m_meg->m_pc);
-			if(!m_meg->run_compiled(n))
+			// the program as the host's own code where it has been made (runtime/dev/xt446_meg.cpp),
+			// else as compiled with HIRAKU (a development build's), else interpreted
+			if(m_meg->run_jit(n))
+				meg_state::s_steps[0] += n;
+			else if(m_meg->run_compiled(n))
+				meg_state::s_steps[1] += n;
+			else {
 				m_meg->run_decoded(n);
+				meg_state::s_steps[2] += n;
+			}
 			if(m_meg->m_pc == 0x180)
 				m_meg->m_pc = 0;
 		}

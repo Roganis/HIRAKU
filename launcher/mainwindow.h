@@ -21,12 +21,14 @@ class QToolButton;
 class QTreeWidget;
 class QTreeWidgetItem;
 class UpdateCheck;
+class GameCards;
 class MusicPlayer;
 
 class MainWindow : public QMainWindow {
     Q_OBJECT
 public:
     MainWindow();
+    ~MainWindow() override;
     void play(const QString &id);
     // the game menu, opening on that game (the one just left); `notice` is said in it first
     void openMenu(const QString &left, const QString &notice = QString());
@@ -60,13 +62,17 @@ private:
     void refreshStatuses();                          // the Status column (first boot, mods...)
     void gameChanged();                              // ... and the details, after a change to the game's setup
     void showEmpty();                                // no game added: the list's place says how to add one
+    void fillCards();                                // the cards (gamecards.h): the list's games shown, as it has them
+    void showAsCards(bool on);                       // View > Cards / List (ui/view)
     void exitReport(const QString &title, int code, QProcess::ExitStatus st);   // why a game stopped, and its log
     void controls(const QString &family);   // the Controls dialog, which can end by starting a game to try them
     void log(const QString &text);
 
     QList<Game> m_games;
     QTreeWidget *m_list;
-    QStackedWidget *m_listStack;   // the list, or the page shown while no game is added
+    QStackedWidget *m_listStack;   // the list, the page shown while no game is added, or the cards
+    GameCards *m_cards;            // the games as cards: the list stays the one picked from, behind them
+    QAction *m_asCards, *m_asList;
     QWidget *m_detailsPane;        // the details beside the list (in m_detailsDock; hidden with that page)
     QStringList m_collapsed;     // the series and systems the player closed (ui/collapsed)
     bool m_arranging = false;    // the list being filled or filtered: not the player opening a series

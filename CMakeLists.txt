@@ -635,7 +635,8 @@ if(Qt6_FOUND AND TARGET hiraku_hidout)
     launcher/updater.cpp
     launcher/report.cpp
     launcher/cleaner.cpp
-    launcher/nvidia.cpp)
+    launcher/nvidia.cpp
+    launcher/gamecards.cpp)
   qt_add_resources(hiraku "launcher_res" PREFIX "/" BASE launcher/res
     FILES launcher/res/icon.png launcher/res/logo.png)
   target_compile_definitions(hiraku PRIVATE ${HK_ROOT_DEFINE})

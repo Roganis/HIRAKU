@@ -335,6 +335,15 @@ if(Qt6_FOUND)
     target_link_libraries(test_powerplan PRIVATE powrprof)
   endif()
   add_test(NAME launcher_power_plan COMMAND test_powerplan ${CMAKE_CURRENT_BINARY_DIR})
+  # the games as cards (launcher/gamecards.h): their shelves, and a game picked there or in the list
+  if(TARGET Qt6::Widgets)
+    add_executable(test_gamecards launcher/test_gamecards.cpp ${CMAKE_SOURCE_DIR}/launcher/gamecards.cpp
+      ${CMAKE_SOURCE_DIR}/launcher/games.cpp ${CMAKE_SOURCE_DIR}/launcher/config.cpp ${CMAKE_SOURCE_DIR}/launcher/theme.cpp)
+    set_target_properties(test_gamecards PROPERTIES AUTOMOC ON)
+    target_include_directories(test_gamecards PRIVATE ${CMAKE_SOURCE_DIR}/launcher)
+    target_link_libraries(test_gamecards PRIVATE Qt6::Widgets)
+    add_test(NAME launcher_game_cards COMMAND test_gamecards ${CMAKE_CURRENT_BINARY_DIR}/gamecards)
+  endif()
 endif()
 
 # Mods' [[text]]: a string found in memory and its replacement (runtime/host/mods.h)

@@ -2,6 +2,7 @@
 // The supported games (games/*/game.toml) and how far each is from playable.
 #pragma once
 
+#include <QColor>
 #include <QIcon>
 #include <QList>
 #include <QString>
@@ -28,6 +29,7 @@ struct Game {
 
 QList<Game> scanGames();
 QIcon familyIcon(const QString &family);
+QColor familyColour(const QString &family);   // its badge's colour (the cards' stand-in pictures)
 
 // Where a game sits in the launcher's list: its series (pop'n music), then the system it runs on
 // (DJ Main, Firebeat, Konami Python...); the orders are the series' and the systems' own, by date

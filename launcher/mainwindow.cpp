@@ -68,6 +68,7 @@
 #include "config.h"
 #include "controlsdialog.h"
 #include "dipsdialog.h"
+#include "gamecards.h"
 #include "lightsdialog.h"
 #include "modsdialog.h"
 #include "music.h"
@@ -132,6 +133,8 @@ static bool unitInstalled(const Game &g);
 static QString unitState(const Game &g);
 static QString nvramSeed(const Game &g);
 static bool firstBoot(const Game &g);
+static QString menuPicture(const QString &id);
+static QString statusOf(const Game &g, bool *notable);
 
 // The window's name: "HIRAKU ~completeMIX~" while the newest games are listed (secretKeys). Qt adds
 // " — " and the application's display name to a title that doesn't end with it: that changes too
@@ -242,6 +245,32 @@ MainWindow::MainWindow() {
     auto *spacer = new QWidget;
     spacer->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
     tb->addWidget(spacer);
+    // the games as cards or as the list (View > Cards, List)
+    m_asCards = new QAction(QIcon::fromTheme("view-list-icons", QIcon::fromTheme("view-grid")), "Cards", this);
+    m_asList = new QAction(QIcon::fromTheme("view-list-details", QIcon::fromTheme("view-list-text")), "List", this);
+    m_asCards->setToolTip("The games as cards, with pictures of their title screens, a shelf for each series");
+    m_asList->setToolTip("The games as a list, by series and system");
+    auto *asGroup = new QActionGroup(this);
+    for (QAction *a : {m_asCards, m_asList}) {
+        a->setCheckable(true);
+        asGroup->addAction(a);
+    }
+    const bool cardsOn = cfg::settings().value("ui/view").toString() == "cards";
+    (cardsOn ? m_asCards : m_asList)->setChecked(true);
+    connect(m_asCards, &QAction::triggered, this, [this] { showAsCards(true); });
+    connect(m_asList, &QAction::triggered, this, [this] { showAsCards(false); });
+    auto *asBox = new QWidget;
+    auto *asLay = new QHBoxLayout(asBox);
+    asLay->setContentsMargins(0, 0, 8, 0);
+    asLay->setSpacing(2);
+    for (QAction *a : {m_asCards, m_asList}) {
+        auto *b = new QToolButton;
+        b->setDefaultAction(a);
+        b->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+        b->setIconSize(QSize(16, 16));
+        asLay->addWidget(b);
+    }
+    tb->addWidget(asBox);
     m_filter = new QLineEdit;
     m_filter->setPlaceholderText("Search");
     m_filter->setClearButtonEnabled(true);
@@ -273,6 +302,7 @@ MainWindow::MainWindow() {
     connect(m_list, &QTreeWidget::itemSelectionChanged, this, [this] {
         updateActions();
         showDetails();
+        m_cards->select(selected() ? selected()->id : QString());
     });
     connect(m_list, &QTreeWidget::customContextMenuRequested, this, &MainWindow::contextMenu);
     // a series or system the player closes stays closed (not one closed or opened by a search)
@@ -341,6 +371,22 @@ MainWindow::MainWindow() {
     m_listStack = new QStackedWidget;
     m_listStack->addWidget(m_list);
     m_listStack->addWidget(empty);
+    // the cards: a card picked picks its game in the list, which the rest goes by
+    m_cards = new GameCards;
+    m_listStack->addWidget(m_cards);
+    connect(m_cards, &GameCards::picked, this, [this](const QString &id) {
+        if (QTreeWidgetItem *it = itemFor(id)) m_list->setCurrentItem(it);
+    });
+    connect(m_cards, &GameCards::activated, this, [this](const QString &id) {
+        if (const Game *g = find(id); g && g->status == Game::Ready) play(id);
+    });
+    connect(m_cards, &GameCards::menuAsked, this, [this](const QString &id, const QPoint &at) {
+        const Game *g = find(id);
+        if (!g) return;
+        QMenu menu(this);
+        fillGameMenu(&menu, *g);
+        menu.exec(at);
+    });
     // a new version is out (updater.h): a bar above the list, until it's taken or closed
     m_updateBar = new QFrame;
     static_cast<QFrame *>(m_updateBar)->setFrameShape(QFrame::StyledPanel);
@@ -428,6 +474,9 @@ MainWindow::MainWindow() {
     opts->addAction(pictureAct);
     opts->addAction(settings);
     auto *view = menuBar()->addMenu("&View");
+    view->addAction(m_asCards);
+    view->addAction(m_asList);
+    view->addSeparator();
     view->addAction(m_showAll);
     view->addAction(m_detailsDock->toggleViewAction());
     view->addAction(m_logDock->toggleViewAction());
@@ -610,6 +659,13 @@ MainWindow::MainWindow() {
         QTimer::singleShot(0, this, [this] { openMenu(lastGame()); });
 }
 
+// The programs' handlers are let go first: a program still running (the details' file check, a
+// moment after a game was picked) is ended by its QProcess's own end, which says "finished" to a
+// handler whose window's members are already gone (a crash on quitting)
+MainWindow::~MainWindow() {
+    for (QProcess *p : {&m_files, &m_ingest, &m_proc, &m_menu}) p->disconnect(this);
+}
+
 bool MainWindow::eventFilter(QObject *o, QEvent *e) {
     if (e->type() == QEvent::KeyPress) {
         // where the key is first given (the focus), not again on its way up to the parents
@@ -648,6 +704,7 @@ void MainWindow::themeChanged() {
     m_play->setIcon(pop ? theme::glyph("play", Qt::white) : QIcon::fromTheme("media-playback-start"));
     m_stop->setIcon(pop ? theme::glyph("stop", Qt::white) : QIcon::fromTheme("media-playback-stop"));
     m_music->themeChanged();
+    m_cards->themeChanged();
     if (m_list->topLevelItemCount()) refresh();   // the badges and the statuses' colours
 }
 
@@ -750,7 +807,7 @@ void MainWindow::refresh() {
         for (auto *p = it->parent(); on && p; p = p->parent()) on = !p->isHidden() && p->isExpanded();
         return on;
     };
-    if (kept && shown(kept)) {
+    if (kept && (shown(kept) || (m_asCards->isChecked() && !kept->isHidden()))) {   // (cards: its series closed in the list or not)
         m_list->setCurrentItem(kept);
         m_list->scrollToItem(kept);
     } else
@@ -801,13 +858,14 @@ void MainWindow::applyFilter() {
     for (int k = 0; k < m_list->topLevelItemCount(); k++) visit(m_list->topLevelItem(k));
     m_arranging = false;
     showEmpty();
+    fillCards();
 }
 
 void MainWindow::showEmpty() {
     bool any = false;
     for (QTreeWidgetItem *it : gameItems()) any = any || !it->isHidden();
     const bool empty = !any && !m_games.isEmpty() && m_filter->text().trimmed().isEmpty() && !m_showAll->isChecked();
-    m_listStack->setCurrentIndex(empty ? 1 : 0);
+    m_listStack->setCurrentIndex(empty ? 1 : m_asCards->isChecked() ? 2 : 0);
     if (empty) m_detailsDock->hide();
     else if (m_detailsPane->property("hiddenEmpty").toBool()) m_detailsDock->show();   // only what this hid
     m_detailsPane->setProperty("hiddenEmpty", empty);
@@ -838,6 +896,45 @@ void MainWindow::refreshStatuses() {
         if (g->status == Game::Ready)   // green, amber where the next start is special
             it->setForeground(Status, notable ? theme::notable() : theme::ready());
     }
+    fillCards();
+}
+
+void MainWindow::fillCards() {
+    QList<Card> cards;
+    for (int k : m_order) {
+        if (k >= m_games.size()) continue;
+        const Game &g = m_games[k];
+        const QTreeWidgetItem *it = itemFor(g.id);
+        if (!it || it->isHidden()) continue;
+        const Shelf sh = shelf(g);
+        Card c;
+        c.id = g.id;
+        c.title = g.title;
+        c.detail = QStringList{g.year, sh.system}.filter(QRegularExpression(".")).join(" · ");
+        c.series = sh.series;
+        c.family = g.family;
+        c.ready = g.status == Game::Ready;
+        const QString st = statusOf(g, &c.notable);
+        if (!c.ready || c.notable) c.status = st.section(", ", 0, 0);   // (the first: what the next start does)
+        c.picture = menuPicture(g.id);
+        c.keepsPicture = g.titleSeconds > 0 && cfg::settings().value("menu/pictures", true).toBool() &&
+                         cfg::settings().value("menu/enabled", true).toBool();
+        cards << c;
+    }
+    m_cards->setCards(cards);
+    m_cards->select(selected() ? selected()->id : QString());
+}
+
+void MainWindow::showAsCards(bool on) {
+    cfg::settings().setValue("ui/view", on ? "cards" : "list");
+    (on ? m_asCards : m_asList)->setChecked(true);
+    showEmpty();
+    if (const Game *g = selected()) {
+        if (on) m_cards->select(g->id);
+        else if (QTreeWidgetItem *it = itemFor(g->id)) selectGame(it);
+    }
+    if (on) m_cards->focusCards();
+    else m_list->setFocus();
 }
 
 void MainWindow::gameChanged() {

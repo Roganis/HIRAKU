@@ -250,9 +250,10 @@ Shelf shelf(const Game &g) {
     return s;
 }
 
-QIcon familyIcon(const QString &family) {
-    struct Look { QColor bg; const char *text; };
-    Look l = family == "popn" ? Look{QColor(0xe8, 0x4a, 0x8a), "pop'n"}
+namespace {
+struct Look { QColor bg; const char *text; };
+Look familyLook(const QString &family) {
+    return family == "popn" ? Look{QColor(0xe8, 0x4a, 0x8a), "pop'n"}
            : family == "djbm" ? Look{QColor(0x22, 0x2a, 0x5a), "bm"}
            : family == "djpopn" ? Look{QColor(0xf0, 0xb4, 0x1e), "pop'n"}
            : family == "pypopn" ? Look{QColor(0x3c, 0xb4, 0xdc), "pop'n"}
@@ -268,6 +269,13 @@ QIcon familyIcon(const QString &family) {
            : family == "gtrf" ? Look{QColor(0x2b, 0x8a, 0xc8), "GF"}
            : family == "iidx" ? Look{QColor(0x18, 0x18, 0x20), "IIDX"}
                               : Look{QColor(0x3a, 0x4c, 0xb8), "bm III"};
+}
+}  // namespace
+
+QColor familyColour(const QString &family) { return theme::badge(family, familyLook(family).bg); }
+
+QIcon familyIcon(const QString &family) {
+    Look l = familyLook(family);
     const bool pop = theme::pop();
     l.bg = theme::badge(family, l.bg);
     QIcon icon;

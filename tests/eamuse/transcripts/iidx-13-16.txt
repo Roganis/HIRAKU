@@ -1,7 +1,8 @@
 # beatmania IIDX DistorteD (FDD), GOLD (GLD), DJ TROOPERS (HDD) and EMPRESS (I00): IC cards through
 # cardmng, the modules pc, music, ranking, grade and shop. Made-up cards and results.
-# (a course result is stamped with the host's clock: its udate isn't compared)
-mask udate="(\d+)"
+# (a course result is stamped with the cabinets' clock, which runs from the file's start at
+# 2003-06-01 12:00:00 UTC, 1054468800: its udate is compared but for the seconds since)
+mask udate="10544688(\d\d)"
 volatile ^iidx-.*-courses$
 model I00:J:A:A:2009072200
 >e <services method="get"/>
@@ -78,7 +79,7 @@ model I00:J:A:A:2009072200
 > <ranking method="entry" iidxid="10000001" coid="5" clid="2" pgnum="10" gnum="10" clr="0" cstage="1" opt="0"/>
 < 200 <response><ranking status="0" method="rankingentry" anum="2" jun="2"></ranking></response>
 > <ranking method="getranker" coid="5" clid="2"/>
-< 200 <response><ranking status="0" method="rankinggetranker"><ranker gnum="50" pgnum="400" name="BRAVO" opname="HIRAKU" pid="27" udate="*"/><ranker gnum="100" pgnum="300" name="ALPHA" opname="HIRAKU" pid="13" udate="*"/></ranking></response>
+< 200 <response><ranking status="0" method="rankinggetranker"><ranker gnum="50" pgnum="400" name="BRAVO" opname="HIRAKU" pid="27" udate="10544688*"/><ranker gnum="100" pgnum="300" name="ALPHA" opname="HIRAKU" pid="13" udate="10544688*"/></ranking></response>
 > <ranking method="getranker" coid="6" clid="2"/>
 < 200 <response><ranking status="0" method="rankinggetranker"></ranking></response>
 
@@ -108,7 +109,7 @@ model HDD:J:A:A:2008031100
 > <ranking method="entry" iidxid="10000001" coid="3" clid="1" pgnum="200" gnum="10" clr="1" cstage="4" opt="0"/>
 < 200 <response><ranking status="0" method="rankingentry" anum="1" jun="1"></ranking></response>
 > <ranking method="getranker" coid="3" clid="1"/>
-< 200 <response><ranking status="0" method="rankinggetranker"><ranker gnum="10" pgnum="200" name="ALPHA" opname="HIRAKU" pid="13" udate="*"/></ranking></response>
+< 200 <response><ranking status="0" method="rankinggetranker"><ranker gnum="10" pgnum="200" name="ALPHA" opname="HIRAKU" pid="13" udate="10544688*"/></ranking></response>
 
 model GLD:J:A:A:2007072301
 > <pc method="reg" rid="48524B0000000001" name="ALPHA" pid="13" did="0"/>
@@ -128,25 +129,25 @@ model FDD:J:A:G
 > <cardmng method="getrefid" cardtype="1" cardid="E004010000000B01" newflag="1" passwd="4321"/>
 < 200 <response><cardmng status="0" refid="48524B0000000002"></cardmng></response>
 > <pc method="reg" rid="48524B0000000002" name="CHARLIE" pid="13" did="0"/>
-< 200 <response><FDD status="0" method="pcreg" id="10000001" id_str="1000-0001"></pc></response>
+< 200 <response><FDD status="0" method="pcreg" id="10000001" id_str="1000-0001"></FDD></response>
 > <cardmng method="inquire" cardtype="1" cardid="E004010000000B01" update="0"/>
 < 200 <response><cardmng status="0" refid="48524B0000000002" binded="1" expired="0" newflag="0"></cardmng></response>
 > <pc method="get" rid="48524B0000000002"/>
 < 200 <response><FDD status="0" method="pcget" name="CHARLIE" pass="4321" pid="13"><pc id="10000001" idstr="1000-0001" name="CHARLIE" pid="13" spnum="0" dpnum="0" sach="0" dach="0" sflg0="0" sflg1="0" sflg2="0" gno="0" hdsd="0" sp_opt="0" dp_opt="0" dp_opt2="0" mcomb="0" ncomb="0" mode="0"/><grade sgid="-1" dgid="-1"/><ex></ex><skin></skin><rlist></rlist></FDD></response>
 > <pc method="save" iidxid="10000001" cltype="0" achi="10" pnum="1" gno="3" mode="1"/>
-< 200 <response><FDD status="0" method="pcsave"></pc></response>
+< 200 <response><FDD status="0" method="pcsave"></FDD></response>
 > <music method="reg" iidxid="10000001" mid="1301" clid="1" pgnum="500" gnum="100" cflg="4" rid="3"/>
-< 200 <response><FDD status="0" method="musicreg" mid="1301" clid="1" crate="0" frate="0"></music></response>
+< 200 <response><FDD status="0" method="musicreg" mid="1301" clid="1" crate="0" frate="0"></FDD></response>
 > <music method="getrank" iidxid="10000001"/>
 < 200 <response><FDD status="0" method="musicgetrank"><r v="13">0wfaq</r></FDD></response>
 > <grade method="raised" iidxid="10000001" gtype="0" gid="5" cflg="4" achi="80"/>
-< 200 <response><FDD status="0" method="graderaised" pnum="0"></grade></response>
+< 200 <response><FDD status="0" method="graderaised" pnum="0"></FDD></response>
 > <ranking method="entry" iidxid="10000001" coid="3" clid="1" pgnum="200" gnum="10" clr="1" cstage="4" opt="0"/>
-< 200 <response><FDD status="0" method="rankingentry" anum="1" jun="1"></ranking></response>
+< 200 <response><FDD status="0" method="rankingentry" anum="1" jun="1"></FDD></response>
 > <ranking method="getranker" coid="3" clid="1"/>
-< 200 <response><FDD status="0" method="rankinggetranker"><ranker gnum="10" pgnum="200" name="CHARLIE" opname="HIRAKU" pid="13" udate="*"/></FDD></response>
+< 200 <response><FDD status="0" method="rankinggetranker"><ranker gnum="10" pgnum="200" name="CHARLIE" opname="HIRAKU" pid="13" udate="10544688*"/></FDD></response>
 > <shop method="getname"/>
-< 200 <response><FDD status="0" method="shopgetname" opname="HIRAKU" pid="13" cls_opt="0" hr="0" mi="0"></shop></response>
+< 200 <response><FDD status="0" method="shopgetname" opname="HIRAKU" pid="13" cls_opt="0" hr="0" mi="0"></FDD></response>
 > <userdata method="read" card="2003010000000010" model="FDD:J:A:G" label=""/>
 < 200 <response><userdata status="109"></userdata></response>
 = 3b8e3b4fba9c5d744143d7d7c8baa71fa1a96df99ebfe24ae2458e8c604d8784 136 cards

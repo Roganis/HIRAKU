@@ -577,7 +577,8 @@ std::string EamuseServer::answer_iidx_fdd(const std::string &game, const Request
             if (2 * pg + gr > 2 * field(*best, "pgnum") + field(*best, "gnum") || get(*best, "udate").empty()) {
                 (*best)["pgnum"] = std::to_string(pg), (*best)["gnum"] = std::to_string(gr);
                 (*best)["clr"] = attr(r.attrs, "clr"), (*best)["cstage"] = attr(r.attrs, "cstage");
-                (*best)["udate"] = std::to_string((long)time(nullptr));
+                // the cabinet's clock, as the rest of the server's dates (C02's udate, ntp.get)
+                (*best)["udate"] = std::to_string((long)(now ? now() : (int64_t)time(nullptr)));
             }
             std::string text;
             for (const Record &x : courses) text += to_line(x);

@@ -389,10 +389,12 @@ std::string EamuseServer::handle(const std::string &req) try {
         const sys::FileLock folder(dir_.empty() ? "" : dir_ + "/" + ea::FOLDER_LOCK);
         for (const Request &r : c.requests) {
             if (on_call) on_call(r.module + "." + (r.method.empty() ? attr(r.attrs, "type") : r.method));
-            // module elements written out as <x ...></x> (the game's parser also takes <x .../>)
+            // module elements written out as <x ...></x> (the game's parser also takes <x .../>),
+            // closed by the answer's own name: DistorteD's are named after the model (<FDD ...>), not
+            // the call's module
             std::string a = answer(c, r, header(head, "Host"));
             if (a.size() > 2 && a.compare(a.size() - 2, 2, "/>") == 0 && a.find('>') == a.size() - 1)
-                a = a.substr(0, a.size() - 2) + "></" + r.module + ">";
+                a = a.substr(0, a.size() - 2) + "></" + a.substr(1, a.find_first_of(" \t\r\n/", 1) - 1) + ">";
             xml += a;
         }
         xml += "</response>";

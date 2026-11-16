@@ -9,6 +9,8 @@ dumps
 local
 analyze
 user
+names
+**/names
 **/__pycache__
 *.tar.xz
 *.tar.gz

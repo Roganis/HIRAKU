@@ -272,6 +272,11 @@ if(SQLite3_FOUND AND Python3_FOUND AND NOT CMAKE_CROSSCOMPILING)   # (hiraku-ser
   add_test(NAME eamuse_web COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/eamuse/test_web.py
            $<TARGET_FILE:hiraku-server> ${CMAKE_SOURCE_DIR}/web)
   set_tests_properties(eamuse_web PROPERTIES TIMEOUT 120)
+  # ... its song names' packs (server/names.h): made-up packs loaded, read again, refused; the API's calls
+  add_test(NAME eamuse_names COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/eamuse/test_names.py $<TARGET_FILE:hiraku-server>)
+  set_tests_properties(eamuse_names PROPERTIES TIMEOUT 120)
+  # ... and tools/eamuse/names.py's reading and numbering, on tiny made-up tables
+  add_test(NAME eamuse_names_tool COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/eamuse/test_names_tool.py)
   # ... and run as a service: health, the log (nothing secret), --log-calls, the config file, backups kept, SIGTERM
   add_test(NAME eamuse_service COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/eamuse/test_service.py
            $<TARGET_FILE:hiraku-server> $<TARGET_FILE:key_client>)

@@ -314,6 +314,23 @@ dialog.dialog::backdrop { background: rgba(18, 13, 38, .5); }
 dialog.dialog h2 { font-size: 1.2rem; }
 dialog.dialog .actions { margin-top: 18px; }
 
+/* --- songs: a title, its genre and artist smaller, its number */
+.song { display: inline-flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; min-width: 0; text-align: left; }
+.song-title { font-weight: 700; overflow-wrap: anywhere; }
+.song-sub { color: var(--muted); font-size: .86rem; overflow-wrap: anywhere; }
+.song-no { color: var(--muted); font-size: .8rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.song-none { color: var(--muted); white-space: nowrap; }
+.chart { display: inline-flex; align-items: baseline; gap: 6px; white-space: nowrap; }
+.picks:empty { display: none; }
+.picks { margin-top: 12px; }
+.pick-list { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 6px; }
+.pick-list .btn { width: 100%; max-width: 100%; min-width: 0; justify-content: flex-start; text-align: left; height: auto; padding-top: 6px; padding-bottom: 6px; white-space: normal; }
+.pick-list .btn .song { min-width: 0; }
+code.path { overflow-wrap: anywhere; }
+.pick-list .btn .song-title { color: var(--ink); }
+.pick-list .btn .song-sub, .pick-list .btn .song-no { font-weight: 400; }
+.rows td.player-col { white-space: nowrap; }
+
 /* --- phone width */
 @media (max-width: 760px) {
   body { font-size: 15px; }
@@ -353,6 +370,8 @@ dialog.dialog .actions { margin-top: 18px; }
   .rows td.wide, .rows td.wide > * { min-width: 0; overflow-wrap: anywhere; }
   .rows td .row-actions { justify-content: flex-end; }
   .rows .num { text-align: right; }
+  .rows td.song-col .song { justify-content: flex-end; text-align: right; }
+  .rows td.player-col { white-space: normal; }
   .arcade { flex-direction: column; align-items: stretch; }
   .tabs a { flex: 1; text-align: center; }
 }

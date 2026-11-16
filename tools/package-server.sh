@@ -31,6 +31,8 @@ mkdir -p "$d/bin" "$d/share/hiraku-server" "$d/share/doc/hiraku-server" "$d/depl
 strip -o "$d/bin/hiraku-server" "$prog"
 copy_tracked_as "$root" "$d/share/hiraku-server/web" web
 [ -f "$d/share/hiraku-server/web/index.html" ] || { echo "package-server: no web/index.html" >&2; exit 1; }
+# (never a song names' pack: they are the owner's own, docs/SERVER.md "Song names")
+if [ -n "$(find "$d" \( -name names -o -name '*.json' \) | head -1)" ]; then echo "package-server: a names folder or .json file in the package" >&2; exit 1; fi
 doc=$d/share/doc/hiraku-server
 cp "$root/docs/SERVER.md" "$root/LICENSE" "$doc/"
 for lib in httplib nlohmann; do

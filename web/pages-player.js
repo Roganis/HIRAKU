@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Every user's pages: Home (cards), My stats, Players, Games, Account. Songs are shown by their
-// number: the server knows no titles.
+// Every user's pages: Home (cards), My stats, Players, Games, Account. Songs are the games' own
+// numbers; a song's name shows beside its number where the server has a names pack for the game
+// (the owner's own, docs/SERVER.md "Song names"), else "song N".
 import {del, enc, get, post, put} from './api.js';
 import {state} from './app.js';
 import {
@@ -71,6 +72,41 @@ function linkCard(done) {
   return card('Link a card', h('p', {class: 'muted', text: 'A card that has played on this server, with any game’s PIN for it. Five wrong PINs lock the card for linking until an admin unlocks it.'}), f);
 }
 
+// --- song names: a game's pack (GET /games/ID/songs), asked once a game a page; none: no names
+
+const namesOf = new Map();
+const NO_NAMES = {songs: {}, charts: {}};
+
+function songNames(game) {
+  if (!namesOf.has(game)) namesOf.set(game, get('/games/' + enc(game) + '/songs').catch(() => NO_NAMES));
+  return namesOf.get(game);
+}
+
+const songOf = (names, n) => (names && names.songs[String(n)]) || null;
+
+// A song: its title with its genre and artist smaller beside it, and its number; "song N" unnamed
+export function songCell(names, n) {
+  const s = songOf(names, n);
+  if (!s) return h('span', {class: 'song'}, h('span', {class: 'song-none', text: `song ${n}`}));
+  const sub = [s.genre, s.artist].filter(Boolean).join(' · ');
+  return h('span', {class: 'song'}, h('span', {class: 'song-title', text: s.title}), sub ? h('span', {class: 'song-sub', text: sub}) : null,
+    h('span', {class: 'song-no', text: `#${n}`}));
+}
+
+// A chart: the pack's name for its number, with the number; else the number
+export function chartCell(names, c) {
+  const name = names && names.charts[String(c)];
+  return name ? h('span', {class: 'chart'}, h('span', {text: name}), h('span', {class: 'song-no', text: `#${c}`})) : c;
+}
+
+// Does song n answer what the user typed: part of its title (or genre, artist), or its number's start
+function songMatches(names, n, q) {
+  if (!q) return true;
+  if (/^\d+$/.test(q) && String(n).startsWith(q)) return true;
+  const s = songOf(names, n);
+  return !!s && `${s.title} ${s.genre || ''} ${s.artist || ''}`.toLowerCase().includes(q.toLowerCase());
+}
+
 // --- stats: a game picker, the player, the scores
 
 function statsView(view, stats, query, base) {
@@ -88,9 +124,12 @@ function statsView(view, stats, query, base) {
     draw();
   });
   view.append(h('div', {class: 'toolbar'}, h('label', {for: 'game-pick', text: 'Game'}), sel), body);
-  function draw() {
-    clear(body);
+  async function draw() {
     const s = stats[pick];
+    clear(body).append(loading());
+    const names = await songNames(s.game);
+    if (stats[pick] !== s) return;   // (another game picked meanwhile)
+    clear(body);
     const best = s.scores.reduce((m, x) => (x.score !== null && x.score > m ? x.score : m), 0);
     body.append(h('div', {class: 'facts'},
       fact('Player', playerName(s) || h('span', {class: 'none', text: '–'})),
@@ -102,12 +141,14 @@ function statsView(view, stats, query, base) {
       body.append(card(null, empty('No scores kept for this game yet.')));
       return;
     }
-    const find = h('input', {type: 'search', id: 'song-find', inputmode: 'numeric', placeholder: 'Song number', 'aria-label': 'Show one song number'});
+    const named = Object.keys(names.songs).length > 0;
+    const find = h('input', {type: 'search', id: 'song-find', inputmode: named ? null : 'numeric', placeholder: named ? 'Song title or number' : 'Song number',
+      'aria-label': named ? 'Find a song by its title or number' : 'Show one song number'});
     const holder = h('div');
     const fill = () => {
       const q = find.value.trim();
-      const rows = q ? s.scores.filter((x) => String(x.song).startsWith(q)) : s.scores;
-      clear(holder).append(rows.length ? scoresTable(rows) : empty(`No song number starting ${q}.`));
+      const rows = q ? s.scores.filter((x) => songMatches(names, x.song, q)) : s.scores;
+      clear(holder).append(rows.length ? scoresTable(rows, names) : empty(named ? `No song matches “${q}”.` : `No song number starting ${q}.`));
     };
     find.addEventListener('input', fill);
     body.append(card('Scores', h('div', {class: 'toolbar'}, find, h('span', {class: 'muted small', text: `${s.scores.length} charts`})), holder));
@@ -122,10 +163,10 @@ function fact(k, v) {
 
 export const clearMark = (c) => (c === null || c === undefined ? null : h('span', {class: ['clear', `clear-${Math.min(Math.max(c, 0), 9)}`], title: `Clear type ${c}`, text: String(c)}));
 
-function scoresTable(rows) {
+function scoresTable(rows, names) {
   return table([
-    {key: 'song', label: 'Song', num: true},
-    {key: 'chart', label: 'Chart', num: true},
+    {key: 'song', label: 'Song', wide: true, cls: 'song-col', cell: (r) => songCell(names, r.song)},
+    {key: 'chart', label: 'Chart', num: true, cell: (r) => chartCell(names, r.chart)},
     {key: 'score', label: 'Score', num: true},
     {key: 'clear', label: 'Clear', num: true, cell: (r) => clearMark(r.clear)},
     {key: 'plays', label: 'Plays', num: true},
@@ -133,6 +174,7 @@ function scoresTable(rows) {
 }
 
 export async function myStats(view, {query, still}) {
+  namesOf.clear();
   view.append(pageHead('My stats', 'Each game a linked card has a player in: the player, and every score the server keeps.'));
   const j = await get('/me/stats');
   if (!still()) return;
@@ -164,6 +206,7 @@ export async function players(view, {still}) {
 }
 
 export async function playerStats(view, {params, query, still}) {
+  namesOf.clear();
   view.append(h('p', {class: 'crumbs'}, h('a', {href: '#/players', text: 'Players'})), pageHead(params.name, 'Their games and scores.'));
   try {
     const j = await get('/players/' + enc(params.name) + '/stats');
@@ -190,22 +233,45 @@ export async function games(view, {still}) {
 }
 
 export async function gameTop(view, {params, query, still}) {
-  const g = (await get('/games')).games.find((x) => x.id === params.id);
+  namesOf.clear();
+  const [list, names] = await Promise.all([get('/games'), songNames(params.id)]);
+  const g = list.games.find((x) => x.id === params.id);
   if (!still()) return;
+  const named = Object.keys(names.songs).length > 0;
+  const chartNames = Object.entries(names.charts).sort((a, b) => a[0] - b[0]);
   view.append(h('p', {class: 'crumbs'}, h('a', {href: '#/games', text: 'Games'})), pageHead(g ? g.title : params.id, 'Best scores among the players who show theirs, best first.'));
   if (g && !g.scores) view.append(note('info', 'The server does not read this game’s scores yet.'));
   const out = h('div');
+  const picks = h('div', {class: 'picks', 'aria-live': 'polite'});
   const f = form([
-    field('Song number', 'song', {type: 'number', min: 0, inputmode: 'numeric', value: query.get('song') || '', help: 'Empty: every song.'}),
-    field('Chart', 'chart', {type: 'number', min: 0, inputmode: 'numeric', value: query.get('chart') || '', help: 'Empty: every chart.'}),
+    named ? field('Song', 'song', {type: 'search', maxlength: 100, value: query.get('song') || '', help: 'Part of a title, or a song number. Empty: every song.'})
+      : field('Song number', 'song', {type: 'number', min: 0, inputmode: 'numeric', value: query.get('song') || '', help: 'Empty: every song.'}),
+    chartNames.length ? field('Chart', 'chart', {options: [['', 'Every chart'], ...chartNames.map(([n, c]) => [n, c])], value: query.get('chart') || ''})
+      : field('Chart', 'chart', {type: 'number', min: 0, inputmode: 'numeric', value: query.get('chart') || '', help: 'Empty: every chart.'}),
     field('How many', 'limit', {options: [[10, '10'], [20, '20'], [50, '50'], [100, '100']], value: query.get('limit') || '20'}),
   ], 'Show', async (f) => {
+    clear(picks);
+    const want = value(f, 'song');
+    if (want && !/^\d+$/.test(want)) {   // (a title: the song it names, or a choice among those)
+      const found = Object.keys(names.songs).map(Number).filter((n) => songMatches(names, n, want)).sort((a, b) => a - b);
+      if (!found.length) return note('info', `No song’s title has “${want}” in it.`);
+      if (found.length > 1) {
+        const shown = found.slice(0, 30);
+        picks.append(h('p', {class: 'muted small', text: found.length > shown.length ? `${found.length} songs match; the first ${shown.length}:` : `${found.length} songs match:`}),
+          h('ul', {class: 'pick-list'}, shown.map((n) => h('li', {}, button(songCell(names, n), 'quiet', () => {
+            f.elements.namedItem('song').value = String(n);
+            f.requestSubmit();
+          }, {'aria-label': `Best scores of song ${n}`})))));
+        return null;
+      }
+      f.elements.namedItem('song').value = String(found[0]);
+    }
     const q = new URLSearchParams();
     for (const k of ['song', 'chart', 'limit']) if (value(f, k)) q.set(k, value(f, k));
     history.replaceState(null, '', `#/games/${enc(params.id)}?${q}`);
     await draw(q);
   }, {class: 'form-row'});
-  view.append(card(null, f), out);
+  view.append(card(null, f, picks), out);
   async function draw(q) {
     clear(out).append(loading());
     const j = await get(`/games/${enc(params.id)}/top?${q}`);
@@ -216,18 +282,19 @@ export async function gameTop(view, {params, query, still}) {
     }
     out.append(card(null, table([
       {key: 'rank', label: 'Rank', num: true},
-      {key: 'user', label: 'Player', wide: true, sort: (r) => r.user || r.player || '', cell: (r) => r.user
+      {key: 'user', label: 'Player', wide: true, cls: 'player-col', sort: (r) => r.user || r.player || '', cell: (r) => r.user
         ? h('span', {}, h('a', {href: '#/players/' + enc(r.user), text: r.user}), r.player ? h('span', {class: 'muted small', text: ` · ${r.player}`}) : null)
         : playerName(r)},
-      {key: 'song', label: 'Song', num: true},
-      {key: 'chart', label: 'Chart', num: true},
+      {key: 'song', label: 'Song', wide: true, cls: 'song-col', cell: (r) => songCell(names, r.song)},
+      {key: 'chart', label: 'Chart', num: true, cell: (r) => chartCell(names, r.chart)},
       {key: 'score', label: 'Score', num: true},
       {key: 'clear', label: 'Clear', num: true, cell: (r) => clearMark(r.clear)},
     ], j.scores, {sort: 0, caption: 'Best scores'})));
   }
   const q = new URLSearchParams();
   for (const k of ['song', 'chart', 'limit']) if (query.get(k)) q.set(k, query.get(k));
-  try { await draw(q); } catch (err) { clear(out).append(errorNote(err)); }
+  if (named && q.get('song') && !/^\d+$/.test(q.get('song'))) f.requestSubmit();   // (a title in the link: found as typed)
+  else try { await draw(q); } catch (err) { clear(out).append(errorNote(err)); }
 }
 
 // --- Account: password, hidden stats, personal tokens

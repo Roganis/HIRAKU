@@ -27,6 +27,11 @@ __pycache__/
 *.core
 /user/
 
+# hiraku-server's song names' packs (docs/SERVER.md, "Song names"): made from the owner's own
+# games, never committed (a names folder at the top, or a pack in any folder called names)
+/names/
+**/names/*.json
+
 # Local notes and backups, not for the repo
 /local/
 

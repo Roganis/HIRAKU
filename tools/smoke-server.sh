@@ -34,6 +34,8 @@ for f in bin/hiraku-server share/hiraku-server/web/index.html share/doc/hiraku-s
 done
 extra=$(cd "$p" && find . -type f \( -name '*.chd' -o -name '*.bin' -o -name '*.so*' -o -name 'hiraku' -o -name 'hiraku-eamuse' \) | head -3)
 [ -z "$extra" ] && ok "the package's files (no library, game data or desktop program in it)" || bad "the package holds $extra"
+names=$(cd "$p" && find . \( -name names -o -name '*.json' \) | head -3)
+[ -z "$names" ] && ok "no song names in the package (no names folder, no .json pack)" || bad "the package holds $names"
 
 out=$("$srv" --version 2>&1); st=$?
 [ $st = 0 ] && [[ $out == hiraku-server* ]] && ok "--version: $out" || bad "--version: ended with $st: $out"

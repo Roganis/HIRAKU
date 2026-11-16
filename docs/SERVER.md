@@ -37,7 +37,41 @@ links out of it), each with `Content-Security-Policy: default-src 'self'` and no
 
 The pages call this server's API only: nothing is loaded from another site (no fonts, no scripts, no
 analytics), and nothing is kept in the browser but the log-in's cookie. Songs are shown by their
-number. Behind a proxy, `/` goes to the same port as `/api/` (below).
+number, and by their names where the server has a names pack for the game (below). Behind a proxy,
+`/` goes to the same port as `/api/` (below).
+
+## Song names
+
+The games keep scores by their own song numbers; the song titles are the games' data, so HIRAKU
+holds none. The server shows a title beside a song's number only from a **names pack** you make from
+your own games' files with `tools/eamuse/names.py`. A pack is yours: keep it on your server, never
+share it, never put it in a repository or a package (the repository ignores `names/` folders, and
+the server's package and container leave them out).
+
+    tools/eamuse/names.py --root HIRAKU_ROOT --out DIR [--game ID ...]
+
+reads each game you have ingested (`HIRAKU_ROOT/dumps/ID`) in place, its own song table, and writes
+`DIR/ID.json` for the games it knows how to read, saying for each how many songs it wrote or why not.
+Put the files in a folder called `names` beside the database (`/var/lib/hiraku-server/names/` for the
+service), or name another with `serve --names DIR` (config: `names = DIR`). `serve` reads them at the
+start, says one line for each (`names: popn12.json: 595 songs`), and reads a file again when it
+changes or drops it when it is gone (it looks at most every 3 seconds, when a page asks). No folder:
+no names, songs by number as before. Loading a pack, or refusing one, never touches the games' port.
+
+A pack is one UTF-8 JSON file a game, named after the game's id in the server's table
+(`GET /api/v1/games`): `songs` by the game's own song number (the `song` of its scores), each with a
+`title` and optionally an `artist` and a `genre`; `charts` optionally names the chart numbers. For
+example (made up):
+
+    {"format": 1, "game": "popn12",
+     "songs": {"5": {"title": "Made-up Song", "artist": "Made-up Artist", "genre": "Made-up Genre"},
+               "20": {"title": "Another Made-up Song"}},
+     "charts": {"0": "Normal", "1": "Hyper"}}
+
+A file is refused, in one line, when it is over 4 MB, isn't that JSON (format 1), names a game the
+table lacks or is named after another game's id, or holds over 20000 songs. A text is cut at 200
+characters and its control characters are dropped. An admin sees the packs loaded and refused on the
+Server settings page (`GET /names`).
 
 ## The first admin
 
@@ -81,7 +115,7 @@ links 20 an hour an account, anything else 600 a minute a session or token.
 | Method | Path | Who | What |
 |---|---|---|---|
 | GET | /health | anyone | `{ok, version, uptime}`; 503 when the database doesn't answer |
-| GET | /server | anyone | the server's name, sign-up mode, games (id, title) |
+| GET | /server | anyone | the server's name, sign-up mode, games (id, title, has_names) |
 | POST | /signup | anyone | `{name, password[, invite]}` |
 | POST | /login | anyone | `{name, password}`: the cookie, `csrf`, `must_change_password` |
 | POST | /reset | anyone | `{code, password}`: a reset code from an admin |
@@ -96,7 +130,8 @@ links 20 an hour an account, anything else 600 a minute a session or token.
 | GET | /me/stats | user | each linked card's games: player, plays, scores |
 | GET | /players | user | users whose stats show |
 | GET | /players/{name}/stats | user | their stats (no card numbers) |
-| GET | /games | user | the games |
+| GET | /games | user | the games (id, title, scores read, has_names) |
+| GET | /games/{id}/songs | user | the game's names pack: `{songs: {"N": {title, artist, genre}}, charts: {"N": name}}` (empty objects without one) |
 | GET | /games/{id}/top?song=&chart=&limit= | user | best scores among players whose stats show |
 | GET, POST | /arcades | operator | own arcades (admin: all); add `{name, prefecture[, owner]}` |
 | GET, PUT, DELETE | /arcades/{id} | operator | `{name, prefecture}` |
@@ -117,6 +152,7 @@ links 20 an hour an account, anything else 600 a minute a session or token.
 | PUT | /cards/{card}/pin | admin | `{pin}` in every place the games keep it |
 | GET, PUT | /settings | admin | the server's own settings and every game's defaults |
 | GET | /audit?limit= | admin | the last actions: when, who, what |
+| GET | /names | admin | the names packs' folder, the packs loaded (game, file, songs, charts, time) and the files refused (file, why) |
 
 An operator acts on its own arcades and their machines only; another operator's answer 404.
 
@@ -149,6 +185,7 @@ taken from the folder serve is started in, so a service's file names whole paths
 | tz | -12 to 14 | the games' time zone, hours from UTC (9) |
 | api | ADDRESS:PORT | the API and the web pages (127.0.0.1:8081) |
 | web | a folder | the web pages' folder (it must hold index.html) |
+| names | a folder | the song names' packs (`names` beside the database; above) |
 | quiet | true or false | only the start-up lines, refusals and errors |
 | log-calls | true or false | every call's body in the log (below) |
 | no-relay | true or false | no NET TAISEN lobby and relay |

@@ -6,7 +6,7 @@
 //
 //   hiraku-server serve --db FILE [--port 8080] [--bind 0.0.0.0] [--allow ADDRESSES] [--cabinets FILE]
 //                 [--key-file FILE] [--clock "2003-06-01 12:00:00"] [--tz 9] [--quiet] [--no-relay] [--no-keys]
-//                 [--api 127.0.0.1:8081 | --no-api] [--api-insecure-cookies] [--api-trust-proxy] [--web DIR | --no-web]
+//                 [--api 127.0.0.1:8081 | --no-api] [--api-insecure-cookies] [--api-trust-proxy] [--web DIR | --no-web] [--names DIR]
 //                 [--log-calls] [--connections 256] [--connections-per-address 64] [--sync full|normal] [--config FILE]
 //   hiraku-server serve --db FILE [--cabinets FILE] --new-cabinet [NAME]  |  [--key-file FILE] --new-key
 //   hiraku-server import FOLDER --db FILE     a data folder's files into the database (made if none)
@@ -68,7 +68,7 @@ int usage(int status) {
             "usage: hiraku-server serve --db FILE [--port N] [--bind ADDR] [--allow ADDRESSES] [--cabinets FILE]\n"
             "                     [--key-file FILE] [--clock \"YYYY-MM-DD HH:MM:SS\"] [--tz H] [--quiet] [--no-relay] [--no-keys]\n"
             "                     [--api ADDR:PORT | --no-api] [--api-insecure-cookies] [--api-trust-proxy]\n"
-            "                     [--web DIR | --no-web] [--log-calls] [--connections N] [--connections-per-address N]\n"
+            "                     [--web DIR | --no-web] [--names DIR] [--log-calls] [--connections N] [--connections-per-address N]\n"
             "                     [--sync full|normal] [--config FILE]\n"
             "       hiraku-server serve --db FILE [--cabinets FILE] --new-cabinet [NAME]\n"
             "       hiraku-server serve --db FILE [--key-file FILE] --new-key\n"
@@ -93,6 +93,8 @@ int usage(int status) {
             "  the caller's address is X-Forwarded-For's last hop\n"
             "  --web: the web pages' folder, served at / on the API's port (default: web beside the program,\n"
             "  ../share/hiraku-server/web, or a build tree's checkout's web/); --no-web: none\n"
+            "  --names: the song names' packs (DIR/GAME.json, made with tools/eamuse/names.py from your own games;\n"
+            "  default: names beside the database), read again when one changes; none: songs by number\n"
             "  serve's log: a line a game call and a line an API request, no body, card, PIN or password;\n"
             "  --log-calls: the calls' bodies too (PINs and passwords as ***), for finding a fault; --quiet: neither\n"
             "  --connections N: the games' connections served at once (256; 16 to 4096), more wait their turn;\n"
@@ -426,7 +428,7 @@ void report(const ea::Copied &c, const char *from, const char *to) {
 // --- serve's config file (--config): "name = value" lines, the names serve's long options
 
 // The options a config file may name: those taking a value, and the switches (true or false)
-const std::set<std::string> VALUED{"db", "port", "bind", "allow", "cabinets", "key-file", "clock", "tz", "api", "web",
+const std::set<std::string> VALUED{"db", "port", "bind", "allow", "cabinets", "key-file", "clock", "tz", "api", "web", "names",
                                    "connections", "connections-per-address", "sync"};
 const std::set<std::string> SWITCHES{"quiet", "no-relay", "no-keys", "no-api", "api-insecure-cookies", "api-trust-proxy", "no-web", "log-calls"};
 

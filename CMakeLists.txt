@@ -841,6 +841,7 @@ if(SQLite3_FOUND)
   target_link_libraries(hiraku_easqlite PUBLIC hiraku_eamuse SQLite::SQLite3)
   add_executable(hiraku-server server/main.cpp server/accounts.cpp server/api.cpp)   # (accounts.h: its accounts, arcades, machines)
   target_link_libraries(hiraku-server PRIVATE hiraku_easqlite hiraku_eanet)
+  target_sources(hiraku-server PRIVATE server/names.cpp)   # (names.h: the song names' packs, read at run time)
   # ... its JSON API (server/api.h): two single-header libraries, server/api.cpp's only, their own
   # warnings not ours (no TLS: a reverse proxy in front makes it, docs/SERVER.md)
   target_include_directories(hiraku-server SYSTEM PRIVATE third_party/httplib third_party/nlohmann)

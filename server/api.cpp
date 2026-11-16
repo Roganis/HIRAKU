@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // hiraku-server's JSON API (api.h): the routes, who is calling, the limits, and the shapes of what
-// goes in and out. The one file that includes the HTTP and JSON libraries (third_party/).
+// goes in and out. The one file that includes the HTTP library, and with names.cpp the JSON one (third_party/).
 #include "api.h"
 
 #include <algorithm>
@@ -25,6 +25,7 @@
 #include <json.hpp>
 
 #include "accounts.h"
+#include "names.h"
 #include "eamuse/games.h"
 #include "eamuse/listener.h"
 #include "shell/sys.h"
@@ -451,6 +452,9 @@ int ApiOptions::option(int argc, char **argv, int &i) {
     else if (a == "--web") {
         if (i + 1 >= argc) { fprintf(stderr, "--web needs a folder\n"); return 2; }
         web = argv[++i];
+    } else if (a == "--names") {
+        if (i + 1 >= argc) { fprintf(stderr, "--names needs a folder\n"); return 2; }
+        names = argv[++i];
     } else if (a == "--api") {
         if (i + 1 >= argc) { fprintf(stderr, "--api needs ADDRESS:PORT\n"); return 2; }
         const std::string v = argv[++i];
@@ -477,7 +481,18 @@ struct Api::Impl {
     std::thread thread;
     const std::chrono::steady_clock::time_point started = std::chrono::steady_clock::now();
 
-    Impl(const std::string &file, ea::Store &store, const ApiOptions &opt) : acc(file, store), o(opt) {}
+    Names names;   // the song names' packs (names.h): the API's only
+
+    Impl(const std::string &file, ea::Store &store, const ApiOptions &opt)
+        : acc(file, store), o(opt), names(opt.names.empty() ? names_beside(file) : opt.names, opt.quiet) {}
+    static std::string names_beside(const std::string &db) {
+        const std::filesystem::path p = std::filesystem::path(db).parent_path();
+        return ((p.empty() ? std::filesystem::path(".") : p) / "names").string();
+    }
+    bool has_names(const ea::Game &g) {
+        const auto p = names.pack(game_id(g));
+        return p && !p->songs.empty();
+    }
 
     std::string address(const Request &req) const {
         if (o.trust_proxy && req.has_header("X-Forwarded-For")) {
@@ -621,8 +636,9 @@ void Api::Impl::routes() {
     route("GET", "/server", anyone, [this](Caller &, const Request &, In &, Response &res) {
         const auto mode = acc.sign_up_mode();
         json games = json::array();
+        names.refresh();
         for (const ea::Game &g : ea::games())
-            if (*g.model && acc.listed(g)) games.push_back({{"id", game_id(g)}, {"title", g.title}});
+            if (*g.model && acc.listed(g)) games.push_back({{"id", game_id(g)}, {"title", g.title}, {"has_names", has_names(g)}});
         answer(res, {{"name", acc.server_name()},
                      {"signup", mode == Accounts::SignUp::closed ? "closed" : mode == Accounts::SignUp::invite ? "invite" : "open"},
                      {"games", games}});
@@ -753,9 +769,27 @@ void Api::Impl::routes() {
     });
     route("GET", "/games", user, [this](Caller &, const Request &, In &, Response &res) {
         json out = json::array();
+        names.refresh();
         for (const ea::Game &g : ea::games())
-            if (*g.model && acc.listed(g)) out.push_back({{"id", game_id(g)}, {"title", g.title}, {"scores", g.readers != nullptr}});
+            if (*g.model && acc.listed(g))
+                out.push_back({{"id", game_id(g)}, {"title", g.title}, {"scores", g.readers != nullptr}, {"has_names", has_names(g)}});
         answer(res, {{"games", out}});
+    });
+    route("GET", "/games/:id/songs", user, [this](Caller &, const Request &req, In &, Response &res) {   // (its pack's names)
+        const ea::Game *g = listed_game(acc, req.path_params.at("id"));
+        if (!g) return fail(res, 404, "not_found", "no game " + req.path_params.at("id"));
+        names.refresh();
+        json songs = json::object(), charts = json::object();
+        if (const auto p = names.pack(game_id(*g))) {
+            for (const auto &[n, s] : p->songs) {
+                json o{{"title", s.title}};
+                if (!s.artist.empty()) o["artist"] = s.artist;
+                if (!s.genre.empty()) o["genre"] = s.genre;
+                songs[std::to_string(n)] = std::move(o);
+            }
+            for (const auto &[n, c] : p->charts) charts[std::to_string(n)] = c;
+        }
+        answer(res, {{"game", game_id(*g)}, {"songs", songs}, {"charts", charts}});
     });
     route("GET", "/games/:id/top", user, [this](Caller &c, const Request &req, In &, Response &res) {
         long song = -1, chart = -1, limit = 20;
@@ -1027,6 +1061,17 @@ void Api::Impl::routes() {
         answer(res, {{"server", server}, {"games", games_settings_json(acc, lines, false)}});
     });
     route("PUT", "/settings", admin, [this](Caller &c, const Request &, In &in, Response &res) { settings_put(c, 0, in, res); });
+    route("GET", "/names", admin, [this](Caller &, const Request &, In &, Response &res) {   // (the packs loaded and refused)
+        names.refresh();
+        json packs = json::array(), refused = json::array();
+        for (const auto &p : names.packs()) {
+            const ea::Game *g = ea::game_by_id(p->game);
+            packs.push_back({{"game", p->game}, {"title", g ? g->title : p->game}, {"file", p->file}, {"songs", p->songs.size()},
+                             {"charts", p->charts.size()}, {"time", p->time}});
+        }
+        for (const NameRefusal &r : names.refused()) refused.push_back({{"file", r.file}, {"why", r.why}});
+        answer(res, {{"folder", names.folder()}, {"packs", packs}, {"refused", refused}});
+    });
     route("GET", "/audit", admin, [this](Caller &c, const Request &req, In &, Response &res) {
         long last = 100;
         if (req.has_param("limit") && !whole_number(req.get_param_value("limit"), last, 1, 10000))
@@ -1067,6 +1112,7 @@ bool Api::start(std::string &error) {
     });
     m.http.set_exception_handler([](const Request &, Response &res, std::exception_ptr) { fail(res, 500, "server_error", "the server could not answer that"); });
     m.routes();
+    m.names.refresh(true);   // (the song names read at the start; a pack refused is said, nothing stops)
     std::string pages;   // the web pages' folder, served at / (after the API's routes: /api/ stays theirs)
     if (m.o.web_enabled) {
         pages = m.o.web.empty() ? find_web() : m.o.web;

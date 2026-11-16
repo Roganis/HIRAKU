@@ -167,8 +167,8 @@ export async function cards(view) {
 // --- the server's settings
 
 export async function settings(view, {still}) {
-  view.append(pageHead('Server settings', 'The server’s name, which games are listed, its own settings, and every game’s default for the arcades.'));
-  const [c, s] = await Promise.all([get('/config'), get('/settings')]);
+  view.append(pageHead('Server settings', 'The server’s name, which games are listed, its own settings, the song names, and every game’s default for the arcades.'));
+  const [c, s, n] = await Promise.all([get('/config'), get('/settings'), get('/names')]);
   if (!still()) return;
   const name = form([field('Server name', 'name', {required: true, maxlength: 64, value: c.name, help: 'Shown on these pages’ sign-in and title.'})], 'Save', async (f) => {
     const j = await put('/config', {name: value(f, 'name')});
@@ -193,7 +193,7 @@ export async function settings(view, {still}) {
   const own = h('div');
   const gamesBox = h('div');
   view.append(h('div', {class: 'grid-2'}, card('This server', name), card('Games listed', all, allOut)),
-    card('The server’s own', own), card('Each game’s defaults', h('p', {class: 'muted', text: 'An arcade’s own value wins over these; a game’s default holds where neither is set.'}), gamesBox));
+    card('The server’s own', own), songNamesCard(n), card('Each game’s defaults', h('p', {class: 'muted', text: 'An arcade’s own value wins over these; a game’s default holds where neither is set.'}), gamesBox));
   const save = (game, list) => put('/settings', {settings: list});
   function drawGames(j) {
     clear(own).append(j.server && j.server.length
@@ -205,6 +205,25 @@ export async function settings(view, {still}) {
     clear(gamesBox).append(j.games.length ? settingsForm(j.games, {arcade: false, save}) : empty('No game has settings.'));
   }
   drawGames(s);
+}
+
+// The song names' packs the server has read (GET /names): the games with names, and the files refused
+function songNamesCard(n) {
+  const body = [h('p', {class: 'muted'}, 'Packs made from your own games with tools/eamuse/names.py, read from ', h('code', {class: 'path', text: n.folder || '(none)'}),
+    ' and again when one changes. They are yours: not to be shared or put in a repository.')];
+  body.push(n.packs.length ? table([
+    {key: 'title', label: 'Game', wide: true},
+    {key: 'songs', label: 'Songs', num: true},
+    {key: 'charts', label: 'Charts', num: true},
+    {key: 'time', label: 'File changed', num: true, wide: true, cell: (p) => when(p.time)},
+  ], n.packs, {sort: 0, caption: 'Games with song names'}) : empty('No game has song names: scores show song numbers.'));
+  if (n.refused.length) {
+    body.push(h('h3', {text: 'Files not read'}), table([
+      {key: 'file', label: 'File', cell: (r) => h('code', {text: r.file})},
+      {key: 'why', label: 'Why', cls: 'wrap', wide: true},
+    ], n.refused, {sort: 0, caption: 'Files not read'}));
+  }
+  return card('Song names', ...body);
 }
 
 // --- the audit log

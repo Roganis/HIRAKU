@@ -29,6 +29,9 @@ struct ApiOptions {
     // where); --no-web: none
     bool web_enabled = true;
     std::string web;
+    // The song names' packs (names.h, docs/SERVER.md): --names DIR, else a folder "names" beside the
+    // database; no such folder: no names
+    std::string names;
 
     // argv[i] taken if it is one of the API's options, i moved past its value: 1 taken, 0 not one of
     // them, 2 wrong (said)

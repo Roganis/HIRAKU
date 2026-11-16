@@ -1,0 +1,222 @@
+# pop'n music 12 (E12), 13 (E13) and 14 (F14): the player's record (new, get, set, score), a
+# player carried over from the game before (conv), cards and PINs (cardmng), NET TAISEN's settings
+# and results, the rankings, one card for all. Made-up cards and data.
+model D11:J:A:A
+# pop'n 11's data of an older card, to carry over: its PIN 1 2 3 4 at 0x9f3, two songs' words
+> <userdata method="write" card="2003010000000010" time="2004-03-24 10:00:00+9" model="D11:J:A:A" label=""><b>{b64 0x300 0x10=54455354}</b><b>{b64 0x300 0x110=0100 0x12c=c000}</b><b>{b64 0x300}</b><b>{b64 0x128 0xf3=01020304}</b></userdata>
+< 200 <response><userdata status="0"></userdata></response>
+
+model E12:J:A:A:2004111700
+>e <services method="get"/>
+< 200 info=1-484b0001-0001 <response><services expire="600" status="0"><item name="posevent" url="http://cabinet.test:8080/"/><item name="pcbtracker" url="http://cabinet.test:8080/"/><item name="numbering" url="http://cabinet.test:8080/"/><item name="package" url="http://cabinet.test:8080/"/><item name="userdata" url="http://cabinet.test:8080/"/><item name="userid" url="http://cabinet.test:8080/"/><item name="local" url="http://cabinet.test:8080/"/><item name="eemall" url="http://cabinet.test:8080/"/><item name="shopinf" url="http://cabinet.test:8080/"/><item name="message" url="http://cabinet.test:8080/"/><item name="cardmng" url="http://cabinet.test:8080/"/><item name="cardreis" url="http://cabinet.test:8080/"/><item name="facility" url="http://cabinet.test:8080/"/><item name="portfw" url="http://cabinet.test:8080/"/><item name="globby" url="globby://cabinet.test:5740/"/></services></response>
+> <ntp method="get"/>
+< 200 <response><ntp status="0" time="2003-06-01 12:00:*+9"></ntp></response>
+> <portfw method="get"/>
+< 200 <response><portfw status="0" globalip="192.168.50.2" port="5700"></portfw></response>
+> <portfw method="get" privateip="192.168.1.20"/>
+< 200 <response><portfw status="0" globalip="192.168.1.20" port="5700"></portfw></response>
+> <E12 type="game" method="get"/>
+< 200 <response><E12 status="0" phase="-1" play_enable="1" local_matching_enable="1" matching_sec="30" room_num="0,0,0,0,0,0,0,0,0,0" message=""></E12></response>
+file phase-E12 2
+file message HELLO
+> <E12 type="game" method="get"/>
+< 200 <response><E12 status="0" phase="2" play_enable="1" local_matching_enable="1" matching_sec="30" room_num="0,0,0,0,0,0,0,0,0,0" message="HELLO"></E12></response>
+# a new card: no player, a new one, the same asked again (kept), its record
+> <E12 type="playerdata" method="get" card_id="2004010000000017"/>
+< 200 <response><E12 status="109"></E12></response>
+> <E12 type="playerdata" method="new" card_id="2004010000000017" name="ALICE" password="4321"/>
+< 200 long:2450 sha256:686d2ce8aabf4adbb4accaea06e1724ee09f930ae9a63dd1fd7709fcb3d5c13b <response><E12 status="0"><b>QUxJQ0UAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQDAgEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA...
+> <E12 type="playerdata" method="new" card_id="2004010000000017" name="EVE" password="0000"/>
+< 200 long:2450 sha256:686d2ce8aabf4adbb4accaea06e1724ee09f930ae9a63dd1fd7709fcb3d5c13b <response><E12 status="0"><b>QUxJQ0UAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQDAgEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA...
+> <E12 type="playerdata" method="get" card_id="2004010000000017"/>
+< 200 long:2450 sha256:686d2ce8aabf4adbb4accaea06e1724ee09f930ae9a63dd1fd7709fcb3d5c13b <response><E12 status="0"><b>QUxJQ0UAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQDAgEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA...
+# a credit: two songs, the puzzle, NET TAISEN's results; a chart's best; a worse and a better score
+> <E12 type="playerdata" method="set" card_id="2004010000000017" option="5" chara_num="12" puzzle_now="3" puzzle_piece="1,2,3,4,5,6"><music num="5" sheet="0" data="1" score="80000"/><music num="20" sheet="3" data="192" score="65000"/><netvs map_hi="1" map_lo="2" stage_record="1,2,3" rank="4" member_name="AAA,BBBB,CC" member_pref="10,0,47" class="2" class_skill="50" music_num="5" sheet_num="1" set_ojama="1,2,3" get_ojama="7" badge="1" caption="2" fruit="3"/></E12>
+< 200 <response><E12 status="0"></E12></response>
+> <E12 type="playerdata" method="score" card_id="2004010000000017" music_num="5" sheet_num="0"/>
+< 200 <response><E12 status="0" score="80000"></E12></response>
+> <E12 type="playerdata" method="set" card_id="2004010000000017"><music num="5" sheet="0" data="3" score="70000"/><music num="20" sheet="3" data="192" score="99000"/></E12>
+< 200 <response><E12 status="0"></E12></response>
+> <E12 type="playerdata" method="score" card_id="2004010000000017" music_num="20" sheet_num="3"/>
+< 200 <response><E12 status="0" score="99000"></E12></response>
+> <E12 type="playerdata" method="get" card_id="2004010000000017"/>
+< 200 long:2450 sha256:93762fcd0af0ac4ee64bce9beebe932a61a315cb364c0c815da3dee3497afa85 <response><E12 status="0"><b>QUxJQ0UAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAwEAAAACAAAAAwAAAAQAAAAFAAAABgAAAAQDAgEFAAwAAAAAAAAAAAAAAAMAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA...
+# the older card: pop'n 11's player as it saved it, then carried over; a card nothing is named after
+> <E12 type="playerdata" method="get" card_id="2003010000000010" model="D11"/>
+< 200 long:3539 sha256:c8fcc6e32046a82c4572d18b519f65bc6a4d3f8719d4ee93c01aa66fc5a18c7f <response><E12 status="0"><b>AAAAAAAAAAAAAAAAAAAAAFRFU1QAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA...
+> <E12 type="playerdata" method="get" card_id="2003010000000010" model="C20"/>
+< 200 <response><E12 status="109"></E12></response>
+> <E12 type="playerdata" method="conv" old_card_id="2003010000000010" new_card_id="2003010000000010" name="CAROL"/>
+< 200 <response><E12 status="0"></E12></response>
+> <E12 type="playerdata" method="get" card_id="2003010000000010"/>
+< 200 long:2450 sha256:38ca66a829fad296942a263b02fb9a2ac63949b6f3bb0ebe5e61a45a81c0d9c7 <response><E12 status="0"><b>Q0FST0wAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAECAwQAAAAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAADAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA...
+> <E12 type="playerdata" method="get" card_id="bad/card"/>
+< 200 <response><E12 status="1"></E12></response>
+> <E12 type="playerdata" method="tmp" card_id="2004010000000017"/>
+< 200 <response><E12 status="0"></E12></response>
+# the rankings and the shops' board
+> <E12 type="rank" method="exp" card_id="2004010000000017" name="414c494345" course_num="2" option="0" score="5000" cool="50" great="5" good="3" bad="1" combo="60" shop_name="SHOP" pref="13"/>
+< 200 <response><E12 status="0" update="1" entry="1" rank="1" hi_score="5000" hi_cool="50"></E12></response>
+> <E12 type="rank" method="shop" shop_name="SHOP" pref="13" item="7" extra="1"/>
+< 200 <response><E12 status="0"></E12></response>
+> <E12 type="rank" method="get"/>
+< 200 long:9845 sha256:86077ec9970186cbfe871416be881b47ea6a16259c34c21fa692624005dfcf6b <response><E12 status="0"><b>AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA...
+> <E12 type="player" method="get" card_id="2004010000000017"/>
+< 200 <response><E12 status="0" mileage="0" ticket="0,0,0,0,0,0,0,0,0" course="0,0,0,0"></E12></response>
+
+model E13:J:A:A:2005090500
+>e <services method="get"/>
+< 200 info=1-484b0002-0002 <response><services expire="600" status="0"><item name="posevent" url="http://cabinet.test:8080/"/><item name="pcbtracker" url="http://cabinet.test:8080/"/><item name="numbering" url="http://cabinet.test:8080/"/><item name="package" url="http://cabinet.test:8080/"/><item name="userdata" url="http://cabinet.test:8080/"/><item name="userid" url="http://cabinet.test:8080/"/><item name="local" url="http://cabinet.test:8080/"/><item name="eemall" url="http://cabinet.test:8080/"/><item name="shopinf" url="http://cabinet.test:8080/"/><item name="message" url="http://cabinet.test:8080/"/><item name="cardmng" url="http://cabinet.test:8080/"/><item name="cardreis" url="http://cabinet.test:8080/"/><item name="facility" url="http://cabinet.test:8080/"/><item name="portfw" url="http://cabinet.test:8080/"/><item name="globby" url="globby://cabinet.test:5740/"/></services></response>
+> <E13 type="game" method="get"/>
+< 200 <response><E13 status="0" phase="-1" net_event="2" local_matching_enable="1" matching_sec="30" room_num="0,0,0,0,0,0,0,0,0,0" message="HELLO"></E13></response>
+file net_event-E13 1
+> <E13 type="game" method="get"/>
+< 200 <response><E13 status="0" phase="-1" net_event="1" local_matching_enable="1" matching_sec="30" room_num="0,0,0,0,0,0,0,0,0,0" message="HELLO"></E13></response>
+> <E13 type="game" method="active" shop_name="SHOP" phase="2"/>
+< 200 <response><E13 status="0"></E13></response>
+> <E13 type="game" method="active" shop_name="SHOP" phase="1"/>
+< 200 <response><E13 status="0"></E13></response>
+> <E13 type="game" method="active" shop_name="OTHER" phase="2"/>
+< 200 <response><E13 status="0"></E13></response>
+> <E13 type="game" method="active" shop_name="SHOP"/>
+< 200 <response><E13 status="0"></E13></response>
+# cards (cardmng): a card the server doesn't know, read again, its PIN, the PIN checked; new ids
+> <cardmng method="inquire" cardtype="1" cardid="E004010000000A01" update="0"/>
+< 200 <response><cardmng status="0" refid="48524B0000000001" binded="0" expired="0" newflag="1"></cardmng></response>
+> <cardmng method="inquire" cardtype="1" cardid="E004010000000A01" update="0"/>
+< 200 <response><cardmng status="0" refid="48524B0000000001" binded="1" expired="0" newflag="0"></cardmng></response>
+> <cardmng method="getrefid" cardtype="1" cardid="E004010000000A01" newflag="1" passwd="1234"/>
+< 200 <response><cardmng status="0" refid="48524B0000000001"></cardmng></response>
+> <cardmng method="authpass" refid="48524B0000000001" pass="1234"/>
+< 200 <response><cardmng status="0"></cardmng></response>
+> <cardmng method="authpass" refid="48524B0000000001" pass="9999"/>
+< 200 <response><cardmng status="116"></cardmng></response>
+> <cardmng method="authpass" refid="48524B00000000FF" pass="1234"/>
+< 200 <response><cardmng status="112"></cardmng></response>
+> <cardmng method="getnewid" cardtype="1" newflag="1"/>
+< 200 <response><cardmng status="0" cardid="2003010000000010" refid="48524B0000000002"></cardmng></response>
+> <cardmng method="gettmpid" cardtype="1" oldid="E004010000000A01"/>
+< 200 <response><cardmng status="0" newid="2003010000000028"></cardmng></response>
+> <cardmng method="rebind" cardtype="1" newid="E004010000000A02"/>
+< 200 <response><cardmng status="0"></cardmng></response>
+> <cardmng method="inquire" cardtype="1" cardid="bad/card" update="0"/>
+< 200 <response><cardmng status="1"></cardmng></response>
+# the pop'n 12 card's card and player, for the carry-over: its pop'n 12 record as it is, then conv
+> <cardmng method="inquire" cardtype="1" cardid="2004010000000017" update="0"/>
+< 200 <response><cardmng status="0" refid="48524B0000000003" binded="0" expired="0" newflag="1"></cardmng></response>
+# (a card without a PIN: the first one given is kept)
+> <cardmng method="authpass" refid="48524B0000000003" pass="5555"/>
+< 200 <response><cardmng status="0"></cardmng></response>
+> <cardmng method="authpass" refid="48524B0000000003" pass="1111"/>
+< 200 <response><cardmng status="116"></cardmng></response>
+> <E13 type="playerdata" method="get" ref_id="48524B0000000003" card_id="2004010000000017"/>
+< 200 <response><E13 status="109"></E13></response>
+> <E13 type="playerdata" method="get" ref_id="48524B0000000003" card_id="2004010000000017" model="E12"/>
+< 200 long:2465 sha256:ad52eabd54e4c878650b98bba8bf4f06bbd538b51b840ebf03445530b0963f84 <response><E13 status="0" f_compress="0"><b>QUxJQ0UAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAwEAAAACAAAAAwAAAAQAAAAFAAAABgAAAAQDAgEFAAwAAAAAAAAAAAAAAAMAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMAAAAAAAAAAAAAAAAAAAAAA...
+> <E13 type="playerdata" method="conv" ref_id="48524B0000000003" old_card_id="2004010000000017" name="ALICE"/>
+< 200 <response><E13 status="0"></E13></response>
+> <E13 type="playerdata" method="get" ref_id="48524B0000000003" card_id="2004010000000017"/>
+< 200 <response><E13 status="0" f_compress="1"><b>bA0AAD9BTElDRQDz//PxTwQDAgHz//P3A/P/CPP/8//z8sDz//P/8//z/wDz//P/8//z//P/8//z//P/APP/8//z//P/8//z//P/8/8A8//z//P/8//z//P/8//z/wDz//P/8//z//P/8//z//P/APP/8//z//P/8//z//P/8/8A8//z//P/8//z//P/8//z/wDz//P/8//z//P/8//z//P/APP/8//z//P/8//z//P/8/8A8//z//P/8//z//P/8//z/wDz//P/8//z//P/8//z//P/APP/8//z//P/8//z//P/8/8A8//z//P/8//z//P/8//z/wDz//P/8//z//P/8//z//P/APP/8//z//P/8//z//P/8/8A8//z//P/8//z//P/8//z/wDz//P/8//z//P/8//z//P/APP/8//z//P/8//z//P/8/8A8//z//P/8//z//P/8//z/wDz//P/8//z//P/8//z//P/APP/8//z//P/8//z//P/8/8A8//z//P/8//z//P/8//z/wDz//P/8//z//P/8//z//P/APP/8//z//P/8/A=</b></E13></response>
+# a new player, a credit, the scores
+> <E13 type="playerdata" method="new" ref_id="48524B0000000001" name="BOB" password="1234"/>
+< 200 <response><E13 status="0" f_compress="1"><b>bA0AAM9CT0IA8f/x8wECAwME8f/x//H/8f/x//H/APH/8f/x//H/8f/x//H/8f8A8f/x//H/8f/x//H/8f/x/wDx//H/8f/x//H/8f/x//H/APH/8f/x//H/8f/x//H/8f8A8f/x//H/8f/x//H/8f/x/wDx//H/8f/x//H/8f/x//H/APH/8f/x//H/8f/x//H/8f8A8f/x//H/8f/x//H/8f/x/wDx//H/8f/x//H/8f/x//H/APH/8f/x//H/8f/x//H/8f8A8f/x//H/8f/x//H/8f/x/wDx//H/8f/x//H/8f/x//H/APH/8f/x//H/8f/x//H/8f8A8f/x//H/8f/x//H/8f/x/wDx//H/8f/x//H/8f/x//H/APH/8f/x//H/8f/x//H/8f8A8f/x//H/8f/x//H/8f/x/wDx//H/8f/x//H/8f/x//H/APH/8f/x//H/8f/x//H/8f8A8f/x//H/8f/x//H/8f/x/wDx//H/8f/x//H/8f/x//H/APH/8f/x//H/8f/x//H/8f+A8f/x//H/8f/x//H/8f8AAQA=</b></E13></response>
+> <E13 type="playerdata" method="set" ref_id="48524B0000000001" option="9" chara_num="33"><music num="5" sheet="1" data="4" score="81000"/><music num="460" sheet="3" data="64" score="60000"/><netvs music_num="5" sheet_num="1" category_num="2" badge="1" caption="2" type="3" class="4" class_skill="5" class_start="6" record="7" member_name="AAA,BBBB,CC" member_pref="10,0,47" set_ojama="1,2,3" get_ojama_hi="1" get_ojama_lo="2" trump_list="1,2,3,4" ojama_condition="1,0,1" ojama_cnt="9,8,7"/></E13>
+< 200 <response><E13 status="0"></E13></response>
+> <E13 type="playerdata" method="score" ref_id="48524B0000000001" music_num="5" sheet_num="1"/>
+< 200 <response><E13 status="0" score="81000"></E13></response>
+> <E13 type="playerdata" method="score" ref_id="48524B0000000003" music_num="20" sheet_num="3"/>
+< 200 <response><E13 status="0" score="99000"></E13></response>
+> <E13 type="playerdata" method="get" ref_id="48524B0000000001" card_id="-"/>
+< 200 <response><E13 status="0" f_compress="1"><b>bA0AAM9CT0IA8f/x8wECnwMECQAh8f/x9AQA8f/x//H/8f/x//H/8f/x/wDx//H/8f/x//H/8f/x//H/APH/8f/x//H/8f/x//H/8f8A8f/x//H/8f/x//H/8f/x/wDx//H/8f/x//H/8f/x//H/APH/8f/x//H/8f/x//H/8f8A8f/x//H/8f/x//H/8f/x/wDx//H/8f/x//H/8f/x//H/APH/8f/x//H/8f/x//H/8f8A8f/x//H/8f/x//H/8f/x/wDx//H/8f/x//H/8f/x//H/APH/8f/x//H/8f/x//H/8f9g8f/x//H/8f/x/wBA8f8A8f/x//H/8f/x//H/8f/x/wDx//H/8f/x//H/8f/x//H/APH/8f/x//H/8f/x//H/8f8A8f/x//H/8f/x//H/8f/x/wDx//H/8f/x//H/8f/x//H/APH/8f/x//H/8f/x//H/8f8A8f/x//H/8f/x//H/8f/x8LkFCQAKAQUGB/H/AJdBQUHx90JlsPH2Q8FD8f/x//H/8f/x/goAKS/x//39AfHwAvH/8f8I8f/7/fWwAykP8f/x//H/wPH/M8jysfH/8f/x8wkIAES/8f/x//H/8f/x//H/8fM=</b></E13></response>
+> <E13 type="rank" method="exp" ref_id="48524B0000000001" name="424f42" course_num="1" option="0" score="5000" cool="50" great="5" good="3" bad="1" combo="60" shop_name="SHOP" pref="13"/>
+< 200 <response><E13 status="0" update="1" entry="1" rank="1" hi_score="5000" hi_cool="50"></E13></response>
+> <E13 type="rank" method="shop" shop_name="SHOP" pref="13" item_lo="7" item_hi="1" stage="2"/>
+< 200 <response><E13 status="0"></E13></response>
+> <E13 type="rank" method="get"/>
+< 200 long:9849 sha256:f86db4041979d06f170be26cb5b75a65b7b1670de5b8a5af0b266f91fb9c6626 <response><E13 status="0"><b>AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA...
+
+model F14:J:A:A:2006071000
+>e <services method="get"/>
+< 200 info=1-484b0003-0003 <response><services expire="600" status="0"><item name="posevent" url="http://cabinet.test:8080/"/><item name="pcbtracker" url="http://cabinet.test:8080/"/><item name="numbering" url="http://cabinet.test:8080/"/><item name="package" url="http://cabinet.test:8080/"/><item name="userdata" url="http://cabinet.test:8080/"/><item name="userid" url="http://cabinet.test:8080/"/><item name="local" url="http://cabinet.test:8080/"/><item name="eemall" url="http://cabinet.test:8080/"/><item name="shopinf" url="http://cabinet.test:8080/"/><item name="message" url="http://cabinet.test:8080/"/><item name="cardmng" url="http://cabinet.test:8080/"/><item name="cardreis" url="http://cabinet.test:8080/"/><item name="facility" url="http://cabinet.test:8080/"/><item name="portfw" url="http://cabinet.test:8080/"/><item name="globby" url="globby://cabinet.test:5740/"/></services></response>
+> <facility method="get"/>
+< 200 <response><facility status="0" expire="600"><location><id>HIRAKU</id><country>JP</country><region>13</region><line>0</line></location><portfw><globalip>192.168.50.2</globalip><globalport>5700</globalport><privateport>5700</privateport></portfw><public><name>HIRAKU</name><flag>0</flag></public></facility></response>
+> <F14 type="game" method="get"/>
+< 200 <response><F14 status="0" phase="-1" net_event="2" local_matching_enable="1" matching_sec="30" message="HELLO"></F14></response>
+file net_event-F14 1
+> <F14 type="game" method="get"/>
+< 200 <response><F14 status="0" phase="-1" net_event="1" local_matching_enable="1" matching_sec="30" message="HELLO"></F14></response>
+> <portfw method="get" privateip="192.168.1.21"/>
+< 200 <response><portfw status="0" globalip="192.168.1.21" port="5700"></portfw></response>
+> <eemall method="get" card_id="E004010000000A01"/>
+< 200 <response><eemall status="0" now_point="0" add_point="0"></eemall></response>
+# pop'n 13's card read by pop'n 14: its pop'n 13 player, carried over; another PIN's card
+> <cardmng method="inquire" cardtype="1" cardid="E004010000000A01" update="1"/>
+< 200 <response><cardmng status="0" refid="48524B0000000001" binded="1" expired="0" newflag="0"></cardmng></response>
+> <F14 type="playerdata" method="get" ref_id="48524B0000000001" card_id="E004010000000A01"/>
+< 200 <response><F14 status="109"></F14></response>
+> <F14 type="playerdata" method="get" ref_id="48524B0000000001" card_id="E004010000000A01" model="E13"/>
+< 200 <response><F14 status="0" f_compress="1"><b>bA0AAM9CT0IA8f/x8wECnwMECQAh8f/x9AQA8f/x//H/8f/x//H/8f/x/wDx//H/8f/x//H/8f/x//H/APH/8f/x//H/8f/x//H/8f8A8f/x//H/8f/x//H/8f/x/wDx//H/8f/x//H/8f/x//H/APH/8f/x//H/8f/x//H/8f8A8f/x//H/8f/x//H/8f/x/wDx//H/8f/x//H/8f/x//H/APH/8f/x//H/8f/x//H/8f8A8f/x//H/8f/x//H/8f/x/wDx//H/8f/x//H/8f/x//H/APH/8f/x//H/8f/x//H/8f9g8f/x//H/8f/x/wBA8f8A8f/x//H/8f/x//H/8f/x/wDx//H/8f/x//H/8f/x//H/APH/8f/x//H/8f/x//H/8f8A8f/x//H/8f/x//H/8f/x/wDx//H/8f/x//H/8f/x//H/APH/8f/x//H/8f/x//H/8f8A8f/x//H/8f/x//H/8f/x8LkFCQAKAQUGB/H/AJdBQUHx90JlsPH2Q8FD8f/x//H/8f/x/goAKS/x//39AfHwAvH/8f8I8f/7/fWwAykP8f/x//H/wPH/M8jysfH/8f/x8wkIAES/8f/x//H/8f/x//H/8fM=</b></F14></response>
+> <F14 type="playerdata" method="get" ref_id="48524B00000000FF" card_id="E004010000000A01" model="E13"/>
+< 200 <response><F14 status="0" f_compress="1"><b>bA0AAM9CT0IA8f/x8wECnwMECQAh8f/x9AQA8f/x//H/8f/x//H/8f/x/wDx//H/8f/x//H/8f/x//H/APH/8f/x//H/8f/x//H/8f8A8f/x//H/8f/x//H/8f/x/wDx//H/8f/x//H/8f/x//H/APH/8f/x//H/8f/x//H/8f8A8f/x//H/8f/x//H/8f/x/wDx//H/8f/x//H/8f/x//H/APH/8f/x//H/8f/x//H/8f8A8f/x//H/8f/x//H/8f/x/wDx//H/8f/x//H/8f/x//H/APH/8f/x//H/8f/x//H/8f9g8f/x//H/8f/x/wBA8f8A8f/x//H/8f/x//H/8f/x/wDx//H/8f/x//H/8f/x//H/APH/8f/x//H/8f/x//H/8f8A8f/x//H/8f/x//H/8f/x/wDx//H/8f/x//H/8f/x//H/APH/8f/x//H/8f/x//H/8f8A8f/x//H/8f/x//H/8f/x8LkFCQAKAQUGB/H/AJdBQUHx90JlsPH2Q8FD8f/x//H/8f/x/goAKS/x//39AfHwAvH/8f8I8f/7/fWwAykP8f/x//H/wPH/M8jysfH/8f/x8wkIAES/8f/x//H/8f/x//H/8fM=</b></F14></response>
+> <F14 type="playerdata" method="get" ref_id="48524B00000000FF" card_id="E004010000000AFF" model="E13"/>
+< 200 <response><F14 status="109"></F14></response>
+> <F14 type="playerdata" method="conv" ref_id="48524B0000000001" card_id="E004010000000A01" name="BOB" popn_id="0" ea_passwd="1234"/>
+< 200 <response><F14 status="0" f_compress="1"><b>uA0AAM9CT0IA8f/x8wkACSHx//H0BPH/8f/x//H/APH/8f/x//H/8f/x//H/8f8A8f/x//H/8f/x//H/8f/x/wDx//H/8f/x//H/8f/x//H/APH/8f/x//H/8f/x//H/8f8A8f/x//H/8f/x//H/8f/x/wDx//H/8f/x//H/8f/x//H/APH/8f/x//H/8f/x//H/8f8A8f/x//H/8f/x//H/8f/x/wDx//H/8f/x//H/8f/x//H/APH/8f/x//H/8f/x//H/8f8A8f/x//H/8f/x//H/8f/x/wDx//H/8f/x//H/8f/x//H/BvH/AEDx//H/8f/x//H/APH/8f/x//H/8f/x//H/8f8A8f/x//H/8f/x//H/8f/x/wDx//H/8f/x//H/8f/x//H/APH/8f/x//H/8f/x//H/8f8A8f/x//H/8f/x//H/8f/x/wDx//H/8f/x//H/8f/x//H/8PH/8f/x//HwBQABAn8BAgMEBQYH8f8vAEFBQfH3QmGw8faDQ0Px//H/8f/x//H+CqMAL/H/8fo6sAHx8AIg8f/x//H/3L3xsAMlD/H/APH/8f/x/y/I7rHx//H/BAQBCEC/8f/x//H/8f/x//H/APH/8f/x//H/8fs=</b></F14></response>
+> <F14 type="playerdata" method="conv" ref_id="48524B00000000FF" card_id="E004010000000AFF" name="NOBODY" popn_id="0" ea_passwd="1234"/>
+< 200 <response><F14 status="109"></F14></response>
+> <F14 type="playerdata" method="get" ref_id="48524B0000000001" card_id="E004010000000A01"/>
+< 200 <response><F14 status="0" f_compress="1"><b>uA0AAM9CT0IA8f/x8wkACSHx//H0BPH/8f/x//H/APH/8f/x//H/8f/x//H/8f8A8f/x//H/8f/x//H/8f/x/wDx//H/8f/x//H/8f/x//H/APH/8f/x//H/8f/x//H/8f8A8f/x//H/8f/x//H/8f/x/wDx//H/8f/x//H/8f/x//H/APH/8f/x//H/8f/x//H/8f8A8f/x//H/8f/x//H/8f/x/wDx//H/8f/x//H/8f/x//H/APH/8f/x//H/8f/x//H/8f8A8f/x//H/8f/x//H/8f/x/wDx//H/8f/x//H/8f/x//H/BvH/AEDx//H/8f/x//H/APH/8f/x//H/8f/x//H/8f8A8f/x//H/8f/x//H/8f/x/wDx//H/8f/x//H/8f/x//H/APH/8f/x//H/8f/x//H/8f8A8f/x//H/8f/x//H/8f/x/wDx//H/8f/x//H/8f/x//H/8PH/8f/x//HwBQABAn8BAgMEBQYH8f8vAEFBQfH3QmGw8faDQ0Px//H/8f/x//H+CqMAL/H/8fo6sAHx8AIg8f/x//H/3L3xsAMlD/H/APH/8f/x/y/I7rHx//H/BAQBCEC/8f/x//H/8f/x//H/APH/8f/x//H/8fs=</b></F14></response>
+> <F14 type="playerdata" method="set" ref_id="48524B0000000001" option="2" chara_num="7"><music num="5" sheet="1" data="12" score="95000"/><music num="699" sheet="0" data="1" score="50000"/><netvs music_num="5" sheet_num="1" category_num="2" badge="1" caption="2" job_num="3" class="4" class_skill="5" class_start="6" class_upgrade="1" record="7" member_name="AAA,BBBB,CC" member_pref="10,0,47" ojama_condition="1,0,1" job_var="258" job_exp="1,2,3,4,5,6,7,8,9" set_ojama="1,2,3" get_ojama_hi="1" get_ojama_lo="2" item_hi="3" item_lo="4"/></F14>
+< 200 <response><F14 status="0"></F14></response>
+> <F14 type="playerdata" method="score" ref_id="48524B0000000001" music_num="5" sheet_num="1"/>
+< 200 <response><F14 status="0" score="95000"></F14></response>
+> <F14 type="playerdata" method="get" ref_id="48524B0000000001" card_id="E004010000000A01"/>
+< 200 <response><F14 status="0" f_compress="1"><b>uA0AAM9CT0IA8f/x8wIACQfx//H0DPH/8f/x//H/APH/8f/x//H/8f/x//H/8f8A8f/x//H/8f/x//H/8f/x/wDx//H/8f/x//H/8f/x//H/APH/8f/x//H/8f/x//H/8f8A8f/x//H/8f/x//H/8f/x/wDx//H/8f/x//H/8f/x//H/APH/8f/x//H/8f/x//H/8f8A8f/x//H/8f/x//H/8f/x/wDx//H/8f/x//H/8f/x//H/APH/8f/x//H/8f/x//H/8f8A8f/x//H/8f/x//H/8f/x/wDx//H/8f/x//H/8f/x//H/BvH/AEDx//H/8f/x//H/APH/8f/x//H/8f/x//H/8f8A8f/x//H/8f/x//H/8f/x/wDx//H/8f/x//H/8f/x//H/APH/8f/x//H/8f/x//H/8f8A8f/x//H/8f/x//H/8f/x/wDx//H/8f/x//H/8f/x//H/4wAB8f/x//H/AAUA/wECAQIDBAUGvgwPAABBQUHx90IMYbDx9kND8f/x//H/8f8K8f4KNrcBDA9Sv2S/8f988f/1qAIAAwAE8f8GvLsAL/il/q/x//H/Zs8M8f/x+gkIDA/x//H/8f9Q8f/x//H/BgIB/qEC8fApA/HwPsEF8fAG8fAMATEIzcHx//SoAgNW3Q==</b></F14></response>
+# a new card on pop'n 14, with a record that isn't one where its player's would be (kept aside)
+> <cardmng method="inquire" cardtype="1" cardid="E004010000000B01" update="1"/>
+< 200 <response><cardmng status="0" refid="48524B0000000004" binded="0" expired="0" newflag="1"></cardmng></response>
+zeros pdata-F14-48524B0000000004 0x40 0x00=4f4c44
+> <F14 type="playerdata" method="get" ref_id="48524B0000000004" card_id="E004010000000B01"/>
+< 200 <response><F14 status="109"></F14></response>
+> <F14 type="playerdata" method="new" ref_id="48524B0000000004" name="DAVE"/>
+< 200 <response><F14 status="0" f_compress="1"><b>uA0AAB9EQVZFAPL/8v/y/wDy//L/8v/y//L/8v/y//L/APL/8v/y//L/8v/y//L/8v8A8v/y//L/8v/y//L/8v/y/wDy//L/8v/y//L/8v/y//L/APL/8v/y//L/8v/y//L/8v8A8v/y//L/8v/y//L/8v/y/wDy//L/8v/y//L/8v/y//L/APL/8v/y//L/8v/y//L/8v8A8v/y//L/8v/y//L/8v/y/wDy//L/8v/y//L/8v/y//L/APL/8v/y//L/8v/y//L/8v8A8v/y//L/8v/y//L/8v/y/wDy//L/8v/y//L/8v/y//L/APL/8v/y//L/8v/y//L/8v8A8v/y//L/8v/y//L/8v/y/wDy//L/8v/y//L/8v/y//L/APL/8v/y//L/8v/y//L/8v8A8v/y//L/8v/y//L/8v/y/wDy//L/8v/y//L/8v/y//L/APL/8v/y//L/8v/y//L/8v8A8v/y//L/8v/y//L/8v/y/wDy//L/8v/y//L/8v/y//L/APL/8v/y//L/8v/y//L/8v8A8v/y//L/8v/y//L/8v/y/A==</b></F14></response>
+# the course ranking without a score or a name (the stages' scores added up, the record's name)
+> <F14 type="rank" method="exp" ref_id="48524B0000000001" course_num="4" option="0" stage_score="1000,2000,3000,4000" cool="50" great="5" good="3" bad="1" combo="60" shop_name="SHOP" pref="13"/>
+< 200 <response><F14 status="0" update="1" entry="1" rank="1" hi_score="10000" hi_cool="50"></F14></response>
+> <F14 type="rank" method="shop" shop_name="SHOP" pref="13" item="7" robo="1"/>
+< 200 <response><F14 status="0"></F14></response>
+> <F14 type="rank" method="get"/>
+< 200 long:2680 sha256:3f810bffa794ee8d491d166d13f99d225dab2b25b3962a172e6c26356156f26e <response><F14 status="0"><b>AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA...
+
+# the limit on cards: a new one past it isn't taken
+file limit-cards 4
+> <cardmng method="inquire" cardtype="1" cardid="E004010000000C01" update="1"/>
+< 200 <response><cardmng status="1"></cardmng></response>
+> <cardmng method="getnewid" cardtype="1" newflag="1"/>
+< 200 <response><cardmng status="1"></cardmng></response>
+= f2e3ecbcba88d5ec78a29af3eb8fc3657f80db06f06f0957724bb3709680fc18 131 E12-rank-exp
+= f7f8f90dda714861741126403dab5db0a7ff440f26719ac66c208df8dbffb02e 58 E12-rank-shop
+= 4544246d07b354e5361c6b45df056393c2121cc50cfda798335f3000c897f51e 127 E13-rank-exp
+= 96a8ed1d9d5a1f2851659a81143192503ffbe0862b52381f1b0d1aace0f825eb 74 E13-rank-shop
+= 6ce644d886cd4b7cdd16ca46620df5224062b696a839f7fa2895afe92b2ace39 47 E13-shop-phase
+= 33b7e567a768c1c824106dc7978d2fae34be5e7b4b415216768522b862502041 128 F14-rank-exp
+= f7f8f90dda714861741126403dab5db0a7ff440f26719ac66c208df8dbffb02e 58 F14-rank-shop
+= b61a47f221d5282afca68b637a02867f2aa298f5dc91cb1a2f15a44393350f2b 252 cards
+= 7de1555df0c2700329e815b93b32c571c3ea54dc967b89e81ab73b9972b72d1d 2 limit-cards
+= 3b09aeb6f5f5336beb205d7f720371bc927cd46c21922e334d47ba264acb5ba4 6 message
+= 4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865 2 net_event-E13
+= 4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865 2 net_event-F14
+= 7de1555df0c2700329e815b93b32c571c3ea54dc967b89e81ab73b9972b72d1d 2 numbering
+= ba64ed70bea28f9d0845cdc0f8e5362ea1e268240e93a4ebf6cbbc62f2652f8e 1800 pdata-E12-2003010000000010
+= 0534af9fe435472379d1dfb60c638c0f1f1dc65497b761dac37c80d09ece8562 1800 pdata-E12-2004010000000017
+= 0c2b2d3f1ac3712939b13b79b5919a3bf4c6c6c730ff715b678b53f28b853405 3436 pdata-E13-48524B0000000001
+= 363edc00af159593f484ed143ec4e6241e70a2e72a3f629bbee3b85aa47ca5b0 3436 pdata-E13-48524B0000000003
+= 4f972b6e6cd9f1c6799d07d1d8448f550434e1b72004f1f19c1613833598056d 3512 pdata-F14-48524B0000000001
+= 9b64fb2c08019c20a2ab28b41d2d4fa1c951416305dcdd6315dfe201d6c8e401 3512 pdata-F14-48524B0000000004
+= ad7283042724156b83873cc71e8bea2c5b2684c5b6a139c3543c5ad27419f6b4 64 pdata-F14-48524B0000000004.unread-DATE
+= 53c234e5e8472b6ac51c1ae1cab3fe06fad053beb8ebfd8977b010655bfdd3c3 2 phase-E12
+= 1cdd9f1fd8c6f435bb9c5e874d8ec198ecdab7b7a36760ba4c4b8f224c0d736c 53 pscore-E12-2004010000000017
+= 918201b2b937ace9ac365f5da55af69d54992260d6059b51fbe632c543375508 54 pscore-E13-48524B0000000001
+= 73fb1c4d5f6dfadbbddeed96d5b7d46f08434881bf5991e8dd1ec51fd893fe9d 54 pscore-F14-48524B0000000001
+= f0b5c2c2211c8d67ed15e75e656c7862d086e9245420892a7de62cd9ec582a06 2 refid
+= 7c2943f58d374df7d02654dbbdc1c7f517c82b148b21d01489004627c5501aab 3557 userdata-D11-2003010000000010

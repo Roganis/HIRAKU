@@ -1,0 +1,138 @@
+# beatmania IIDX 9th style (C02) and 10th style, RED, HAPPY SKY (D01, E11, ECO): their module named
+# after the model, a method and a command line; pop'n 9's modules for the rest. Made-up cards.
+model C02:J:A:A
+>e <services method="get"/>
+< 200 info=1-484b0001-0001 <response><services expire="600" status="0"><item name="posevent" url="http://cabinet.test:8080/"/><item name="pcbtracker" url="http://cabinet.test:8080/"/><item name="numbering" url="http://cabinet.test:8080/"/><item name="package" url="http://cabinet.test:8080/"/><item name="userdata" url="http://cabinet.test:8080/"/><item name="userid" url="http://cabinet.test:8080/"/><item name="local" url="http://cabinet.test:8080/"/></services></response>
+> <ntp method="get"/>
+< 200 <response><ntp status="0"><time year="2003" month="6" day="1" hour="12" min="0" sec="*"></time></ntp></response>
+> <numbering method="assign" label="cardv1" model="C02:J:A:A" format="card16m10"/>
+< 200 <response><numbering status="0" number="2003010000000010"></numbering></response>
+# the card's record, as the game wrote it
+> <userdata method="read" card="2003010000000010" model="C02:J:A:A" label=""/>
+< 200 <response><userdata status="109"></userdata></response>
+> <userdata method="write" card="2003010000000010" time="2003-06-02 06:42:41+9" model="C02:J:A:A" label=""><b>{b64 0x80 0x00=414c494345}</b></userdata>
+< 200 <response><userdata status="0"></userdata></response>
+> <userdata method="read" card="2003010000000010" model="C02:J:A:A" label=""/>
+< 200 <response><userdata status="0" time="2003-06-02 06:42:41+9"><b>QUxJQ0UAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=</b></userdata></response>
+> <userdata method="write" card="bad/card" time="2003-06-02 06:42:41+9" model="C02:J:A:A" label=""><b>AAAA</b></userdata>
+< 200 <response><userdata status="1"></userdata></response>
+# scores: a chart played, better, worse; another card; a song no chart has; the lists
+> <C02 method="music" command="reg 2003010000000010 1 908 120 50 3 1"/>
+< 200 <response><C02 status="SOK" method="musicreg" mid="908" clid="1" bestScore="1"></C02></response>
+> <C02 method="music" command="reg 2003010000000010 1 908 200 10 2 1"/>
+< 200 <response><C02 status="SOK" method="musicreg" mid="908" clid="1" bestScore="1"></C02></response>
+> <C02 method="music" command="reg 2003010000000010 1 908 20 10 5 0"/>
+< 200 <response><C02 status="SOK" method="musicreg" mid="908" clid="1" bestScore="0"></C02></response>
+> <C02 method="music" command="reg 2003010000000010 4 77 20 10 5 0"/>
+< 200 <response><C02 status="SOK" method="musicreg" mid="77" clid="4" bestScore="1"></C02></response>
+> <C02 method="music" command="reg 2003010000000028 1 908 150 20 3 1"/>
+< 200 <response><C02 status="SOK" method="musicreg" mid="908" clid="1" bestScore="1"></C02></response>
+> <C02 method="music" command="reg 2003010000000010 1 9999 1 1 1 1"/>
+< 200 <response><C02 status="SOK" method="musicreg" mid="9999" clid="1" bestScore="0"></C02></response>
+> <C02 method="music" command="getrank 2003010000000010 100"/>
+< 200 <response><C02 status="SOK" method="musicgetrank" mid="908" wid="1743"><rank cl="1">718a</rank><rank cl="4">09b4</rank></C02></response>
+> <C02 method="music" command="getranking 10"/>
+< 200 <response><C02 status="SOK" method="musicgetranking"><music mid="908"/><music mid="77"/></C02></response>
+> <C02 method="music" command="other"/>
+< 200 <response><C02 status="SOK" method="musicother"></C02></response>
+# the week's song and its ranking
+> <C02 method="weekly" command="getmid"/>
+< 200 <response><C02 status="SOK" method="weeklygetmid" mid="908" wid="1743"></C02></response>
+> <C02 method="weekly" command="getinfo"/>
+< 200 <response><C02 status="SOK" method="weeklygetinfo" nowtim="*"><week wid="1743" mid="908" since="1053907200" till="1054512000" cmnt=""/></C02></response>
+file iidx9-weekly-song 77
+> <C02 method="weekly" command="getmid"/>
+< 200 <response><C02 status="SOK" method="weeklygetmid" mid="77" wid="1743"></C02></response>
+> <C02 method="weekly" command="entry 2003010000000010 1743 1 100 50 ALICE SHOP 13 0"/>
+< 200 <response><C02 status="SOK" method="weeklyentry" bstscr="250"></C02></response>
+> <C02 method="weekly" command="entry 2003010000000010 1743 1 200 50 ALICE SHOP 13 0"/>
+< 200 <response><C02 status="SOK" method="weeklyentry" bstscr="450"></C02></response>
+> <C02 method="weekly" command="entry 2003010000000028 1743 1 150 50 BOB SHOP 13 1"/>
+< 200 <response><C02 status="SOK" method="weeklyentry" bstscr="350"></C02></response>
+> <C02 method="weekly" command="getranker"/>
+< 200 <response><C02 status="SOK" method="weeklygetranker"><ranker pid="13" gnum="50" pgnum="200" opt="0" name="ALICE" opname="SHOP" name2="" udate="20030601"/><ranker pid="13" gnum="50" pgnum="150" opt="1" name="BOB" opname="SHOP" name2="" udate="20030601"/></C02></response>
+> <C02 method="weekly" command="getme 2003010000000010"/>
+< 200 <response><C02 status="SOK" method="weeklygetme"><me wid="1743" clid="1" pgnum="200" gnum="50"/></C02></response>
+> <C02 method="weekly" command="other"/>
+< 200 <response><C02 status="SOK" method="weeklyother"></C02></response>
+# the expert courses
+> <C02 method="ranking" command="getinfo"/>
+< 200 <response><C02 status="SOK" method="rankinggetinfo" rid="1" c0="0" c1="1" c2="2" c3="3" c4="4" c5="5"></C02></response>
+file iidx9-courses 2 0 1 2 3 4 5
+> <C02 method="ranking" command="getinfo"/>
+< 200 <response><C02 status="SOK" method="rankinggetinfo" rid="2" c0="0" c1="1" c2="2" c3="3" c4="4" c5="5"></C02></response>
+> <C02 method="ranking" command="entry 2003010000000010 1 3 300 100 ALICE 0 0 SHOP 1 13 5 - -"/>
+< 200 <response><C02 status="SOK" method="rankingentry" rentry="1" bstscr="700" bstranking="1" topranker="700"></C02></response>
+> <C02 method="ranking" command="entry 2003010000000028 1 3 400 100 BOB 0 0 SHOP 1 13 5 - -"/>
+< 200 <response><C02 status="SOK" method="rankingentry" rentry="2" bstscr="900" bstranking="1" topranker="900"></C02></response>
+> <C02 method="ranking" command="entry 2003010000000010 1 3 100 100 ALICE 0 0 SHOP 1 13 2 - -"/>
+< 200 <response><C02 status="SOK" method="rankingentry" rentry="3" bstscr="700" bstranking="2" topranker="900"></C02></response>
+> <C02 method="ranking" command="entry bad/card 1 3 100 100 X 0 0 SHOP 1 13 2 - -"/>
+< 200 <response><C02 status="SOK" method="rankingentry" rentry="0" bstscr="0" bstranking="0" topranker="0"></C02></response>
+> <C02 method="ranking" command="getranker 2 1 20 3"/>
+< 200 <response><C02 status="SOK" method="rankinggetranker"><ranker pid="13" gnum="100" pgnum="400" opt="0" name="BOB" opname="SHOP" name2="-" udate="20030601"/><ranker pid="13" gnum="100" pgnum="300" opt="0" name="ALICE" opname="SHOP" name2="-" udate="20030601"/></C02></response>
+> <C02 method="ranking" command="getme 2003010000000010 120"/>
+< 200 <response><C02 status="SOK" method="rankinggetme"><course clid="1" coid="3" gnum="100" pgnum="100" tcnt="2" cflg="0"/></C02></response>
+> <C02 method="ranking" command="other"/>
+< 200 <response><C02 status="SOK" method="rankingother"></C02></response>
+> <C02 method="grade" command="raised 2003010000000010 0 9 4"/>
+< 200 <response><C02 status="SOK" method="graderaised"></C02></response>
+
+model E11:J:A:A
+>e <services method="get"/>
+< 200 info=1-484b0002-0002 <response><services expire="600" status="0"><item name="posevent" url="http://cabinet.test:8080/"/><item name="pcbtracker" url="http://cabinet.test:8080/"/><item name="numbering" url="http://cabinet.test:8080/"/><item name="package" url="http://cabinet.test:8080/"/><item name="userdata" url="http://cabinet.test:8080/"/><item name="userid" url="http://cabinet.test:8080/"/><item name="local" url="http://cabinet.test:8080/"/></services></response>
+> <E11 method="pc" command="get 2003010000000010 0"/>
+< 200 <response><E11 status="ENOTFOUND" method="pcget"></E11></response>
+> <E11 method="pc" command="reg 2003010000000010 ALICE 1234 0 13 0"/>
+< 200 <response><E11 status="SOK" method="pcreg" id="10000001"></E11></response>
+> <E11 method="pc" command="reg bad/card X 1 0 13 0"/>
+< 200 <response><E11 status="EPARAM" method="pcreg"></E11></response>
+> <E11 method="pc" command="reg 2003010000000028 BOB 4321 0 27 0"/>
+< 200 <response><E11 status="SOK" method="pcreg" id="10000002"></E11></response>
+> <E11 method="pc" command="get 2003010000000010 0"/>
+< 200 <response><E11 status="SOK" method="pcget"><pc id="10000001" idstr="1000-0001" name="ALICE" pass="1234" cpass="" spnum="0" dpnum="0" sach="0.000000" dach="0.000000" pid="13"/></E11></response>
+> <E11 method="pc" command="save 10000001 0 12.500000 3.250000 7 2"/>
+< 200 <response><E11 status="SOK" method="pcsave"></E11></response>
+> <E11 method="pc" command="get 2003010000000010 0"/>
+< 200 <response><E11 status="SOK" method="pcget"><pc id="10000001" idstr="1000-0001" name="ALICE" pass="1234" cpass="" spnum="7" dpnum="2" sach="12.500000" dach="3.250000" pid="13"/></E11></response>
+> <E11 method="music" command="reg 10000001 1 908 120 50 3 1"/>
+< 200 <response><E11 status="SOK" method="musicreg" mid="908" clid="1"></E11></response>
+> <E11 method="music" command="reg 10000001 1 908 200 10 2 4"/>
+< 200 <response><E11 status="SOK" method="musicreg" mid="908" clid="1"></E11></response>
+> <E11 method="music" command="reg 10000001 4 77 20 10 5 0"/>
+< 200 <response><E11 status="SOK" method="musicreg" mid="77" clid="4"></E11></response>
+> <E11 method="music" command="reg 10000001 1 9999 1 1 1 1"/>
+< 200 <response><E11 status="SOK" method="musicreg" mid="9999" clid="1"></E11></response>
+> <E11 method="music" command="getrank 10000001"/>
+< 200 <response><E11 status="SOK" method="musicgetrank"><rank cl="1">qmC6o</rank><rank cl="4">2pe0M</rank></E11></response>
+> <E11 method="grade" command="raised 10000001 0 9 4 SHOP 13"/>
+< 200 <response><E11 status="SOK" method="graderaised"></E11></response>
+> <E11 method="shop" command="getname"/>
+< 200 <response><E11 status="SOK" method="shopgetname"></E11></response>
+> <userdata method="read" card="2003010000000010" model="E11:J:A:A" label=""/>
+< 200 <response><userdata status="109"></userdata></response>
+
+model D01:J:A:A
+> <D01 method="pc" command="reg 2003010000000010 ALICE 1234 0 13 0"/>
+< 200 <response><D01 status="SOK" method="pcreg" id="10000001"></D01></response>
+> <D01 method="music" command="reg 10000001 1 908 120 50 3 2"/>
+< 200 <response><D01 status="SOK" method="musicreg" mid="908" clid="1"></D01></response>
+> <D01 method="music" command="getrank 10000001"/>
+< 200 <response><D01 status="SOK" method="musicgetrank"><rank cl="1">qmS4w</rank></D01></response>
+model ECO:J:A:A
+> <ECO method="pc" command="reg 2003010000000010 ALICE 1234 0 13 0"/>
+< 200 <response><ECO status="SOK" method="pcreg" id="10000001"></ECO></response>
+> <ECO method="pc" command="get 2003010000000010 0"/>
+< 200 <response><ECO status="SOK" method="pcget"><pc id="10000001" idstr="1000-0001" name="ALICE" pass="1234" cpass="" spnum="0" dpnum="0" sach="0.000000" dach="0.000000" pid="13"/></ECO></response>
+= 6c8ffdae5f04acd5c931f9ac7507d5a9e24562a0ac996d5b16fdf41d291c6a9d 72 iidx-D01-players
+= 13f03021950b079f452a69244bbd9d24ff52ae8f2ac22a9fbc2a435770b6a594 59 iidx-D01-scores
+= 47ae305bd6c0c5f3d38a68f871d8d6aabbd4b15ee2a02bfb32147d422cdfb58f 267 iidx-E11-players
+= fc1e6a5556093b0e68ed4b4dc9dd90137e4495cb529d56e24918cb4789af612c 116 iidx-E11-scores
+= 6c8ffdae5f04acd5c931f9ac7507d5a9e24562a0ac996d5b16fdf41d291c6a9d 72 iidx-ECO-players
+= c9f91ffdc13d70627d5c3773d975062cd0aa9c48a956b2e215dbd31e6e5f1cbe 14 iidx9-courses
+= 55cc788844f15e990f056be22fa1d6c3cf9479ef985137c5712c3c190404b7dc 400 iidx9-ranking
+= 755efb7bd1c376078cf76e1935f448affd003fe01ae97ee42d7c197323af0f7e 205 iidx9-scores
+= a68a434158e6e8a650c11dd359b1ade9975e8909b9120d5b76a2dc30d6bade26 194 iidx9-weekly
+= 94d5a38598be77593d4781b8fbd74cb4e2cd05bb006b1b531988ab2db90de9c9 3 iidx9-weekly-song
+= 53c234e5e8472b6ac51c1ae1cab3fe06fad053beb8ebfd8977b010655bfdd3c3 2 numbering
+= 8fe050eb8db4f55bd1f985786777c0015e254ed6160c2f0af7caca56973ca7cf 240 userdata-C02-2003010000000010

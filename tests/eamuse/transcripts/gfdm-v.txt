@@ -1,0 +1,33 @@
+# GuitarFreaks and DrumMania V (E02, F02, E03, F03; Konami Python 2): cards, a credit's results, the
+# start of the next credit. Made-up cards and results.
+model F03:J:A:A:2005092800
+>e <services method="get"/>
+< 200 info=1-484b0001-0001 <response><services expire="600" status="0"><item name="posevent" url="http://cabinet.test:8080/"/><item name="pcbtracker" url="http://cabinet.test:8080/"/><item name="numbering" url="http://cabinet.test:8080/"/><item name="package" url="http://cabinet.test:8080/"/><item name="userdata" url="http://cabinet.test:8080/"/><item name="userid" url="http://cabinet.test:8080/"/><item name="local" url="http://cabinet.test:8080/"/><item name="eemall" url="http://cabinet.test:8080/"/><item name="shopinf" url="http://cabinet.test:8080/"/><item name="message" url="http://cabinet.test:8080/"/><item name="cardmng" url="http://cabinet.test:8080/"/><item name="cardreis" url="http://cabinet.test:8080/"/><item name="facility" url="http://cabinet.test:8080/"/><item name="ntp" url="ntp://10.50.0.1/"/><item name="keepalive" url="http://10.50.0.1/keepalive?pa=10.50.0.1&amp;ia=10.50.0.1&amp;ga=10.50.0.1&amp;ma=10.50.0.1&amp;t1=2&amp;t2=10"/></services></response>
+> <ntp method="get"/>
+< 200 <response><ntp status="0" time="2003-06-01 12:00:*+9"></ntp></response>
+# two cards read, one for the first time; its name and PIN; read again
+> <cardutil method="check"><card no="1" id="E004010000000A01"/><card no="2" id="bad/card"/></cardutil>
+< 200 <response><cardutil status="0"><card no="1" state="1" gdid="0000000001"/><card no="2" state="0"/></cardutil></response>
+> <cardutil method="regist"><card cardid="E004010000000A01" name="ALICE" pass="1234"/></cardutil>
+< 200 <response><cardutil status="0"></cardutil></response>
+> <cardutil method="regist"><card cardid="E004010000000AFF" name="NOBODY" pass="1234"/></cardutil>
+< 200 <response><cardutil status="1"></cardutil></response>
+> <cardutil method="check"><card no="1" id="E004010000000A01"/></cardutil>
+< 200 <response><cardutil status="0"><card no="1" state="2" pass="1234" gdid="0000000001" skill="0"/></cardutil></response>
+# a credit's two stages, then another credit with a better and a worse result
+> <gametop method="get"><player gdid="0000000001"/></gametop>
+< 200 <response><gametop status="0"><player gdid="0000000001" styles="0" pticket="0" ticket="0"/></gametop></response>
+> <gameend method="regist"><stagedata netid="101"/><stagedata netid="205"/><playerdata gdid="0000000001" styles="3" perfect="100" great="50" good="10" poor="2" miss="1" time="240" point="900"><stage seqmode="1" score="80000" combo="120" perc="91" skill="45"/><stage seqmode="2" score="60000" combo="80" perc="75" skill="30"/></playerdata></gameend>
+< 200 <response><gameend status="0"></gameend></response>
+> <gameend method="regist"><stagedata netid="101"/><stagedata netid="205"/><playerdata gdid="0000000001" styles="5" perfect="10" great="5" good="1" poor="0" miss="0" time="120" point="100"><stage seqmode="1" score="90000" combo="100" perc="95" skill="50"/><stage seqmode="2" score="10000" combo="8" perc="20" skill="3"/></playerdata><playerdata gdid="bad/id" styles="1"><stage seqmode="1" score="1"/></playerdata></gameend>
+< 200 <response><gameend status="0"></gameend></response>
+> <gametop method="get"><player gdid="0000000001"/><player gdid="0000000002"/></gametop>
+< 200 <response><gametop status="0"><player gdid="0000000001" styles="5" pticket="0" ticket="0"/><player gdid="0000000002" styles="0" pticket="0" ticket="0"/></gametop></response>
+model E02:J:A:A:2005022200
+> <cardutil method="check"><card no="1" id="E004010000000A01"/><card no="2" id="E004010000000B01"/></cardutil>
+< 200 <response><cardutil status="0"><card no="1" state="2" pass="1234" gdid="0000000001" skill="0"/><card no="2" state="1" gdid="0000000002"/></cardutil></response>
+> <pcbtracker method="alive"/>
+< 200 <response><pcbtracker status="0"></pcbtracker></response>
+= ec2af424513b8a58182d4eddb2569f149967d91dc9fb86e4d1856af9a70e1a8f 223 gfdmv-0000000001
+= 98996631631d93999c253244d8a109bd6576abb4a66eadca510e108a0d645c53 109 gfdmv-cards
+= 1121cfccd5913f0a63fec40a6ffd44ea64f9dc135c66634ba001d10bcf4302a2 2 gfdmv-gdid

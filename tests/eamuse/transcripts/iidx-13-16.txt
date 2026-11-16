@@ -1,0 +1,164 @@
+# beatmania IIDX DistorteD (FDD), GOLD (GLD), DJ TROOPERS (HDD) and EMPRESS (I00): IC cards through
+# cardmng, the modules pc, music, ranking, grade and shop. Made-up cards and results.
+# (a course result is stamped with the host's clock: its udate isn't compared)
+mask udate="(\d+)"
+volatile ^iidx-.*-courses$
+model I00:J:A:A:2009072200
+>e <services method="get"/>
+< 200 info=1-484b0001-0001 <response><services expire="600" status="0"><item name="posevent" url="http://cabinet.test:8080/"/><item name="pcbtracker" url="http://cabinet.test:8080/"/><item name="numbering" url="http://cabinet.test:8080/"/><item name="package" url="http://cabinet.test:8080/"/><item name="userdata" url="http://cabinet.test:8080/"/><item name="userid" url="http://cabinet.test:8080/"/><item name="local" url="http://cabinet.test:8080/"/><item name="eemall" url="http://cabinet.test:8080/"/><item name="shopinf" url="http://cabinet.test:8080/"/><item name="message" url="http://cabinet.test:8080/"/><item name="cardmng" url="http://cabinet.test:8080/"/><item name="cardreis" url="http://cabinet.test:8080/"/><item name="facility" url="http://cabinet.test:8080/"/><item name="pc" url="http://cabinet.test:8080/"/><item name="music" url="http://cabinet.test:8080/"/><item name="grade" url="http://cabinet.test:8080/"/><item name="ranking" url="http://cabinet.test:8080/"/><item name="shop" url="http://cabinet.test:8080/"/><item name="pcbevent" url="http://cabinet.test:8080/"/><item name="keepalive" url="http://127.0.0.1/keepalive?pa=127.0.0.1&amp;ia=127.0.0.1&amp;ga=192.168.0.1&amp;ma=127.0.0.1&amp;t1=2&amp;t2=10"/></services></response>
+> <facility method="get"/>
+< 200 <response><facility status="0" expire="600"><location><id>HIRAKU</id><country>JP</country><region>13</region><name>HIRAKU</name><type __type="u8">0</type></location><line><id>0</id><class __type="u8">0</class></line><portfw><globalip __type="ip4">192.168.0.2</globalip><globalport __type="u16">5700</globalport><privateport __type="u16">5700</privateport></portfw><public><flag __type="u8">0</flag><name>HIRAKU</name><latitude>0</latitude><longitude>0</longitude></public><share><url><eapass>www.ea-pass.konami.net</eapass><arcadefan>www.konami.jp/am</arcadefan><konaminetdx>http://am.573.jp</konaminetdx><konamiid>http://id.konami.jp</konamiid></url><eapass><valid __type="u16">1</valid></eapass><eacoin><notchamount __type="s32">0</notchamount><notchcount __type="s32">0</notchcount><supplylimit __type="s32">100000</supplylimit></eacoin></share></facility></response>
+> <shop method="getname"/>
+< 200 <response><shop status="0" method="shopgetname" opname="HIRAKU" pid="13" cls_opt="0" hr="0" mi="0"></shop></response>
+> <pc method="common"/>
+< 200 <response><pc status="0" method="pccommon"><gshop vipg="0"/></pc></response>
+# a pass the server doesn't know, its PIN, the player's name; read again
+> <cardmng method="inquire" cardtype="1" cardid="E004010000000A01" update="0"/>
+< 200 <response><cardmng status="112"></cardmng></response>
+> <cardmng method="getrefid" cardtype="1" cardid="E004010000000A01" newflag="1" passwd="1234"/>
+< 200 <response><cardmng status="0" refid="48524B0000000001"></cardmng></response>
+> <cardmng method="inquire" cardtype="1" cardid="E004010000000A01" update="0"/>
+< 200 <response><cardmng status="0" refid="48524B0000000001" binded="0" expired="0" newflag="0"></cardmng></response>
+> <pc method="get" rid="48524B0000000001"/>
+< 200 <response><pc status="1" method="pcget"></pc></response>
+> <pc method="reg" rid="48524B0000000001" name="ALPHA" pid="13" did="0"/>
+< 200 <response><pc status="0" method="pcreg" id="10000001" id_str="1000-0001"></pc></response>
+> <pc method="reg" rid="48524B0000000002" name="BRAVO" pid="27" did="0"/>
+< 200 <response><pc status="0" method="pcreg" id="10000002" id_str="1000-0002"></pc></response>
+> <pc method="reg" rid="bad/ref" name="X" pid="1" did="0"/>
+< 200 <response><pc status="1" method="pcreg"></pc></response>
+> <cardmng method="inquire" cardtype="1" cardid="E004010000000A01" update="0"/>
+< 200 <response><cardmng status="0" refid="48524B0000000001" binded="1" expired="0" newflag="0"></cardmng></response>
+> <cardmng method="authpass" refid="48524B0000000001" pass="1234"/>
+< 200 <response><cardmng status="0"></cardmng></response>
+> <pc method="getname" rid="48524B0000000001"/>
+< 200 <response><pc status="0" method="pcgetname" name="ALPHA" idstr="1000-0001" pid="13"></pc></response>
+> <pc method="getname" rid="48524B00000000FF"/>
+< 200 <response><pc status="1" method="pcgetname"></pc></response>
+> <pc method="takeover" iidxid="10000001"/>
+< 200 <response><pc status="0" method="pctakeover" id="10000001"></pc></response>
+# credits on SP and DP, the dan grades, the charts' results
+> <pc method="save" iidxid="10000001" cltype="0" achi="1234" pnum="7" gno="3" mode="1" pmode="2" lift_len="10"/>
+< 200 <response><pc status="0" method="pcsave"></pc></response>
+> <pc method="save" iidxid="10000001" cltype="1" achi="55" pnum="2" gno="3" mode="1"/>
+< 200 <response><pc status="0" method="pcsave"></pc></response>
+> <grade method="raised" iidxid="10000001" gtype="0" gid="9" cflg="4" achi="88"/>
+< 200 <response><grade status="0" method="graderaised" pnum="0"></grade></response>
+> <grade method="raised" iidxid="10000001" gtype="0" gid="10" cflg="2" achi="40"/>
+< 200 <response><grade status="0" method="graderaised" pnum="0"></grade></response>
+> <grade method="raised" iidxid="10000001" gtype="0" gid="10" cflg="1" achi="20"/>
+< 200 <response><grade status="0" method="graderaised" pnum="0"></grade></response>
+> <grade method="raised" iidxid="10000001" gtype="1" gid="8" cflg="4" achi="70"/>
+< 200 <response><grade status="0" method="graderaised" pnum="0"></grade></response>
+> <music method="reg" iidxid="10000001" mid="1601" clid="1" pgnum="500" gnum="100" cflg="4" mnum="3"/>
+< 200 <response><music status="0" method="musicreg" mid="1601" clid="1" crate="0" frate="0"></music></response>
+> <music method="reg" iidxid="10000001" mid="1601" clid="1" pgnum="600" gnum="50" cflg="2" mnum="3"/>
+< 200 <response><music status="0" method="musicreg" mid="1601" clid="1" crate="0" frate="0"></music></response>
+> <music method="reg" iidxid="10000001" mid="1602" clid="4" pgnum="100" gnum="100" cflg="1" mnum="3"/>
+< 200 <response><music status="0" method="musicreg" mid="1602" clid="4" crate="0" frate="0"></music></response>
+> <music method="reg" iidxid="10000002" mid="1601" clid="1" pgnum="300" gnum="100" cflg="7" mnum="3"/>
+< 200 <response><music status="0" method="musicreg" mid="1601" clid="1" crate="0" frate="0"></music></response>
+> <music method="getrank" iidxid="10000001" cltype="0"/>
+< 200 <response><music status="0" method="musicgetrank"><m __type="s16" __count="8">-1 1601 0 4 0 0 1250 0</m></music></response>
+> <music method="getrank" iidxid="10000001" cltype="1"/>
+< 200 <response><music status="0" method="musicgetrank"><m __type="s16" __count="8">-1 1602 0 1 0 0 300 0</m></music></response>
+> <music method="play" mid="1601" clid="1"/>
+< 200 <response><music status="0" method="musicplay" mid="1601" clid="1" crate="0" frate="0"></music></response>
+> <pc method="other"/>
+< 200 <response><pc status="0" method="pcother"></pc></response>
+> <pc method="get" rid="48524B0000000001"/>
+< 200 <response><pc status="0" method="pcget"><pcdata id="10000001" idstr="1000-0001" name="ALPHA" pid="13" spnum="7" dpnum="2" sach="1234" dach="55" sflg0="0" sflg1="0" sflg2="0" gno="3" sdhd="0" sp_opt="0" dp_opt="0" dp_opt2="0" mcomb="0" ncomb="0" mode="1" pmode="2" lift_len="10"/><grade sgid="9" dgid="8"><g __type="u8" __count="4">0 10 2 40</g><g __type="u8" __count="4">0 9 4 88</g><g __type="u8" __count="4">1 8 4 70</g></grade><ex></ex><rlist></rlist><gold now_g="0" all_g="0" use_g="0"/><jnum __type="s64">0</jnum><bjnum __type="s32" __count="18">0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0</bjnum></pc></response>
+> <pc method="get" rid="48524B0000000002"/>
+< 200 <response><pc status="0" method="pcget"><pcdata id="10000002" idstr="1000-0002" name="BRAVO" pid="27" spnum="0" dpnum="0" sach="0" dach="0" sflg0="0" sflg1="0" sflg2="0" gno="0" sdhd="0" sp_opt="0" dp_opt="0" dp_opt2="0" mcomb="0" ncomb="0" mode="0" pmode="0" lift_len="0"/><grade sgid="-1" dgid="-1"/><ex></ex><rlist></rlist><gold now_g="0" all_g="0" use_g="0"/><jnum __type="s64">0</jnum><bjnum __type="s32" __count="18">0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0</bjnum></pc></response>
+# an EXPERT course: two players, a worse run again, the rankers
+> <ranking method="entry" iidxid="10000001" coid="5" clid="2" pgnum="300" gnum="100" clr="1" cstage="4" opt="0"/>
+< 200 <response><ranking status="0" method="rankingentry" anum="1" jun="1"></ranking></response>
+> <ranking method="entry" iidxid="10000002" coid="5" clid="2" pgnum="400" gnum="50" clr="1" cstage="4" opt="0"/>
+< 200 <response><ranking status="0" method="rankingentry" anum="2" jun="1"></ranking></response>
+> <ranking method="entry" iidxid="10000001" coid="5" clid="2" pgnum="10" gnum="10" clr="0" cstage="1" opt="0"/>
+< 200 <response><ranking status="0" method="rankingentry" anum="2" jun="2"></ranking></response>
+> <ranking method="getranker" coid="5" clid="2"/>
+< 200 <response><ranking status="0" method="rankinggetranker"><ranker gnum="50" pgnum="400" name="BRAVO" opname="HIRAKU" pid="27" udate="*"/><ranker gnum="100" pgnum="300" name="ALPHA" opname="HIRAKU" pid="13" udate="*"/></ranking></response>
+> <ranking method="getranker" coid="6" clid="2"/>
+< 200 <response><ranking status="0" method="rankinggetranker"></ranking></response>
+
+model HDD:J:A:A:2008031100
+>e <services method="get"/>
+< 200 info=1-484b0002-0002 <response><services expire="600" status="0"><item name="posevent" url="http://cabinet.test:8080/"/><item name="pcbtracker" url="http://cabinet.test:8080/"/><item name="numbering" url="http://cabinet.test:8080/"/><item name="package" url="http://cabinet.test:8080/"/><item name="userdata" url="http://cabinet.test:8080/"/><item name="userid" url="http://cabinet.test:8080/"/><item name="local" url="http://cabinet.test:8080/"/><item name="eemall" url="http://cabinet.test:8080/"/><item name="shopinf" url="http://cabinet.test:8080/"/><item name="message" url="http://cabinet.test:8080/"/><item name="cardmng" url="http://cabinet.test:8080/"/><item name="cardreis" url="http://cabinet.test:8080/"/><item name="facility" url="http://cabinet.test:8080/"/><item name="pc" url="http://cabinet.test:8080/"/><item name="music" url="http://cabinet.test:8080/"/><item name="grade" url="http://cabinet.test:8080/"/><item name="ranking" url="http://cabinet.test:8080/"/><item name="shop" url="http://cabinet.test:8080/"/><item name="pcbevent" url="http://cabinet.test:8080/"/><item name="keepalive" url="http://127.0.0.1/keepalive?pa=127.0.0.1&amp;ia=127.0.0.1&amp;ga=192.168.0.1&amp;ma=127.0.0.1&amp;t1=2&amp;t2=10"/></services></response>
+> <pc method="visit" iidxid="10000001"/>
+< 200 <response><pc status="0" method="pcvisit" anum="0" snum="0" pnum="0" aflg="0" sflg="0" pflg="0"></pc></response>
+> <pc method="lcommon"/>
+< 200 <response><pc status="0" method="pclcommon" ls="0"></pc></response>
+> <pc method="reg" rid="48524B0000000001" name="ALPHA" pid="13" did="0"/>
+< 200 <response><pc status="0" method="pcreg" id="10000001" id_str="1000-0001"></pc></response>
+> <pc method="save" iidxid="10000001" cltype="0" achi="10" pnum="1" gno="3" mode="1"/>
+< 200 <response><pc status="0" method="pcsave"></pc></response>
+> <music method="reg" iidxid="10000001" mid="1501" clid="1" pgnum="500" gnum="100" cflg="4" rid="3"/>
+< 200 <response><music status="0" method="musicreg" mid="1501" clid="1" crate="0" frate="0"></music></response>
+> <music method="reg" iidxid="10000001" mid="1501" clid="1" pgnum="100" gnum="100" cflg="5" rid="1"/>
+< 200 <response><music status="0" method="musicreg" mid="1501" clid="1" crate="0" frate="0"></music></response>
+> <music method="getrank" iidxid="10000001"/>
+< 200 <response><music status="0" method="musicgetrank"><r v="15">0wfab</r></music></response>
+> <music method="lplay" mid="1501" clid="1"/>
+< 200 <response><music status="0" method="musiclplay" mid="1501" clid="1" crate="0" frate="0"></music></response>
+> <grade method="raised" iidxid="10000001" gtype="0" gid="5" cflg="4" achi="80"/>
+< 200 <response><grade status="0" method="graderaised" pnum="0"></grade></response>
+> <pc method="get" rid="48524B0000000001"/>
+< 200 <response><pc status="0" method="pcget"><pcdata id="10000001" idstr="1000-0001" name="ALPHA" pid="13" spnum="1" dpnum="0" sach="10" dach="0" sflg0="0" sflg1="0" sflg2="0" gno="3" sdhd="0" sp_opt="0" dp_opt="0" dp_opt2="0" mcomb="0" ncomb="0" mode="1" pmode="0" lift_len="0"/><grade sgid="5" dgid="-1"/><ex></ex><skin></skin><rlist></rlist><gold now_g="0" all_g="0" use_g="0"/><jnum __type="s64">0</jnum><bjnum __type="s32" __count="18">0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0</bjnum></pc></response>
+> <ranking method="entry" iidxid="10000001" coid="3" clid="1" pgnum="200" gnum="10" clr="1" cstage="4" opt="0"/>
+< 200 <response><ranking status="0" method="rankingentry" anum="1" jun="1"></ranking></response>
+> <ranking method="getranker" coid="3" clid="1"/>
+< 200 <response><ranking status="0" method="rankinggetranker"><ranker gnum="10" pgnum="200" name="ALPHA" opname="HIRAKU" pid="13" udate="*"/></ranking></response>
+
+model GLD:J:A:A:2007072301
+> <pc method="reg" rid="48524B0000000001" name="ALPHA" pid="13" did="0"/>
+< 200 <response><pc status="0" method="pcreg" id="10000001" id_str="1000-0001"></pc></response>
+> <pc method="get" rid="48524B0000000001"/>
+< 200 <response><pc status="0" method="pcget"><pcdata id="10000001" idstr="1000-0001" name="ALPHA" pid="13" spnum="0" dpnum="0" sach="0" dach="0" sflg0="0" sflg1="0" sflg2="0" gno="0" sdhd="0" sp_opt="0" dp_opt="0" dp_opt2="0" mcomb="0" ncomb="0" mode="0" pmode="0" lift_len="0"/><grade sgid="-1" dgid="-1"/><ex></ex><skin></skin><rlist></rlist><gold now_g="0" all_g="0" use_g="0"/><jnum __type="s64">0</jnum><bjnum __type="s32" __count="18">0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0</bjnum></pc></response>
+> <music method="reg" iidxid="10000001" mid="1401" clid="2" pgnum="500" gnum="100" cflg="4" rid="3"/>
+< 200 <response><music status="0" method="musicreg" mid="1401" clid="2" crate="0" frate="0"></music></response>
+> <music method="getrank" iidxid="10000001"/>
+< 200 <response><music status="0" method="musicgetrank"><r v="14">0yfaq</r></music></response>
+
+model FDD:J:A:G
+>e <services method="get"/>
+< 200 info=1-484b0003-0003 <response><services expire="600" status="0"><item name="posevent" url="http://cabinet.test:8080/"/><item name="pcbtracker" url="http://cabinet.test:8080/"/><item name="numbering" url="http://cabinet.test:8080/"/><item name="package" url="http://cabinet.test:8080/"/><item name="userdata" url="http://cabinet.test:8080/"/><item name="userid" url="http://cabinet.test:8080/"/><item name="local" url="http://cabinet.test:8080/"/><item name="eemall" url="http://cabinet.test:8080/"/><item name="shopinf" url="http://cabinet.test:8080/"/><item name="message" url="http://cabinet.test:8080/"/><item name="cardmng" url="http://cabinet.test:8080/"/><item name="cardreis" url="http://cabinet.test:8080/"/><item name="facility" url="http://cabinet.test:8080/"/></services></response>
+> <cardmng method="inquire" cardtype="1" cardid="E004010000000B01" update="0"/>
+< 200 <response><cardmng status="112"></cardmng></response>
+> <cardmng method="getrefid" cardtype="1" cardid="E004010000000B01" newflag="1" passwd="4321"/>
+< 200 <response><cardmng status="0" refid="48524B0000000002"></cardmng></response>
+> <pc method="reg" rid="48524B0000000002" name="CHARLIE" pid="13" did="0"/>
+< 200 <response><FDD status="0" method="pcreg" id="10000001" id_str="1000-0001"></pc></response>
+> <cardmng method="inquire" cardtype="1" cardid="E004010000000B01" update="0"/>
+< 200 <response><cardmng status="0" refid="48524B0000000002" binded="1" expired="0" newflag="0"></cardmng></response>
+> <pc method="get" rid="48524B0000000002"/>
+< 200 <response><FDD status="0" method="pcget" name="CHARLIE" pass="4321" pid="13"><pc id="10000001" idstr="1000-0001" name="CHARLIE" pid="13" spnum="0" dpnum="0" sach="0" dach="0" sflg0="0" sflg1="0" sflg2="0" gno="0" hdsd="0" sp_opt="0" dp_opt="0" dp_opt2="0" mcomb="0" ncomb="0" mode="0"/><grade sgid="-1" dgid="-1"/><ex></ex><skin></skin><rlist></rlist></FDD></response>
+> <pc method="save" iidxid="10000001" cltype="0" achi="10" pnum="1" gno="3" mode="1"/>
+< 200 <response><FDD status="0" method="pcsave"></pc></response>
+> <music method="reg" iidxid="10000001" mid="1301" clid="1" pgnum="500" gnum="100" cflg="4" rid="3"/>
+< 200 <response><FDD status="0" method="musicreg" mid="1301" clid="1" crate="0" frate="0"></music></response>
+> <music method="getrank" iidxid="10000001"/>
+< 200 <response><FDD status="0" method="musicgetrank"><r v="13">0wfaq</r></FDD></response>
+> <grade method="raised" iidxid="10000001" gtype="0" gid="5" cflg="4" achi="80"/>
+< 200 <response><FDD status="0" method="graderaised" pnum="0"></grade></response>
+> <ranking method="entry" iidxid="10000001" coid="3" clid="1" pgnum="200" gnum="10" clr="1" cstage="4" opt="0"/>
+< 200 <response><FDD status="0" method="rankingentry" anum="1" jun="1"></ranking></response>
+> <ranking method="getranker" coid="3" clid="1"/>
+< 200 <response><FDD status="0" method="rankinggetranker"><ranker gnum="10" pgnum="200" name="CHARLIE" opname="HIRAKU" pid="13" udate="*"/></FDD></response>
+> <shop method="getname"/>
+< 200 <response><FDD status="0" method="shopgetname" opname="HIRAKU" pid="13" cls_opt="0" hr="0" mi="0"></shop></response>
+> <userdata method="read" card="2003010000000010" model="FDD:J:A:G" label=""/>
+< 200 <response><userdata status="109"></userdata></response>
+= 3b8e3b4fba9c5d744143d7d7c8baa71fa1a96df99ebfe24ae2458e8c604d8784 136 cards
+= ---------------------------------------------------------------- - iidx-FDD-courses
+= 641ae94566a79ce73cfd2948c09242cefa75171d6ed73323c919c289dd7df90e 100 iidx-FDD-players
+= 6a2d077e3aec35ec0e3e76117c833cefe70c3947a719eec45d6243ef30a3676f 56 iidx-FDD-scores
+= 730c933446d5f1b798d80df486da9d6349dac72517f98ed2281028397a06e9f5 51 iidx-GLD-players
+= 735177fac4e33aab1d0ecbf37c66b6a9d52839e8e9f58cda6c1f367cfad3b44d 56 iidx-GLD-scores
+= ---------------------------------------------------------------- - iidx-HDD-courses
+= 3429759b252611398474d5e2800045fa8a4d673b2c8548a5bb96f6f124e60aa8 98 iidx-HDD-players
+= 625a6374e2ec81c6f16433dd75a66ae9f5f164c2e512a651af5c8adf77fbe5a2 56 iidx-HDD-scores
+= ---------------------------------------------------------------- - iidx-I00-courses
+= bd99c747facb5e09459256e544dd76a0da5b48edbf7247cbd8202b16bce046c7 217 iidx-I00-players
+= cc1376fc036f5a10fa0011031fbec6cc3a43aa7af355f347bd8c8ddb02e71764 166 iidx-I00-scores
+= 1121cfccd5913f0a63fec40a6ffd44ea64f9dc135c66634ba001d10bcf4302a2 2 refid

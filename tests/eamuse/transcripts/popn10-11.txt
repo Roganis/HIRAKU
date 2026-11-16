@@ -1,0 +1,133 @@
+# pop'n music 10 (C20) and 11 (D11): a card's data kept per game, a pop'n 9 card carried over, the
+# course ranking, the shops' boards, the event phase, ee'MALL, pop'n 11's own module. Made-up data.
+model C00:J:A:A
+# pop'n 9's data of the card, to carry over: songs 5 and 10 cleared
+> <userdata method="write" card="2003010000000010" time="2003-06-02 06:42:41+9" model="C00:J:A:A" label=""><b>{b64 0x300 0x10=54455354}</b><b>{b64 0x260 0x11b=03 0x120=0f}</b></userdata>
+< 200 <response><userdata status="0"></userdata></response>
+
+model C20:J:A:A
+>e <services method="get"/>
+< 200 info=1-484b0001-0001 <response><services expire="600" status="0"><item name="posevent" url="http://cabinet.test:8080/"/><item name="pcbtracker" url="http://cabinet.test:8080/"/><item name="numbering" url="http://cabinet.test:8080/"/><item name="package" url="http://cabinet.test:8080/"/><item name="userdata" url="http://cabinet.test:8080/"/><item name="userid" url="http://cabinet.test:8080/"/><item name="local" url="http://cabinet.test:8080/"/><item name="eemall" url="http://cabinet.test:8080/"/><item name="shopinf" url="http://cabinet.test:8080/"/><item name="message" url="http://cabinet.test:8080/"/><item name="cardmng" url="http://cabinet.test:8080/"/><item name="cardreis" url="http://cabinet.test:8080/"/><item name="facility" url="http://cabinet.test:8080/"/></services></response>
+> <ntp method="get"/>
+< 200 <response><ntp status="0" time="2003-06-01 12:00:*+9"></ntp></response>
+# the card: pop'n 9's (no pop'n 10 data yet), asked by name too, then pop'n 10's own with pop'n 9's marks in
+> <userdata method="read" card="2003010000000010" model="C20:J:A:A" label=""/>
+< 200 long:1932 sha256:fa499a2715e08c0908161a76ad283649993922a7bba59992a84e5f5aa2c8bebf <response><userdata status="0" time="2003-06-02 06:42:41+9"><b>AAAAAAAAAAAAAAAAAAAAAFRFU1QAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA...
+> <userdata method="read" card="2003010000000010:C00" model="C20:J:A:A" label=""/>
+< 200 long:1932 sha256:fa499a2715e08c0908161a76ad283649993922a7bba59992a84e5f5aa2c8bebf <response><userdata status="0" time="2003-06-02 06:42:41+9"><b>AAAAAAAAAAAAAAAAAAAAAFRFU1QAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA...
+> <userdata method="read" card="2003010000000010:D11" model="C20:J:A:A" label=""/>
+< 200 <response><userdata status="109"></userdata></response>
+> <userdata method="write" card="2003010000000010" time="2003-08-06 10:00:00+9" model="C20:J:A:A" label=""><b>{b64 0x300 0x10=54455354}</b><b>{b64 0x300 0x100=4000 0x10a=0001}</b><b>{b64 0x1a0}</b></userdata>
+< 200 <response><userdata status="0"></userdata></response>
+> <userdata method="read" card="2003010000000010" model="C20:J:A:A" label=""/>
+< 200 long:2707 sha256:ec7ea2f28e18a113d80df92c33377dce5549978fc44bfba3c9cc5b173a613ff3 <response><userdata status="0" time="2003-08-06 10:00:00+9"><b>AAAAAAAAAAAAAAAAAAAAAFRFU1QAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA...
+> <userdata method="read" card="2003010000000099" model="C20:J:A:A" label=""/>
+< 200 <response><userdata status="109"></userdata></response>
+> <userdata method="write" card="bad/card" time="2003-08-06 10:00:00+9" model="C20:J:A:A" label=""><b>AAAA</b></userdata>
+< 200 <response><userdata status="1"></userdata></response>
+# a course's ranking: two cards, a better result, the table
+> <rank method="exp" card_id="2003010000000010" name="414141" course="1" option="0" score="5000" cool="50" great="5" good="3" bad="1" combo="60" shop_name="SHOP" area_num="13"/>
+< 200 <response><rank status="0" update="1" entry="1" rank="1" hi_score="5000" hi_cool="50"></rank></response>
+> <rank method="exp" card_id="2003010000000028" name="424242" course="1" option="0" score="7000" cool="70" great="5" good="3" bad="1" combo="80" shop_name="SHOP" area_num="13"/>
+< 200 <response><rank status="0" update="1" entry="2" rank="1" hi_score="7000" hi_cool="70"></rank></response>
+> <rank method="exp" card_id="2003010000000010" name="414141" course="1" option="0" score="9000" cool="90" great="5" good="3" bad="1" combo="99" shop_name="SHOP" area_num="13"/>
+< 200 <response><rank status="0" update="1" entry="2" rank="1" hi_score="9000" hi_cool="90"></rank></response>
+> <rank method="get"/>
+< 200 <response><rank status="0"><b>AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAIAAABBQUEAAAAAAAAAAAAAAQ0AKCMAAFoAAABCQkIAAAAAAAAAAAAAAg0AWBsAAEY=</b></rank></response>
+> <rank method="course"/>
+< 200 <response><rank status="117"></rank></response>
+> <rank method="shop" shop_name="SHOP" area_num="13" praystar_lo="7" praystar_hi="1"/>
+< 200 <response><rank status="0"></rank></response>
+> <rank method="shop" shop_name="OTHER" area_num="27" praystar_lo="255" praystar_hi="0"/>
+< 200 <response><rank status="0"></rank></response>
+> <rank method="shop" shop_name="SHOP" area_num="13" praystar_lo="15" praystar_hi="1"/>
+< 200 <response><rank status="0"></rank></response>
+> <rank method="get"/>
+< 200 long:9895 sha256:a61248947e91e85bd43c6a7e8e493810c679883bf920c68d1fcb94287f1a230a <response><rank status="0"><b>AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA...
+# the event phase: the cabinet's own, then the server's; the owner's message
+> <message method="get"/>
+< 200 <response><message status="0" phase="-1" text=""></message></response>
+file phase-C20 3
+file message HELLO
+> <message method="get"/>
+< 200 <response><message status="0" phase="3" text="HELLO"></message></response>
+> <eemall method="get" card_id="2003010000000010"/>
+< 200 <response><eemall status="0" now_point="0" add_point="0"></eemall></response>
+file eemall-2003010000000010 3\n5
+> <eemall method="get" card_id="2003010000000010"/>
+< 200 <response><eemall status="0" now_point="0" add_point="0"><item num="3"/><item num="5"/></eemall></response>
+> <shopinf method="getsservip"/>
+< 200 <response><shopinf status="0"></shopinf></response>
+> <numbering method="assign" label="cardv1" model="C20:J:A:A" format="card16m10"/>
+< 200 <response><numbering status="0" number="2003010000000010"></numbering></response>
+>e <userid method="ctou" card="2003010000000010" model="C20:J:A:A"/>
+< 200 info=1-484b0002-0002 <response><userid status="112"></userid></response>
+
+model D11:J:A:A
+>e <services method="get"/>
+< 200 info=1-484b0003-0003 <response><services expire="600" status="0"><item name="posevent" url="http://cabinet.test:8080/"/><item name="pcbtracker" url="http://cabinet.test:8080/"/><item name="numbering" url="http://cabinet.test:8080/"/><item name="package" url="http://cabinet.test:8080/"/><item name="userdata" url="http://cabinet.test:8080/"/><item name="userid" url="http://cabinet.test:8080/"/><item name="local" url="http://cabinet.test:8080/"/><item name="eemall" url="http://cabinet.test:8080/"/><item name="shopinf" url="http://cabinet.test:8080/"/><item name="message" url="http://cabinet.test:8080/"/><item name="cardmng" url="http://cabinet.test:8080/"/><item name="cardreis" url="http://cabinet.test:8080/"/><item name="facility" url="http://cabinet.test:8080/"/></services></response>
+> <eemall method="check"/>
+< 200 <response><eemall status="0"></eemall></response>
+> <portfw method="get"/>
+< 200 <response><portfw status="0"></portfw></response>
+# the card: pop'n 9's again (pop'n 11 has none of its own), then its own with the marks of 9 and 10
+> <userdata method="read" card="2003010000000010" model="D11:J:A:A" label=""/>
+< 200 long:1932 sha256:fa499a2715e08c0908161a76ad283649993922a7bba59992a84e5f5aa2c8bebf <response><userdata status="0" time="2003-06-02 06:42:41+9"><b>AAAAAAAAAAAAAAAAAAAAAFRFU1QAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA...
+> <userdata method="read" card="2003010000000010:C20" model="D11:J:A:A" label=""/>
+< 200 long:2707 sha256:0298f62b0fad7f5991f504bdc623c2fa4d0d093f443c6ce0d665d638a09b0dbf <response><userdata status="0" time="2003-08-06 10:00:00+9"><b>AAAAAAAAAAAAAAAAAAAAAFRFU1QAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA...
+> <userdata method="write" card="2003010000000010" time="2004-03-24 10:00:00+9" model="D11:J:A:A" label=""><b>{b64 0x300 0x10=54455354}</b><b>{b64 0x300 0x110=0100 0x12c=c000}</b><b>{b64 0x300}</b><b>{b64 0x128 0xf3=01020304}</b></userdata>
+< 200 <response><userdata status="0"></userdata></response>
+> <userdata method="read" card="2003010000000010" model="D11:J:A:A" label=""/>
+< 200 long:3578 sha256:d2b5a687a3cb42b716970749ed5ea51b6e5d33d8a9e0dbd57b2620161e5dba57 <response><userdata status="0" time="2004-03-24 10:00:00+9"><b>AAAAAAAAAAAAAAAAAAAAAFRFU1QAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA...
+# its own module: the game's settings, the rankings, a card's mileage and tickets
+> <D11 type="game" method="get"/>
+< 200 <response><D11 status="0" phase="-1" message="HELLO"></D11></response>
+file phase-D11 2
+> <D11 type="game" method="get"/>
+< 200 <response><D11 status="0" phase="2" message="HELLO"></D11></response>
+> <D11 type="game" method="active" shop_name="SHOP"/>
+< 200 <response><D11 status="0"></D11></response>
+> <D11 type="rank" method="exp" card_id="2003010000000010" name="414141" course="0" option="0" score="5000" cool="50" great="5" good="3" bad="1" combo="60" shop_name="SHOP" area_num="13"/>
+< 200 <response><D11 status="0" update="1" entry="1" rank="1" hi_score="5000" hi_cool="50"></D11></response>
+> <D11 type="rank" method="exp" card_id="2003010000000028" name="424242" course="3" option="0" score="100" cool="1" great="5" good="3" bad="1" combo="6" shop_name="OTHER" area_num="27"/>
+< 200 <response><D11 status="0" update="1" entry="1" rank="1" hi_score="100" hi_cool="1"></D11></response>
+> <D11 type="rank" method="shop" shop_name="SHOP" area_num="13" item="7" extra="1"/>
+< 200 <response><D11 status="0"></D11></response>
+> <D11 type="rank" method="shop" shop_name="OTHER" area_num="27" item="1023" extra="0"/>
+< 200 <response><D11 status="0"></D11></response>
+> <D11 type="rank" method="shop" shop_name="THIRD" area_num="40" item="7" extra="1"/>
+< 200 <response><D11 status="0"></D11></response>
+> <D11 type="rank" method="get"/>
+< 200 long:9957 sha256:6c23ea110734b9d4234abeb77536102ae3eb9bc8ab955a7b2810e6854248e475 <response><D11 status="0"><b>AQAAAEFBQQAAAAAAAAAAAAANAQCIEwAAMgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA...
+> <D11 type="player" method="get" card_id="2003010000000010"/>
+< 200 <response><D11 status="0" mileage="0" ticket="0,0,0,0,0,0,0,0,0" course="0,0,0,0"></D11></response>
+> <D11 type="player" method="set" card_id="2003010000000010" mileage="1200" ticket="1,0,2,0,0,0,0,0,3,"/>
+< 200 <response><D11 status="0"></D11></response>
+> <D11 type="player" method="get" card_id="2003010000000010"/>
+< 200 <response><D11 status="0" mileage="1200" ticket="1,0,2,0,0,0,0,0,3" course="0,0,0,0"></D11></response>
+> <D11 type="player" method="get" card_id="bad/card"/>
+< 200 <response><D11 status="1"></D11></response>
+> <D11 type="pf" method="get" card_id="2003010000000010"/>
+< 200 <response><D11 status="0"></D11></response>
+> <D11 type="renewc" method="ask" card_id="2003010000000010"/>
+< 200 <response><D11 status="0"></D11></response>
+
+# a model no file is named after
+model ../:J:A:A
+> <rank method="exp" card_id="2003010000000010" name="414141" course="1" option="0" score="5000" cool="50" great="5" good="3" bad="1" combo="60" shop_name="SHOP" area_num="13"/>
+< 200 <response><rank status="0" update="1" entry="1" rank="1" hi_score="5000" hi_cool="50"></rank></response>
+> <userdata method="write" card="2003010000000010" time="2003-08-06 10:00:00+9" model="../:J:A:A" label=""><b>AAAA</b></userdata>
+< 200 <response><userdata status="0"></userdata></response>
+= f07fa669c31dfa22e38fd6edb7514764570cad9c2c4c94d1e2bf6228fc11a229 254 C20-rank-exp
+= 227e21a291d27d1eca83507314477199ab070ae3a7b822b99a2504dd101a0588 120 C20-rank-shop
+= a07058571e1e3ba0080e9d5f9ed96ccb7999844a3f7f9fa7f25ddbdd52eff536 252 D11-rank-exp
+= e1d75ed9981f172103d2232b0a2ba31aa9c16ece7868e3d01afee5cf7a27295c 179 D11-rank-shop
+= 56c47cb32092661c2f3438298862e0759fa78694dbe78060f6369502f4386a09 4 eemall-2003010000000010
+= 3b09aeb6f5f5336beb205d7f720371bc927cd46c21922e334d47ba264acb5ba4 6 message
+= 53c234e5e8472b6ac51c1ae1cab3fe06fad053beb8ebfd8977b010655bfdd3c3 2 numbering
+= 1121cfccd5913f0a63fec40a6ffd44ea64f9dc135c66634ba001d10bcf4302a2 2 phase-C20
+= 53c234e5e8472b6ac51c1ae1cab3fe06fad053beb8ebfd8977b010655bfdd3c3 2 phase-D11
+= 67be6bd0ba9c72161addb10cd792747b44e13dcd48a7ea7f75acf12304084bf0 39 player-D11-2003010000000010
+= 66f2163201c6acf55b01a225a1adccb89ad2e7863f429f294791d11fc7f015df 1911 userdata-2003010000000010
+= e2bb8ab122838408cdc6a4b136532b457eed6f2b08986aa10132531dd101be48 2686 userdata-C20-2003010000000010
+= 7c2943f58d374df7d02654dbbdc1c7f517c82b148b21d01489004627c5501aab 3557 userdata-D11-2003010000000010

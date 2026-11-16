@@ -1,0 +1,130 @@
+# pop'n music 9 (C00) and the modules every game shares: services, the clock, card numbering, a
+# card's data, KONAMI ID, the three rankings, ee'MALL, the title message. Made-up cards and data.
+model C00:J:A:A
+>e <services method="get"/>
+< 200 info=1-484b0001-0001 <response><services expire="600" status="0"><item name="posevent" url="http://cabinet.test:8080/"/><item name="pcbtracker" url="http://cabinet.test:8080/"/><item name="numbering" url="http://cabinet.test:8080/"/><item name="package" url="http://cabinet.test:8080/"/><item name="userdata" url="http://cabinet.test:8080/"/><item name="userid" url="http://cabinet.test:8080/"/><item name="local" url="http://cabinet.test:8080/"/></services></response>
+>e <pcbtracker method="alive"/>
+< 200 info=1-484b0002-0002 <response><pcbtracker status="0"></pcbtracker></response>
+>e <posevent method="income" slot1="00000000" sync="1"/><posevent method="sales" play="00000000" coin="00000000" service="00000000" article="0" sync="1"/><posevent method="sale" article1="00000000" article2="00000000" payment1="00000000" payment2="00000000" payment3="00000000" sync="1"/>
+< 200 info=1-484b0003-0003 <response><posevent status="0"></posevent><posevent status="0" approve="1" margin="0"></posevent><posevent status="0" approve="1" margin="0"></posevent></response>
+> <ntp method="get"/>
+< 200 <response><ntp status="0"><time year="2003" month="6" day="1" hour="12" min="0" sec="*"></time></ntp></response>
+
+# a new card's number, twice: the count goes on
+> <numbering method="assign" label="cardv1" model="C00:J:A:A" format="card16m10"/>
+< 200 <response><numbering status="0" number="2003010000000010"></numbering></response>
+> <numbering method="assign" label="cardv1" model="C00:J:A:A" format="card16m10"/>
+< 200 <response><numbering status="0" number="2003010000000028"></numbering></response>
+
+# a card's data: none, written in two pieces (songs 5 and 10 cleared, byte 0x416 + song), read back
+> <userdata method="read" card="2003010000000010" model="C00:J:A:A" label=""/>
+< 200 <response><userdata status="109"></userdata></response>
+> <userdata method="write" card="2003010000000010" time="2003-06-02 06:42:41+9" model="C00:J:A:A" label=""><b>{b64 0x300 0x10=54455354}</b><b>{b64 0x260 0x11b=03 0x120=0f}</b></userdata>
+< 200 <response><userdata status="0"></userdata></response>
+> <userdata method="read" card="2003010000000010" model="C00:J:A:A" label=""/>
+< 200 long:1932 sha256:fa499a2715e08c0908161a76ad283649993922a7bba59992a84e5f5aa2c8bebf <response><userdata status="0" time="2003-06-02 06:42:41+9"><b>AAAAAAAAAAAAAAAAAAAAAFRFU1QAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA...
+> <userdata method="read" card="2003010000000028" model="C00:J:A:A" label=""/>
+< 200 <response><userdata status="109"></userdata></response>
+# a card no file is named after
+> <userdata method="write" card="../2003010000000010" time="2003-06-02 06:42:41+9" model="C00:J:A:A" label=""><b>AAAA</b></userdata>
+< 200 <response><userdata status="1"></userdata></response>
+> <userdata method="read" card="a/b" model="C00:J:A:A" label=""/>
+< 200 <response><userdata status="109"></userdata></response>
+
+# KONAMI ID: no user, a user, the same name again, the card taken, a wrong password, no such user,
+# a second card, the card's user
+>e <userid method="ctou" card="2003010000000010" model="C00:J:A:A"/>
+< 200 info=1-484b0004-0004 <response><userid status="112"></userid></response>
+>e <userid method="adduser" model="C00:J:A:A" user="hiraku09" pass="5678" card="2003010000000010"/>
+< 200 info=1-484b0005-0005 <response><userid status="0" alter=""></userid></response>
+>e <userid method="adduser" model="C00:J:A:A" user="hiraku09" pass="0000" card="2003010000000028"/>
+< 200 info=1-484b0006-0006 <response><userid status="113"></userid></response>
+>e <userid method="adduser" model="C00:J:A:A" user="other" pass="0000" card="2003010000000010"/>
+< 200 info=1-484b0007-0007 <response><userid status="114"></userid></response>
+>e <userid method="addcard" user="hiraku09" pass="1111" card="2003010000000028" model="C00:J:A:A"/>
+< 200 info=1-484b0008-0008 <response><userid status="116"></userid></response>
+>e <userid method="addcard" user="nobody" pass="1111" card="2003010000000028" model="C00:J:A:A"/>
+< 200 info=1-484b0009-0009 <response><userid status="115"></userid></response>
+>e <userid method="addcard" user="hiraku09" pass="5678" card="2003010000000028" model="C00:J:A:A"/>
+< 200 info=1-484b000a-000a <response><userid status="0"></userid></response>
+>e <userid method="ctou" card="2003010000000028" model="C00:J:A:A"/>
+< 200 info=1-484b000b-000b <response><userid status="0" user="hiraku09" active="1"></userid></response>
+
+# the rankings: two cards on a course, a better and a worse result again, another course; the
+# HITASURA and GAMBLER Z boards
+> <rank method="get" course_offset="0" course_num="4" rank_offset="1" rank_num="100"/>
+< 200 <response><rank status="0"><item course="0" entry="0"/><item course="1" entry="0"/><item course="2" entry="0"/><item course="3" entry="0"/></rank></response>
+> <rank method="register" card_id="2003010000000010" konami_id="" gpcb_id="0102030405060708090A" name="414141" course="0" option="0" score="918" cool="1" great="1" good="3" bad="36" combo="0" shop_name="" area_num="255"/>
+< 200 <response><rank status="0"><item rank="1" name="414141" score="918" cool="1" area="255" id="2003010000000010" entry="1" update="1"/></rank></response>
+> <rank method="register" card_id="2003010000000028" konami_id="hiraku09" gpcb_id="0102030405060708090A" name="424242" course="0" option="0" score="2000" cool="10" great="1" good="3" bad="6" combo="20" shop_name="SHOP" area_num="13"/>
+< 200 <response><rank status="0"><item rank="1" name="424242" score="2000" cool="10" area="13" id="hiraku09" entry="2" update="1"/></rank></response>
+> <rank method="register" card_id="2003010000000010" konami_id="" gpcb_id="0102030405060708090A" name="414141" course="0" option="0" score="3000" cool="30" great="1" good="3" bad="0" combo="40" shop_name="" area_num="255"/>
+< 200 <response><rank status="0"><item rank="1" name="414141" score="3000" cool="30" area="255" id="2003010000000010" entry="2" update="1"/></rank></response>
+> <rank method="register" card_id="2003010000000010" konami_id="" gpcb_id="0102030405060708090A" name="414141" course="0" option="0" score="100" cool="1" great="1" good="3" bad="0" combo="4" shop_name="" area_num="255"/>
+< 200 <response><rank status="0"><item rank="1" name="414141" score="3000" cool="30" area="255" id="2003010000000010" entry="2" update="0"/></rank></response>
+> <rank method="register" card_id="2003010000000010" konami_id="" gpcb_id="0102030405060708090A" name="414141" course="2" option="1" score="500" cool="5" great="1" good="3" bad="0" combo="4" shop_name="" area_num="255"/>
+< 200 <response><rank status="0"><item rank="1" name="414141" score="500" cool="5" area="255" id="2003010000000010" entry="1" update="1"/></rank></response>
+> <rank method="get" course_offset="0" course_num="4" rank_offset="1" rank_num="100"/>
+< 200 <response><rank status="0"><item course="0" entry="2"/><item rank="1" name="414141" score="3000" cool="30" area="255" id="2003010000000010" /><item rank="2" name="424242" score="2000" cool="10" area="13" id="hiraku09" /><item course="1" entry="0"/><item course="2" entry="1"/><item rank="1" name="414141" score="500" cool="5" area="255" id="2003010000000010" /><item course="3" entry="0"/></rank></response>
+> <rank method="get" course_offset="2" course_num="1" rank_offset="2" rank_num="5"/>
+< 200 <response><rank status="0"><item course="2" entry="1"/></rank></response>
+> <rank method="register_h" card_id="2003010000000010" konami_id="" gpcb_id="0102030405060708090A" name="414141" course="0" music="3" combo="365" shop_name="" area_num="255"/>
+< 200 <response><rank status="0"><item rank="1" name="414141" music="3" combo="365" area="255" id="2003010000000010" entry="1" update="1"/></rank></response>
+> <rank method="register_h" card_id="2003010000000028" konami_id="hiraku09" gpcb_id="0102030405060708090A" name="424242" course="0" music="3" combo="400" shop_name="SHOP" area_num="13"/>
+< 200 <response><rank status="0"><item rank="1" name="424242" music="3" combo="400" area="13" id="hiraku09" entry="2" update="1"/></rank></response>
+> <rank method="get_h" course_offset="0" course_num="4" rank_offset="1" rank_num="100"/>
+< 200 <response><rank status="0"><item course="0" entry="2"/><item rank="1" name="424242" music="3" combo="400" area="13" id="hiraku09" /><item rank="2" name="414141" music="3" combo="365" area="255" id="2003010000000010" /><item course="1" entry="0"/><item course="2" entry="0"/><item course="3" entry="0"/></rank></response>
+> <rank method="register_gz" gpcb_id="0102030405060708090A" prog="2" parts="0000001f" shop_name="SHOP" area_num="13"/>
+< 200 <response><rank status="0"><item rank="1" prog="2" parts="0000001f" shop_name="SHOP" area="13" id="0102030405060708090A" entry="1" update="1"/></rank></response>
+> <rank method="register_gz" gpcb_id="0A090807060504030201" prog="2" parts="000000ff" shop_name="OTHER" area_num="27"/>
+< 200 <response><rank status="0"><item rank="1" prog="2" parts="000000ff" shop_name="OTHER" area="27" id="0A090807060504030201" entry="2" update="1"/></rank></response>
+> <rank method="get_gz" rank_offset="1" rank_num="100"/>
+< 200 <response><rank status="0"><item entry="2"/><item rank="1" prog="2" parts="000000ff" shop_name="OTHER" area="27" id="0A090807060504030201" /><item rank="2" prog="2" parts="0000001f" shop_name="SHOP" area="13" id="0102030405060708090A" /></rank></response>
+
+# ee'MALL: no items, then two
+> <eemall method="i_get" card_id="2003010000000010" model="C00:J:A:A"/>
+< 200 <response><eemall status="0"></eemall></response>
+file eemall-2003010000000010 3\n5
+> <eemall method="i_get" card_id="2003010000000010" model="C00:J:A:A"/>
+< 200 <response><eemall status="0"><item num="3"/><item num="5"/></eemall></response>
+
+# the title message: none, then the owner's; its download, and another path
+> <package method="list" pkgtype="all" model="C00:J:A:A"/>
+< 200 <response><package status="0"></package></response>
+get /message
+< 404
+file message HELLO FROM THE SERVER
+> <package method="list" pkgtype="all" model="C00:J:A:A"/>
+< 200 <response><package status="0"><item url="http://cabinet.test:8080/message" name="message" desc="" size="22" pkgtype="all" sumtype="" sum="" from="" till=""/></package></response>
+> <package method="intend" url="http://cabinet.test:8080/message" model="C00:J:A:A"/>
+< 200 <response><package status="0"></package></response>
+get /message
+< 200 HELLO FROM THE SERVER
+get /other
+< 404
+
+# kept nothing for: pop'n friends, and a module the server doesn't know
+> <p_friend method="get" card_id="2003010000000010" gpcb_id="0102030405060708090A" p_friend="0" shop_name="" area_num="255"/>
+< 200 <response><p_friend status="0"></p_friend></response>
+> <p_friend method="state" card_id="2003010000000010" p_friend="0" status="0"/>
+< 200 <response><p_friend status="0"></p_friend></response>
+> <p_friend method="ask" card_id="2003010000000010" p_friend="0"/>
+< 200 <response><p_friend status="0"></p_friend></response>
+> <unknown method="thing"/>
+< 200 <response><unknown status="0"></unknown></response>
+
+# the folder's limit on files: a card's data past it isn't kept
+file limit-files 1
+> <userdata method="write" card="2003010000000036" time="2003-06-02 06:42:41+9" model="C00:J:A:A" label=""><b>AAAA</b></userdata>
+< 200 <response><userdata status="0"></userdata></response>
+> <userdata method="read" card="2003010000000036" model="C00:J:A:A" label=""/>
+< 200 <response><userdata status="109"></userdata></response>
+= 56c47cb32092661c2f3438298862e0759fa78694dbe78060f6369502f4386a09 4 eemall-2003010000000010
+= 4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865 2 limit-files
+= 4f141bb28ab605d57c64501b3f7ca86167695f3188f25ebf1d73e7dd85310c16 22 message
+= 1121cfccd5913f0a63fec40a6ffd44ea64f9dc135c66634ba001d10bcf4302a2 2 numbering
+= 0f8952a2fb89ec6032c7778c71bd7c03b5f14ee98fd6ad2f21bdf3a36b4b4318 167 rank-gamblerz
+= 1a6ffaa8f6553aa8dd74b20578977d132a9899adf2df61cd53a24e964faf5aa5 259 rank-hitasura
+= fe29a4d362c5ce6ec2c6767ade784202592d0c69e4ef6d73acd62e654fafe490 500 rank-score
+= 66f2163201c6acf55b01a225a1adccb89ad2e7863f429f294791d11fc7f015df 1911 userdata-2003010000000010
+= f08eb0b0a5c59b07da72ea9c4e1245f9c9b6d0fbaa5e7b607da13dd5b041f349 73 users

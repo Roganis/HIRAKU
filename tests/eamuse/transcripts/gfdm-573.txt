@@ -1,0 +1,83 @@
+# The System 573 GuitarFreaks (model xx39) and DrumMania (xx40): the other server class
+# (runtime/eamuse/server.h with runtime/sys573/eagfdm.h's answers): cards, a credit's start and end,
+# the skill and the places, the most played songs; its card numbering, KONAMI ID and title message.
+# Made-up cards and results.
+model D40:J:A:A
+>e <services method="get"/>
+< 200 info=1-484b0001-0001 <response><services expire="600" status="0"><item name="posevent" url="http://cabinet.test:8080/"/><item name="pcbtracker" url="http://cabinet.test:8080/"/><item name="numbering" url="http://cabinet.test:8080/"/><item name="userid" url="http://cabinet.test:8080/"/><item name="local" url="http://cabinet.test:8080/"/><item name="keepalive" url="ping://192.168.50.1/?pa=192.168.50.1&amp;ga=192.168.50.1"/><item name="ntp" url="ntp://192.168.50.1/"/></services></response>
+>e <pcbtracker method="alive"/>
+< 200 info=1-484b0002-0002 <response><pcbtracker status="0"></pcbtracker></response>
+>e <posevent method="income" slot1="00000000" sync="1"/><posevent method="sales" play="00000000" coin="00000000" service="00000000" article="0" sync="1"/><posevent method="sale" article1="00000000" article2="00000000" payment1="00000000" payment2="00000000" payment3="00000000" sync="1"/>
+< 200 info=1-484b0003-0003 <response><posevent status="0"></posevent><posevent status="0" approve="1" margin="0"></posevent><posevent status="0" approve="1" margin="0"></posevent></response>
+> <ntp method="get"/>
+< 200 <response><ntp status="0"><time year="2003" month="6" day="1" hour="12" min="0" sec="*"></time></ntp></response>
+> <gamedata method="dataget" sid="020304050607"><favorite nr="10"/></gamedata>
+< 200 <response><gamedata status="0"><system status="0"/></gamedata></response>
+> <numbering method="assign" label="cardv1" model="D40:J:A:A" format="card16m10"/>
+< 200 <response><numbering status="0" number="2003010000000010"></numbering></response>
+>e <userid method="ctou" card="2003010000000010" model="D40:J:A:A"/>
+< 200 info=1-484b0004-0004 <response><userid status="112"></userid></response>
+>e <userid method="adduser" model="D40:J:A:A" user="hiraku09" pass="5678" card="2003010000000010"/>
+< 200 info=1-484b0005-0005 <response><userid status="0" alter=""></userid></response>
+>e <userid method="adduser" model="D40:J:A:A" user="hiraku09" pass="5678" card="2003010000000028"/>
+< 200 info=1-484b0006-0006 <response><userid status="113"></userid></response>
+>e <userid method="addcard" user="hiraku09" pass="0000" card="2003010000000028" model="D40:J:A:A"/>
+< 200 info=1-484b0007-0007 <response><userid status="116"></userid></response>
+>e <userid method="addcard" user="hiraku09" pass="5678" card="2003010000000028" model="D40:J:A:A"/>
+< 200 info=1-484b0008-0008 <response><userid status="0"></userid></response>
+>e <userid method="ctou" card="2003010000000028" model="D40:J:A:A"/>
+< 200 info=1-484b0009-0009 <response><userid status="0" user="hiraku09" active="1"></userid></response>
+# a card: new, registered, read again; another; one nothing is named after
+>e <gamedata method="cardcheck"><card id="2003010000000010"/></gamedata>
+< 200 info=1-484b000a-000a <response><gamedata status="0"><system status="0"/><card status="1"/></gamedata></response>
+>e <gamedata method="cardregist"><card id="2003010000000010" irid="0" name="ALICE" pass="1234" type="1" update="0" pazzleno="0" recovery="0"/></gamedata>
+< 200 info=1-484b000b-000b <response><gamedata status="0"><system status="0"/><card status="0" gdid="1"/></gamedata></response>
+>e <gamedata method="cardcheck"><card id="2003010000000010"/></gamedata>
+< 200 info=1-484b000c-000c <response><gamedata status="0"><system status="0"/><card status="2" pass="1234" skill="0" color="0" gdid="1"/></gamedata></response>
+>e <gamedata method="cardregist"><card id="2003010000000028" irid="0" name="BOB" pass="4321" type="1" update="0" pazzleno="0" recovery="0"/></gamedata>
+< 200 info=1-484b000d-000d <response><gamedata status="0"><system status="0"/><card status="0" gdid="2"/></gamedata></response>
+>e <gamedata method="cardregist"><card id="bad/card" irid="0" name="X" pass="1" type="1" update="0" pazzleno="0" recovery="0"/></gamedata>
+< 200 info=1-484b000e-000e <response><gamedata status="0"><system status="0"/><card status="1" gdid="0"/></gamedata></response>
+# a credit: its start, two stages played and cleared, the second player's credit on the same song
+>e <gamedata method="gametop"><player no="1" gdid="1" recovery="0"/></gamedata>
+< 200 info=1-484b000f-000f <response><gamedata status="0"><system status="0"/><player no="1" recovery="0"><skillseqs>xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx</skillseqs><musicseqs>xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx</musicseqs></player></gamedata></response>
+>e <gamedata method="gameend"><stagedata><stage no="1" netid="12"/><stage no="2" netid="40"/></stagedata><player no="1" gdid="1"><play><stage no="1" seqmode="1" perc="91" clear="1" score="80000" skill="45" combo="120"/><stage no="2" seqmode="2" perc="60" clear="0"/></play></player></gamedata>
+< 200 info=1-484b0010-0010 <response><gamedata status="0"><system status="0"/><player no="1" skill="45" skill_order="1" skill_all="1"><stage all="1" order="1" best="1"/><stage all="1" order="1" best="1"/></player></gamedata></response>
+>e <gamedata method="gameend"><stagedata><stage no="1" netid="12"/></stagedata><player no="1" gdid="2"><play><stage no="1" seqmode="1" perc="100" clear="1" score="95000" skill="60" combo="200"/></play></player></gamedata>
+< 200 info=1-484b0011-0011 <response><gamedata status="0"><system status="0"/><player no="1" skill="60" skill_order="1" skill_all="2"><stage all="2" order="1" best="1"/></player></gamedata></response>
+>e <gamedata method="gameend"><stagedata><stage no="1" netid="12"/><stage no="2" netid="13"/></stagedata><player no="1" gdid="1"><play><stage no="1" seqmode="1" perc="80" clear="1" score="70000" skill="40" combo="90"/><stage no="2" seqmode="1" perc="99" clear="1" score="99000" skill="70" combo="300"/></play></player><player no="2" gdid="2"><play><stage no="1" seqmode="1" perc="50" clear="0"/></play></player></gamedata>
+< 200 info=1-484b0012-0012 <response><gamedata status="0"><system status="0"/><player no="1" skill="115" skill_order="1" skill_all="2"><stage all="2" order="2" best="0"/><stage all="1" order="1" best="1"/></player><player no="2" skill="60" skill_order="2" skill_all="2"><stage all="2" order="1" best="0"/></player></gamedata></response>
+>e <gamedata method="gametop"><player no="1" gdid="1" recovery="0"/><player no="2" gdid="2" recovery="1"/></gamedata>
+< 200 info=1-484b0013-0013 long:2910 sha256:be15ee17d051fc3aa8a32af11c9719c0e46c34aec53ee58118b9db31ebe7917e <response><gamedata status="0"><system status="0"/><player no="1" recovery="0"><skillseqs>xxxxxxxxxxxx11xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx...
+>e <gamedata method="cardcheck"><card id="2003010000000010"/></gamedata>
+< 200 info=1-484b0014-0014 <response><gamedata status="0"><system status="0"/><card status="2" pass="1234" skill="115" color="0" gdid="1"/></gamedata></response>
+> <gamedata method="dataget" sid="020304050607"><favorite nr="2"/></gamedata>
+< 200 <response><gamedata status="0"><system status="0"/><favorite nr="2" netids="12?13?" from="20030601" to="20030601"/></gamedata></response>
+>e <gamedata method="autoir"/>
+< 200 info=1-484b0015-0015 <response><gamedata status="0"><system status="0"/></gamedata></response>
+>e <shoprank method="get"/>
+< 200 info=1-484b0016-0016 <response><shoprank status="0"></shoprank></response>
+get /message
+< 404
+file message HELLO
+get /message
+< 200 HELLO
+# GuitarFreaks on the same server: the same cards, its own results
+model D39:J:A:A
+>e <services method="get"/>
+< 200 info=1-484b0017-0017 <response><services expire="600" status="0"><item name="posevent" url="http://cabinet.test:8080/"/><item name="pcbtracker" url="http://cabinet.test:8080/"/><item name="numbering" url="http://cabinet.test:8080/"/><item name="userid" url="http://cabinet.test:8080/"/><item name="local" url="http://cabinet.test:8080/"/><item name="keepalive" url="ping://192.168.50.1/?pa=192.168.50.1&amp;ga=192.168.50.1"/><item name="ntp" url="ntp://192.168.50.1/"/></services></response>
+>e <gamedata method="cardcheck"><card id="2003010000000010"/></gamedata>
+< 200 info=1-484b0018-0018 <response><gamedata status="0"><system status="0"/><card status="2" pass="1234" skill="0" color="0" gdid="1"/></gamedata></response>
+>e <gamedata method="gametop"><player no="1" gdid="1" recovery="0"/></gamedata>
+< 200 info=1-484b0019-0019 <response><gamedata status="0"><system status="0"/><player no="1" recovery="0"><skillseqs>xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx</skillseqs><musicseqs>xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx</musicseqs></player></gamedata></response>
+>e <gamedata method="gameend"><stagedata><stage no="1" netid="12"/></stagedata><player no="1" gdid="1"><play><stage no="1" seqmode="0" perc="77" clear="1" score="50000" skill="20" combo="60"/></play></player></gamedata>
+< 200 info=1-484b001a-001a <response><gamedata status="0"><system status="0"/><player no="1" skill="20" skill_order="1" skill_all="1"><stage all="1" order="1" best="1"/></player></gamedata></response>
+> <gamedata method="dataget" sid="020304050607"><favorite nr="5"/></gamedata>
+< 200 <response><gamedata status="0"><system status="0"/><favorite nr="1" netids="12?" from="20030601" to="20030601"/></gamedata></response>
+= 2612a5c4d52e0283adba36cee7a8a57e179bda659d707aec588cee761add9556 80 gfdm-D39-1
+= 3ee979cb712c9774020c35218f7ed4018251f5f078f4076c2cd725424225f283 197 gfdm-D40-1
+= 3e1ac4e3f1746123325040cb69c88eb117c6e7f67265733d761b298f4caa058e 82 gfdm-D40-2
+= 1f19ea17d60e61509aa17324b7adaa7e4a404a57773ab88396d9b89899798e37 184 gfdm-cards
+= 3b09aeb6f5f5336beb205d7f720371bc927cd46c21922e334d47ba264acb5ba4 6 message
+= 53c234e5e8472b6ac51c1ae1cab3fe06fad053beb8ebfd8977b010655bfdd3c3 2 numbering
+= f08eb0b0a5c59b07da72ea9c4e1245f9c9b6d0fbaa5e7b607da13dd5b041f349 73 users

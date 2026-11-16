@@ -1,0 +1,125 @@
+# The two later PC pop'n games (model M39): the 64-bit one's modules info and player, the last
+# 32-bit one's info24, player24 and lobby24. Made-up players.
+# (the lobby numbers a room by the clock's seconds unless a higher number is there: a clock that
+# starts where those seconds are 0, and another cabinet's room 500 there beforehand, make it 501)
+clock 2003-05-31 16:53:20
+model M39:K:D:A:2026041500
+volatile ^lobby24-M39$
+>e <services method="get"/>
+< 200 info=1-484b0001-0001 long:1822 sha256:aef2041097f0b122238991c2a1478281eb440229c14ffdf66e057b9d5e02ea5d <response><services expire="600" status="0"><item name="posevent" url="http://cabinet.test:8080/"/><item name="pcbtracker" url="http://cabinet.test:8080/"/><item name="numbering" url="http://cabinet.t...
+> <facility method="get"><encoding>SHIFT_JIS</encoding></facility>
+< 200 <response><facility status="0" expire="600"><location><id>HIRAKU</id><type>0</type><name>HIRAKU</name><country>JP</country><region>JP-13</region><customercode>HIRAKU</customercode><companycode>HIRAKU</companycode></location><line><id>0</id><class __type="u8">0</class></line><portfw><globalip __type="ip4">192.168.0.2</globalip><globalport __type="u16">5700</globalport><privateport __type="u16">5700</privateport></portfw><public><flag __type="u8">0</flag><name>HIRAKU</name><latitude>0</latitude><longitude>0</longitude></public><share><eacoin><notchamount __type="s32">0</notchamount><notchcount __type="s32">0</notchcount><supplylimit __type="s32">100000</supplylimit></eacoin><url><eapass>www.ea-pass.konami.net</eapass><arcadefan>www.konami.jp/am</arcadefan><konaminetdx>http://am.573.jp</konaminetdx><konamiid>http://id.konami.jp</konamiid><eagate>http://eagate.573.jp</eagate></url></share></facility></response>
+file cards cardid=E004010000000A01\tcardtype=1\tpass=1234\trefid=48524B0000000001
+> <cardmng method="inquire" cardtype="1" cardid="E004010000000A01" update="0"/>
+< 200 <response><cardmng status="0" refid="48524B0000000001" binded="1" expired="0" newflag="0"></cardmng></response>
+
+# the 64-bit one: the events' phases, as they are and as the owner set them
+> <info method="common" loc_id="X"/>
+< 200 <response><info status="0"><phase><event_id __type="s16">0</event_id><phase __type="s16">7</phase></phase><phase><event_id __type="s16">1</event_id><phase __type="s16">1</phase></phase><phase><event_id __type="s16">2</event_id><phase __type="s16">3</phase></phase><phase><event_id __type="s16">4</event_id><phase __type="s16">11</phase></phase><phase><event_id __type="s16">5</event_id><phase __type="s16">2</phase></phase><phase><event_id __type="s16">6</event_id><phase __type="s16">1</phase></phase><phase><event_id __type="s16">7</event_id><phase __type="s16">1</phase></phase></info></response>
+file phases-phc 0=2 4=0
+> <info method="common" loc_id="X"/>
+< 200 <response><info status="0"><phase><event_id __type="s16">0</event_id><phase __type="s16">2</phase></phase><phase><event_id __type="s16">1</event_id><phase __type="s16">1</phase></phase><phase><event_id __type="s16">2</event_id><phase __type="s16">3</phase></phase><phase><event_id __type="s16">4</event_id><phase __type="s16">0</phase></phase><phase><event_id __type="s16">5</event_id><phase __type="s16">2</phase></phase><phase><event_id __type="s16">6</event_id><phase __type="s16">1</phase></phase><phase><event_id __type="s16">7</event_id><phase __type="s16">1</phase></phase></info></response>
+> <info method="other"/>
+< 200 <response><info status="0"></info></response>
+# a guest's credit, a card's: no player, a new one, the same asked again (kept), read
+> <player method="start" ref_id=""/>
+< 200 <response><player status="0"><play_id __type="s32">1</play_id><phase><event_id __type="s16">0</event_id><phase __type="s16">2</phase></phase><phase><event_id __type="s16">1</event_id><phase __type="s16">1</phase></phase><phase><event_id __type="s16">2</event_id><phase __type="s16">3</phase></phase><phase><event_id __type="s16">4</event_id><phase __type="s16">0</phase></phase><phase><event_id __type="s16">5</event_id><phase __type="s16">2</phase></phase><phase><event_id __type="s16">6</event_id><phase __type="s16">1</phase></phase><phase><event_id __type="s16">7</event_id><phase __type="s16">1</phase></phase></player></response>
+> <player method="start" ref_id="48524B0000000001"/>
+< 200 <response><player status="0"><play_id __type="s32">1</play_id><phase><event_id __type="s16">0</event_id><phase __type="s16">2</phase></phase><phase><event_id __type="s16">1</event_id><phase __type="s16">1</phase></phase><phase><event_id __type="s16">2</event_id><phase __type="s16">3</phase></phase><phase><event_id __type="s16">4</event_id><phase __type="s16">0</phase></phase><phase><event_id __type="s16">5</event_id><phase __type="s16">2</phase></phase><phase><event_id __type="s16">6</event_id><phase __type="s16">1</phase></phase><phase><event_id __type="s16">7</event_id><phase __type="s16">1</phase></phase></player></response>
+> <player method="read"><ref_id __type="str">48524B0000000001</ref_id></player>
+< 200 <response><player status="0"><result __type="s8">2</result></player></response>
+> <player method="new"><ref_id __type="str">48524B0000000001</ref_id><name __type="str">ALICE</name></player>
+< 200 long:387398 sha256:127bc8e03e51fc8bb4d3bc65ed3f783ebfffa16b9efdfb5700d6ef7b2af489b5 <response><player status="0"><result __type="s8">0</result><account><g_pm_id __type="str">0000-0001</g_pm_id><name __type="str">ALICE</name><tutorial __type="s16">0</tutorial><read_news __type="s16">0...
+> <player method="new"><ref_id __type="str">48524B0000000001</ref_id><name __type="str">EVE</name></player>
+< 200 long:387398 sha256:127bc8e03e51fc8bb4d3bc65ed3f783ebfffa16b9efdfb5700d6ef7b2af489b5 <response><player status="0"><result __type="s8">0</result><account><g_pm_id __type="str">0000-0001</g_pm_id><name __type="str">ALICE</name><tutorial __type="s16">0</tutorial><read_news __type="s16">0...
+> <player method="start" ref_id="48524B0000000001"/>
+< 200 <response><player status="0"><play_id __type="s32">1</play_id><phase><event_id __type="s16">0</event_id><phase __type="s16">2</phase></phase><phase><event_id __type="s16">1</event_id><phase __type="s16">1</phase></phase><phase><event_id __type="s16">2</event_id><phase __type="s16">3</phase></phase><phase><event_id __type="s16">4</event_id><phase __type="s16">0</phase></phase><phase><event_id __type="s16">5</event_id><phase __type="s16">2</phase></phase><phase><event_id __type="s16">6</event_id><phase __type="s16">1</phase></phase><phase><event_id __type="s16">7</event_id><phase __type="s16">1</phase></phase></player></response>
+# a song played twice (the better kept), its options; the scores; the credit's end; what was unlocked
+> <player method="write_music"><ref_id __type="str">48524B0000000001</ref_id><music_num __type="s16">100</music_num><sheet_num __type="u8">2</sheet_num><score __type="s32">90000</score><clear_type __type="u8">7</clear_type><clear_rank __type="u8">6</clear_rank><is_option_save __type="bool">1</is_option_save><hispeed __type="s16">40</hispeed><popkun __type="u8">1</popkun></player>
+< 200 <response><player status="0"></player></response>
+> <player method="write_music"><ref_id __type="str">48524B0000000001</ref_id><music_num __type="s16">100</music_num><sheet_num __type="u8">2</sheet_num><score __type="s32">80000</score><clear_type __type="u8">9</clear_type><clear_rank __type="u8">5</clear_rank><is_option_save __type="bool">0</is_option_save></player>
+< 200 <response><player status="0"></player></response>
+> <player method="read_score"><ref_id __type="str">48524B0000000001</ref_id></player>
+< 200 <response><player status="0"><con_flg __type="bool">0</con_flg><music><music_num __type="s16">100</music_num><sheet_num __type="u8">2</sheet_num><score __type="s32">90000</score><clear_type __type="u8">9</clear_type><clear_rank __type="u8">6</clear_rank><cnt __type="s16">2</cnt><score_ver __type="s32">0</score_ver><clear_type_ver __type="u8">0</clear_type_ver></music></player></response>
+> <player method="read_option"><ref_id __type="str">48524B0000000001</ref_id></player>
+< 200 <response><player status="0"><option><hispeed __type="s16">40</hispeed><popkun __type="u8">1</popkun><hidden __type="bool">0</hidden><sudden __type="bool">0</sudden><randmir __type="s8">0</randmir><gauge_type __type="s8">0</gauge_type><ojama_0 __type="u8">0</ojama_0><ojama_1 __type="u8">0</ojama_1><forever_0 __type="bool">0</forever_0><forever_1 __type="bool">0</forever_1><full_setting __type="bool">0</full_setting><judge __type="u8">0</judge><guide_se __type="s8">0</guide_se><lift __type="bool">0</lift><lift_rate __type="s16">0</lift_rate><judge_ad __type="s8">0</judge_ad><roof __type="s16">0</roof><long_pop __type="s8">0</long_pop><hidden_rate __type="s16">-70</hidden_rate><sudden_rate __type="s16">-270</sudden_rate><guide_se_vol __type="u8">3</guide_se_vol></option></player></response>
+> <player method="write"><ref_id __type="str">48524B0000000001</ref_id><account><tutorial __type="s16">3</tutorial><read_news __type="s16">5</read_news></account><config><mode __type="u8">2</mode><chara __type="s16">77</chara></config><option><hispeed __type="s16">45</hispeed></option><customize><effector __type="u8">1</effector></customize><item><type __type="u8">1</type><id __type="u16">5</id><param __type="u16">3</param><is_new __type="bool">1</is_new><get_time __type="u64">0</get_time></item></player>
+< 200 <response><player status="0"></player></response>
+file unlock-phc 0
+> <player method="write"><ref_id __type="str">48524B0000000001</ref_id><item><type __type="u8">2</type><id __type="u16">9</id><param __type="u16">1</param><is_new __type="bool">1</is_new><get_time __type="u64">0</get_time></item></player>
+< 200 <response><player status="0"></player></response>
+> <player method="read"><ref_id __type="str">48524B0000000001</ref_id></player>
+< 200 long:4236 sha256:c45e324582eccdfa8fb72b1842899b6d4bac7ef2d9e3fe9bbb6d9fbc3f9c0525 <response><player status="0"><result __type="s8">0</result><account><g_pm_id __type="str">0000-0001</g_pm_id><name __type="str">ALICE</name><tutorial __type="s16">3</tutorial><read_news __type="s16">5...
+> <player method="logout" ref_id="48524B0000000001"/>
+< 200 <response><player status="0"></player></response>
+> <player method="read"><ref_id __type="str">bad/ref</ref_id></player>
+< 200 <response><player status="0"></player></response>
+> <player method="read"><ref_id __type="str">48524B00000000FF</ref_id></player>
+< 200 <response><player status="0"><result __type="s8">2</result></player></response>
+
+# the last 32-bit one
+> <info24 method="common"/>
+< 200 long:18193 sha256:35c7b23ab3ce609586c025ca757168199f0ae07c8ac775862aa11a81d9479638 <response><info24 status="0"><phase><event_id __type="s16">3</event_id><phase __type="s16">1</phase></phase><area><area_id __type="s16">1</area_id><end_date __type="u64">0</end_date><medal_id __type="...
+file netvs-M39 0
+> <info24 method="common"/>
+< 200 long:18193 sha256:1e34a92bff338e5cdd4f6cfd2bf2f237f51039f174052d85d51e9458989b3e7f <response><info24 status="0"><phase><event_id __type="s16">3</event_id><phase __type="s16">0</phase></phase><area><area_id __type="s16">1</area_id><end_date __type="u64">0</end_date><medal_id __type="...
+> <player24 method="start"/>
+< 200 long:18230 sha256:691765a10e6dafc2adb4fd63eb1ce0292689da149215d9b6e6f3d2713b549479 <response><player24 status="0"><play_id __type="s32">1</play_id><phase><event_id __type="s16">3</event_id><phase __type="s16">0</phase></phase><area><area_id __type="s16">1</area_id><end_date __type="...
+> <player24 method="start"><ref_id __type="str">48524B0000000001</ref_id></player24>
+< 200 long:18230 sha256:52b4d80fbb641376e57332125e3f01d149b6b482f1464dcb2388c101b7a7d5ce <response><player24 status="0"><play_id __type="s32">2</play_id><phase><event_id __type="s16">3</event_id><phase __type="s16">0</phase></phase><area><area_id __type="s16">1</area_id><end_date __type="...
+> <player24 method="read"><ref_id __type="str">48524B0000000001</ref_id></player24>
+< 200 <response><player24 status="0"><result __type="s8">2</result></player24></response>
+> <player24 method="new"><ref_id __type="str">48524B0000000001</ref_id><name __type="str">ALICE</name></player24>
+< 200 long:4994 sha256:2f0ee33b15d95bfb9c5b4a4d5aed58d17bd487603904d6d75c08626bfb0a7ec8 <response><player24 status="0"><result __type="s8">0</result><account><g_pm_id __type="str">0000-0001</g_pm_id><name __type="str">ALICE</name><tutorial __type="s16">0</tutorial><area_id __type="s16">0...
+> <player24 method="new"><ref_id __type="str">48524B0000000001</ref_id><name __type="str">EVE</name></player24>
+< 200 long:4994 sha256:2f0ee33b15d95bfb9c5b4a4d5aed58d17bd487603904d6d75c08626bfb0a7ec8 <response><player24 status="0"><result __type="s8">0</result><account><g_pm_id __type="str">0000-0001</g_pm_id><name __type="str">ALICE</name><tutorial __type="s16">0</tutorial><area_id __type="s16">0...
+> <player24 method="write_music"><ref_id __type="str">48524B0000000001</ref_id><music_num __type="s16">100</music_num><sheet_num __type="u8">2</sheet_num><score __type="s32">90000</score><clear_type __type="u8">7</clear_type><clear_rank __type="u8">6</clear_rank><is_option_save __type="bool">1</is_option_save><hispeed __type="s16">40</hispeed><netvs_type __type="u8">1</netvs_type></player24>
+< 200 <response><player24 status="0"></player24></response>
+> <player24 method="write_music"><ref_id __type="str">48524B0000000001</ref_id><music_num __type="s16">200</music_num><sheet_num __type="u8">1</sheet_num><score __type="s32">70000</score><clear_type __type="u8">5</clear_type><clear_rank __type="u8">4</clear_rank><is_option_save __type="bool">0</is_option_save></player24>
+< 200 <response><player24 status="0"></player24></response>
+> <player24 method="read_score"><ref_id __type="str">48524B0000000001</ref_id></player24>
+< 200 <response><player24 status="0"><music><music_num __type="s16">100</music_num><sheet_num __type="u8">2</sheet_num><score __type="s32">90000</score><clear_type __type="u8">7</clear_type><clear_rank __type="u8">6</clear_rank><cnt __type="s16">1</cnt></music><music><music_num __type="s16">200</music_num><sheet_num __type="u8">1</sheet_num><score __type="s32">70000</score><clear_type __type="u8">5</clear_type><clear_rank __type="u8">4</clear_rank><cnt __type="s16">1</cnt></music></player24></response>
+> <player24 method="read_option"><ref_id __type="str">48524B0000000001</ref_id></player24>
+< 200 <response><player24 status="0"><option><hispeed __type="s16">40</hispeed><popkun __type="u8">0</popkun><hidden __type="bool">0</hidden><hidden_rate __type="s16">0</hidden_rate><sudden __type="bool">0</sudden><sudden_rate __type="s16">0</sudden_rate><randmir __type="s8">0</randmir><gauge_type __type="s8">0</gauge_type><ojama_0 __type="u8">0</ojama_0><ojama_1 __type="u8">0</ojama_1><forever_0 __type="bool">0</forever_0><forever_1 __type="bool">0</forever_1><full_setting __type="bool">0</full_setting><judge __type="u8">0</judge><guide_se __type="s8">0</guide_se><guide_se_vol __type="u8">3</guide_se_vol><lift __type="bool">0</lift><lift_rate __type="s16">0</lift_rate></option></player24></response>
+> <player24 method="write"><ref_id __type="str">48524B0000000001</ref_id><account><tutorial __type="s16">3</tutorial></account><info><ep __type="u16">9</ep></info><config><mode __type="u8">2</mode></config><option><hispeed __type="s16">45</hispeed></option><customize><effector __type="u8">1</effector></customize><stage><no __type="s16">100</no></stage><stage><no __type="s16">200</no></stage><chara_param><chara_id __type="u16">7</chara_id><friendship __type="u16">30</friendship></chara_param></player24>
+< 200 <response><player24 status="0"></player24></response>
+> <player24 method="read"><ref_id __type="str">48524B0000000001</ref_id></player24>
+< 200 long:5100 sha256:6beb06770c7426647fa56c3f54b481d71e1d2a6a19f7c25a2669b20be2b5622c <response><player24 status="0"><result __type="s8">0</result><account><g_pm_id __type="str">0000-0001</g_pm_id><name __type="str">ALICE</name><tutorial __type="s16">3</tutorial><area_id __type="s16">0...
+> <player24 method="start"><ref_id __type="str">48524B0000000001</ref_id></player24>
+< 200 long:18230 sha256:baaf9ea02f9ed8bde2ee762390d0dc42235fc736c4e4bcf4a88624467c46ef72 <response><player24 status="0"><play_id __type="s32">3</play_id><phase><event_id __type="s16">3</event_id><phase __type="s16">0</phase></phase><area><area_id __type="s16">1</area_id><end_date __type="...
+> <player24 method="read"><ref_id __type="str">48524B00000000FF</ref_id></player24>
+< 200 <response><player24 status="0"><result __type="s8">2</result></player24></response>
+> <player24 method="write"><ref_id __type="str">48524B0000000001</ref_id><chara_param><chara_id __type="u16">8</chara_id><friendship __type="u16">5</friendship></chara_param><chara_param><chara_id __type="u16">7</chara_id><friendship __type="u16">31</friendship></chara_param></player24>
+< 200 <response><player24 status="0"></player24></response>
+> <player24 method="logout"><ref_id __type="str">48524B0000000001</ref_id></player24>
+< 200 <response><player24 status="0"></player24></response>
+# the 64-bit one's read as binary XML: <player method="read"><ref_id __type="str">48524B0000000001</ref_id></player>
+>x a042807f0000002c0104a26c712e05cb4a6ac42e05e37a2ea40106d719beab702e06caae6dd2900b06deaae5ba90fefefeff00000000005c000000154d33393a4b3a443a413a323032363034313530300000000000000015303130323033303430353036303730383039304100000000000000057265616400000000000000113438353234423030303030303030303100000000
+< 200 compress=none long:3509 sha256:c96b81735775ae3b52f8c8ca7f5a10a3fd80b3910907fb153f826d68e7cc980f kbin:a042807f000003880108deae35d33e2a0106d719beab702e06e399b9eb800206deae3ac790fe01079a8a34eb3e400b07b25d7296ea40fe0b04ce6caafe0408e7ae74dee9b1fe0409dea9a9973abce0fe0207bb8968d33ec0fe030d9a8e6eeea96bd...
+# its NET TAISEN lobby: a room entered, seen by another cabinet and not by its own, its match, gone
+file lobby24-M39 gpm_id=BOB000000002\tip=167772162\tis_ojama=0\tlocal_ip=3232235778\tmusic=200\tno=500\tport=5700\tserver=1\tsheet=1\tsrc=0B0B0B0B0B0B0B0B0B0B\ttime=60000\tuntil=2000000000
+> <lobby24 method="getList"/>
+< 200 <response><lobby24 status="0"><list><no __type="u32">500</no><time __type="u32">60000</time><ip __type="u32">167772162</ip><port __type="u16">5700</port><local_ip __type="u32">3232235778</local_ip><music __type="s16">200</music><sheet __type="u8">1</sheet><is_ojama __type="u8">0</is_ojama></list></lobby24></response>
+> <lobby24 method="entry"><time __type="u32">60000</time><ip __type="u32">167772161</ip><port __type="u16">5700</port><local_ip __type="u32">3232235777</local_ip><music __type="s16">100</music><sheet __type="u8">2</sheet><is_ojama __type="u8">1</is_ojama><gpm_id __type="str">ALICE0000001</gpm_id></lobby24>
+< 200 <response><lobby24 status="0"><no __type="u32">501</no></lobby24></response>
+> <lobby24 method="getList"/>
+< 200 <response><lobby24 status="0"><list><no __type="u32">500</no><time __type="u32">60000</time><ip __type="u32">167772162</ip><port __type="u16">5700</port><local_ip __type="u32">3232235778</local_ip><music __type="s16">200</music><sheet __type="u8">1</sheet><is_ojama __type="u8">0</is_ojama></list></lobby24></response>
+srcid 0A090807060504030201
+> <lobby24 method="getList"/>
+< 200 <response><lobby24 status="0"><list><no __type="u32">500</no><time __type="u32">60000</time><ip __type="u32">167772162</ip><port __type="u16">5700</port><local_ip __type="u32">3232235778</local_ip><music __type="s16">200</music><sheet __type="u8">1</sheet><is_ojama __type="u8">0</is_ojama></list><list><no __type="u32">501</no><time __type="u32">60000</time><ip __type="u32">167772161</ip><port __type="u16">5700</port><local_ip __type="u32">3232235777</local_ip><music __type="s16">100</music><sheet __type="u8">2</sheet><is_ojama __type="u8">1</is_ojama></list></lobby24></response>
+> <lobby24 method="update"><room_no __type="u32">501</room_no><matched_cnt __type="u8">2</matched_cnt></lobby24>
+< 200 <response><lobby24 status="0"></lobby24></response>
+> <lobby24 method="delete"><no __type="u32">501</no></lobby24>
+< 200 <response><lobby24 status="0"></lobby24></response>
+> <lobby24 method="getList"/>
+< 200 <response><lobby24 status="0"><list><no __type="u32">500</no><time __type="u32">60000</time><ip __type="u32">167772162</ip><port __type="u16">5700</port><local_ip __type="u32">3232235778</local_ip><music __type="s16">200</music><sheet __type="u8">1</sheet><is_ojama __type="u8">0</is_ojama></list></lobby24></response>
+= a933d95540199002df2d3fe58f299fa6078cc033e9c8734317eb76dbe93c84ac 68 cards
+= ---------------------------------------------------------------- - lobby24-M39
+= 9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa 2 netvs-M39
+= 2ca2537daf831cb64e06bb4ae4711bcea55b61acd9fb8d42c1b52dde001d8316 151 p24-48524B0000000001
+= 3ed5faf3efed9701957fa70bed1a4c5ac465fdeac8c04d9858ab16caa186fadd 4 p24-plays
+= 01e58616975ee34fe29576bc37063d6647a4cc77fb83bf6bb2727d8c938abb08 124 p24s-48524B0000000001
+= 0ecdd414e23c61d8d3d66d86e7f84fb222e754ba0d39818c535371fb421960a3 8 phases-phc
+= 665cfee7ff6a680e9c6527885e615b3238981ae5618c5fecd84520c6c53abf86 167 phc-48524B0000000001
+= 5d920d0b2f83a2974c2dec4a4b728aaf8a39c8b0224d6a2cf7b43b3466f154e0 62 phcs-48524B0000000001
+= 9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa 2 unlock-phc

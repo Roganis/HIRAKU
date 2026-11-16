@@ -32,6 +32,14 @@
 
 namespace hk::ea {
 
+// The arcade a cabinet belongs to (hiraku-server's machines, server/accounts.h): its id (whose own
+// settings come first: games.h's setting()), the shop's name and prefecture the answers give
+struct Cabinet {
+    std::string arcade;   // "": none (the server's settings)
+    std::string shop;     // "": the server's own name (HIRAKU)
+    int pref = -1;        // -1: the server's own (13)
+};
+
 class Server {
 public:
     // dir: where the server keeps what it must remember (cards, player data), or "" for nothing
@@ -45,6 +53,9 @@ public:
     // Whether the cabinet a call says it is from (its srcid, the PCBID) is answered: a server on a
     // network takes the ones it was told (eamuse/access.h). Unset: every one, as a core's own server
     std::function<bool(const std::string &srcid)> admit;
+    // The arcade of the cabinet a call is from (its srcid), asked once a call after admit. Unset, or
+    // an empty answer: none, today's answers byte for byte
+    std::function<Cabinet(const std::string &srcid)> cabinet;
     // Each call in clear (request and answer), for HK_PY_NET_LOG.
     std::function<void(const std::string &)> log;
     // Each call's module and method as it comes ("playerdata.get"; the core's scripts wait on them)
@@ -95,6 +106,14 @@ private:
     // services.get's answer: each name with this server's URL
     static std::string services(const std::string &host, const std::vector<const char *> &names);
     std::string message() const;   // the owner's title-screen message (package "message"), or ""
+    // A game's setting for the asking cabinet: its arcade's value, else the server's, else the default
+    // (games.h's setting())
+    std::string setting_of(const Game &g, const char *name, const std::string &model = "") const {
+        return setting(*store_, g, name, model, cab_.arcade);
+    }
+    // The shop's name and prefecture the answers give: the asking cabinet's arcade's, else HIRAKU's
+    std::string shop_name() const { return cab_.shop.empty() ? "HIRAKU" : cab_.shop; }
+    int shop_pref() const { return cab_.pref < 0 ? 13 : cab_.pref; }
 
     struct Entered {   // a result entered on a board (enter)
         std::map<std::string, std::string> kept;   // the entrant's best, as kept
@@ -159,6 +178,7 @@ private:
     std::unique_ptr<Store> store_;
     uint32_t serial_ = 0;   // for the answers' X-Eamuse-Info: deterministic
     std::string src_;       // the asking cabinet (the call's srcid)
+    Cabinet cab_;           // ... and its arcade (cabinet)
     std::string self_;      // this server, among those sharing its data folder (a random number)
     // What a server others can reach keeps is bounded (a call registers a card, writes a card's file):
     // the store's things (FolderStore: limit-files) and cards (the store's limit "cards"; both

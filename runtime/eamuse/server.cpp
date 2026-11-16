@@ -301,6 +301,7 @@ std::string Server::handle(const std::string &req) try {
     if (parse(body, c)) {
         // a cabinet the server wasn't told to take: no answer to read anything from
         if (admit && !admit(c.srcid)) return "HTTP/1.0 403 Forbidden\r\nContent-Length: 0\r\n\r\n";
+        cab_ = cabinet ? cabinet(c.srcid) : Cabinet{};
         xml = "<response>";
         // The store is this call's from here to its answer: servers that share a data folder (each
         // cabinet's own on one PC, hiraku-eamuse's threads) read, change and write back the same

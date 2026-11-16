@@ -2,7 +2,7 @@
 // What the e-AMUSEMENT server keeps of its players, read by code outside the games' answers (the
 // tools, later an API): who has a player, its name, its scores. Free functions over a Store
 // (store.h); each game's way of reading is behind its row of the table of games (games.h, Readers).
-// Nothing here writes.
+// Nothing here writes but reset_pin.
 #pragma once
 
 #include <string>
@@ -31,6 +31,20 @@ std::vector<Identity> players(const Store &);
 // The card's player of this game; false: none (or the game isn't read yet)
 bool profile(const Store &, const Game &, const Identity &, Profile &);
 std::vector<Score> scores(const Store &, const Game &, const Identity &);
+
+// Every PIN kept for the card, in any game (each once): the cards' table's (pop'n 13 on, IIDX
+// DistorteD on), IIDX 10th style to HAPPY SKY's players, the GuitarFreaks and DrumMania cards (V and
+// System 573), and the ones inside pop'n records: 11's userdata (0x9f3), 12's record (0x34), 13's
+// (0x1c). For hiraku-server's card linking (server/accounts.h): a PIN never leaves the process
+std::vector<std::string> pins(const Store &, const Identity &);
+// The card's PIN (four digits) put in every place pins() reads that the server may write (the
+// records' bytes where the answers write them too): the places done, and those the card has a player
+// in whose PIN isn't changed (by name, for a person; why not in brackets). false: a PIN that isn't
+// four digits, or a place not written
+struct PinReset {
+    std::vector<std::string> done, not_done;
+};
+bool reset_pin(Store &, const Identity &, const std::string &pin, PinReset &);
 
 // A family's way of reading (a row's Readers in games.cpp)
 struct Readers {

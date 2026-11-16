@@ -95,6 +95,7 @@ int main() {
         {tables::netvs_m39, {}, "netvs-M39"},
         {tables::iidx9_weekly_song, {}, "iidx9-weekly-song"},
         {tables::iidx9_courses, {}, "iidx9-courses"},
+        {tables::arcade, {"3", "net_event", "F14"}, "arcade-3-net_event-F14"},
     };
     std::set<const Table *> named;
     for (const Named &n : names) {

@@ -7,6 +7,7 @@
 #pragma once
 
 #include <cstdint>
+#include <functional>
 #include <string>
 
 #include "eamuse/access.h"
@@ -41,6 +42,9 @@ struct Listener {
 
     CabinetList cabinets;
     net::Key key;
+    // hiraku-server's machines (server/accounts.h): a call's srcid to 1 answered, 0 refused, -1 not
+    // theirs to say (the cabinets' list decides, as without it). Asked once a call
+    std::function<int(const std::string &srcid)> machines;
 };
 
 }  // namespace hk::ea

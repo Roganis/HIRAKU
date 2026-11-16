@@ -4,6 +4,7 @@
 #include "eamuse/readers.h"
 #include "eamuse/server_parts.h"
 
+#include <algorithm>
 #include <cstring>
 #include <map>
 #include <utility>
@@ -42,6 +43,100 @@ bool profile(const Store &st, const Game &g, const Identity &id, Profile &p) {
 std::vector<Score> scores(const Store &st, const Game &g, const Identity &id) {
     if (!g.readers || !g.readers->scores) return {};
     return g.readers->scores(st, g, id);
+}
+
+namespace {
+
+// The PIN places inside pop'n records (server_popn.cpp's answer_playerdata and conv): a digit a
+// byte, four bytes. pop'n 12's record by card, 13's by ref id; 11's userdata (base64) by card
+struct PinAt {
+    const char *model;
+    size_t at, size;   // where, and the record's size (exactly; 0: at least at + 4)
+};
+constexpr PinAt POPN_PINS[] = {{"D11", 0x9f3, 0}, {"E12", 0x34, 0x708}, {"E13", 0x1c, 0xd6c}};
+
+std::string popn_pin_record(const Store &st, const PinAt &p, const Identity &id) {
+    const std::string m = p.model, key = m == "E13" ? id.ref : id.card;
+    if (!safe_name(key)) return "";
+    std::string rec = m == "D11" ? unbase64_b(st.get(tables::userdata, {m, key})) : st.get(tables::pdata, {m, key});
+    if (p.size ? rec.size() != p.size : rec.size() < p.at + 4) return "";
+    return rec;
+}
+
+bool four_digits(const std::string &pin) {
+    if (pin.size() != 4) return false;
+    for (char c : pin)
+        if (c < '0' || c > '9') return false;
+    return true;
+}
+
+}  // namespace
+
+std::vector<std::string> pins(const Store &st, const Identity &id) {
+    std::vector<std::string> out;
+    auto add = [&](const std::string &pin) {
+        if (!pin.empty() && std::find(out.begin(), out.end(), pin) == out.end()) out.push_back(pin);
+    };
+    if (id.card.empty()) return out;
+    for (const Record &c : from_lines(st.get(tables::cards, {})))
+        if (attr(c, "cardid") == id.card) add(attr(c, "pass"));
+    for (const Record &c : from_lines(st.get(tables::gfdmv_cards, {})))
+        if (attr(c, "cardid") == id.card) add(attr(c, "pass"));
+    for (const Record &c : from_lines(st.get(tables::gfdm_cards, {})))
+        if (attr(c, "id") == id.card) add(attr(c, "pass"));
+    for (const Key &k : st.keys(tables::iidx_players))
+        for (const Record &p : from_lines(st.get(tables::iidx_players, k)))
+            if (attr(p, "card") == id.card || (!id.ref.empty() && attr(p, "rid") == id.ref)) add(attr(p, "pass"));
+    for (const PinAt &p : POPN_PINS) {
+        const std::string rec = popn_pin_record(st, p, id);
+        if (rec.empty()) continue;
+        std::string pin;
+        for (size_t i = 0; i < 4; i++)
+            if ((uint8_t)rec[p.at + i] <= 9) pin += (char)('0' + rec[p.at + i]);
+        if (pin.size() == 4) add(pin);
+    }
+    return out;
+}
+
+bool reset_pin(Store &st, const Identity &id, const std::string &pin, PinReset &did) {
+    did = PinReset{};
+    if (!four_digits(pin) || id.card.empty()) return false;
+    const auto held = st.hold();
+    bool ok = true;
+    // a table of records, a line each: the card's PIN changed where it has one
+    auto lines = [&](const Table &t, const Key &k, const char *card, const std::string &what) {
+        std::vector<Record> recs = from_lines(st.get(t, k));
+        bool changed = false;
+        for (Record &r : recs)
+            if (attr(r, card) == id.card || (&t == &tables::iidx_players && !id.ref.empty() && attr(r, "rid") == id.ref))
+                if (!attr(r, "pass").empty()) r["pass"] = pin, changed = true;
+        if (!changed) return;
+        std::string text;
+        for (const Record &r : recs) text += to_line(r);
+        if (st.put(t, k, text)) did.done.push_back(what);
+        else ok = false;
+    };
+    lines(tables::cards, {}, "cardid", "the cards (pop'n music 13 on, IIDX DistorteD on)");
+    lines(tables::gfdmv_cards, {}, "cardid", "GuitarFreaks and DrumMania V");
+    lines(tables::gfdm_cards, {}, "id", "the System 573 GuitarFreaks and DrumMania");
+    for (const Key &k : st.keys(tables::iidx_players)) lines(tables::iidx_players, k, "card", "beatmania IIDX " + k[0]);
+    for (const PinAt &p : POPN_PINS) {
+        std::string rec = popn_pin_record(st, p, id);
+        if (rec.empty()) continue;
+        const std::string m = p.model;
+        if (m == "D11") {   // (the game's own bytes, given back as it wrote them)
+            did.not_done.push_back("pop'n music 11 (its own record: whether the game checks it whole isn't known)");
+            continue;
+        }
+        for (size_t i = 0; i < 4; i++) rec[p.at + i] = (char)(pin[i] - '0');
+        if (st.put(tables::pdata, {m, m == "E13" ? id.ref : id.card}, rec)) did.done.push_back(m == "E12" ? "pop'n music 12" : "pop'n music 13");
+        else ok = false;
+    }
+    if (!st.get(tables::userdata_c00, {id.card}).empty()) did.not_done.push_back("pop'n music 9 (the PIN's place in its record isn't known)");
+    if (!st.get(tables::userdata, {"C20", id.card}).empty()) did.not_done.push_back("pop'n music 10 (the PIN's place in its record isn't known)");
+    if (!st.get(tables::userdata, {"C02", id.card}).empty())
+        did.not_done.push_back("beatmania IIDX 9th style (the PIN's place in its record isn't known)");
+    return ok;
 }
 
 namespace {

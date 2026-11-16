@@ -184,7 +184,7 @@ std::string common_info(long netvs) {
 std::string Server::answer_p24(const Game &g, const Call &, const Request &r, const std::string &) {
     const std::string &m = r.module, &f = r.method;
     if (m != "player24" && m != "info24" && m != "lobby24") return "";
-    const long netvs = std::strtol(setting(*store_, g, "netvs").c_str(), nullptr, 10);
+    const long netvs = std::strtol(setting_of(g, "netvs").c_str(), nullptr, 10);
     if (m == "info24") return f == "common" ? "<info24 status=\"0\">" + common_info(netvs) + "</info24>" : "<info24 status=\"0\"/>";
     if (m == "lobby24") return answer_lobby24(r);
     std::string ref = child(r.inner, "ref_id");

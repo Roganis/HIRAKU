@@ -170,6 +170,12 @@ int Listener::serve(Server &server, const std::string &kept) {
     };
     std::string asking;   // the address the call being answered came from (the calls are answered one at a time)
     server.admit = [&](const std::string &srcid) {
+        if (const int m = machines ? machines(srcid) : -1; m >= 0) {
+            if (m == 0)
+                note("cabinet " + srcid, "refused: a call from " + asking + " as cabinet " + (pcbid_of(srcid).empty() ? "\"" + srcid.substr(0, 40) + "\" (not a PCBID)" : pcbid_of(srcid)) +
+                                             ", which isn't an enabled machine of the database (machine list)");
+            return m == 1;
+        }
         if (cabinets.has(srcid)) return true;
         const std::string id = pcbid_of(srcid);
         note("cabinet " + srcid, "refused: a call from " + asking + " as cabinet " + (id.empty() ? "\"" + srcid.substr(0, 40) + "\" (not a PCBID)" : id) +

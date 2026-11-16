@@ -72,7 +72,12 @@ Key setting_key(const Game *, const Setting &, const std::string &model = "");
 // declared default. One that isn't declared reads as "". model: the call's model's three letters,
 // the key's for a row that has no model of its own (a model the table doesn't name: phase-Z99);
 // without them such a row has only its defaults.
-std::string setting(const Store &, const Game &, const char *name, const std::string &model = "");
+// arcade: the asking cabinet's arcade (Server::Cabinet), whose own value (tables::arcade) comes
+// first; "": the server's.
+std::string setting(const Store &, const Game &, const char *name, const std::string &model = "", const std::string &arcade = "");
 std::string setting(const Store &, const char *name);   // the server's
+// The key an arcade's own value of a game's setting is kept under (tables::arcade: arcade id, name,
+// model; model as setting()'s); empty: none (no arcade, or a row with no model and none given)
+Key arcade_setting_key(const Game &, const Setting &, const std::string &arcade, const std::string &model = "");
 
 }  // namespace hk::ea

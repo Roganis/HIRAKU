@@ -129,10 +129,19 @@ Key setting_key(const Game *g, const Setting &s, const std::string &model) {
     return dash ? Key{std::string(s.name, dash), dash + 1} : Key{s.name};
 }
 
+Key arcade_setting_key(const Game &g, const Setting &s, const std::string &arcade, const std::string &model) {
+    const std::string m = *g.model && !std::strchr(g.model, '?') ? std::string(g.model) : model;
+    if (arcade.empty() || m.empty()) return {};
+    return {arcade, s.name, m};
+}
+
 namespace {
-std::string read_setting(const Store &st, const Game *g, const char *name, const std::string &model) {
+std::string read_setting(const Store &st, const Game *g, const char *name, const std::string &model, const std::string &arcade) {
     const Setting *s = find_setting(g, name);
     if (!s) return "";
+    if (g && !arcade.empty())   // (an arcade's own value first)
+        if (const Key ak = arcade_setting_key(*g, *s, arcade, model); !ak.empty())
+            if (std::string v = st.get(tables::arcade, ak); !v.empty()) return v;
     const Key key = setting_key(g, *s, model);
     if (s->table == BY_GAME && key.empty()) return s->by_default;
     const std::string v = st.get(*s->table, key);
@@ -140,8 +149,10 @@ std::string read_setting(const Store &st, const Game *g, const char *name, const
 }
 }  // namespace
 
-std::string setting(const Store &st, const Game &g, const char *name, const std::string &model) { return read_setting(st, &g, name, model); }
-std::string setting(const Store &st, const char *name) { return read_setting(st, nullptr, name, ""); }
+std::string setting(const Store &st, const Game &g, const char *name, const std::string &model, const std::string &arcade) {
+    return read_setting(st, &g, name, model, arcade);
+}
+std::string setting(const Store &st, const char *name) { return read_setting(st, nullptr, name, "", ""); }
 
 // Adding a game: its answers as members of Server in a server_<family>.cpp (or an existing family's
 // file, server.h names them), one row here, its section in docs/EAMUSE3.md, its calls in a

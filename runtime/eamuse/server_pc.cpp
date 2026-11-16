@@ -17,8 +17,7 @@ namespace hk::ea {
 namespace {
 // A setting of pop'n 15 or 16's game get as an attribute: its text, trailing white space cut (none
 // left: the declared default)
-std::string as_set(const Store &st, const Game &g, const Setting &s) {
-    std::string v = setting(st, g, s.name);
+std::string as_set(std::string v, const Setting &s) {   // v: its value (Server::setting_of)
     while (!v.empty() && std::isspace((unsigned char)v.back())) v.pop_back();
     return std::string(" ") + s.name + "=\"" + esc(v.empty() ? s.by_default : v) + "\"";
 }
@@ -62,7 +61,7 @@ std::string Server::answer_g15(const Game &g, const Call &, const Request &r, co
         }
         return out;
     };
-    auto number = [&](const char *name) { return std::strtol(setting(*store_, g, name).c_str(), nullptr, 10); };   // games.cpp
+    auto number = [&](const char *name) { return std::strtol(setting_of(g, name).c_str(), nullptr, 10); };   // games.cpp
 
     if (f == "game_get") {
         // phase (0-2, the songs' event stage, 0x427130: the cabinet's own unless the server's is
@@ -89,7 +88,7 @@ std::string Server::answer_g15(const Game &g, const Call &, const Request &r, co
         // gauge faster x1.5; 0x42d200, 0x48e7f1). job_exp_rate, cpu_higher_release,
         // shop_event_ranking: read, never used.
         for (const Setting &s : g.settings)
-            if (strcmp(s.name, "phase") && strcmp(s.name, "ir_ranking") && strcmp(s.name, "net_event")) a += as_set(*store_, g, s);
+            if (strcmp(s.name, "phase") && strcmp(s.name, "ir_ranking") && strcmp(s.name, "net_event")) a += as_set(setting_of(g, s.name), s);
         return open + a + " message=\"" + esc(message()) + "\"/>";
     }
     // the expert courses' board; its entries keep their four stages' scores for the records
@@ -345,9 +344,9 @@ std::string Server::answer_j39(const Game &g, const Call &call, const Request &r
     if (m == "game" && f == "get") {
         if (p16) {   // as pop'n 15's game_get: the phase (none set: none sent), then the rest of the game's settings in order (games.cpp)
             std::string a;
-            if (const std::string ph = setting(*store_, g, "phase"); !ph.empty()) a += " phase=\"" + std::to_string(std::strtol(ph.c_str(), nullptr, 10)) + "\"";
+            if (const std::string ph = setting_of(g, "phase"); !ph.empty()) a += " phase=\"" + std::to_string(std::strtol(ph.c_str(), nullptr, 10)) + "\"";
             for (const Setting &s : g.settings)
-                if (strcmp(s.name, "phase")) a += as_set(*store_, g, s);
+                if (strcmp(s.name, "phase")) a += as_set(setting_of(g, s.name), s);
             return "<game status=\"0\"" + a + " message=\"" + esc(message()) + "\"/>";
         }
         // 17 and 18: each of the game's settings (games.cpp), a number. Guesses but matching_sec
@@ -356,7 +355,7 @@ std::string Server::answer_j39(const Game &g, const Call &call, const Request &r
         // to 14 (0x4c73bd, 0x4521d1), taken as the last
         std::string a;
         for (const Setting &s : g.settings)
-            a += std::string(" ") + s.name + "=\"" + std::to_string(std::strtol(setting(*store_, g, s.name).c_str(), nullptr, 10)) + "\"";
+            a += std::string(" ") + s.name + "=\"" + std::to_string(std::strtol(setting_of(g, s.name).c_str(), nullptr, 10)) + "\"";
         return "<game status=\"0\"" + a + "/>";
     }
     if (m == "game") return "<game status=\"0\"/>";   // active

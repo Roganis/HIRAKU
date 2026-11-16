@@ -834,12 +834,12 @@ add_library(hiraku_eanet STATIC runtime/eamuse/listener.cpp runtime/eamuse/admin
 target_link_libraries(hiraku_eanet PUBLIC hiraku_eamuse)
 target_link_libraries(hiraku-eamuse PRIVATE hiraku_eanet)
 # hiraku-server: the same server keeping its data in a SQLite 3 database (runtime/eamuse/store_sqlite.h,
-# server/main.cpp), built when the system has SQLite 3; in no package yet
+# server/main.cpp, server/accounts.h), built when the system has SQLite 3; in no package yet
 find_package(SQLite3 QUIET)
 if(SQLite3_FOUND)
   add_library(hiraku_easqlite STATIC runtime/eamuse/store_sqlite.cpp)
   target_link_libraries(hiraku_easqlite PUBLIC hiraku_eamuse SQLite::SQLite3)
-  add_executable(hiraku-server server/main.cpp)
+  add_executable(hiraku-server server/main.cpp server/accounts.cpp)   # (accounts.h: its accounts, arcades, machines)
   target_link_libraries(hiraku-server PRIVATE hiraku_easqlite hiraku_eanet)
 endif()
 target_compile_options(hiraku_sys573 PRIVATE -O2 -Wno-unused-parameter)

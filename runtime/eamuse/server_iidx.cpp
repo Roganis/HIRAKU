@@ -90,7 +90,7 @@ std::string Server::answer_c02(const Game &, const Call &, const Request &r, con
     std::vector<Record> scores = from_lines(store_->get(tables::iidx9_scores, {}));
     // the week's song: the operator's, else one of the songs played here, a different one a week
     auto weekly_song = [&]() -> long {
-        if (const std::string s = setting(*store_, g, "weekly_song"); !s.empty()) return std::strtol(s.c_str(), nullptr, 10);
+        if (const std::string s = setting_of(g, "weekly_song"); !s.empty()) return std::strtol(s.c_str(), nullptr, 10);
         std::set<long> songs;
         for (const Record &s : scores) songs.insert(field(s, "mid"));
         if (songs.empty()) return 0;
@@ -208,7 +208,7 @@ std::string Server::answer_c02(const Game &, const Call &, const Request &r, con
 
     if (method == "ranking") {
         // the ranking and its six courses: the operator's, else one ranking of courses 0-5
-        std::vector<std::string> info = words(setting(*store_, g, "courses"));
+        std::vector<std::string> info = words(setting_of(g, "courses"));
         if (info.size() < 7) info = words(find_setting(&g, "courses")->by_default);   // (the owner's, cut short)
         const std::string rid = info[0];
         std::vector<Record> entries = from_lines(store_->get(tables::iidx9_ranking, {}));
@@ -684,7 +684,7 @@ std::string Server::answer_iidx_fdd(const Game &, const Call &call, const Reques
     if (mod == "music" && (method == "reg" || method == "play" || method == "lplay"))   // the chart's clear rate
         return ok(a("mid", attr(r.attrs, "mid")) + a("clid", attr(r.attrs, "clid")) + a("crate", "0") + a("frate", "0"));   // (frate: EMPRESS's)
     if (mod == "shop" && method == "getname")   // the shop's name (the location's), its prefecture, its closing time
-        return ok(a("opname", "HIRAKU") + a("pid", "13") + a("cls_opt", "0") + a("hr", "0") + a("mi", "0"));
+        return ok(a("opname", shop_name()) + a("pid", std::to_string(shop_pref())) + a("cls_opt", "0") + a("hr", "0") + a("mi", "0"));
     return ok();
 }
 

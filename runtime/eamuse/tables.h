@@ -80,6 +80,9 @@ inline constexpr Table unlock_phc{"unlock_phc", "unlock-phc"};
 inline constexpr Table netvs_m39{"netvs_m39", "netvs-M39"};
 inline constexpr Table iidx9_weekly_song{"iidx9_weekly_song", "iidx9-weekly-song"};
 inline constexpr Table iidx9_courses{"iidx9_courses", "iidx9-courses"};
+// An arcade's own value of a game's setting, over the server's (games.h's setting(); hiraku-server's
+// arcades, server/accounts.h): by arcade id, setting name and model (arcade-3-net_event-F14)
+inline constexpr Table arcade{"arcade", "arcade-{}-{}-{}"};
 
 // Every table, for tests and tools
 inline constexpr const Table *all[] = {
@@ -87,7 +90,7 @@ inline constexpr const Table *all[] = {
     &phc, &phcs, &p24, &p24s, &p24_plays, &lobby24, &rank_score, &rank_hitasura, &rank_gamblerz, &rank_exp,
     &rank_ir, &rank_shop, &shop_phase, &iidx9_scores, &iidx9_weekly, &iidx9_ranking, &iidx_players,
     &iidx_scores, &iidx_courses, &gfdmv_cards, &gfdmv_gdid, &gfdmv, &gfdm_cards, &gfdm, &message, &setting,
-    &phases_phc, &unlock_phc, &netvs_m39, &iidx9_weekly_song, &iidx9_courses};
+    &phases_phc, &unlock_phc, &netvs_m39, &iidx9_weekly_song, &iidx9_courses, &arcade};
 
 // A card's <userdata> of a game: pop'n 9's (C00) is by card alone
 struct Kept {

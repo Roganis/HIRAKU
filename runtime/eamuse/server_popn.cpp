@@ -76,12 +76,14 @@ std::string Server::answer_later(const Game &g, const Call &call, const Request 
         // as text (avs2-ea3's facility query 4: id, type, name, country, region, customercode,
         // companycode; a missing or other-typed one fails its start-up), then portfw's address and port;
         // in Japan the region as ISO 3166-2 (0x18008a500 takes the number after "JP-", or throws)
-        return "<facility status=\"0\" expire=\"600\"><location><id>HIRAKU</id><type>0</type><name>HIRAKU</name>"
-               "<country>JP</country><region>JP-13</region><customercode>HIRAKU</customercode>"
+        char region[16];
+        snprintf(region, sizeof region, "JP-%02d", shop_pref());
+        return "<facility status=\"0\" expire=\"600\"><location><id>HIRAKU</id><type>0</type><name>" + esc(shop_name()) + "</name>"
+               "<country>JP</country><region>" + region + "</region><customercode>HIRAKU</customercode>"
                "<companycode>HIRAKU</companycode></location><line><id>0</id><class __type=\"u8\">0</class></line>"
                "<portfw><globalip __type=\"ip4\">192.168.0.2</globalip><globalport __type=\"u16\">5700</globalport>"
                "<privateport __type=\"u16\">5700</privateport></portfw><public><flag __type=\"u8\">0</flag>"
-               "<name>HIRAKU</name><latitude>0</latitude><longitude>0</longitude></public><share><eacoin>"
+               "<name>" + esc(shop_name()) + "</name><latitude>0</latitude><longitude>0</longitude></public><share><eacoin>"
                "<notchamount __type=\"s32\">0</notchamount><notchcount __type=\"s32\">0</notchcount>"
                "<supplylimit __type=\"s32\">100000</supplylimit></eacoin><url><eapass>www.ea-pass.konami.net</eapass>"
                "<arcadefan>www.konami.jp/am</arcadefan><konaminetdx>http://am.573.jp</konaminetdx>"
@@ -92,10 +94,10 @@ std::string Server::answer_later(const Game &g, const Call &call, const Request 
         // pop'n 18's (J39) also the location's name and type, the line's class and share/eacoin
         // (its map in libavs-win32-ea3.dll, from 0x35fe0)
         return "<facility status=\"0\" expire=\"600\"><location><id>HIRAKU</id><country>JP</country>"
-               "<region>13</region><name>HIRAKU</name><type __type=\"u8\">0</type></location>"
+               "<region>" + std::to_string(shop_pref()) + "</region><name>" + esc(shop_name()) + "</name><type __type=\"u8\">0</type></location>"
                "<line><id>0</id><class __type=\"u8\">0</class></line><portfw><globalip __type=\"ip4\">192.168.0.2"
                "</globalip><globalport __type=\"u16\">5700</globalport><privateport __type=\"u16\">5700</privateport>"
-               "</portfw><public><flag __type=\"u8\">0</flag><name>HIRAKU</name><latitude>0</latitude>"
+               "</portfw><public><flag __type=\"u8\">0</flag><name>" + esc(shop_name()) + "</name><latitude>0</latitude>"
                "<longitude>0</longitude></public><share><url><eapass>www.ea-pass.konami.net</eapass>"
                "<arcadefan>www.konami.jp/am</arcadefan><konaminetdx>http://am.573.jp</konaminetdx>"
                "<konamiid>http://id.konami.jp</konamiid></url><eapass><valid __type=\"u16\">1</valid></eapass>"
@@ -105,8 +107,8 @@ std::string Server::answer_later(const Game &g, const Call &call, const Request 
     }
     if (m == "facility" && f == "get") {   // pop'n 14 (0x17d6860): the shop, as text elements in three groups
         return "<facility status=\"0\" expire=\"600\"><location><id>HIRAKU</id><country>JP</country>"
-               "<region>13</region><line>0</line></location><portfw><globalip>192.168.50.2</globalip>"
-               "<globalport>5700</globalport><privateport>5700</privateport></portfw><public><name>HIRAKU</name>"
+               "<region>" + std::to_string(shop_pref()) + "</region><line>0</line></location><portfw><globalip>192.168.50.2</globalip>"
+               "<globalport>5700</globalport><privateport>5700</privateport></portfw><public><name>" + esc(shop_name()) + "</name>"
                "<flag>0</flag></public></facility>";
     }
     if (m == "cardmng") {   // pop'n 13: a card has an id (written on it) and its player a ref id, in "cards"
@@ -275,7 +277,7 @@ std::string Server::answer_later(const Game &g, const Call &call, const Request 
     }
     if (m == "message" && f == "get") {   // (0x19f4e0) phase: the event phase, set online when >= 0
         // (0x18dee0); -1 leaves the cabinet's own. text: the owner's message.
-        const long phase = std::strtol(setting(*store_, g, "phase", game).c_str(), nullptr, 10);
+        const long phase = std::strtol(setting_of(g, "phase", game).c_str(), nullptr, 10);
         return "<message status=\"0\" phase=\"" + std::to_string(phase) + "\" text=\"" + esc(message()) + "\"/>";
     }
     if (m == "eemall" && f == "get") {   // (0x19eda8) points, then <item num/> and <kisekae path pri/>
@@ -343,7 +345,7 @@ std::string Server::answer_game(const std::string &game, const Request &r) {
     }
     if (type == "game" && f == "get") {   // phase: as pop'n 10's message.get (-1: the cabinet's own)
         const Game &g = game_of(game);
-        const long phase = std::strtol(setting(*store_, g, "phase", game).c_str(), nullptr, 10);
+        const long phase = std::strtol(setting_of(g, "phase", game).c_str(), nullptr, 10);
         // pop'n 13 and 14 also read net_event (14's 0x17e9308), the network event running: 1 the
         // INTERNET RANKING (14's 0x17fdc78: the attract mode's course boards, the courses' results
         // and high scores online; every use asks for exactly 1), 2 NET TAISEN, one or the other.
@@ -357,7 +359,7 @@ std::string Server::answer_game(const std::string &game, const Request &r) {
         // the game's own (pop'n 12: an ojama 1000 ms at least, 0x126f38)
         if (game == "E12") flags += " play_enable=\"1\"";
         if (game == "E13" || game == "F14") {
-            flags += " net_event=\"" + std::to_string(std::strtol(setting(*store_, g, "net_event", game).c_str(), nullptr, 10)) + "\"";
+            flags += " net_event=\"" + std::to_string(std::strtol(setting_of(g, "net_event", game).c_str(), nullptr, 10)) + "\"";
         }
         if (game == "E12" || game == "E13" || game == "F14") flags += " local_matching_enable=\"1\" matching_sec=\"30\"";
         if (game == "E12" || game == "E13") flags += " room_num=\"0,0,0,0,0,0,0,0,0,0\"";

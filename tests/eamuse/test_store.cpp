@@ -2,7 +2,8 @@
 // The e-AMUSEMENT server's store (runtime/eamuse/store.h, tables.h): the folder back end names every
 // table's files as HIRAKU always has (and finds each file's table and key again), refuses a key that
 // would name a file outside the folder, keeps within the folder's file limit, and keeps aside what
-// isn't a record.
+// isn't a record. With SQLite (HK_TEST_SQLITE): the same on the database back end where they apply,
+// and a folder imported into a database and exported again is the same folder.
 #include <cstdio>
 #include <ctime>
 #include <filesystem>
@@ -15,6 +16,13 @@
 
 #include "eamuse/store.h"
 #include "eamuse/tables.h"
+#ifdef HK_TEST_SQLITE
+#include <sqlite3.h>
+
+#include <map>
+
+#include "eamuse/store_sqlite.h"
+#endif
 
 namespace fs = std::filesystem;
 using hk::ea::FolderStore;
@@ -201,6 +209,114 @@ int main() {
                   !FolderStore::table_of("format", k),
               "table_of: the singleton, then the most specific pattern");
     }
+
+#ifdef HK_TEST_SQLITE
+    using hk::ea::SqliteStore;
+    // 7. the database: the folder's rule on keys, its limit (rows for files), aside, hold, format
+    {
+        fs::remove_all(top / "db");
+        fs::create_directories(top / "db");
+        const std::string db = (top / "db" / "eamuse.db").string();
+        {
+            SqliteStore st(db);
+            check(st.ok(), "a new database made");
+            check(!st.put(tables::pdata, {"F14", "../x"}, "no") && !st.put(tables::userdata_c00, {"a/b"}, "no") &&
+                      !st.put(tables::setting, {"..", "x"}, "no") && !st.put(tables::pdata, {"F14"}, "no") &&
+                      st.keys(tables::pdata).empty() && st.keys(tables::userdata_c00).empty() && st.keys(tables::setting).empty(),
+                  "db: put refuses / and .., and a key with too few parts");
+            check(st.get(tables::pdata, {"F14", "../../pdata-F14-x"}).empty() && st.get(tables::pdata, {"F14/..", "x"}).empty(),
+                  "db: get refuses / and ..");
+            const std::string bytes("\0\xff\n\tz", 5);
+            check(st.put(tables::cards, {}, "c\n") && st.get(tables::cards, {}) == "c\n" && st.put(tables::pdata, {"F14", "R1"}, bytes) &&
+                      st.get(tables::pdata, {"F14", "R1"}) == bytes,
+                  "db: a plain put and get, bytes as they are");
+            check(st.put(tables::setting, {"phase", "H16"}, "") && st.keys(tables::setting) == std::vector<Key>{{"phase", "H16"}} &&
+                      st.get(tables::setting, {"phase", "H16"}).empty(),
+                  "db: an empty thing kept, and listed");
+            check(st.label(tables::pdata, {"F14", "R1"}) == "pdata/F14/R1" && st.label(tables::cards, {}) == "cards", "db: label table/key");
+            {
+                auto held = st.hold();
+                auto again = st.hold();   // (nested: the outer one's transaction)
+                st.put(tables::refid, {}, "7\n");
+            }
+            check(st.get(tables::refid, {}) == "7\n", "db: hold, nested, then written");
+            st.aside(tables::pdata, {"F14", "R1"}, "short");
+            const auto asides = st.asides();
+            check(asides.size() == 1 && asides[0].table == &tables::pdata && asides[0].key == Key{"F14", "R1"} &&
+                      asides[0].aside.size() == 15 && st.get_named(asides[0]) == "short" &&
+                      hk::ea::file_name(asides[0]).rfind("pdata-F14-R1.unread-", 0) == 0,
+                  "db: aside keeps the bytes as a row of pdata.unread, dated");
+        }
+        {
+            const std::string db2 = (top / "db" / "limit.db").string();
+            SqliteStore st(db2);
+            st.put(tables::setting, {"limit", "files"}, "3\n");
+            st.put(tables::cards, {}, "old");
+            check(st.limit("files", 200000) == 3 && st.limit("cards", 65536) == 65536, "db: limit: the owner's row, else the default");
+            check(st.put(tables::refid, {}, "2\n"), "db: a new row under the limit");
+            check(!st.put(tables::numbering, {}, "2\n") && st.keys(tables::numbering).empty(), "db: a new row past the limit refused");
+            check(st.put(tables::cards, {}, "new") && st.get(tables::cards, {}) == "new", "db: an existing row still written");
+        }
+        {
+            sqlite3 *raw = nullptr;
+            sqlite3_open(db.c_str(), &raw);
+            sqlite3_exec(raw, "PRAGMA user_version=2", nullptr, nullptr, nullptr);
+            sqlite3_close(raw);
+            SqliteStore newer(db);
+            check(newer.get(tables::cards, {}) == "c\n", "db: a newer format's database is read");
+            check(!newer.put(tables::cards, {}, "d\n") && !newer.put(tables::users, {}, "u\n") && newer.get(tables::cards, {}) == "c\n" &&
+                      newer.keys(tables::users).empty(),
+                  "db: ... and not written to");
+        }
+        {
+            SqliteStore st((top / "db" / "keys.db").string());
+            for (const Named &n : names) st.put(n.table, n.key, "x");
+            bool each = true;
+            for (const Named &n : names) each = each && st.keys(n.table) == std::vector<Key>{n.key};
+            check(each, "db: keys: every table's key is its own, and only its");
+        }
+    }
+
+    // 8. a made-up folder holding a file of every table (the owner's limits, a copy aside and files of
+    // no table among them) imported into a database and exported: the same files, the same bytes
+    {
+        const fs::path from = top / "from", out = top / "out";
+        fs::remove_all(from);
+        fs::remove_all(out);
+        fs::create_directories(from);
+        std::map<std::string, std::string> want;
+        int i = 0;
+        auto made = [&](const std::string &name, std::string data) {
+            put_file(from / name, data);
+            want[name] = data;
+        };
+        for (const Named &n : names) made(n.file, std::string(n.file) + std::string("\0\xfe\r\n", 4) + std::to_string(i++));
+        made("pdata-F14-48524B0000000001.unread-20261116-120000", "kept aside");
+        made("limit-files", "3\n");   // (fewer than it holds: an import takes all of it)
+        made("limit-cards", "5\n");
+        made("message", "");           // (an empty file is a file)
+        put_file(from / "format", "1\n");
+        put_file(from / ".lock", "");
+        for (const char *other : {"cards.tmp", "a-b-c-d", "cabinets.txt"}) put_file(from / other, "x");
+        const std::string db = (top / "db" / "import.db").string();
+        SqliteStore st(db);
+        const hk::ea::Copied in = hk::ea::copy_store(FolderStore(from.string()), st);
+        check(in.not_put.empty() && in.things == want.size(), "import: every file of a table's put in (" + std::to_string(in.things) + ")");
+        check(in.not_placed == std::vector<std::string>{"a-b-c-d", "cabinets.txt", "cards.tmp"}, "import: the files of no table's said, by name");
+        check(st.limit("files", 0) == 3 && st.bounded, "import: the owner's limit came in, and holds again after");
+        fs::create_directories(out);
+        FolderStore to(out.string());
+        const hk::ea::Copied back = hk::ea::copy_store(st, to);
+        check(back.not_put.empty() && back.not_placed.empty() && back.things == want.size(), "export: every row written");
+        std::map<std::string, std::string> got;
+        for (const auto &e : fs::directory_iterator(out)) {
+            const std::string name = e.path().filename().string();
+            if (name != "format" && name != ".lock") got[name] = get_file(e.path());
+        }
+        check(got == want, "export: the same files with the same bytes (format and .lock aside)");
+        check(get_file(out / "format") == "1\n", "export: the folder stamped format 1");
+    }
+#endif
 
     fs::remove_all(top);
     return failed ? 1 : 0;

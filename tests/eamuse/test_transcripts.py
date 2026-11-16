@@ -10,6 +10,13 @@ is meant to change nothing (moving its files, another way of keeping its data) c
     tests/eamuse/test_transcripts.py [SERVER] --full [FILE...]     print each file as this server answers
                                                                    it, long answers whole (to compare by hand)
 
+SERVER may be hiraku-server (server/main.cpp): the same files are then run against it on a new
+database each, their file and zeros lines put in through `hiraku-server put`, and at each file's end
+the database is exported to a folder (`hiraku-server export`) whose files are the ones listed, held
+to the same recorded lines: no second set of what is expected. (The export's own format file, which
+it writes with its first file, is the folder's "format" line, as the server's first new file
+stamps a data folder; the database's files beside it aren't listed.)
+
 A transcript's lines:
     # ...            a comment
     clock TIME       the cabinets' time the file's server starts at ("2003-06-01 12:00:00", the
@@ -85,14 +92,22 @@ def expand(body):
                   lambda m: base64.b64encode(made_up(m.group(2))).decode() if m.group(1) == 'b64' else made_up(m.group(2)).hex(), body)
 
 
+def is_database_server(program):
+    """hiraku-server: its data in a database, not a folder"""
+    return os.path.basename(program).startswith('hiraku-server')
+
+
 class Server:
     def __init__(self, program, clock):
+        self.program = program
         self.dir = tempfile.mkdtemp(prefix='hk-transcript-')
+        self.db = os.path.join(self.dir, 'eamuse.db') if is_database_server(program) else None
         with socket.socket() as s:
             s.bind(('127.0.0.1', 0))
             self.port = s.getsockname()[1]
-        self.proc = subprocess.Popen([program, '--port', str(self.port), '--bind', '127.0.0.1', '--data', self.dir, '--quiet',
-                                      '--no-relay', '--clock', clock],
+        where = ['serve', '--db', self.db] if self.db else ['--data', self.dir]
+        self.proc = subprocess.Popen([program] + where + ['--port', str(self.port), '--bind', '127.0.0.1', '--quiet',
+                                                          '--no-relay', '--clock', clock],
                                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         for _ in range(300):   # up to 30 s: a freshly built server read from a slow disk
             try:
@@ -116,6 +131,26 @@ class Server:
                     break
                 out += d
         return out
+
+    def write(self, name, data):
+        """a file of the data folder, or the thing it would be in the database"""
+        if self.db:
+            done = subprocess.run([self.program, 'put', name, '--db', self.db], input=data, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+            if done.returncode:
+                raise SystemExit(f'hiraku-server put {name}: status {done.returncode}: {done.stderr.decode(errors="replace").strip()}')
+            return
+        with open(os.path.join(self.dir, name), 'wb') as f:
+            f.write(data)
+
+    def kept(self):
+        """the folder that holds what is kept: the data folder, or the database exported to one"""
+        if not self.db:
+            return self.dir
+        folder = os.path.join(self.dir, 'export')
+        done = subprocess.run([self.program, 'export', folder, '--db', self.db], stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+        if done.returncode:
+            raise SystemExit(f'hiraku-server export: status {done.returncode}: {done.stderr.decode(errors="replace").strip()}')
+        return folder
 
     def close(self):
         self.proc.terminate()
@@ -182,12 +217,10 @@ def run_once(program, path):
                 srcid = rest.strip()
             elif word == 'file':
                 name, _, text = rest.partition(' ')
-                with open(os.path.join(server.dir, name), 'wb') as f:
-                    f.write(unescape(text).encode('latin-1') + b'\n')
+                server.write(name, unescape(text).encode('latin-1') + b'\n')
             elif word == 'zeros':
                 name, _, spec = rest.partition(' ')
-                with open(os.path.join(server.dir, name), 'wb') as f:
-                    f.write(made_up(spec))
+                server.write(name, made_up(spec))
             elif word == 'mask':
                 masks.append(re.compile(rest))
             elif word == 'volatile':
@@ -214,10 +247,11 @@ def run_once(program, path):
                 raise SystemExit(f'{path}: not a transcript line: {line[:60]}')
         if time.monotonic() - began > SLOW:
             raise Slow()
-        for name in sorted(os.listdir(server.dir)):
+        kept = server.kept()
+        for name in sorted(os.listdir(kept)):
             if name == '.lock':
                 continue
-            with open(os.path.join(server.dir, name), 'rb') as f:
+            with open(os.path.join(kept, name), 'rb') as f:
                 data = f.read()
             # (a file kept aside is named after the host's clock: NAME.unread-DATE)
             shown = re.sub(r'\.unread-\d{8}-\d{6}$', '.unread-DATE', name)

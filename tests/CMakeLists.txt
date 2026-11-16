@@ -217,6 +217,13 @@ if(Python3_Interpreter_FOUND AND NOT WIN32)
   # ... every game family's calls against the answers recorded for them (eamuse/transcripts/), and the
   # data folder's files as they leave it: what work on the server must not change
   add_test(NAME eamuse_transcripts COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/eamuse/test_transcripts.py $<TARGET_FILE:hiraku-eamuse>)
+  # ... the same against hiraku-server and its database (the database exported at each file's end), and
+  # its backup while it serves, two programs writing it at once
+  find_package(SQLite3 QUIET)
+  if(SQLite3_FOUND)
+    add_test(NAME eamuse_transcripts_sqlite COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/eamuse/test_transcripts.py $<TARGET_FILE:hiraku-server>)
+    add_test(NAME eamuse_server_db COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/eamuse/test_server_db.py $<TARGET_FILE:hiraku-server>)
+  endif()
   # ... what it keeps read back (players, names, scores) and the owner's settings changed (--players, --set...)
   add_test(NAME eamuse_readers COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/eamuse/test_readers.py $<TARGET_FILE:hiraku-eamuse>)
   # ... and calls no game would send (it listens on a network): answered or dropped, the server goes on
@@ -263,6 +270,12 @@ add_test(NAME eamuse_folder_merge COMMAND test_merge)
 add_executable(test_store eamuse/test_store.cpp)
 target_link_libraries(test_store PRIVATE hiraku_eamuse)
 add_test(NAME eamuse_store COMMAND test_store)
+# ... and the database back end of hiraku-server (runtime/eamuse/store_sqlite.h), with the system's SQLite 3
+find_package(SQLite3 QUIET)
+if(SQLite3_FOUND)
+  target_link_libraries(test_store PRIVATE hiraku_easqlite)
+  target_compile_definitions(test_store PRIVATE HK_TEST_SQLITE=1)
+endif()
 # NET TAISEN's lobby (runtime/eamuse/lobby.h): what it holds is bounded
 add_executable(test_lobby eamuse/test_lobby.cpp ${CMAKE_SOURCE_DIR}/runtime/eamuse/lobby.cpp)
 target_include_directories(test_lobby PRIVATE ${CMAKE_SOURCE_DIR}/runtime)

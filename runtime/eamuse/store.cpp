@@ -17,7 +17,7 @@
 
 namespace hk::ea {
 
-std::string FolderStore::file_name(const Table &t, const Key &k) {
+std::string file_name(const Table &t, const Key &k) {
     std::string name;
     size_t part = 0;
     for (const char *p = t.file; *p; p++) {
@@ -120,7 +120,7 @@ bool matches(const char *pattern, const std::string &file, Key &key, size_t &let
 }
 }  // namespace
 
-const Table *FolderStore::table_of(const std::string &file, Key &key) {
+const Table *table_of(const std::string &file, Key &key) {
     const Table *best = nullptr;
     size_t most = 0;
     for (const Table *t : tables::all) {
@@ -134,6 +134,29 @@ const Table *FolderStore::table_of(const std::string &file, Key &key) {
         if (!best || letters > most) best = t, most = letters, key = k;
     }
     return best;
+}
+
+namespace {
+constexpr const char ASIDE[] = ".unread-";   // NAME.unread-DATE: a copy kept aside
+}
+
+std::string file_name(const Named &n) {
+    if (!n.table) return "";
+    const std::string name = file_name(*n.table, n.key);
+    return name.empty() || n.aside.empty() ? name : name + ASIDE + n.aside;
+}
+
+bool named(const std::string &file, Named &n) {
+    n = Named{};
+    if ((n.table = table_of(file, n.key))) return true;
+    const size_t at = file.rfind(ASIDE);
+    if (at == std::string::npos) return false;
+    const std::string date = file.substr(at + sizeof ASIDE - 1);
+    if (date.empty() || date.find_first_not_of("0123456789-_ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz") != std::string::npos)
+        return false;
+    n.table = table_of(file.substr(0, at), n.key);
+    n.aside = date;
+    return n.table != nullptr;
 }
 
 std::vector<Key> FolderStore::keys(const Table &t) const {
@@ -150,6 +173,7 @@ std::vector<Key> FolderStore::keys(const Table &t) const {
 }
 
 bool FolderStore::room_for_file() {
+    if (!bounded) return true;
     if (files_ < 0) {
         files_ = 0;
         std::error_code ec;
@@ -174,10 +198,56 @@ void FolderStore::aside(const Table &t, const Key &k, const std::string &had) {
     char date[32];
     const time_t now = time(nullptr);
     strftime(date, sizeof date, "%Y%m%d-%H%M%S", localtime(&now));
-    const std::string aside = name + ".unread-" + date;
+    const std::string aside = ea::file_name(Named{&t, k, date});
     write(aside, had);
     fprintf(stderr, "e-AMUSEMENT: %s isn't a player's file as this HIRAKU keeps them (%zu bytes): kept as %s, a new one made\n",
             name.c_str(), had.size(), aside.c_str());
+}
+
+std::vector<Named> FolderStore::asides() const {
+    std::vector<Named> out;
+    if (dir_.empty()) return out;
+    std::error_code ec;
+    for (const auto &e : std::filesystem::directory_iterator(dir_, ec)) {
+        Named n;
+        if (e.is_regular_file(ec) && named(e.path().filename().string(), n) && !n.aside.empty()) out.push_back(n);
+    }
+    return out;
+}
+
+std::string FolderStore::get_named(const Named &n) const { return read(ea::file_name(n)); }
+bool FolderStore::put_named(const Named &n, const std::string &data) { return write(ea::file_name(n), data); }
+
+std::vector<std::string> FolderStore::strays() const {
+    std::vector<std::string> out;
+    if (dir_.empty()) return out;
+    std::error_code ec;
+    for (const auto &e : std::filesystem::directory_iterator(dir_, ec)) {
+        const std::string name = e.path().filename().string();
+        Named n;
+        if (name != "format" && name != ea::FOLDER_LOCK && !named(name, n)) out.push_back(name);
+    }
+    std::sort(out.begin(), out.end());
+    return out;
+}
+
+Copied copy_store(const Store &from, Store &to) {
+    Copied c;
+    const bool was = to.bounded;
+    to.bounded = false;
+    {
+        const auto held = to.hold();   // (a database: one transaction)
+        auto put = [&](const Named &n, const std::string &data) {
+            if (to.put_named(n, data)) c.things++;
+            else c.not_put.push_back(file_name(n));
+        };
+        for (const Table *t : tables::all)
+            for (const Key &k : from.keys(*t)) put(Named{t, k, ""}, from.get(*t, k));
+        for (const Named &n : from.asides()) put(n, from.get_named(n));
+    }
+    c.not_placed = from.strays();
+    to.bounded = was;
+    return c;
 }
 
 namespace {

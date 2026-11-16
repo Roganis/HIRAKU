@@ -20,6 +20,28 @@ struct Table {
 };
 using Key = std::vector<std::string>;
 
+// Folder names, the exchange format: what the folder back end calls a thing kept is how every back
+// end, import and export (copy_store below) and hiraku-server's get and put name it. A thing by
+// such a name: its table and key, or a copy of it kept aside (Store::aside), with that copy's date
+struct Named {
+    const Table *table = nullptr;
+    Key key;
+    std::string aside;   // the date of a copy kept aside ("20261116-120000"); "": the thing itself
+};
+// A table's file name for a key: the pattern's {} each replaced by the key's next part ("" if the key
+// has another number of parts). Not checked: the stores refuse a name safe_file refuses.
+std::string file_name(const Table &, const Key &);
+// ... and a Named's: NAME, or NAME.unread-DATE for a copy kept aside ("" for none)
+std::string file_name(const Named &);
+// The table a file of the folder belongs to, and its key; null for a file no table names. A file is
+// one table's: a pattern with no {} that is the name wins; else the matching pattern with the most
+// letters of its own, a key's part never holding a '-' ("gfdmv-cards" is the singleton, not gfdmv-{};
+// "userdata-C20-X" userdata-{}-{}; the owner's {}-{} takes only what nothing else does)
+const Table *table_of(const std::string &file, Key &key);
+// ... and a copy kept aside too (NAME.unread-DATE). false: a file no table names (format, .lock, the
+// owner's own files)
+bool named(const std::string &file, Named &);
+
 class Store {
 public:
     virtual ~Store() = default;
@@ -43,7 +65,31 @@ public:
     // PC, hiraku-eamuse's threads) read, change and write back the same things, and one's write would
     // undo another's
     virtual std::unique_ptr<Hold> hold() = 0;
+
+    // The exchange (folder names, above): every copy kept aside (aside), and a thing or such a copy
+    // read or written by its name. put_named is put's for a thing (the same checks), and for a copy
+    // aside's without the message
+    virtual std::vector<Named> asides() const = 0;
+    virtual std::string get_named(const Named &) const = 0;
+    virtual bool put_named(const Named &, const std::string &) = 0;
+    // What it holds that no table names, by name (the folder: its files of no table's, format and
+    // .lock aside), for import's report
+    virtual std::vector<std::string> strays() const { return {}; }
+    // false while a store is copied into it (copy_store): what the other kept comes in whatever the
+    // limit on things kept says (the owner's limits come in with the rest, in no order)
+    bool bounded = true;
 };
+
+// Everything `from` keeps put in `to` (hiraku-server's import and export): every key of every table
+// of tables::all, the owner's settings and limits among them, and the copies kept aside, each thing's
+// bytes as they are. A folder exported from a database imported from a folder holds the same files
+// with the same bytes (its format file and .lock aside)
+struct Copied {
+    size_t things = 0;                     // put in `to`
+    std::vector<std::string> not_placed;   // what `from` holds that no table names (by name only)
+    std::vector<std::string> not_put;      // what `to` refused (by name)
+};
+Copied copy_store(const Store &from, Store &to);
 
 // Plain files in a folder: records as lines of tab-separated key=value fields (protocol.h), a
 // player's record as the game's bytes. dir "": nothing is kept.
@@ -61,15 +107,14 @@ public:
     long limit(const char *what, long by_default) const override;
     std::vector<Key> keys(const Table &) const override;
     std::unique_ptr<Hold> hold() override;
+    std::vector<Named> asides() const override;
+    std::string get_named(const Named &) const override;
+    bool put_named(const Named &, const std::string &) override;
+    std::vector<std::string> strays() const override;
 
-    // A table's file name for a key: the pattern's {} each replaced by the key's next part ("" if
-    // the key has another number of parts). Not checked: get and put refuse a name safe_file refuses.
-    static std::string file_name(const Table &, const Key &);
-    // The table a file of the folder belongs to, and its key; null for a file no table names. A file
-    // is one table's: a pattern with no {} that is the name wins; else the matching pattern with the
-    // most letters of its own, a key's part never holding a '-' ("gfdmv-cards" is the singleton, not
-    // gfdmv-{}; "userdata-C20-X" userdata-{}-{}; the owner's {}-{} takes only what nothing else does)
-    static const Table *table_of(const std::string &file, Key &key);
+    // (store.h's file_name and table_of, by their old names)
+    static std::string file_name(const Table &t, const Key &k) { return ea::file_name(t, k); }
+    static const Table *table_of(const std::string &file, Key &key) { return ea::table_of(file, key); }
 
 private:
     std::string read(const std::string &name) const;

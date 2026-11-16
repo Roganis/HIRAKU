@@ -5,6 +5,7 @@
 #include "eamuse/protocol.h"
 #include "shell/sys.h"
 
+#include <algorithm>
 #include <cstdio>
 #include <cstdlib>
 #include <ctime>
@@ -40,15 +41,45 @@ bool FolderStore::write(const std::string &name, const std::string &data) {
         fprintf(stderr, "e-AMUSEMENT: not written: a call's field made no file name (%zu bytes)\n", name.size());
         return false;
     }
+    if (!writable()) return false;
     sys::make_dir(dir_);
     // whole or not at all: a full or failing disk keeps the player's file from before
     const std::string path = dir_ + "/" + name;
-    if (!sys::exists(path) && !room_for_file()) return false;
+    if (!sys::exists(path)) {
+        if (!room_for_file()) return false;
+        stamp();
+    }
     if (!sys::write_file(path, data)) {
         fprintf(stderr, "e-AMUSEMENT: cannot write %s: the one from before is kept\n", path.c_str());
         return false;
     }
     return true;
+}
+
+bool FolderStore::writable() {
+    if (format_ < 0) {
+        const std::string path = dir_ + "/format";
+        format_ = 0;
+        if (sys::exists(path)) {
+            const std::string had = read("format");
+            format_ = std::max(1L, std::strtol(had.c_str(), nullptr, 10));
+        }
+    }
+    if (format_ <= FORMAT) return true;
+    if (!newer_said_)
+        fprintf(stderr, "e-AMUSEMENT: %s was made by a newer HIRAKU (its format %ld, this one's %ld): it is left as it is, nothing is written to it\n",
+                dir_.c_str(), format_, FORMAT);
+    newer_said_ = true;
+    return false;
+}
+
+void FolderStore::stamp() {
+    if (format_ != 0) return;
+    format_ = FORMAT;
+    const std::string path = dir_ + "/format";
+    if (sys::exists(path)) return;   // (another server sharing the folder stamped it)
+    if (!sys::write_file(path, std::to_string(FORMAT) + "\n")) fprintf(stderr, "e-AMUSEMENT: cannot write %s\n", path.c_str());
+    else if (files_ >= 0) files_++;
 }
 
 std::string FolderStore::get(const Table &t, const Key &k) const { return read(file_name(t, k)); }

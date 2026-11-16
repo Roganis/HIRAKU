@@ -23,4 +23,5 @@ model
 > <ntp method="get"/>
 < 200 <response><ntp status="0"><time year="2003" month="6" day="1" hour="12" min="0" sec="*"></time></ntp></response>
 = 4eb9ca313263d12e9af16f4cbdef76cc0cd2fd109a3517d0653a43d462bb9eb2 58 cards
+= 4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865 2 format
 = 53c234e5e8472b6ac51c1ae1cab3fe06fad053beb8ebfd8977b010655bfdd3c3 2 refid

@@ -124,6 +124,7 @@ model ECO:J:A:A
 < 200 <response><ECO status="SOK" method="pcreg" id="10000001"></ECO></response>
 > <ECO method="pc" command="get 2003010000000010 0"/>
 < 200 <response><ECO status="SOK" method="pcget"><pc id="10000001" idstr="1000-0001" name="ALICE" pass="1234" cpass="" spnum="0" dpnum="0" sach="0.000000" dach="0.000000" pid="13"/></ECO></response>
+= 4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865 2 format
 = 6c8ffdae5f04acd5c931f9ac7507d5a9e24562a0ac996d5b16fdf41d291c6a9d 72 iidx-D01-players
 = 13f03021950b079f452a69244bbd9d24ff52ae8f2ac22a9fbc2a435770b6a594 59 iidx-D01-scores
 = 47ae305bd6c0c5f3d38a68f871d8d6aabbd4b15ee2a02bfb32147d422cdfb58f 267 iidx-E11-players

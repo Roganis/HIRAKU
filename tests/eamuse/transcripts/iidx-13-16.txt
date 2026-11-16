@@ -151,6 +151,7 @@ model FDD:J:A:G
 > <userdata method="read" card="2003010000000010" model="FDD:J:A:G" label=""/>
 < 200 <response><userdata status="109"></userdata></response>
 = 3b8e3b4fba9c5d744143d7d7c8baa71fa1a96df99ebfe24ae2458e8c604d8784 136 cards
+= 4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865 2 format
 = ---------------------------------------------------------------- - iidx-FDD-courses
 = 641ae94566a79ce73cfd2948c09242cefa75171d6ed73323c919c289dd7df90e 100 iidx-FDD-players
 = 6a2d077e3aec35ec0e3e76117c833cefe70c3947a719eec45d6243ef30a3676f 56 iidx-FDD-scores

@@ -114,6 +114,7 @@ srcid 0A090807060504030201
 > <lobby24 method="getList"/>
 < 200 <response><lobby24 status="0"><list><no __type="u32">500</no><time __type="u32">60000</time><ip __type="u32">167772162</ip><port __type="u16">5700</port><local_ip __type="u32">3232235778</local_ip><music __type="s16">200</music><sheet __type="u8">1</sheet><is_ojama __type="u8">0</is_ojama></list></lobby24></response>
 = a933d95540199002df2d3fe58f299fa6078cc033e9c8734317eb76dbe93c84ac 68 cards
+= 4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865 2 format
 = ---------------------------------------------------------------- - lobby24-M39
 = 9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa 2 netvs-M39
 = 2ca2537daf831cb64e06bb4ae4711bcea55b61acd9fb8d42c1b52dde001d8316 151 p24-48524B0000000001

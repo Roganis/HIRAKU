@@ -45,8 +45,11 @@ public:
 
 // Plain files in a folder: records as lines of tab-separated key=value fields (protocol.h), a
 // player's record as the game's bytes. dir "": nothing is kept.
+// The folder's format is a number in its file "format" (none: 1), written with the folder's first
+// new file. A folder of a newer format than this program's is read but never written to.
 class FolderStore : public Store {
 public:
+    static constexpr long FORMAT = 1;   // this program's
     explicit FolderStore(std::string dir) : dir_(std::move(dir)) {}
 
     std::string get(const Table &, const Key &) const override;
@@ -64,6 +67,11 @@ private:
     std::string read(const std::string &name) const;
     bool write(const std::string &name, const std::string &data);
     bool room_for_file();   // a new file may be made (counted from the folder, once)
+    bool writable();        // the folder's format is one this program writes (said once if not)
+    void stamp();           // the folder's format written, if it has none
+
+    long format_ = -1;      // the folder's format: -1 not read yet, 0 no file yet (format 1)
+    bool newer_said_ = false;
 
     std::string dir_;
     // What a server others can reach keeps is bounded (a call registers a card, writes a card's

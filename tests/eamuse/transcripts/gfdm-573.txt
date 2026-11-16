@@ -74,6 +74,7 @@ model D39:J:A:A
 < 200 info=1-484b001a-001a <response><gamedata status="0"><system status="0"/><player no="1" skill="20" skill_order="1" skill_all="1"><stage all="1" order="1" best="1"/></player></gamedata></response>
 > <gamedata method="dataget" sid="020304050607"><favorite nr="5"/></gamedata>
 < 200 <response><gamedata status="0"><system status="0"/><favorite nr="1" netids="12?" from="20030601" to="20030601"/></gamedata></response>
+= 4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865 2 format
 = 2612a5c4d52e0283adba36cee7a8a57e179bda659d707aec588cee761add9556 80 gfdm-D39-1
 = 3ee979cb712c9774020c35218f7ed4018251f5f078f4076c2cd725424225f283 197 gfdm-D40-1
 = 3e1ac4e3f1746123325040cb69c88eb117c6e7f67265733d761b298f4caa058e 82 gfdm-D40-2

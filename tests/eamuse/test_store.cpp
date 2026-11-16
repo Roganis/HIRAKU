@@ -143,6 +143,33 @@ int main() {
         check(held && fs::exists(dir / ".lock"), "hold: the folder's .lock");
     }
 
+    // 5. the folder's format: stamped once, with its first new file; a newer one is only read
+    {
+        fs::remove_all(dir);
+        {
+            FolderStore st(dir.string());
+            st.put(tables::cards, {}, "a\n");
+            check(get_file(dir / "format") == "1\n", "the first new file stamps the folder: format 1");
+            put_file(dir / "format", "1 \n");   // (an edit would show if it were written again)
+            st.put(tables::refid, {}, "2\n");
+            st.put(tables::cards, {}, "b\n");
+        }
+        FolderStore again(dir.string());
+        again.put(tables::numbering, {}, "3\n");
+        check(get_file(dir / "format") == "1 \n", "... and only once");
+        put_file(dir / "format", "2\n");
+        FolderStore newer(dir.string());
+        check(newer.get(tables::cards, {}) == "b\n", "a newer format's folder is read");
+        check(!newer.put(tables::cards, {}, "c\n") && !newer.put(tables::users, {}, "u\n") && get_file(dir / "cards") == "b\n" &&
+                  !fs::exists(dir / "users"),
+              "... and not written to");
+        fs::remove_all(dir);
+        fs::create_directories(dir);
+        put_file(dir / "limit-files", "0\n");
+        FolderStore full(dir.string());
+        check(!full.put(tables::cards, {}, "x") && !fs::exists(dir / "format"), "no stamp when nothing new is kept");
+    }
+
     fs::remove_all(top);
     return failed ? 1 : 0;
 }

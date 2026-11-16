@@ -28,6 +28,7 @@ model E02:J:A:A:2005022200
 < 200 <response><cardutil status="0"><card no="1" state="2" pass="1234" gdid="0000000001" skill="0"/><card no="2" state="1" gdid="0000000002"/></cardutil></response>
 > <pcbtracker method="alive"/>
 < 200 <response><pcbtracker status="0"></pcbtracker></response>
+= 4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865 2 format
 = ec2af424513b8a58182d4eddb2569f149967d91dc9fb86e4d1856af9a70e1a8f 223 gfdmv-0000000001
 = 98996631631d93999c253244d8a109bd6576abb4a66eadca510e108a0d645c53 109 gfdmv-cards
 = 1121cfccd5913f0a63fec40a6ffd44ea64f9dc135c66634ba001d10bcf4302a2 2 gfdmv-gdid

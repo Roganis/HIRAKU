@@ -188,7 +188,7 @@ const std::vector<Game> &games() {
           LOCAL_MATCHING, MATCHING_SEC, BOSS_DIFF_18, BOSS_POINT_18},
          &POPN_READERS},
         {"popn-pc-later", "the later PC pop'n games", "M39", Family::popn_pc_later, {&S::answer_hc, &S::answer_p24, later, shared, popn9},
-         {PHASES_LATER, UNLOCK_LATER, NETVS_LATER}, &POPN_LATER_READERS},
+         {PHASES_LATER, UNLOCK_LATER, NETVS_LATER}, &POPN_LATER_READERS, /*unlisted*/ true},
         {"iidx9", "beatmania IIDX 9th style", "C02", Family::iidx9, {c02, iidx_userdata, shared, popn9}, {WEEKLY_SONG_9, COURSES_9},
          &IIDX9_READERS},
         {"iidx10", "beatmania IIDX 10th style", "D01", Family::iidx10_13, {c02, red, iidx_userdata, shared, popn9}, {}, &IIDX_READERS},

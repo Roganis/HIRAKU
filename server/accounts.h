@@ -15,7 +15,9 @@
 // shown once when made; kept as the 32 bytes its text makes, what the connection's keys are made
 // from), and serve takes a machine's calls behind it. Every change is in the audit log: who, when, what; never a
 // password, PIN or code. A password is kept as PBKDF2-HMAC-SHA256 (pbkdf2-sha256$ROUNDS$SALT$HASH),
-// a reset or invitation code as its SHA-256.
+// a reset or invitation code as its SHA-256. The API's (server/api.h) sessions and personal tokens
+// are kept as their SHA-256 too: a session lasts 30 days from its last use, a token until revoked;
+// neither works for a disabled or removed user.
 #pragma once
 
 #include <cstdint>
@@ -91,12 +93,27 @@ struct Stat {
 struct SettingLine {
     std::string game, name, arcade, server, by_default;
 };
+// A personal token as listed (never its text)
+struct Token {
+    long id = 0;
+    std::string label;
+    bool write = false;
+    int64_t created = 0, last_used = 0;
+};
+// One of a game's best scores, as anyone signed in may see it: the user's name when the card is
+// linked to one (else ""), the game's own player name
+struct TopScore {
+    std::string user, player;
+    long song = 0, chart = 0, score = 0;
+    int clear = -1;
+};
 
 class Accounts {
 public:
     static constexpr long VERSION = 1;          // the tables' (the meta table's row "accounts")
     static constexpr uint32_t ROUNDS = 200000;   // PBKDF2's for a new password
     static constexpr int LOCK_TRIES = 5;         // wrong PINs that lock a card for linking
+    static constexpr int64_t SESSION_SECONDS = 30 * 86400;   // a session's life from its last use
     enum class SignUp { open, invite, closed };
 
     // The accounts of the database `file` (made if it has none), whose things are `store`'s (the same
@@ -126,12 +143,36 @@ public:
     Refusal set_hide_stats(const Who &, const std::string &user, bool);   // one's own, or an admin
     Refusal remove_user(const Who &, const std::string &user);           // its cards unlinked, their data kept
     Refusal users(const Who &, std::vector<User> &);                       // an admin
+    Refusal user(const Who &, const std::string &name, User &);            // one's own, or an admin
     Refusal make_reset(const Who &, const std::string &user, std::string &code);   // an admin: a code for a day, once
+    // user "": the code's own user
     Refusal use_reset(const std::string &user, const std::string &code, const std::string &password);
+    // The users whose stats show (not hidden, not disabled), by name: anyone signed in
+    Refusal players(const Who &, std::vector<std::string> &);
 
     SignUp sign_up_mode() const;
     Refusal set_sign_up_mode(const Who &, SignUp);
     Refusal make_invite(const Who &, int uses, int days, std::string &code);
+    // The server's name, for people (the API's /server); "HIRAKU" until an admin names it
+    std::string server_name() const;
+    Refusal set_server_name(const Who &, const std::string &);
+    // Whether the games' rows marked unlisted (games.h) are listed and their stats shown: an admin's
+    bool list_all_games() const;
+    Refusal set_list_all_games(const Who &, bool);
+    bool listed(const ea::Game &) const;   // a row anyone may see now
+
+    // The API's sessions (server/api.h): a new one for the user (its token and CSRF value: the
+    // caller gives them out, once), the user of a session that is there and not past its time (its
+    // life made 30 days again; csrf: its value), one closed
+    Refusal open_session(const Who &, std::string &token, std::string &csrf);
+    Refusal session(const std::string &token, Who &, bool &must_change, std::string &csrf);
+    void close_session(const std::string &token);
+    // ... and personal tokens: made (its text given once), the user of one (write: its scope),
+    // one's own listed and revoked
+    Refusal make_token(const Who &, const std::string &label, bool write, std::string &token, long &id);
+    Refusal token(const std::string &token, Who &, bool &must_change, bool &write, long &id);
+    Refusal tokens(const Who &, std::vector<Token> &);
+    Refusal revoke_token(const Who &, long id);
 
     // Cards
     Refusal link_card(const Who &, const std::string &card, const std::string &pin);
@@ -139,7 +180,10 @@ public:
     Refusal unlock_card(const Who &, const std::string &card);   // an admin
     Refusal reset_card_pin(const Who &, const std::string &card, const std::string &pin, ea::PinReset &);   // an admin
     Refusal cards(const Who &, const std::string &user, std::vector<LinkedCard> &);   // user "": who's own
-    Refusal stats(const Who &, const std::string &user, std::vector<Stat> &);
+    Refusal stats(const Who &, const std::string &user, std::vector<Stat> &);   // the games listed (listed())
+    // A game's best scores among the players whose stats show (a card linked to no user: by the game's
+    // player name), best first; song, chart -1: any; at most `limit`
+    Refusal top(const Who &, const std::string &game, long song, long chart, size_t limit, std::vector<TopScore> &);
 
     // Arcades and machines: an operator's own, every one for an admin
     Refusal add_arcade(const Who &, const std::string &name, int pref, const std::string &owner, long &id);
@@ -160,6 +204,8 @@ public:
     // own settings, arcade 0 only), checked against its declaration (games.h); value "": none
     Refusal set_setting(const Who &, long arcade, const std::string &game, const std::string &name, const std::string &value);
     Refusal settings(const Who &, long arcade, const std::string &game, std::vector<SettingLine> &);
+    // The server's own settings (game "server"; server value and default): an admin's
+    Refusal server_settings(const Who &, std::vector<SettingLine> &);
 
     Refusal audit(const Who &, size_t last, std::vector<AuditLine> &);   // an admin: the last ones
 

@@ -6,6 +6,7 @@
 //
 //   hiraku-server serve --db FILE [--port 8080] [--bind 0.0.0.0] [--allow ADDRESSES] [--cabinets FILE]
 //                 [--key-file FILE] [--clock "2003-06-01 12:00:00"] [--tz 9] [--quiet] [--no-relay] [--no-keys]
+//                 [--api 127.0.0.1:8081 | --no-api] [--api-insecure-cookies] [--api-trust-proxy]
 //   hiraku-server serve --db FILE [--cabinets FILE] --new-cabinet [NAME]  |  [--key-file FILE] --new-key
 //   hiraku-server import FOLDER --db FILE     a data folder's files into the database (made if none)
 //   hiraku-server export FOLDER --db FILE     the database as a data folder (a new or empty one)
@@ -21,7 +22,8 @@
 //     user; a password, PIN or code is read from stdin (a line each) or asked for, never an argument.
 //     Once the database has a machine, serve answers its enabled machines only (not cabinets.txt),
 //     each behind its own key (machine add, machine key; shell/keyed.h) and as itself only;
-//     --no-keys: by the PCBID a call says it is, for a private network or a VPN.
+//     --no-keys: by the PCBID a call says it is, for a private network or a VPN. serve's JSON API
+//     (server/api.h, docs/SERVER.md) listens on --api, a port of its own, behind a reverse proxy's TLS.
 #include <cctype>
 #include <cstdio>
 #include <cstdlib>
@@ -33,6 +35,7 @@
 #include <vector>
 
 #include "accounts.h"
+#include "api.h"
 #include "eamuse/admin.h"
 #include "eamuse/listener.h"
 #include "eamuse/server.h"
@@ -53,6 +56,7 @@ int usage(int status) {
     fprintf(status ? stderr : stdout,
             "usage: hiraku-server serve --db FILE [--port N] [--bind ADDR] [--allow ADDRESSES] [--cabinets FILE]\n"
             "                     [--key-file FILE] [--clock \"YYYY-MM-DD HH:MM:SS\"] [--tz H] [--quiet] [--no-relay] [--no-keys]\n"
+            "                     [--api ADDR:PORT | --no-api] [--api-insecure-cookies] [--api-trust-proxy]\n"
             "       hiraku-server serve --db FILE [--cabinets FILE] --new-cabinet [NAME]\n"
             "       hiraku-server serve --db FILE [--key-file FILE] --new-key\n"
             "       hiraku-server import FOLDER --db FILE   a data folder's files into the database (made if none)\n"
@@ -67,6 +71,9 @@ int usage(int status) {
             "  serve's options are hiraku-eamuse's; cabinets.txt and key.txt are beside the database by default.\n"
             "  Once there are machines, each is answered behind its own key only (machine add, machine key);\n"
             "  --no-keys: by the PCBID a call says, for a private network or a VPN\n"
+            "  --api: the JSON API's address (127.0.0.1:8081; docs/SERVER.md), behind a reverse proxy's TLS;\n"
+            "  --api-insecure-cookies: its log-in cookie without Secure (plain HTTP, tests); --api-trust-proxy:\n"
+            "  the caller's address is X-Forwarded-For's last hop\n"
             "accounts, cards, arcades, machines (--db FILE; --as USER acts as that user, else the command line, an admin;\n"
             "a password, PIN or code is read from stdin, a line each, or asked for):\n"
             "  user add NAME [--role player|operator|admin]   a new account (password)\n"
@@ -399,10 +406,13 @@ int main(int argc, char **argv) {
     AccountOptions ao;
     ea::Listener listener;
     listener.program = ME;
+    srv::ApiOptions api;
     for (int i = 1; i < argc; i++) {
         const std::string a = argv[i];
         if (const int taken = listener.option(argc, argv, i)) {
             if (taken == 2) return 2;
+        } else if (const int api_taken = api.option(argc, argv, i)) {
+            if (api_taken == 2) return 2;
         } else if (a == "--db") {
             if (i + 1 >= argc) { fprintf(stderr, "%s needs a value\n", a.c_str()); return 2; }
             db = argv[++i];
@@ -451,6 +461,7 @@ int main(int argc, char **argv) {
         if (const int status = listener.start(beside(db), new_cabinet, new_name, new_key); status >= 0) return status;
         auto store = std::make_unique<ea::SqliteStore>(db);
         if (!store->ok()) return 1;
+        ea::SqliteStore &kept = *store;
         srv::Accounts acc(db, *store);   // (the store lives as long as the server, this function)
         if (!acc.ok()) return 1;
         first_admin(acc);
@@ -475,6 +486,16 @@ int main(int argc, char **argv) {
                    no_keys ? ", by the PCBID a call says (--no-keys)" : ", each behind its own key");
             if (const size_t u = acc.machines_without_key(); u && !no_keys)
                 printf("%s: %zu machine%s no key, and %s answered: machine key PCBID makes one\n", ME, u, u == 1 ? " has" : "s have", u == 1 ? "isn't" : "aren't");
+        }
+        // the JSON API: its own threads and its own connection to the database (server/api.h)
+        api.quiet = listener.quiet;
+        std::unique_ptr<srv::Api> web;
+        if (api.enabled) {
+            web = std::make_unique<srv::Api>(db, kept, api);
+            if (std::string error; !web->start(error)) {
+                fprintf(stderr, "%s: the API: %s (--api ADDRESS:PORT, or --no-api)\n", ME, error.c_str());
+                return 1;
+            }
         }
         return listener.serve(server, db);
     }

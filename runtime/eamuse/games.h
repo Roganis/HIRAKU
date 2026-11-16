@@ -56,6 +56,8 @@ struct Game {
     std::vector<Answer> chain;   // tried in order; after the last, <MODULE status="0"/>
     std::vector<Setting> settings = {};   // what the owner may set for it
     const Readers *readers = nullptr;     // its players, names and scores (readers.h); null: not read yet
+    bool unlisted = false;                // left out of what hiraku-server's API lists and shows (its own
+                                          // switch, list_all_games, lists it): no effect on the answers
 };
 
 const std::vector<Game> &games();                 // the one table: every game the server answers

@@ -4,6 +4,10 @@
 
 <p align="center"><b>“HIRAKU” is all about giggles and fun. Enjoy!!</b></p>
 
+<p align="center">
+  <a href="https://discord.gg/GeBPXZsq23"><img src="https://img.shields.io/discord/1571872355620356178?label=Discord&logo=discord&logoColor=white&color=5865F2&style=for-the-badge" alt="Join HIRAKU's Discord"></a>
+</p>
+
 HIRAKU plays Konami's BEMANI arcade games on Linux and Windows, from DJ Main (1997) to the first BEMANI PC cabinets (2010), all from one launcher. It brings back what went away with the arcades too: e-AMUSEMENT cards, scores and rankings, events, and pop'n music's NET TAISEN battles.
 
 HIRAKU ships no game data: you bring your own dumps.

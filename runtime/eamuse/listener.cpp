@@ -126,6 +126,10 @@ int Listener::start(const std::string &folder, bool new_cabinet, const std::stri
             return 1;
         }
         key = net::Key(text);
+        if (!key.id().empty()) {   // (a machine's key, hiraku-server's, is one cabinet's)
+            fprintf(stderr, "%s: %s: that is one machine's key (hk2.), not a server's (--new-key makes one)\n", program, key_file.c_str());
+            return 1;
+        }
     }
     if (!cabinets_file.empty() && !cabinets.in_force()) {
         fprintf(stderr, "%s: --cabinets: no %s (--new-cabinet makes it)\n", program, cabinets_file.c_str());
@@ -169,7 +173,14 @@ int Listener::serve(Server &server, const std::string &kept) {
         return false;
     };
     std::string asking;   // the address the call being answered came from (the calls are answered one at a time)
+    std::string proven;   // ... the machine its connection's key is ("": none, or a key for all)
     server.admit = [&](const std::string &srcid) {
+        if (!proven.empty() && pcbid_of(srcid) != proven) {
+            note("cabinet " + srcid + " as " + proven, "refused: a call from " + asking + " behind machine " + proven + "'s key as cabinet " +
+                                                           (pcbid_of(srcid).empty() ? "\"" + srcid.substr(0, 40) + "\" (not a PCBID)" : pcbid_of(srcid)) +
+                                                           ": a machine's key is for its own calls only");
+            return false;
+        }
         if (const int m = machines ? machines(srcid) : -1; m >= 0) {
             if (m == 0)
                 note("cabinet " + srcid, "refused: a call from " + asking + " as cabinet " + (pcbid_of(srcid).empty() ? "\"" + srcid.substr(0, 40) + "\" (not a PCBID)" : pcbid_of(srcid)) +
@@ -221,6 +232,8 @@ int Listener::serve(Server &server, const std::string &kept) {
     if (relay) {
         relay_server.log = server.log;
         relay_server.key = key;
+        relay_server.machine_key = machine_key;
+        relay_server.machines_only = machines_only;
         relay_server.turned_away = [&](uint32_t ip, const char *why) { turned_away(ip, "the relay", why); };
         relay_server.admit = [&](uint32_t ip) { return from_allowed(ip, "the relay"); };
         if (relay_server.start(bind, Lobby::PORT))
@@ -261,9 +274,35 @@ int Listener::serve(Server &server, const std::string &kept) {
                 if (n <= 0 || std::chrono::steady_clock::now() > until) come = false;
                 else got += (size_t)n;
             }
+            // A machine's key ("HKK2") is taken only where the machines' keys are (hiraku-server), and
+            // where only those are taken, nothing else is.
             net::Keyed keyed;
-            const bool with_key = come && net::keyed::is_hello(first);
+            const size_t hello = come ? net::keyed::hello_size(first) : 0;
+            const bool with_key = hello != 0, machine = hello == net::keyed::kHello2;
+            const bool machines_only_now = come && machines_only && machines_only();
+            std::string machine_id;
             if (!come) {
+            } else if (machine && !machine_key) {
+                net::send(fd, key.set() ? net::keyed::kOneKey : net::keyed::kNoKey, 4);
+                turned_away(ip, "e-AMUSE3", key.set() ? "with a machine's key (hk2.), and this server has one key for all (its key.txt)"
+                                                      : "with a machine's key (hk2.), and this server has no key");
+                come = false;
+            } else if (machine) {
+                net::Key mk;
+                if (!keyed.hear(fd, (const uint8_t *)first)) {
+                    come = false;
+                } else if (!machine_key(keyed.id(), mk)) {
+                    turned_away(ip, "e-AMUSE3", ("with machine " + keyed.id() + "'s key, which isn't an enabled machine of the database with a key (machine list)").c_str());
+                    come = false;
+                } else {
+                    come = keyed.answer(mk);
+                    machine_id = keyed.id();
+                }
+            } else if (machines_only_now) {
+                if (with_key) net::send(fd, net::keyed::kMachinesOnly, 4);
+                turned_away(ip, "e-AMUSE3", with_key ? "with the server's one key, and only machines' own keys are taken (machine key PCBID)"
+                                                     : "without a machine's key, and only machines' own keys are taken (machine key PCBID)");
+                come = false;
             } else if (with_key && !key.set()) {
                 net::send(fd, net::keyed::kNoKey, 4);
                 turned_away(ip, "e-AMUSE3", "with a key, and this server has none");
@@ -282,6 +321,7 @@ int Listener::serve(Server &server, const std::string &kept) {
                 {
                     std::lock_guard<std::mutex> one(answering);
                     asking = dotted(ip);
+                    proven = machine_id;
                     answer = server.handle(req);
                 }
                 if (with_key) {
@@ -294,7 +334,7 @@ int Listener::serve(Server &server, const std::string &kept) {
                     }
                 }
             } else if (come && with_key && keyed.wrong()) {
-                turned_away(ip, "e-AMUSE3", "with another key");
+                turned_away(ip, "e-AMUSE3", machine ? ("with another key than machine " + machine_id + "'s").c_str() : "with another key");
             }
             net::close(fd);
             connections--;

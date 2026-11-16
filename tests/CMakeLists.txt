@@ -259,6 +259,12 @@ if(Python3_FOUND AND NOT CMAKE_CROSSCOMPILING)
   add_test(NAME eamuse_key COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/eamuse/test_key.py $<TARGET_FILE:hiraku-eamuse> $<TARGET_FILE:key_client>)
   set_tests_properties(eamuse_key PROPERTIES RESOURCE_LOCK relay_5740 TIMEOUT 180)
 endif()
+# ... and hiraku-server's key per machine (machine add, machine key): calls and the relay behind it
+if(SQLite3_FOUND AND Python3_FOUND AND NOT CMAKE_CROSSCOMPILING)   # (hiraku-server is made with SQLite 3)
+  add_test(NAME eamuse_machine_keys COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/eamuse/test_machine_keys.py
+           $<TARGET_FILE:hiraku-server> $<TARGET_FILE:key_client> $<TARGET_FILE:hiraku-eamuse>)
+  set_tests_properties(eamuse_machine_keys PROPERTIES RESOURCE_LOCK relay_5740 TIMEOUT 180)
+endif()
 # The lists a server on a network keeps (runtime/eamuse/access.h): addresses, cabinets by PCBID
 add_executable(test_access_lists eamuse/test_access_lists.cpp)
 target_include_directories(test_access_lists PRIVATE ${CMAKE_SOURCE_DIR}/runtime)

@@ -4,6 +4,7 @@
 //   key_client call HOST PORT KEY               the request on its input to the server behind the key; the
 //                                               answer on its output ("error: ..." and exit 1 if none)
 //   key_client garbled HOST PORT KEY            the same, the first record with a bit changed on its way
+//   key_client remote HOST PORT KEY             the same through ea::Remote, as a cabinet's core sends it
 //   key_client forward HOST PORT KEY            a port on this computer passed on behind the key (as for a
 //                                               PC game): "port N", until its input closes
 //   key_client relay HOST PORT KEY [ADDRESS]    a cabinet on NET TAISEN's relay (KEY "-": none): "address
@@ -18,6 +19,7 @@
 #include <thread>
 
 #include "eamuse/netrelay.h"
+#include "eamuse/remote.h"
 #include "shell/keyed.h"
 #include "shell/net.h"
 
@@ -70,6 +72,15 @@ int main(int argc, char **argv) {
             in.open(raw, answer);
         }
         if (answer.empty()) { printf("error: no answer\n"); return 1; }
+        fwrite(answer.data(), 1, answer.size(), stdout);
+        return 0;
+    }
+    if (mode == "remote") {
+        const std::string req(std::istreambuf_iterator<char>(std::cin), {});
+        const ea::Remote r("http://" + host + ":" + std::to_string(port) + "/", key);
+        if (!r.reachable(&why)) { printf("error: %s\n", why.c_str()); return 1; }
+        const std::string answer = r.exchange({"", 0, true}, req, &why);
+        if (answer.empty()) { printf("error: %s\n", why.c_str()); return 1; }
         fwrite(answer.data(), 1, answer.size(), stdout);
         return 0;
     }

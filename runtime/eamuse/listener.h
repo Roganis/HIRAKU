@@ -45,6 +45,12 @@ struct Listener {
     // hiraku-server's machines (server/accounts.h): a call's srcid to 1 answered, 0 refused, -1 not
     // theirs to say (the cabinets' list decides, as without it). Asked once a call
     std::function<int(const std::string &srcid)> machines;
+    // ... and their keys (shell/keyed.h): with these, a cabinet with a machine's key ("HKK2") is
+    // taken behind that machine's key, and only calls as that machine (its srcid) from it. Unset
+    // (hiraku-eamuse): such a cabinet is turned away. Called on the connections' threads
+    net::MachineKeys machine_key;
+    // ... and whether only such cabinets are taken now (the database has machines; not --no-keys)
+    std::function<bool()> machines_only;
 };
 
 }  // namespace hk::ea

@@ -58,7 +58,8 @@ public:
                "  --eamuse local|URL  with the unit, when the game has e-AMUSEMENT on: the server in the core\n"
                "                    (default, offline; its data in the save folder's eamuse/) or a server at\n"
                "                    http://host[:port][/path] (online)\n"
-               "  -eakey KEY        online: the key of a hiraku-eamuse that has one (or HK_EA_KEY's value)\n"
+               "  -eakey KEY        online: the key of a hiraku-eamuse that has one, or this machine's own of a\n"
+               "                    hiraku-server (hk2.PCBID...: also -p, unless -p says one) (or HK_EA_KEY's value)\n"
                "  -p PCBID          online: this cabinet's own PCBID (20 hex digits) in place of the game's, which\n"
                "                    every copy of it has, for a server that answers the cabinets it lists\n"
                "  --cd hdd          boot the unit's data installer CD (implies --npu): it installs the\n"
@@ -147,6 +148,8 @@ public:
             }
             cfg.pccard2 = "npu";
             cfg.eamuse = eamuse_;
+            if (eamuse_ != "local")   // (-p follows a machine's key: shell/eaoptions.h)
+                if (const std::string note = hk::EaOptions::pcbid_by_key(eakey_, pcbid_); !note.empty()) printf("%s\n", note.c_str());
             cfg.pcbid = pcbid_;
             cfg.eakey = eakey_;
             // the card units come with it: one on DrumMania, one per guitar on GuitarFreaks

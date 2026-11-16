@@ -16,6 +16,7 @@
 #include "eamuse/protocol.h"
 #include "eamuse/tables.h"
 #include "shell/crypt.h"
+#include "shell/keyed.h"
 
 namespace hk::srv {
 
@@ -31,6 +32,7 @@ constexpr const char *TABLES =
     "CREATE TABLE IF NOT EXISTS arcades(id INTEGER PRIMARY KEY, owner INTEGER, name TEXT NOT NULL, pref INTEGER NOT NULL);"
     "CREATE TABLE IF NOT EXISTS machines(pcbid TEXT PRIMARY KEY, arcade INTEGER NOT NULL, name TEXT NOT NULL,"
     " enabled INTEGER NOT NULL, last_seen INTEGER NOT NULL DEFAULT 0);"
+    "CREATE TABLE IF NOT EXISTS machine_keys(pcbid TEXT PRIMARY KEY, kept TEXT NOT NULL, made INTEGER NOT NULL);"
     "CREATE TABLE IF NOT EXISTS resets(code_hash TEXT PRIMARY KEY, user INTEGER NOT NULL, expires INTEGER NOT NULL);"
     "CREATE TABLE IF NOT EXISTS invites(code_hash TEXT PRIMARY KEY, expires INTEGER NOT NULL, uses_left INTEGER NOT NULL);"
     "CREATE TABLE IF NOT EXISTS config(name TEXT PRIMARY KEY, value TEXT);"
@@ -176,6 +178,13 @@ std::string upper(std::string s) {
 bool same_card(const std::string &a, const std::string &b) { return upper(a) == upper(b); }
 
 const char *const NOT_ALLOWED = "not allowed for this account";
+
+// A machine's key as kept: "pbkdf2-sha256$ROUNDS$" and the 32 bytes its text makes (keyed.h's
+// stretching, its salt fixed there), in hex
+std::string kept_key(const std::string &text) {
+    const net::Key k(text);
+    return "pbkdf2-sha256$" + std::to_string(net::Key::kRounds) + "$" + hex(k.bytes(), 32);
+}
 
 }  // namespace
 
@@ -750,7 +759,8 @@ Accounts::Refusal Accounts::remove_arcade(const Who &who, long id) {
     if (!(why = may_edit_arcade(who, id, a)).empty()) return why;
     {
         Tx tx(db_);
-        if (!St(db_, "DELETE FROM machines WHERE arcade=?1").bind(1, (int64_t)id).run() ||
+        if (!St(db_, "DELETE FROM machine_keys WHERE pcbid IN (SELECT pcbid FROM machines WHERE arcade=?1)").bind(1, (int64_t)id).run() ||
+            !St(db_, "DELETE FROM machines WHERE arcade=?1").bind(1, (int64_t)id).run() ||
             !St(db_, "DELETE FROM arcades WHERE id=?1").bind(1, (int64_t)id).run())
             return "the database: " + error();
         log(who, "arcade.remove", std::to_string(id) + " " + a.name + " (its machines with it)");
@@ -784,20 +794,42 @@ Accounts::Refusal Accounts::machine_arcade(const Who &who, const std::string &pc
     return why.empty() ? "" : "the machine " + m.pcbid + " is another operator's";
 }
 
-Accounts::Refusal Accounts::add_machine(const Who &who, long arcade, const std::string &name, std::string &pcbid) {
+Accounts::Refusal Accounts::add_machine(const Who &who, long arcade, const std::string &name, std::string &pcbid, std::string *key) {
     pcbid.clear();
+    if (key) key->clear();
     Refusal why;
     if (!writable(why)) return why;
     Arcade a;
     if (!(why = may_edit_arcade(who, arcade, a)).empty() || !(why = label_wrong(name)).empty()) return why;
     const std::string id = ea::new_pcbid();
-    if (id.empty()) return "the system gives no random numbers";
+    const std::string text = key ? net::Key::make_for(id) : "";
+    if (id.empty() || (key && text.empty())) return "the system gives no random numbers";
     Tx tx(db_);
-    if (!St(db_, "INSERT INTO machines(pcbid, arcade, name, enabled) VALUES(?1, ?2, ?3, 1)").bind(1, id).bind(2, (int64_t)arcade).bind(3, name).run())
+    if (!St(db_, "INSERT INTO machines(pcbid, arcade, name, enabled) VALUES(?1, ?2, ?3, 1)").bind(1, id).bind(2, (int64_t)arcade).bind(3, name).run() ||
+        !St(db_, "DELETE FROM machine_keys WHERE pcbid=?1").bind(1, id).run() ||
+        (key && !St(db_, "INSERT INTO machine_keys(pcbid, kept, made) VALUES(?1, ?2, ?3)").bind(1, id).bind(2, kept_key(text)).bind(3, now()).run()))
         return "the database: " + error();
-    log(who, "machine.add", id + " " + name + " (arcade " + std::to_string(arcade) + ")");
+    log(who, "machine.add", id + " " + name + " (arcade " + std::to_string(arcade) + ")" + (key ? ", with a key" : ""));
     if (!tx.commit()) return "the database: " + error();
     pcbid = id;
+    if (key) *key = text;
+    return "";
+}
+
+Accounts::Refusal Accounts::new_machine_key(const Who &who, const std::string &pcbid, std::string &key) {
+    key.clear();
+    Refusal why;
+    if (!writable(why)) return why;
+    Machine m;
+    if (!(why = machine_arcade(who, pcbid, m)).empty()) return why;
+    const std::string text = net::Key::make_for(m.pcbid);
+    if (text.empty()) return "the system gives no random numbers";
+    Tx tx(db_);
+    if (!St(db_, "INSERT OR REPLACE INTO machine_keys(pcbid, kept, made) VALUES(?1, ?2, ?3)").bind(1, m.pcbid).bind(2, kept_key(text)).bind(3, now()).run())
+        return "the database: " + error();
+    log(who, "machine.key", m.pcbid + " " + m.name + " (a new key; the old one no longer taken)");
+    if (!tx.commit()) return "the database: " + error();
+    key = text;
     return "";
 }
 
@@ -829,7 +861,9 @@ Accounts::Refusal Accounts::remove_machine(const Who &who, const std::string &pc
     Machine m;
     if (!(why = machine_arcade(who, pcbid, m)).empty()) return why;
     Tx tx(db_);
-    if (!St(db_, "DELETE FROM machines WHERE pcbid=?1").bind(1, m.pcbid).run()) return "the database: " + error();
+    if (!St(db_, "DELETE FROM machines WHERE pcbid=?1").bind(1, m.pcbid).run() ||
+        !St(db_, "DELETE FROM machine_keys WHERE pcbid=?1").bind(1, m.pcbid).run())
+        return "the database: " + error();
     log(who, "machine.remove", m.pcbid + " " + m.name + " (arcade " + std::to_string(m.arcade) + ")");
     return tx.commit() ? "" : "the database: " + error();
 }
@@ -842,10 +876,11 @@ Accounts::Refusal Accounts::machines(const Who &who, long arcade, std::vector<Ma
         Arcade a;
         if (const Refusal why = may_edit_arcade(who, arcade, a); !why.empty()) return why;
     }
-    St q(db_, "SELECT m.pcbid, m.arcade, m.name, m.enabled, m.last_seen FROM machines m JOIN arcades a ON a.id=m.arcade"
+    St q(db_, "SELECT m.pcbid, m.arcade, m.name, m.enabled, m.last_seen, k.pcbid IS NOT NULL FROM machines m JOIN arcades a ON a.id=m.arcade"
+              " LEFT JOIN machine_keys k ON k.pcbid=m.pcbid"
               " WHERE (?1 = 0 OR m.arcade = ?1) AND (?2 OR a.owner = ?3) ORDER BY m.arcade, m.name, m.pcbid");
     q.bind(1, (int64_t)arcade).bind(2, (int64_t)who.admin()).bind(3, (int64_t)who.id);
-    while (q.row()) out.push_back({q.text(0), (long)q.num(1), q.text(2), q.num(3) != 0, q.num(4)});
+    while (q.row()) out.push_back({q.text(0), (long)q.num(1), q.text(2), q.num(3) != 0, q.num(4), q.num(5) != 0});
     return "";
 }
 
@@ -934,6 +969,25 @@ size_t Accounts::machine_count() {
     if (!db_) return 0;
     St q(db_, "SELECT COUNT(*) FROM machines");
     return q.row() ? (size_t)q.num(0) : 0;
+}
+
+size_t Accounts::machines_without_key() {
+    if (!db_) return 0;
+    St q(db_, "SELECT COUNT(*) FROM machines m LEFT JOIN machine_keys k ON k.pcbid=m.pcbid WHERE k.pcbid IS NULL");
+    return q.row() ? (size_t)q.num(0) : 0;
+}
+
+bool Accounts::machine_key(const std::string &pcbid, uint8_t key[32]) {
+    const std::string id = ea::pcbid_of(pcbid);
+    if (!db_ || id.empty()) return false;
+    St q(db_, "SELECT k.kept FROM machines m JOIN machine_keys k ON k.pcbid=m.pcbid WHERE m.pcbid=?1 AND m.enabled=1");
+    q.bind(1, id);
+    if (!q.row()) return false;
+    const std::string kept = q.text(0), prefix = "pbkdf2-sha256$" + std::to_string(net::Key::kRounds) + "$";
+    std::string bytes;
+    if (kept.rfind(prefix, 0) != 0 || !unhex(kept.substr(prefix.size()), bytes) || bytes.size() != 32) return false;
+    memcpy(key, bytes.data(), 32);
+    return true;
 }
 
 int Accounts::admits(const std::string &srcid) {

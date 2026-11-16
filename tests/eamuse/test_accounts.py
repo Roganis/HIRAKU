@@ -130,7 +130,8 @@ def main():
         check(refused('arcade', 'rename', a1, 'MINE NOW', who='op2')[0], "... nor rename another's arcade")
         good, m1 = ok('machine', 'add', a1, 'CAB ONE', who='op1')
         good2, m2 = ok('machine', 'add', a2, 'CAB TWO', who='op2')
-        m1, m2 = m1.strip(), m2.strip()
+        k1, k2 = m1.strip(), m2.strip()   # (a machine's key, hk2.PCBID.SECRET: its PCBID in it)
+        m1, m2 = k1.split('.')[1] if k1.count('.') == 2 else '', k2.split('.')[1] if k2.count('.') == 2 else ''
         check(good and good2 and len(m1) == 20 and len(m2) == 20, 'each adds a machine to its own arcade (a new PCBID)')
         _, listed = ok('machine', 'list', who='op1')
         check(m1 in listed and m2 not in listed, "an operator lists its own machines only")
@@ -138,6 +139,8 @@ def main():
         check(f'{a1}\tSHOP ONE\t27\top1' in listed and f'{a2}\tSHOP TWO\t1\top2' in listed, 'the admin lists every arcade')
         check(ok('arcade', 'rename', a2, 'SHOP 2')[0] and ok('arcade', 'rename', a2, 'SHOP TWO', who='op2')[0], 'the admin edits any arcade')
         _, extra = ok('machine', 'add', a2, 'SPARE')
+        secrets += [k1, k2, extra.strip(), k1.split('.')[2]]
+        extra = extra.strip().split('.')[1]
         check(ok('machine', 'disable', extra.strip())[0], 'the admin adds and disables a machine of any arcade')
 
         # 4. cards: a right PIN from two games, five wrong ones, the lock, one card one account
@@ -200,7 +203,7 @@ def main():
         with socket.socket() as s:
             s.bind(('127.0.0.1', 0))
             port = s.getsockname()[1]
-        serve = subprocess.Popen([program, 'serve', '--db', db, '--port', str(port), '--bind', '127.0.0.1', '--quiet', '--no-relay'],
+        serve = subprocess.Popen([program, 'serve', '--db', db, '--port', str(port), '--bind', '127.0.0.1', '--quiet', '--no-relay', '--no-keys'],
                                  stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
         for _ in range(300):
             try:

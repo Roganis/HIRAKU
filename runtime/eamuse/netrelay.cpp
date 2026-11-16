@@ -207,7 +207,7 @@ void RelayServer::run() {
         std::string in;   // bytes not yet a whole hello or datagram
         // behind the key: the bytes as they came (not yet whole records), and the two directions
         uint32_t ip = 0;
-        bool keyed = false;
+        bool decided = false, keyed = false;   // decided: by its first bytes, in clear or behind a key
         std::string raw;
         net::Sealer out;
         net::Opener opened;
@@ -265,35 +265,59 @@ void RelayServer::run() {
             char buf[8192];
             const ssize_t n = net::recv(fd, buf, sizeof buf);
             if (n <= 0) { gone.push_back(fd); continue; }
-            if (key.set()) {
-                // Nothing of a connection is read as a cabinet's until it came behind the key
-                c.raw.append(buf, (size_t)n);
-                if (!c.keyed) {
-                    if (c.raw.size() < 4) continue;
-                    if (!net::keyed::is_hello(c.raw.data())) { away(c, "without the key"); gone.push_back(fd); continue; }
-                    if (c.raw.size() < net::keyed::kHello) continue;
-                    uint8_t answer[net::keyed::kServerHello];
-                    if (!net::keyed::server_answer(key, (const uint8_t *)c.raw.data(), answer, c.out, c.opened) ||
-                        !send_all(fd, answer, sizeof answer)) {
-                        gone.push_back(fd);
-                        continue;
-                    }
-                    c.raw.erase(0, net::keyed::kHello);
-                    c.keyed = true;
-                }
-                if (!c.opened.open(c.raw, c.in)) {
-                    away(c, c.opened.records() ? "with a record that isn't the key's" : "with another key");
+            // Nothing of a connection is read as a cabinet's until it is known how it came: in clear
+            // (taken only where no key is wanted) or behind a key (the server's, or its machine's)
+            c.raw.append(buf, (size_t)n);
+            if (!c.decided) {
+                if (c.raw.size() < 4) continue;
+                const size_t hello = net::keyed::hello_size(c.raw.data());
+                const bool only_machines = machines_only && machines_only();
+                if (hello == 0) {
+                    if (key.set() || only_machines) { away(c, only_machines ? "without a machine's key, and only machines' own keys are taken" : "without the key"); gone.push_back(fd); continue; }
+                    c.decided = true;
+                } else if (hello == net::keyed::kHello2 && !machine_key) {
+                    send_all(fd, key.set() ? net::keyed::kOneKey : net::keyed::kNoKey, 4);
+                    away(c, key.set() ? "with a machine's key (hk2.), and this server has one key for all" : "with a machine's key (hk2.), and this server has no key");
                     gone.push_back(fd);
                     continue;
-                }
-            } else {
-                c.in.append(buf, (size_t)n);
-                if (!c.greeted && c.in.size() >= 4 && net::keyed::is_hello(c.in.data())) {   // a cabinet with a key, and none here
+                } else if (hello == net::keyed::kHello && only_machines) {
+                    send_all(fd, net::keyed::kMachinesOnly, 4);
+                    away(c, "with the server's one key, and only machines' own keys are taken");
+                    gone.push_back(fd);
+                    continue;
+                } else if (hello == net::keyed::kHello && !key.set()) {   // a cabinet with a key, and none here
                     send_all(fd, net::keyed::kNoKey, 4);
                     away(c, "with a key, and this server has none");
                     gone.push_back(fd);
                     continue;
+                } else {
+                    if (c.raw.size() < hello) continue;
+                    net::Key k = key;
+                    if (hello == net::keyed::kHello2) {
+                        const std::string id = net::keyed::hello_id((const uint8_t *)c.raw.data());
+                        if (!machine_key(id, k)) {
+                            away(c, ("with machine " + id + "'s key, which isn't an enabled machine of the database with a key").c_str());
+                            gone.push_back(fd);
+                            continue;
+                        }
+                    }
+                    uint8_t answer[net::keyed::kServerHello];
+                    if (!net::keyed::server_answer(k, (const uint8_t *)c.raw.data(), answer, c.out, c.opened) ||
+                        !send_all(fd, answer, sizeof answer)) {
+                        gone.push_back(fd);
+                        continue;
+                    }
+                    c.raw.erase(0, hello);
+                    c.decided = c.keyed = true;
                 }
+            }
+            if (!c.keyed) {
+                c.in += c.raw;
+                c.raw.clear();
+            } else if (!c.opened.open(c.raw, c.in)) {
+                away(c, c.opened.records() ? "with a record that isn't the key's" : "with another key");
+                gone.push_back(fd);
+                continue;
             }
             if (!c.greeted) {
                 if (c.in.size() < sizeof(Hello)) continue;

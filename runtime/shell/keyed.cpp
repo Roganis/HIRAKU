@@ -18,6 +18,28 @@ namespace hk::net {
 namespace {
 
 const char kMagic[4] = {'H', 'K', 'K', '1'};
+const char kMagic2[4] = {'H', 'K', 'K', '2'};
+
+std::string trim(const std::string &given) {
+    const size_t from = given.find_first_not_of(" \t\r\n"), to = given.find_last_not_of(" \t\r\n");
+    return from == std::string::npos ? std::string() : given.substr(from, to - from + 1);
+}
+
+int hex_digit(char c) {
+    return c >= '0' && c <= '9' ? c - '0' : c >= 'a' && c <= 'f' ? c - 'a' + 10 : c >= 'A' && c <= 'F' ? c - 'A' + 10 : -1;
+}
+
+// 20 hex digits in capitals; "" if the text isn't
+std::string pcbid_in(const std::string &s) {
+    if (s.size() != 20) return "";
+    std::string id;
+    for (char c : s) {
+        const int v = hex_digit(c);
+        if (v < 0) return "";
+        id += "0123456789ABCDEF"[v];
+    }
+    return id;
+}
 
 bool send_all(int fd, const void *p, size_t n) {
     const char *c = (const char *)p;
@@ -63,10 +85,31 @@ void direction_keys(const Key &key, const uint8_t *client16, const uint8_t *serv
 // --- the key ---
 
 Key::Key(const std::string &given) {
-    const size_t from = given.find_first_not_of(" \t\r\n"), to = given.find_last_not_of(" \t\r\n");
-    if (from == std::string::npos) return;
-    crypt::pbkdf2_sha256(given.substr(from, to - from + 1), "HIRAKU e-AMUSEMENT key 1", kRounds, k_);
+    std::string text = trim(given);
+    if (text.empty()) return;
+    id_ = id_in(text);
+    if (!id_.empty()) text = "hk2." + id_ + text.substr(24);   // (its PCBID in capitals whatever it was given in)
+    crypt::pbkdf2_sha256(text, "HIRAKU e-AMUSEMENT key 1", kRounds, k_);
     set_ = true;
+}
+
+Key Key::kept(const std::string &pcbid, const uint8_t bytes[32]) {
+    Key k;
+    k.id_ = pcbid_in(pcbid);
+    memcpy(k.k_, bytes, 32);
+    k.set_ = true;
+    return k;
+}
+
+std::string Key::id_in(const std::string &given) {
+    const std::string text = trim(given);
+    if (text.size() < 4 + 20 + 1 + 12 || (text.compare(0, 4, "hk2.") != 0 && text.compare(0, 4, "HK2.") != 0) || text[24] != '.') return "";
+    return pcbid_in(text.substr(4, 20));
+}
+
+std::string Key::make_for(const std::string &pcbid) {
+    const std::string id = pcbid_in(pcbid), secret = id.empty() ? "" : make();
+    return secret.empty() ? "" : "hk2." + id + "." + secret;
 }
 
 std::string Key::make() {
@@ -82,9 +125,11 @@ std::string Key::make() {
 }
 
 std::string Key::wrong_with(const std::string &given) {
-    const size_t from = given.find_first_not_of(" \t\r\n"), to = given.find_last_not_of(" \t\r\n");
-    const size_t n = from == std::string::npos ? 0 : to - from + 1;
+    const std::string text = trim(given);
+    const size_t n = text.size();
     if (n == 0) return "no key in it";
+    if ((text.compare(0, 4, "hk2.") == 0 || text.compare(0, 4, "HK2.") == 0) && id_in(text).empty())
+        return "not a machine's key as hiraku-server makes it (hk2., the PCBID's 20 hex digits, '.', the rest)";
     if (n < 12) return "a key of " + std::to_string(n) + " characters is soon guessed: 12 at least (hiraku-eamuse --new-key makes one)";
     return "";
 }
@@ -145,12 +190,33 @@ bool Opener::open(std::string &raw, std::string &plain) {
 namespace keyed {
 
 const char kNoKey[4] = {'H', 'K', 'K', '0'};
+const char kOneKey[4] = {'H', 'K', 'K', 'S'};
+const char kMachinesOnly[4] = {'H', 'K', 'K', 'M'};
 
-bool is_hello(const void *first4) { return memcmp(first4, kMagic, 4) == 0; }
+size_t hello_size(const void *first4) {
+    return memcmp(first4, kMagic, 4) == 0 ? kHello : memcmp(first4, kMagic2, 4) == 0 ? kHello2 : 0;
+}
+
+bool is_hello(const void *first4) { return hello_size(first4) != 0; }
 
 bool client_hello(uint8_t hello[kHello]) {
     memcpy(hello, kMagic, 4);
     return crypt::random_bytes(hello + 4, 16);
+}
+
+bool client_hello(const Key &key, uint8_t hello[kHello2], size_t *size) {
+    *size = kHello;
+    if (key.id().empty()) return client_hello(hello);
+    memcpy(hello, kMagic2, 4);
+    for (int i = 0; i < 10; i++) hello[kHello + i] = (uint8_t)(hex_digit(key.id()[2 * i]) << 4 | hex_digit(key.id()[2 * i + 1]));
+    *size = kHello2;
+    return crypt::random_bytes(hello + 4, 16);
+}
+
+std::string hello_id(const uint8_t *hello) {
+    std::string id;
+    for (int i = 0; i < 10; i++) id += "0123456789ABCDEF"[hello[kHello + i] >> 4], id += "0123456789ABCDEF"[hello[kHello + i] & 15];
+    return id;
 }
 
 bool server_answer(const Key &key, const uint8_t hello[kHello], uint8_t answer[kServerHello], Sealer &out, Opener &in) {
@@ -167,7 +233,7 @@ bool server_answer(const Key &key, const uint8_t hello[kHello], uint8_t answer[k
 }
 
 int client_take(const Key &key, const uint8_t hello[kHello], const uint8_t answer[kServerHello], Sealer &out, Opener &in) {
-    if (!is_hello(answer)) return 2;
+    if (memcmp(answer, kMagic, 4) != 0) return 2;
     uint8_t c2s[32], s2c[32];
     direction_keys(key, hello + 4, answer + 4, c2s, s2c);
     out.start(c2s);
@@ -182,14 +248,24 @@ int client_take(const Key &key, const uint8_t hello[kHello], const uint8_t answe
 
 bool Keyed::connect(int fd, const Key &key, std::string *error) {
     fd_ = fd;
-    uint8_t hello[keyed::kHello], answer[keyed::kServerHello];
-    if (!keyed::client_hello(hello)) { *error = "the system gives no random numbers for the key's use"; return false; }
-    if (!send_all(fd, hello, sizeof hello) || !recv_all(fd, answer, 4)) {
-        *error = "it gave no answer to the key (not a hiraku-eamuse, or one older than keys)";
+    uint8_t hello[keyed::kHello2], answer[keyed::kServerHello];
+    size_t size = 0;
+    if (!keyed::client_hello(key, hello, &size)) { *error = "the system gives no random numbers for the key's use"; return false; }
+    if (!send_all(fd, hello, size) || !recv_all(fd, answer, 4)) {
+        *error = key.id().empty() ? "it gave no answer to the key (not a hiraku-eamuse, or one older than keys)"
+                                  : "it gave no answer to the key (not a HIRAKU server, or one older than machines' keys)";
         return false;
     }
     if (memcmp(answer, keyed::kNoKey, 4) == 0) {
         *error = "the server has no key, and a key was given here (-eakey): a key on both sides, or on neither";
+        return false;
+    }
+    if (memcmp(answer, keyed::kOneKey, 4) == 0) {
+        *error = "the server has one key for all its cabinets (its key.txt), and this is a machine's key (hk2.): give this cabinet the server's key";
+        return false;
+    }
+    if (memcmp(answer, keyed::kMachinesOnly, 4) == 0) {
+        *error = "the server takes each machine's own key only (hiraku-server machine add or machine key PCBID makes one: hk2....)";
         return false;
     }
     if (!keyed::is_hello(answer) || !recv_all(fd, answer + 4, sizeof answer - 4)) {
@@ -203,11 +279,21 @@ bool Keyed::connect(int fd, const Key &key, std::string *error) {
     return true;
 }
 
-bool Keyed::accept(int fd, const Key &key, const uint8_t first4[4]) {
+bool Keyed::accept(int fd, const Key &key, const uint8_t first4[4]) { return hear(fd, first4) && answer(key); }
+
+bool Keyed::hear(int fd, const uint8_t first4[4]) {
     fd_ = fd;
-    uint8_t hello[keyed::kHello], answer[keyed::kServerHello];
-    memcpy(hello, first4, 4);
-    return recv_all(fd, hello + 4, 16) && keyed::server_answer(key, hello, answer, out_, in_) && send_all(fd, answer, sizeof answer);
+    const size_t size = keyed::hello_size(first4);
+    if (!size) return false;
+    memcpy(hello_, first4, 4);
+    if (!recv_all(fd, hello_ + 4, size - 4)) return false;
+    id_ = size == keyed::kHello2 ? keyed::hello_id(hello_) : "";
+    return true;
+}
+
+bool Keyed::answer(const Key &key) {
+    uint8_t answer[keyed::kServerHello];
+    return keyed::server_answer(key, hello_, answer, out_, in_) && send_all(fd_, answer, sizeof answer);
 }
 
 bool Keyed::send(const void *p, size_t n) {

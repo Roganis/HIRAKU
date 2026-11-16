@@ -71,6 +71,11 @@ public:
     std::function<bool(uint32_t ip)> admit;
     // The server's key: with one, only connections behind it are cabinets. Set before start()
     net::Key key;
+    // Machines' keys (hiraku-server's, shell/keyed.h): with these, a cabinet with a machine's key
+    // ("HKK2") is taken behind it; unset, it is turned away. machines_only: whether only those are
+    // taken now. Set before start(); called on the relay's thread
+    net::MachineKeys machine_key;
+    std::function<bool()> machines_only;
     // A connection let go for the key's sake, and why ("without the key", "with another key")
     std::function<void(uint32_t ip, const char *why)> turned_away;
 

@@ -5,7 +5,7 @@
 // folder's own file names (import, export), so a data folder moves into a database and back.
 //
 //   hiraku-server serve --db FILE [--port 8080] [--bind 0.0.0.0] [--allow ADDRESSES] [--cabinets FILE]
-//                 [--key-file FILE] [--clock "2003-06-01 12:00:00"] [--tz 9] [--quiet] [--no-relay]
+//                 [--key-file FILE] [--clock "2003-06-01 12:00:00"] [--tz 9] [--quiet] [--no-relay] [--no-keys]
 //   hiraku-server serve --db FILE [--cabinets FILE] --new-cabinet [NAME]  |  [--key-file FILE] --new-key
 //   hiraku-server import FOLDER --db FILE     a data folder's files into the database (made if none)
 //   hiraku-server export FOLDER --db FILE     the database as a data folder (a new or empty one)
@@ -19,13 +19,16 @@
 //     hiraku-eamuse's --players, --scores, --settings and --set. The accounts, cards, arcades and
 //     machines (server/accounts.h) act as the command line itself (an admin) unless --as names a
 //     user; a password, PIN or code is read from stdin (a line each) or asked for, never an argument.
-//     Once the database has a machine, serve answers its enabled machines only (not cabinets.txt).
+//     Once the database has a machine, serve answers its enabled machines only (not cabinets.txt),
+//     each behind its own key (machine add, machine key; shell/keyed.h) and as itself only;
+//     --no-keys: by the PCBID a call says it is, for a private network or a VPN.
 #include <cctype>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <ctime>
 #include <filesystem>
+#include <mutex>
 #include <string>
 #include <vector>
 
@@ -49,7 +52,7 @@ constexpr const char *ME = "hiraku-server";
 int usage(int status) {
     fprintf(status ? stderr : stdout,
             "usage: hiraku-server serve --db FILE [--port N] [--bind ADDR] [--allow ADDRESSES] [--cabinets FILE]\n"
-            "                     [--key-file FILE] [--clock \"YYYY-MM-DD HH:MM:SS\"] [--tz H] [--quiet] [--no-relay]\n"
+            "                     [--key-file FILE] [--clock \"YYYY-MM-DD HH:MM:SS\"] [--tz H] [--quiet] [--no-relay] [--no-keys]\n"
             "       hiraku-server serve --db FILE [--cabinets FILE] --new-cabinet [NAME]\n"
             "       hiraku-server serve --db FILE [--key-file FILE] --new-key\n"
             "       hiraku-server import FOLDER --db FILE   a data folder's files into the database (made if none)\n"
@@ -61,7 +64,9 @@ int usage(int status) {
             "       hiraku-server scores CARD [GAME] --db FILE   the card's scores: game, song, chart, score, clear, plays\n"
             "       hiraku-server settings [GAME] --db FILE      the owner's settings: game, name, value, default, range, what it does\n"
             "       hiraku-server set GAME NAME VALUE --db FILE  change one (GAME \"server\": the server's own); VALUE \"\": the default\n"
-            "  serve's options are hiraku-eamuse's; cabinets.txt and key.txt are beside the database by default\n"
+            "  serve's options are hiraku-eamuse's; cabinets.txt and key.txt are beside the database by default.\n"
+            "  Once there are machines, each is answered behind its own key only (machine add, machine key);\n"
+            "  --no-keys: by the PCBID a call says, for a private network or a VPN\n"
             "accounts, cards, arcades, machines (--db FILE; --as USER acts as that user, else the command line, an admin;\n"
             "a password, PIN or code is read from stdin, a line each, or asked for):\n"
             "  user add NAME [--role player|operator|admin]   a new account (password)\n"
@@ -79,7 +84,9 @@ int usage(int status) {
             "  arcade add NAME PREF [--owner USER] | rename ID NAME | pref ID PREF | remove ID | list\n"
             "  arcade settings ID|server [GAME]  game, name, the arcade's value, the server's, the default\n"
             "  arcade set ID|server GAME NAME VALUE   an arcade's own value (\"\": none), or the server's\n"
-            "  machine add ARCADE NAME           a new machine and its PCBID\n"
+            "  machine add ARCADE NAME           a new machine: its key (hk2.PCBID....), shown this once, for the\n"
+            "                                    cabinet's -eakey (the launcher's Server key); its PCBID is in it\n"
+            "  machine key PCBID                 a new key for the machine (shown this once); the old one stops\n"
             "  machine rename PCBID NAME | enable PCBID | disable PCBID | remove PCBID | list [ARCADE]\n"
             "  config show | signup open|invite|closed | invite [USES [DAYS]]\n"
             "  audit [N]                         the last N actions (all): when, who, what, detail\n");
@@ -309,11 +316,15 @@ int accounts_command(srv::Accounts &acc, const std::vector<std::string> &w, cons
         }
     } else if (group == "machine") {
         long arcade = 0;
-        if (verb == "add") {
-            std::string pcbid;
-            if (!shape(n == 2 && number(word(2), arcade))) return 2;
-            if (const int s = refused(acc.add_machine(who, arcade, word(3), pcbid))) return s;
-            line({pcbid});
+        if (verb == "add" || verb == "key") {
+            std::string pcbid, key;
+            if (verb == "add" ? !shape(n == 2 && number(word(2), arcade)) : !shape(n == 1)) return 2;
+            if (const int s = refused(verb == "add" ? acc.add_machine(who, arcade, word(3), pcbid, &key) : acc.new_machine_key(who, word(2), key))) return s;
+            line({key});   // (shown this once: only what the connection's keys are made from is kept)
+            fflush(stdout);
+            fprintf(stderr, "%s: the machine's key, shown this once: give its cabinet that (-eakey; the launcher: Settings, "
+                            "e-AMUSEMENT, Server key); it is the cabinet's PCBID too%s\n",
+                    ME, verb == "key" ? ". Its old key is no longer taken" : "");
             return 0;
         }
         if (verb == "rename") return shape(n == 2) ? refused(acc.rename_machine(who, word(2), word(3))) : 2;
@@ -324,7 +335,7 @@ int accounts_command(srv::Accounts &acc, const std::vector<std::string> &w, cons
             if (!shape(n == 0 || (n == 1 && number(word(2), arcade)))) return 2;
             if (const int s = refused(acc.machines(who, arcade, list))) return s;
             for (const srv::Machine &m : list)
-                line({m.pcbid, std::to_string(m.arcade), m.name, m.enabled ? "enabled" : "disabled", date(m.last_seen)});
+                line({m.pcbid, std::to_string(m.arcade), m.name, m.enabled ? "enabled" : "disabled", m.keyed ? "key" : "no key", date(m.last_seen)});
             return 0;
         }
     } else if (group == "config") {
@@ -382,7 +393,7 @@ void report(const ea::Copied &c, const char *from, const char *to) {
 
 int main(int argc, char **argv) {
     std::string db;
-    bool new_cabinet = false, new_key = false;
+    bool new_cabinet = false, new_key = false, no_keys = false;
     std::string new_name;
     std::vector<std::string> words;   // the command and its own words
     AccountOptions ao;
@@ -403,6 +414,7 @@ int main(int argc, char **argv) {
             (a == "--as" ? ao.as : a == "--owner" ? ao.owner : ao.role) = argv[++i];
         } else if (a == "--invite") ao.invite = true;
         else if (a == "--new-key") new_key = true;
+        else if (a == "--no-keys") no_keys = true;
         else if (a == "--help" || a == "-h") return usage(0);
         else if (a.size() > 1 && a[0] == '-') { fprintf(stderr, "%s: no option %s\n", ME, a.c_str()); return usage(2); }
         else words.push_back(a);
@@ -443,11 +455,27 @@ int main(int argc, char **argv) {
         if (!acc.ok()) return 1;
         first_admin(acc);
         ea::Server server(std::move(store));   // every game's, by a call's model (runtime/eamuse/server.cpp)
-        // the machines answered and their arcades (server/accounts.h; called one call at a time)
-        listener.machines = [&acc](const std::string &srcid) { return acc.admits(srcid); };
-        server.cabinet = [&acc](const std::string &srcid) { return acc.cabinet(srcid); };
-        if (const size_t m = acc.machine_count())
-            printf("%s: calls answered for the database's enabled machines only (%zu machine%s; machine list)\n", ME, m, m == 1 ? "" : "s");
+        // the machines answered and their arcades (server/accounts.h), and their keys: asked by the
+        // calls (one at a time), the connections' threads and the relay's, so one at a time
+        std::mutex one;
+        listener.machines = [&acc, &one](const std::string &srcid) { std::lock_guard<std::mutex> l(one); return acc.admits(srcid); };
+        server.cabinet = [&acc, &one](const std::string &srcid) { std::lock_guard<std::mutex> l(one); return acc.cabinet(srcid); };
+        if (!no_keys) {
+            listener.machine_key = [&acc, &one](const std::string &pcbid, hk::net::Key &key) {
+                std::lock_guard<std::mutex> l(one);
+                uint8_t k[32];
+                if (!acc.machine_key(pcbid, k)) return false;
+                key = hk::net::Key::kept(pcbid, k);
+                return true;
+            };
+            listener.machines_only = [&acc, &one] { std::lock_guard<std::mutex> l(one); return acc.machine_count() > 0; };
+        }
+        if (const size_t m = acc.machine_count()) {
+            printf("%s: calls answered for the database's enabled machines only (%zu machine%s; machine list)%s\n", ME, m, m == 1 ? "" : "s",
+                   no_keys ? ", by the PCBID a call says (--no-keys)" : ", each behind its own key");
+            if (const size_t u = acc.machines_without_key(); u && !no_keys)
+                printf("%s: %zu machine%s no key, and %s answered: machine key PCBID makes one\n", ME, u, u == 1 ? " has" : "s have", u == 1 ? "isn't" : "aren't");
+        }
         return listener.serve(server, db);
     }
     ea::SqliteStore st(db);

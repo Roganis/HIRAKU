@@ -9,8 +9,10 @@
 //                             at start
 //   -p PCBID                  the cabinet's PCBID (20 hex digits), sent in place of the game's own
 //   -eakey KEY                HIRAKU's: with -url, the key of a hiraku-eamuse that has one (its
-//                             --new-key; shell/keyed.h). Without the option, HK_EA_KEY's value: what
-//                             the launcher sets, so that the key is on no command line and in no log
+//                             --new-key; shell/keyed.h), or this machine's own of a hiraku-server
+//                             (machine add: hk2.PCBID....; then it is -p too, unless -p says one).
+//                             Without the option, HK_EA_KEY's value: what the launcher sets, so that
+//                             the key is on no command line and in no log
 //   -card0 / -card1 NUMBER    player 1's / 2's card number (16 hex digits, E004...). Without it,
 //                             card0.txt / card1.txt: the working directory's, then the save folder's
 //   -autocard off|p1|p2|both  present the card(s) to the reader whenever it waits for one, so
@@ -28,6 +30,8 @@
 #include <functional>
 #include <iterator>
 #include <string>
+
+#include "shell/keyed.h"
 
 namespace hk {
 
@@ -110,6 +114,22 @@ struct EaOptions {
         return k ? k : "";
     }
 
+    // -p follows the key: a machine's key (hk2.PCBID...., hiraku-server's) is its cabinet's PCBID
+    // too, unless -p says one. What is to be said at start ("" nothing): a -p that isn't the key's
+    // (the options left as given: such a server refuses the calls)
+    static std::string pcbid_by_key(const std::string &key, std::string &pcbid) {
+        const std::string id = net::Key::id_in(key);
+        if (id.empty()) return "";
+        if (pcbid.empty()) {
+            pcbid = id;
+            return "";
+        }
+        if (pcbid == id) return "";
+        return "e-AMUSEMENT: -p " + pcbid + " isn't the PCBID of the machine's key given (" + id +
+               "): its server takes that machine's calls only, as " + id + " (-p left out takes the key's)";
+    }
+    std::string follow_key() { return online() ? pcbid_by_key(key, pcbid) : ""; }
+
     bool online() const { return !url.empty(); }
     // url with its scheme: spice2x's "host:port" form is plain HTTP
     std::string http_url() const { return url.find("://") == std::string::npos ? "http://" + url : url; }
@@ -120,7 +140,8 @@ struct EaOptions {
                "  -url URL             a server on the network: host:port[/path] or http://host:port[/path]\n"
                "  -smartea             with -url: the server inside HIRAKU if that one doesn't answer at start\n"
                "  -p PCBID             the cabinet's PCBID (20 hex digits) in the game's calls\n"
-               "  -eakey KEY           with -url: the key of a hiraku-eamuse that has one (or HK_EA_KEY's value)\n"
+               "  -eakey KEY           with -url: the key of a hiraku-eamuse that has one, or this machine's own\n"
+               "                       of a hiraku-server (hk2.PCBID...: also -p, unless -p says one) (or HK_EA_KEY's value)\n"
                "  -card0 NUMBER        player 1's card number (16 hex digits, E004...); default: card0.txt in\n"
                "                       the working directory or the save folder (-card1, card1.txt: player 2)\n"
                "  -autocard off|p1|p2|both  the card is presented whenever the reader waits for one\n"

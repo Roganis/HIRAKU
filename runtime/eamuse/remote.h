@@ -5,6 +5,7 @@
 // and answers go through unchanged (encrypted as the game and the server encrypt them),
 // except the request line's path (the URL's path in front) and the Host header. A server that has a
 // key (hiraku-eamuse's, shell/keyed.h) is given the same one here: each connection then goes behind it.
+// A machine's own key (hiraku-server's, hk2.PCBID....) the same way: its connections say its PCBID.
 #pragma once
 
 #include <cstdint>

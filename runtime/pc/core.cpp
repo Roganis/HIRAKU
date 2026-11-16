@@ -1300,6 +1300,7 @@ private:
     bool start_eamuse(const std::string &root) {
         hk::net::start();
         set_env("HK_EA_KEY", "");   // (read into ea_ already: not the game's process's to have)
+        if (const std::string note = ea_.follow_key(); !note.empty()) printf("%s\n", note.c_str());   // (-p follows a machine's key)
         if (ea_.online()) {   // host:port[/path] or http://host:port[/path]: its IPv4 address
             std::string url = ea_.http_url().substr(ea_.http_url().find("://") + 3);
             url = url.substr(0, url.find('/'));

@@ -553,6 +553,7 @@ public:
                     printf("e-AMUSEMENT: online, %s%s\n", ea_.http_url().c_str(), keyed ? ", behind the server's key" : "");
                 }
             }
+            if (const std::string note = ea_.follow_key(); !note.empty()) printf("%s\n", note.c_str());   // (-p follows a machine's key)
             if (!ea_.pcbid.empty()) printf("e-AMUSEMENT: PCBID %s\n", ea_.pcbid.c_str());
             // the server's files: in the saves' default places (the game window's), one folder for all
             // the pop'n games, beside their saves, so a card's player carries from one to the next;

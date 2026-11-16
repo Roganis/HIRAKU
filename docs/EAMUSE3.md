@@ -50,7 +50,7 @@ and the launcher's Settings > e-AMUSEMENT writes them, laid out like spicecfg's 
 | `-url URL` | EA Service URL | the cabinet's server: `host:port[/path]` (spice2x's form) or `http://host[:port][/path]`. `--eamuse URL` is the older name |
 | `-smartea` | Smart EA | with `-url`: if that server doesn't take a connection at start (3 s), the server inside HIRAKU |
 | `-p PCBID` | PCBID | 20 hex digits, sent in place of the game's own (pop'n 9's is `01401401000100045FEF`) as `srcid` and `gpcb_id`, for a server that only takes the machines it knows (`hiraku-eamuse` with a `cabinets.txt`: `--new-cabinet` makes one). Also on System 573 GuitarFreaks and DrumMania (`srcid`) and the PC games |
-| `-eakey KEY` (HIRAKU's) | Server key | with `-url`: the key of a `hiraku-eamuse` that has one (below, "A key"): everything this cabinet and the server say then goes over the network sealed. Without the option, `HK_EA_KEY`'s value, which is how the launcher gives it (on no command line, in no log). On System 573 GuitarFreaks and DrumMania and the PC games too |
+| `-eakey KEY` (HIRAKU's) | Server key | with `-url`: the key of a `hiraku-eamuse` that has one (below, "A key"), or this machine's own of a `hiraku-server` (`hk2.PCBID....`, below, "A key per machine"; it is `-p` too): everything this cabinet and the server say then goes over the network sealed. Without the option, `HK_EA_KEY`'s value, which is how the launcher gives it (on no command line, in no log). On System 573 GuitarFreaks and DrumMania and the PC games too |
 | `-card0 NUMBER` | Player 1 Card | the card's number, 16 hex digits (`E004...`). Without it, `card0.txt` (the working directory's, then the save folder's), as spice2x reads it. `-card1` and `card1.txt` are player 2's; pop'n has one reader |
 | `-autocard off\|p1\|p2\|both` | Auto Card Insert | the card goes in by itself: it is in the slot from the start, and back in it 8 s after the reader gives it out, so the game takes it whenever it opens the slot |
 | `-autopin` (HIRAKU's) | Type the card's PIN | a card HIRAKU's own server knows and holds a PIN for: its PIN typed on the 10-key when the game asks for it, a fixed time after the server reads the card (pop'n 14: 3 s; 15-18: 4 s, then Enter). Not with `-url` (the PIN is the other server's) |
@@ -92,6 +92,18 @@ and the launcher's Settings > e-AMUSEMENT writes them, laid out like spicecfg's 
     What it doesn't do: hide that a cabinet talks to the server, or protect what was recorded
     from someone who later gets the key. The PC games make their own connections in their own
     process, so hiraku-pc opens two ports on its own computer that pass them on behind the key.
+  - **A key per machine** (`hiraku-server` only, the server on a database): `hiraku-server machine
+    add ARCADE NAME --db FILE` prints the new machine's key, `hk2.PCBID.SECRET`, once; it is never
+    shown or logged again (the database keeps only what the connection's keys are made from).
+    Give that one text to the cabinet where a key goes (Server key, `-eakey`, `HK_EA_KEY`): it is
+    its PCBID too, so no `-p` is needed (a `-p` that differs is said at start, and refused). Once
+    the database has machines, `serve` takes only cabinets behind an enabled machine's own key,
+    and from each only calls as that machine; a key for all (`key.txt`), no key, a disabled
+    machine's or another machine's PCBID get nothing (the calls' port and the relay alike).
+    `machine key PCBID` makes a new key at once, the old one no longer taken; `machine list` says
+    which machines have one. `serve --no-keys` answers the enabled machines by the PCBID a call
+    says instead, for a private network or a VPN where the cabinets can't be given keys.
+    `hiraku-eamuse` has one key for all (or none) and turns a machine's key away, saying so.
   - **Addresses** (`--allow 192.168.1.0/24,10.0.0.5`): connections from other addresses are closed
     unanswered, on the calls' port and on NET TAISEN's relay. This computer itself is always taken.
     Nothing to set on any cabinet: the right list for a home network or a party.
@@ -117,7 +129,7 @@ and the launcher's Settings > e-AMUSEMENT writes them, laid out like spicecfg's 
 
   A call it can't read is refused, a connection that says nothing is let go after 15 s, and nothing
   a call holds names a file outside the data folder (`tests/eamuse/test_malformed.py`,
-  `test_access.py`, `test_key.py`).
+  `test_access.py`, `test_key.py`, `test_machine_keys.py`).
 
 **What the HIRAKU server keeps** (the save folder's `eamuse/`, or `--data`), plain text, one record
 a line, tab-separated `key=value` fields:

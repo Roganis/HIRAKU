@@ -11,7 +11,9 @@
 // a PIN any game keeps for it (eamuse/readers.h pins(); five wrong ones lock the card for linking
 // until an admin unlocks it). An operator owns arcades (a shop's name and prefecture) and their
 // machines (a PCBID each); a machine of an arcade is answered with its arcade's name, prefecture and
-// event settings (Server::cabinet). Every change is in the audit log: who, when, what; never a
+// event settings (Server::cabinet). A machine has a key of its own (shell/keyed.h: "hk2.PCBID.SECRET",
+// shown once when made; kept as the 32 bytes its text makes, what the connection's keys are made
+// from), and serve takes a machine's calls behind it. Every change is in the audit log: who, when, what; never a
 // password, PIN or code. A password is kept as PBKDF2-HMAC-SHA256 (pbkdf2-sha256$ROUNDS$SALT$HASH),
 // a reset or invitation code as its SHA-256.
 #pragma once
@@ -72,6 +74,7 @@ struct Machine {
     std::string name;
     bool enabled = true;
     int64_t last_seen = 0;   // 0: never
+    bool keyed = false;      // it has a key (machine key)
 };
 struct AuditLine {
     long id = 0;
@@ -144,7 +147,10 @@ public:
     Refusal set_arcade_pref(const Who &, long id, int pref);
     Refusal remove_arcade(const Who &, long id);   // its machines and settings with it
     Refusal arcades(const Who &, std::vector<Arcade> &);
-    Refusal add_machine(const Who &, long arcade, const std::string &name, std::string &pcbid);
+    // key: when given, the new machine's key's text (its only showing: never kept, logged or shown again)
+    Refusal add_machine(const Who &, long arcade, const std::string &name, std::string &pcbid, std::string *key = nullptr);
+    // A new key for the machine, its old one no longer taken: its text, as above
+    Refusal new_machine_key(const Who &, const std::string &pcbid, std::string &key);
     Refusal rename_machine(const Who &, const std::string &pcbid, const std::string &name);
     Refusal enable_machine(const Who &, const std::string &pcbid, bool);
     Refusal remove_machine(const Who &, const std::string &pcbid);
@@ -164,6 +170,11 @@ public:
     // The machine's arcade, for Server::cabinet
     ea::Cabinet cabinet(const std::string &srcid);
     size_t machine_count();
+    size_t machines_without_key();
+    // An enabled machine's key: the 32 bytes its text makes (net::Key::kept). false: no such machine,
+    // a disabled one, one without a key. Read from the database each time (a change made by the
+    // command line while serve runs holds at once)
+    bool machine_key(const std::string &pcbid, uint8_t key[32]);
 
 private:
     struct Tx;

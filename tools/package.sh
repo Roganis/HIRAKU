@@ -36,7 +36,9 @@ mkdir -p "$d/bin/lib" "$d/dumps"
 [ "$mode" = portable ] && mkdir -p "$d/user/config" "$d/user/data"
 for f in "$build"/hiraku "$build"/hiraku-*; do
   [ -x "$f" ] && [ -f "$f" ] || continue
-  case $(basename "$f") in hiraku-recomp) continue ;; esac
+  # (hiraku-server: the hosted server, a package of its own, tools/package-server.sh; it needs the
+  # system's SQLite, which the desktop package doesn't ask of a PC)
+  case $(basename "$f") in hiraku-recomp|hiraku-server) continue ;; esac
   strip -o "$d/bin/$(basename "$f")" "$f"
   # Konami Python games (runtime/python/) are built in PCSX2 Reliquary's tree and linked
   # into the build dir: they need Reliquary's resources/ beside them, and the libraries
@@ -129,6 +131,7 @@ fi
 [ -f "$d/bin/hiraku" ] && ln -s bin/hiraku "$d/HIRAKU"
 sdl=""
 for f in "$build"/hiraku "$build"/hiraku-*; do   # the first binary that has SDL (hiraku-eamuse hasn't)
+  case $(basename "$f") in hiraku-recomp|hiraku-server) continue ;; esac   # (not in this package: above)
   [ -n "$sdl" ] || sdl=$(ldd "$f" 2>/dev/null | awk '/libSDL3/ {print $3}')
 done
 [ -n "$sdl" ] && cp -L "$sdl" "$d/bin/lib/"

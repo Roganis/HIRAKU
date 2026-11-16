@@ -69,6 +69,9 @@ for f in "$root"/bin/hiraku-*"$ext"; do
   else bad "$name --help: ended with $st$([ -n "$out" ] && echo ", saying: $(echo "$out" | tail -2 | tr '\n' ' ')" || echo " and said nothing")"; fi
 done
 [ "$n" -ge 8 ] && ok "$n programs answer --help" || bad "only $n programs answered --help (a package has ten or more)"
+# hiraku-server is a package of its own (tools/package-server.sh): it needs the system's SQLite
+if [ -e "$root/bin/hiraku-server$ext" ]; then bad "bin/hiraku-server$ext is in the package (it has its own: tools/package-server.sh)"
+else ok "no hiraku-server in the package (its own: tools/package-server.sh)"; fi
 
 # --- the game menu, by a script, to its choice ---
 printf 'hiraku-menu-list 1\ncurrent\tfirst\ngame\tfirst\tA shelf\tThe first game\t2001\ngame\tsecond\tA shelf\tThe second game\t2002\n' > "$tmp/list.txt"

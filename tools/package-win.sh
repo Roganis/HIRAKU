@@ -29,7 +29,8 @@ mkdir -p "$d/bin" "$d/dumps"
 strip=$(command -v llvm-strip || command -v x86_64-w64-mingw32-strip)
 for f in "$build"/hiraku*.exe; do
   [ -f "$f" ] || continue
-  case $(basename "$f") in hiraku-recomp.exe|hiraku-start.exe) continue ;; esac
+  # (hiraku-server.exe: the hosted server is a Linux package of its own, tools/package-server.sh)
+  case $(basename "$f") in hiraku-recomp.exe|hiraku-start.exe|hiraku-server.exe) continue ;; esac
   "$strip" -o "$d/bin/$(basename "$f")" "$f"
 done
 # HIRAKU.exe in the top folder: starts bin\hiraku.exe (launcher/start.c), so the launcher is the

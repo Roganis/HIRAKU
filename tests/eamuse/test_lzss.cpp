@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// The server's LZSS packer (runtime/python/easerver.cpp, a player's record to a game): the same
+// The server's LZSS packer (runtime/eamuse/server.cpp, a player's record to a game): the same
 // bytes as the plain search it was (every place of the window tried in full), on records like a
 // player's (mostly zeros), on text, on noise and on short ends; and what it packs unpacks to what
 // went in. How long each takes is printed.
@@ -9,7 +9,7 @@
 #include <random>
 #include <string>
 
-#include "python/easerver_parts.h"
+#include "eamuse/server_parts.h"
 
 namespace {
 
@@ -84,7 +84,7 @@ int main() {
     double fast_ms = 0, plain_ms = 0, rec_fast = 0, rec_plain = 0;
     const auto one = [&](const std::string &in, const char *what) {
         auto t = std::chrono::steady_clock::now();
-        const std::string a = hk::py::lzss(in);
+        const std::string a = hk::ea::lzss(in);
         const double fast = ms(t);
         t = std::chrono::steady_clock::now();
         const std::string b = plain(in);

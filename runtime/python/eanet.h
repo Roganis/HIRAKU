@@ -30,9 +30,11 @@
 
 #include "eamuse/lan.h"
 #include "python/lancable.h"
-#include "python/lobby.h"
+#include "eamuse/lobby.h"
 
 namespace hk::py {
+
+using ea::Lobby;   // NET TAISEN's lobby (eamuse/lobby.h)
 
 class VirtualNet {
 public:

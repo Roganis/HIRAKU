@@ -807,7 +807,7 @@ cannot get url`).
 **pop'n music 16 PARTY♪, 17 THE MOVIE, 18 せんごく列伝** (`H16`, `I17`, `J39`, Windows PCs through
 hiraku-pc, PLAN.md §30 PC-6; checked in HIRAKU under Wine). Addresses are the newest programs'
 (16: 2008052700, 17: 2009022500, 18: 2010040500). Start-up as pop'n 15's; 17 and 18's libavs
-sends binary XML (kbin) and wants it back (`runtime/python/kbin.h`); `ea3_query` is in
+sends binary XML (kbin) and wants it back (`runtime/eamuse/kbin.h`); `ea3_query` is in
 `libavs-win32-ea3.dll` from 17 on.
 - **The modules** are `game` (`get`, `active`) and `playerdata` (`get`, `new`, `set`, `expire`,
   `friend`, `conversion`; 16 and 17 also `score`, 17's a stub; a table of name, builder and
@@ -1099,7 +1099,7 @@ different PCs meet online through `hiraku-eamuse`'s relay (below, "Online").
     Alone, both say nobody came and start CHALLENGE mode.
   - **全国対戦 or 店内対戦:** a pop'n 13 cabinet that has heard another's broadcast asks first,
     nationwide (the lobby) or in-shop (the LAN, no lobby); left to its timer it takes nationwide.
-- **Online** (`runtime/python/netrelay.h`): `hiraku-eamuse` keeps the lobby and a relay on TCP
+- **Online** (`runtime/eamuse/netrelay.h`): `hiraku-eamuse` keeps the lobby and a relay on TCP
   port 5740, the port its `globby` URL names. Each cabinet with `-url` pointing at it connects
   there at start, and the relay gives it an address of its own, 10.57.0.N. The cabinet puts that
   address in its `portfw` answer (port 5700), as a shop router's address would be, so the other
@@ -1277,7 +1277,7 @@ request kind's fields in turn, numbers in decimal, names in EUC-JP). The answer:
   per command its name, its field count and a handler per element depth).
 
 The calls, what the game does with the answers (bm2dx JAH), and HIRAKU's answers
-(`runtime/python/easerver_iidx.cpp`, files in the server's folder):
+(`runtime/eamuse/server_iidx.cpp`, files in the server's folder):
 
 - **music reg** `CARD chart song pgreat great djlevel cleared` after each stage (`0x4364d0`): chart
   0-2 SP normal, hyper, another, 3-5 DP; the song's number (style × 100 + n, 908); the DJ level 0

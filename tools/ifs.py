@@ -5,7 +5,7 @@ replaced (rebuild); their binary XML (kbin) read and written; LZ77 (avslz) undon
 A pack: a header (0x6CAD8F89, its version, the end of its file list), a binary XML (kbin) file list
 whose files are three s32 (where from the list's end, the size, a time) and folders their nodes,
 then the files. Names are written with _E for '.', __ for '_' and a '_' before a leading digit.
-The kbin reading follows runtime/python/kbin.cpp's.
+The kbin reading follows runtime/eamuse/kbin.cpp's.
 """
 import struct
 

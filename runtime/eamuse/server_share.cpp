@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// One card for all, pop'n music 9-18 (docs/EAMUSE3.md): clear marks and best scores shared (easerver.h).
-#include "python/easerver_parts.h"
+// One card for all, pop'n music 9-18 (docs/EAMUSE3.md): clear marks and best scores shared (server.h).
+#include "eamuse/server_parts.h"
 #include <algorithm>
 #include <cctype>
 #include <cstdio>
@@ -9,7 +9,7 @@
 #include <iterator>
 #include <set>
 
-namespace hk::py {
+namespace hk::ea {
 
 // pop'n 12's player data (docs/EAMUSE3.md): get and new answer a binary record of 0x708 bytes as
 // base64 in <b> (0x1917f8; decoded at 0x18f860 into 0x1867e68); set sends this credit's changes as
@@ -125,7 +125,7 @@ void marks_out(const std::string &game, std::string &d, size_t n, uint8_t m) {
 
 }  // namespace
 
-std::vector<uint8_t> EamuseServer::shared_marks(const std::string &card) const {
+std::vector<uint8_t> Server::shared_marks(const std::string &card) const {
     std::vector<uint8_t> marks(SONG_MAX, 0);
     if (!safe_name(card)) return marks;
     std::string ref;   // pop'n 13 and 14 keep their players by ref id
@@ -152,7 +152,7 @@ std::vector<uint8_t> EamuseServer::shared_marks(const std::string &card) const {
 
 // data: the game's own player data (a userdata answer with <b> pieces for pop'n 9-11, the raw
 // record for 12-14), returned with the card's shared marks put in
-std::string EamuseServer::with_shared_marks(const std::string &game, const std::string &card, std::string data) const {
+std::string Server::with_shared_marks(const std::string &game, const std::string &card, std::string data) const {
     const std::vector<uint8_t> marks = shared_marks(card);
     const bool blob = game == "C00" || game == "C20" || game == "D11";
     std::string d = blob ? unbase64_b(data) : data;
@@ -211,7 +211,7 @@ long hiscore_at(const std::string &h, size_t i) {
 // a player's best scores in one game, by song and sheet: 12-15's kept here a line a chart
 // (pscore-<game>-<who>), 16's and 17's in their records (32 bits a chart, chart-major: 16 0x8dc,
 // 846 a chart; 17 0xcd4, 950), 18's as its <hiscore> (pscore-J39-<who>)
-std::map<std::pair<long, long>, long> EamuseServer::scores_of(const std::string &game, const std::string &who) const {
+std::map<std::pair<long, long>, long> Server::scores_of(const std::string &game, const std::string &who) const {
     std::map<std::pair<long, long>, long> out;
     if (!safe_name(who)) return out;
     if (game == "H16" || game == "I17") {
@@ -250,7 +250,7 @@ static void card_and_ref(const std::vector<Record> &cards, const std::string &ga
     }
 }
 
-long EamuseServer::shared_score(const std::string &game, const std::string &key, const std::string &song, const std::string &sheet) const {
+long Server::shared_score(const std::string &game, const std::string &key, const std::string &song, const std::string &sheet) const {
     std::string card, ref;
     card_and_ref(from_lines(read_file("cards")), game, key, card, ref);
     const long n = std::strtol(song.c_str(), nullptr, 10), s = std::strtol(sheet.c_str(), nullptr, 10);
@@ -263,7 +263,7 @@ long EamuseServer::shared_score(const std::string &game, const std::string &key,
     return best;
 }
 
-std::map<std::pair<long, long>, long> EamuseServer::shared_scores(const std::string &game, const std::string &key) const {
+std::map<std::pair<long, long>, long> Server::shared_scores(const std::string &game, const std::string &key) const {
     std::string card, ref;
     card_and_ref(from_lines(read_file("cards")), game, key, card, ref);
     std::map<std::pair<long, long>, long> best;
@@ -275,4 +275,4 @@ std::map<std::pair<long, long>, long> EamuseServer::shared_scores(const std::str
     return best;
 }
 
-}  // namespace hk::py
+}  // namespace hk::ea

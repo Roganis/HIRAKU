@@ -396,7 +396,7 @@ static void chart_pack(const struct chart *c, char *rel, size_t n) {
 // the time in milliseconds at +0, 45 04 a tempo (its value at +6), 45 06 the end.
 // A pack: its header (to its file list's end at +16), a binary XML (kbin) list from +0x24 whose
 // files are three s32 (where from the list's end, the size, a time); names six bits a letter, '_'
-// written "__" and '.' "_E". The list read as runtime/python/kbin.cpp and tools/ifs.py read it.
+// written "__" and '.' "_E". The list read as runtime/eamuse/kbin.cpp and tools/ifs.py read it.
 static int ifs_member(HANDLE f, const char *want, uint32_t *at, uint32_t *size) {
     static const unsigned char SZ[57][2] = {
         {0, 0}, {0, 0}, {1, 1}, {1, 1}, {2, 1}, {2, 1}, {4, 1}, {4, 1}, {8, 1}, {8, 1}, {1, 0}, {1, 0}, {4, 1}, {4, 1}, {4, 1}, {8, 1},

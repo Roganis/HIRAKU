@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// GuitarFreaks and DrumMania V on the server (Konami Python 2) (easerver.h).
-#include "python/easerver_parts.h"
+// GuitarFreaks and DrumMania V on the server (Konami Python 2) (server.h).
+#include "eamuse/server_parts.h"
 #include <algorithm>
 #include <cctype>
 #include <cstdio>
@@ -10,7 +10,7 @@
 #include <set>
 #include <ctime>
 
-namespace hk::py {
+namespace hk::ea {
 
 // GuitarFreaks and DrumMania V's e-AMUSEMENT (Konami Python 2; PLAN.md section 23, PY-6), from the
 // game's eamservice module (in RAM: cardutil 0x94a348-0x94ae38):
@@ -30,7 +30,7 @@ namespace hk::py {
 //     0x94c890), towerdata, kingdata. Answered without them so far.
 // The players: the data folder's gfdmv-cards (cardid, gdid, then pass and name once registered);
 // gdids are 10 digits from gfdmv-gdid.
-std::string EamuseServer::answer_gfdmv(const std::string &game, const Request &r) {
+std::string Server::answer_gfdmv(const std::string &game, const Request &r) {
     const std::string &m = r.module, &f = r.method;
     std::vector<Record> cards = from_lines(read_file("gfdmv-cards"));
     auto find = [&](const std::string &id) -> Record * {
@@ -146,4 +146,4 @@ std::string EamuseServer::answer_gfdmv(const std::string &game, const Request &r
     return "";
 }
 
-}  // namespace hk::py
+}  // namespace hk::ea

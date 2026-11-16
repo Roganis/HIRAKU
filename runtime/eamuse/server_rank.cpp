@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// The server's rankings: pop'n 9's boards, pop'n 10-14's rank.get tables (easerver.h).
-#include "python/easerver_parts.h"
+// The server's rankings: pop'n 9's boards, pop'n 10-14's rank.get tables (server.h).
+#include "eamuse/server_parts.h"
 #include <algorithm>
 #include <cctype>
 #include <cstdio>
@@ -11,7 +11,7 @@
 
 #include "shell/sys.h"
 
-namespace hk::py {
+namespace hk::ea {
 
 const Board BOARD_SCORE = {"rank-score", "card_id", {"name", "score", "cool", "great", "good", "bad", "combo", "option", "konami_id", "shop_name", "area_num", "gpcb_id"}, "score", "cool", 10};
 const Board BOARD_H = {"rank-hitasura", "card_id", {"name", "music", "combo", "konami_id", "shop_name", "area_num", "gpcb_id"}, "music", "combo", 10};
@@ -25,13 +25,13 @@ bool better(const Board &b, const Record &x, const Record &y) {   // x ranks abo
     return num(x, b.second, b.second_base) > num(y, b.second, b.second_base);
 }
 
-std::string EamuseServer::rank_register(const Board &b, const Request &r) {
+std::string Server::rank_register(const Board &b, const Request &r) {
     const Entered e = enter(b, r);
     return item(b, e.kept, e.place) + "entry=\"" + std::to_string(e.entries) + "\" update=\"" + (e.update ? "1" : "0") + "\"/>";
 }
 
 // A result entered on a board: kept if it beats the entrant's best; where the entrant now stands
-EamuseServer::Entered EamuseServer::enter(const Board &b, const Request &r) {
+Server::Entered Server::enter(const Board &b, const Request &r) {
     // pop'n 12 on name the course course_num
     const char *course_key = attr(r.attrs, "course").empty() && !attr(r.attrs, "course_num").empty() ? "course_num" : "course";
     const std::string course = b.file == BOARD_GZ.file ? "0" : std::to_string(num(r.attrs, course_key));
@@ -87,7 +87,7 @@ EamuseServer::Entered EamuseServer::enter(const Board &b, const Request &r) {
     return out;
 }
 
-std::string EamuseServer::rank_get(const Board &b, const Request &r) {
+std::string Server::rank_get(const Board &b, const Request &r) {
     const std::vector<Record> all = from_lines(read_file(b.file));
     const bool courses = b.file != BOARD_GZ.file;
     const long c0 = courses ? num(r.attrs, "course_offset") : 0, cn = courses ? std::max(1L, num(r.attrs, "course_num")) : 1;
@@ -106,7 +106,7 @@ std::string EamuseServer::rank_get(const Board &b, const Request &r) {
 }
 
 // An entry as the game reads it: <item rank=.. (the board's fields) area=.. id=..
-std::string EamuseServer::item(const Board &b, const Record &e, size_t place) {
+std::string Server::item(const Board &b, const Record &e, size_t place) {
     std::string o = "<item rank=\"" + std::to_string(place) + "\" ";
     if (b.file == BOARD_SCORE.file)
         o += "name=\"" + esc(attr(e, "name")) + "\" score=\"" + esc(attr(e, "score")) + "\" cool=\"" + esc(attr(e, "cool")) + "\" ";
@@ -132,7 +132,7 @@ std::string EamuseServer::item(const Board &b, const Record &e, size_t place) {
 // name (24 bytes), place, prefecture, stage, the area's words (low, high) at 0x20 and 0x24: the
 // attractions built, drawn per bit}. pop'n 14 (0x17db420, 0x1894 bytes, at 0x15f28f8): 13 such
 // courses, no shop board. Little-endian.
-std::string EamuseServer::rank_table(const std::string &game) {
+std::string Server::rank_table(const std::string &game) {
     const bool p11 = game == "D11", p13 = game == "E13", p14 = game == "F14", pref_first = game != "C20";
     // pop'n 15: 22 courses (0x2998 bytes, its check of the table 0x427e40), no shop board; 16 and
     // 17: 11 (0x14cc, 16 0x4374c0, 17 0x437be9)
@@ -238,7 +238,7 @@ std::string EamuseServer::rank_table(const std::string &game) {
 
 // rank.get's answer: the table in <b> pieces of 768 bytes (the game's reader refuses one long
 // text, and appends each <b> after the last: 0x19e300)
-std::string EamuseServer::rank_b(const std::string &game) {
+std::string Server::rank_b(const std::string &game) {
     const std::string t = rank_table(game);
     std::string out;
     for (size_t at = 0; at < t.size(); at += 768) out += "<b>" + base64(t.substr(at, 768)) + "</b>";
@@ -248,7 +248,7 @@ std::string EamuseServer::rank_b(const std::string &game) {
 // A shop's event report (pop'n 10 rank.shop praystar_lo/hi; pop'n 11 and 12 rank shop item/extra;
 // pop'n 13 item_lo/item_hi and stage), kept per shop (and board) with when its finds last grew
 // (the server's clock: MMDDhhmm, for pop'n 11's board)
-void EamuseServer::rank_shop(const std::string &game, const Request &r, const char *mask, const char *mask_hi) {
+void Server::rank_shop(const std::string &game, const Request &r, const char *mask, const char *mask_hi) {
     std::vector<Record> shops = from_lines(read_file(game + "-rank-shop"));
     const std::string name = attr(r.attrs, "shop_name");
     const time_t now_t = now ? (time_t)now() : 0;
@@ -281,4 +281,4 @@ void EamuseServer::rank_shop(const std::string &game, const Request &r, const ch
     write_file(game + "-rank-shop", out);
 }
 
-}  // namespace hk::py
+}  // namespace hk::ea

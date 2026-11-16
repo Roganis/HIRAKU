@@ -83,7 +83,7 @@ inline void set(Line &line, const char *key, const std::string &value) {
         if (f.key == key && !f.plain) f.value = value;
 }
 
-// A ref id's count ("48524B" and ten hex digits, easerver_popn.cpp), 0 for anything else
+// A ref id's count ("48524B" and ten hex digits, server_popn.cpp), 0 for anything else
 inline unsigned long long ref_count(const std::string &ref) {
     return ref.size() == 16 && ref.compare(0, 6, "48524B") == 0 ? std::strtoull(ref.c_str() + 6, nullptr, 16) : 0;
 }

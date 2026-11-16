@@ -126,18 +126,16 @@ endif()
 target_compile_options(hk_python_shell PRIVATE ${HK_PY_FLAGS})
 set_target_properties(hk_python_shell PROPERTIES CXX_STANDARD 20 CXX_STANDARD_REQUIRED ON)
 
+# HIRAKU's e-AMUSEMENT server (runtime/eamuse/): the files the top CMakeLists.txt's build takes too,
+# listed once for both (cmake/eamuse.cmake)
+include(${HK}/cmake/eamuse.cmake)
+list(TRANSFORM HK_EAMUSE_SOURCES PREPEND ${HK}/ OUTPUT_VARIABLE HK_PY_EAMUSE)
 # The Python core and HIRAKU's main(), compiled once. hiraku-python runs any Python game (--game ID,
 # or its name); hiraku-<id> is a link to it (runtime/shell/built.h), made by the target of that name.
 # Windows (no links): a binary per game, of the same objects and a one-line file naming the game
 add_library(hk_python_core OBJECT ${HK}/runtime/main.cpp ${HK}/runtime/python/core.cpp ${HK}/runtime/python/cardunit.cpp
 	${HK}/runtime/python/icca.cpp ${HK}/runtime/python/eanet.cpp ${HK}/runtime/python/ethnet.cpp ${HK}/runtime/python/gfdmcard.cpp
-	${HK}/runtime/python/lancable.cpp ${HK}/runtime/python/netrelay.cpp ${HK}/runtime/python/lobby.cpp
-	${HK}/runtime/python/easerver.cpp ${HK}/runtime/python/easerver_rank.cpp ${HK}/runtime/python/easerver_gfdm.cpp
-	${HK}/runtime/python/easerver_popn.cpp ${HK}/runtime/python/easerver_share.cpp ${HK}/runtime/python/easerver_pc.cpp
-	${HK}/runtime/python/easerver_hc.cpp
-	${HK}/runtime/python/easerver_p24.cpp
-	${HK}/runtime/python/easerver_iidx.cpp
-	${HK}/runtime/python/kbin.cpp ${HK}/runtime/eamuse/protocol.cpp ${HK}/runtime/eamuse/remote.cpp)
+	${HK}/runtime/python/lancable.cpp ${HK_PY_EAMUSE})
 # HK_ROOT, this checkout's path in the binary; none in a release's (HK_RELEASE: its binary takes the
 # folder above it, the package, as the other cores' do: the top CMakeLists.txt's HK_ROOT_DEFINE)
 option(HK_RELEASE "a release's build: this checkout's path isn't in the binary" OFF)

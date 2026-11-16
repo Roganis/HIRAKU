@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// pop'n music 10-14 on the server: their own calls, and the player data (easerver.h).
-#include "python/easerver_parts.h"
+// pop'n music 10-14 on the server: their own calls, and the player data (server.h).
+#include "eamuse/server_parts.h"
 #include <algorithm>
 #include <cctype>
 #include <cstdio>
@@ -11,14 +11,14 @@
 
 #include "shell/sys.h"
 #include <ctime>
-#include "python/kbin.h"
-#include "python/lobby.h"
+#include "eamuse/kbin.h"
+#include "eamuse/lobby.h"
 
-namespace hk::py {
+namespace hk::ea {
 
 // pop'n music 10 on (docs/EAMUSE3.md, "Later games"): game is the model's first three
 // characters. "" leaves the call to pop'n 9's answers (services, numbering, userid, posevent, ...).
-std::string EamuseServer::answer_later(const std::string &game, const Request &r, const std::string &host) {
+std::string Server::answer_later(const std::string &game, const Request &r, const std::string &host) {
     const std::string &m = r.module, &f = r.method;
     if (game == "E02" || game == "F02" || game == "E03" || game == "F03")
         if (std::string a = answer_gfdmv(game, r); !a.empty()) return a;
@@ -87,8 +87,8 @@ std::string EamuseServer::answer_later(const std::string &game, const Request &r
                "<arcadefan>www.konami.jp/am</arcadefan><konaminetdx>http://am.573.jp</konaminetdx>"
                "<konamiid>http://id.konami.jp</konamiid><eagate>http://eagate.573.jp</eagate></url></share></facility>";
     }
-    if ((m == "player" || m == "info") && game == "M39") return answer_hc(r);   // the 64-bit PC pop'n's (easerver_hc.cpp)
-    if ((m == "player24" || m == "info24" || m == "lobby24") && game == "M39") return answer_p24(r);   // the last 32-bit PC pop'n's (easerver_p24.cpp)
+    if ((m == "player" || m == "info") && game == "M39") return answer_hc(r);   // the 64-bit PC pop'n's (server_hc.cpp)
+    if ((m == "player24" || m == "info24" || m == "lobby24") && game == "M39") return answer_p24(r);   // the last 32-bit PC pop'n's (server_p24.cpp)
     if (m == "facility" && f == "get" && (pc_popn(game) || pc_iidx(game))) {   // pop'n 15's library (libavs ea3_facility): every
         // field it imports (location, line, portfw, public, share), or it fails the start-up (5-2009);
         // pop'n 18's (J39) also the location's name and type, the line's class and share/eacoin
@@ -149,7 +149,7 @@ std::string EamuseServer::answer_later(const std::string &game, const Request &r
             const bool fresh = ref.empty();
             // beatmania IIDX 13: a pass the server doesn't know is 112 (not registered): the game asks the
             // new PIN twice and registers it (getrefid), then its DJ name (pc reg); binded, a DistorteD
-            // player for the pass (easerver_iidx.cpp)
+            // player for the pass (server_iidx.cpp)
             if (game == "FDD" || pc_iidx(game)) {
                 if (fresh) return "<cardmng status=\"112\"/>";
                 bool binded = false;
@@ -316,7 +316,7 @@ std::string EamuseServer::answer_later(const std::string &game, const Request &r
 
 // pop'n 11 on: the module named after the game, a type and a method (pop'n 11's parsers
 // 0x18c858-0x18ddf8). The answer is that element again.
-std::string EamuseServer::answer_game(const std::string &game, const Request &r) {
+std::string Server::answer_game(const std::string &game, const Request &r) {
     const std::string type = attr(r.attrs, "type"), &f = r.method;
     const std::string open = "<" + game + " status=\"0\"";
     const bool ranked = game == "D11" || game == "E12" || game == "E13" || game == "F14";   // the games whose table is worked out
@@ -395,7 +395,7 @@ std::string EamuseServer::answer_game(const std::string &game, const Request &r)
     return open + "/>";
 }
 
-std::string EamuseServer::answer_playerdata(const std::string &game, const Request &r) {
+std::string Server::answer_playerdata(const std::string &game, const Request &r) {
     // each game's record (docs/EAMUSE3.md): its size, the password's, option's and character's
     // places, and the songs' clear words (16 bits each in pop'n 12, 32 in pop'n 13)
     struct Layout { size_t record, password, option, chara, songs, song_bytes, songs_end; };
@@ -661,4 +661,4 @@ std::string EamuseServer::answer_playerdata(const std::string &game, const Reque
     return open + "/>";
 }
 
-}  // namespace hk::py
+}  // namespace hk::ea

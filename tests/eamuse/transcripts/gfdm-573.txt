@@ -1,5 +1,5 @@
-# The System 573 GuitarFreaks (model xx39) and DrumMania (xx40): the other server class
-# (runtime/eamuse/server.h with runtime/sys573/eagfdm.h's answers): cards, a credit's start and end,
+# The System 573 GuitarFreaks (model xx39) and DrumMania (xx40), runtime/eamuse/server_gfdm.cpp (once a
+# server class of their own): cards, a credit's start and end,
 # the skill and the places, the most played songs; its card numbering, KONAMI ID and title message.
 # Made-up cards and results.
 model D40:J:A:A

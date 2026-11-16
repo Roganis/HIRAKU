@@ -14,7 +14,7 @@
 // Options of its own: --wine PROGRAM (Linux: the Wine to run it with, default `wine` from the PATH),
 // --game-ahead (the game draws its next picture while the shell shows this one: a frame's more
 // time to draw, a frame later on the screen), and e-AMUSEMENT's, as spice2x's (shell/eaoptions.h): -url, -card0 / -card1. Without -url the
-// e-AMUSEMENT server is HIRAKU's own (runtime/python/easerver.h, pop'n 9-14's), on this machine,
+// e-AMUSEMENT server is HIRAKU's own (runtime/eamuse/server.h, pop'n 9-14's), on this machine,
 // with the pop'n games' shared folder (one card for all); the DLL leads the game's network library
 // to it (runtime/pc/net.c). HK_PC_EA_LOG=1 prints each call in clear.
 //
@@ -82,9 +82,9 @@ extern char **environ;
 #include "host/script.h"
 #include "pc/link.h"
 #include "pc/process.h"
-#include "python/easerver.h"
-#include "python/lobby.h"
-#include "python/netrelay.h"
+#include "eamuse/server.h"
+#include "eamuse/lobby.h"
+#include "eamuse/netrelay.h"
 #include "pc/gamepath.h"
 #include "shell/cabinet.h"
 #include "shell/core.h"
@@ -1322,7 +1322,7 @@ private:
             // the key, the calls' and the relay's
             if (const hk::net::Key key(ea_.key); key.set()) {
                 std::string why;
-                if (!ea_forward_.start(ip, ea_port, key, &why) || !relay_forward_.start(ip, hk::py::Lobby::PORT, key, &why)) {
+                if (!ea_forward_.start(ip, ea_port, key, &why) || !relay_forward_.start(ip, hk::ea::Lobby::PORT, key, &why)) {
                     fprintf(stderr, "e-AMUSEMENT: %s\n", why.c_str());
                     return false;
                 }
@@ -1337,7 +1337,7 @@ private:
             }
             set_env("HK_PC_EA", std::string(ip) + ":" + std::to_string(ea_port));
             // NET TAISEN: hiraku-eamuse's relay, at its lobby's port (runtime/pc/vsock.c)
-            set_env("HK_PC_RELAY", std::string(ip) + ":" + std::to_string(hk::py::Lobby::PORT));
+            set_env("HK_PC_RELAY", std::string(ip) + ":" + std::to_string(hk::ea::Lobby::PORT));
             printf("e-AMUSEMENT: online, %s\n", ea_.http_url().c_str());
             return true;
         }
@@ -1349,7 +1349,7 @@ private:
         const std::string mine = saves + "/" + game_;
         const std::string dir = save_ == mine || save_.rfind(mine + "+", 0) == 0 ? saves + "/eamuse" : save_ + "/eamuse";
         hk::sys::make_dir(dir);
-        server_ = std::make_unique<hk::py::EamuseServer>(dir);
+        server_ = std::make_unique<hk::ea::Server>(dir);
         server_->now = [] { return (int64_t)time(nullptr) + 9 * 3600; };   // the cabinet's clock: Japan's
         if (getenv("HK_PC_EA_LOG")) server_->log = [](const std::string &s) { fprintf(stderr, "%s\n", s.c_str()); };
         server_->on_call = [](const std::string &call) { hk::script::event("ea:" + call); };   // for scripts' `on` lines
@@ -1384,26 +1384,9 @@ private:
             const int fd = hk::net::accept(listen_);
             if (fd < 0) continue;
             hk::net::set_timeouts(fd, 10000);
-            std::string req;
-            char buf[4096];
-            for (;;) {   // the head, then Content-Length's body
-                const size_t he = req.find("\r\n\r\n");
-                if (he != std::string::npos) {
-                    std::string head = req.substr(0, he);
-                    for (char &c : head) c = (char)std::tolower((unsigned char)c);
-                    size_t body = 0;
-                    if (const size_t cl = head.find("\r\ncontent-length:"); cl != std::string::npos)
-                        body = std::strtoul(head.c_str() + cl + 17, nullptr, 10);
-                    if (body > (1u << 20) || req.size() >= he + 4 + body) break;
-                }
-                const ssize_t n = req.size() > (1u << 21) ? -1 : hk::net::recv(fd, buf, sizeof buf);
-                if (n <= 0) {
-                    req.clear();
-                    break;
-                }
-                req.append(buf, (size_t)n);
-            }
-            if (!req.empty()) {
+            std::string req;   // the head, then Content-Length's body (eamuse/protocol.h)
+            const auto recv = [fd](char *p, size_t n) { return (long)hk::net::recv(fd, p, n); };
+            if (hk::ea::read_request(recv, req, std::chrono::steady_clock::now() + std::chrono::seconds(60))) {
                 const std::string answer = server_->handle(req);
                 for (size_t sent = 0; sent < answer.size();) {
                     const ssize_t n = hk::net::send(fd, answer.data() + sent, answer.size() - sent);
@@ -2110,8 +2093,8 @@ private:
     std::string market_;              // --market: the 64-bit loader's HK_PC64_MARKET
     std::string contents_, loader_;   // its game folder, hiraku-pc64.exe (contents_: the 32-bit one's too)
     hk::EaOptions ea_;
-    std::unique_ptr<hk::py::EamuseServer> server_;
-    hk::py::RelayServer relay_;
+    std::unique_ptr<hk::ea::Server> server_;
+    hk::ea::RelayServer relay_;
     hk::net::KeyForward ea_forward_, relay_forward_;   // online behind a key: the game's connections passed on
     int listen_ = -1;
     hk_pc_link *link_ = nullptr;

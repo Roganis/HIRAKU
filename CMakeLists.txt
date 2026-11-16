@@ -255,20 +255,15 @@ if(WIN32)
   target_link_libraries(hiraku_sys PUBLIC ws2_32)
 endif()
 
-# --- HIRAKU's e-AMUSEMENT server (docs/EAMUSE3.md): the Python games', the PC games' and
-# hiraku-eamuse's (the Python core's own build compiles the same files, runtime/python/CMakeLists.txt)
-# e-AMUSE3 itself (runtime/eamuse/: the calls, the cabinet's LAN, a real server online) and the
-# System 573's GuitarFreaks and DrumMania answers
-add_library(hiraku_eamuse STATIC runtime/eamuse/protocol.cpp runtime/eamuse/lan.cpp runtime/eamuse/server.cpp
-            runtime/eamuse/remote.cpp runtime/sys573/eagfdm.cpp)
+# --- HIRAKU's e-AMUSEMENT server (docs/EAMUSE3.md; runtime/eamuse/): every game's, inside the cores
+# and as hiraku-eamuse. Its files are listed once, in cmake/eamuse.cmake, for this build and for the
+# Python core's own (runtime/python/CMakeLists.txt). With them here: the cabinet's side of the System
+# 573's network unit (its LAN, and the server it reaches)
+include(cmake/eamuse.cmake)
+add_library(hiraku_eamuse STATIC ${HK_EAMUSE_SOURCES} runtime/eamuse/lan.cpp runtime/sys573/eagfdm.cpp)
 target_include_directories(hiraku_eamuse PUBLIC runtime)
 find_package(Threads REQUIRED)
 target_link_libraries(hiraku_eamuse PUBLIC hiraku_sys Threads::Threads)
-add_library(hiraku_easerver STATIC runtime/python/easerver.cpp runtime/python/easerver_rank.cpp
-            runtime/python/easerver_gfdm.cpp runtime/python/easerver_popn.cpp runtime/python/easerver_share.cpp
-            runtime/python/easerver_pc.cpp runtime/python/easerver_hc.cpp runtime/python/easerver_p24.cpp runtime/python/easerver_iidx.cpp runtime/python/kbin.cpp runtime/python/lobby.cpp
-            runtime/python/netrelay.cpp)
-target_link_libraries(hiraku_easerver PUBLIC hiraku_eamuse)
 
 # --- cabinet tables, lights file formats (shared with the launcher) -------------
 add_library(hiraku_cabinet STATIC runtime/shell/cabinet.cpp runtime/host/hiddesc.cpp)
@@ -620,7 +615,7 @@ if(SDL3_FOUND)
   # hiraku-pc: the PC games, Konami's own programs, as a core of HIRAKU's shell (runtime/pc/core.cpp,
   # PLAN.md section 30); its DLLs are the hiraku-pc-dlls above
   add_executable(hiraku-pc runtime/pc/core.cpp runtime/pc/process.cpp)
-  target_link_libraries(hiraku-pc PRIVATE hiraku_main hiraku_built_none hiraku_easerver hiraku_host hiraku_shell)
+  target_link_libraries(hiraku-pc PRIVATE hiraku_main hiraku_built_none hiraku_eamuse hiraku_host hiraku_shell)
   target_compile_definitions(hiraku-pc PRIVATE ${HK_ROOT_DEFINE})
   if(TARGET hiraku-pc-dlls)
     add_dependencies(hiraku-pc hiraku-pc-dlls)
@@ -828,10 +823,10 @@ target_include_directories(hiraku_sys573 PUBLIC runtime)
 target_link_libraries(hiraku_sys573 PUBLIC hiraku_mame573 hiraku_cabinet hiraku_eamuse hiraku_jit)
 hk_stencils(r3000 hiraku_sys573)
 # hiraku-eamuse: the e-AMUSEMENT server on the network, for several cabinets (tools/eamuse/server.cpp):
-# the System 573's and the Python core's (docs/EAMUSE3.md); plain C++, no emulator
+# every game's (docs/EAMUSE3.md); plain C++, no emulator
 add_executable(hiraku-eamuse tools/eamuse/server.cpp)
 target_include_directories(hiraku-eamuse PRIVATE runtime)
-target_link_libraries(hiraku-eamuse PRIVATE hiraku_easerver)
+target_link_libraries(hiraku-eamuse PRIVATE hiraku_eamuse)
 target_compile_options(hiraku_sys573 PRIVATE -O2 -Wno-unused-parameter)
 hk_pgo(sys573 hiraku_mame573)
 

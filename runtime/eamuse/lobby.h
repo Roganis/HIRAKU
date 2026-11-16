@@ -21,7 +21,7 @@
 #include <string>
 #include <vector>
 
-namespace hk::py {
+namespace hk::ea {
 
 class Lobby {
 public:
@@ -57,4 +57,4 @@ private:
     bool pc_;
 };
 
-}  // namespace hk::py
+}  // namespace hk::ea

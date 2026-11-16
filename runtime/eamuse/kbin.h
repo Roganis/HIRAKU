@@ -11,7 +11,7 @@
 // bytes (Shift-JIS as the game sent them), escaped for XML.
 #include <string>
 
-namespace hk::py::kbin {
+namespace hk::ea::kbin {
 
 bool is_binary(const std::string &body);   // starts with kbin's signature (0xa0, 0x42 / 0x45)
 
@@ -24,4 +24,4 @@ bool from_text(const std::string &xml, std::string &bin);
 // Konami's LZ77 (a flag byte, then 8 items: a byte as is, or two bytes: 12 bits back, 4 of length - 3)
 std::string lz77_unpack(const std::string &packed);
 
-}  // namespace hk::py::kbin
+}  // namespace hk::ea::kbin

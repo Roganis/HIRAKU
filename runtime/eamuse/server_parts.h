@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// What the e-AMUSEMENT server's files (easerver*.cpp) share: the protocol's pieces (eamuse/protocol.h)
-// and the server's own. Not for the server's users (easerver.h).
+// What the e-AMUSEMENT server's files (server*.cpp) share: the protocol's pieces (eamuse/protocol.h)
+// and the server's own. Not for the server's users (server.h).
 #pragma once
 
 #include <cstddef>
@@ -12,35 +12,25 @@
 #include <vector>
 
 #include "eamuse/protocol.h"
-#include "python/easerver.h"
+#include "eamuse/server.h"
 
-namespace hk::py {
-
-using ea::attr;
-using ea::esc;
-using ea::from_lines;
-using ea::header;
-using ea::num;
-using ea::read_attrs;
-using ea::Record;
-using ea::safe_name;
-using ea::to_line;
+namespace hk::ea {
 
 // The three rankings (docs/EAMUSE3.md, "rank"): what is kept and how entries compare
-struct EamuseServer::Board {
+struct Server::Board {
     const char *file;
     const char *who;                   // the request's field naming the entrant
     std::vector<const char *> keep;    // fields from the request kept with the entry
     const char *first, *second;        // ranked by these, larger first
     int second_base;                   // parts is hex
 };
-using Board = EamuseServer::Board;
-// easerver_rank.cpp: pop'n 9's three boards; what pop'n 10 on keep of an entry (rank.exp)
+using Board = Server::Board;
+// server_rank.cpp: pop'n 9's three boards; what pop'n 10 on keep of an entry (rank.exp)
 extern const Board BOARD_SCORE, BOARD_H, BOARD_GZ;
 extern const std::vector<const char *> EXP_KEEP;
 bool better(const Board &b, const Record &x, const Record &y);   // x ranks above y on b
 
-// easerver.cpp: LZSS as the games pack (X-Compress: lz77), base64, printf of two numbers
+// server.cpp: LZSS as the games pack (X-Compress: lz77), base64, printf of two numbers
 std::string lzss(const std::string &in);
 std::string base64(const std::string &in);
 std::string unbase64_b(const std::string &x);
@@ -49,7 +39,7 @@ std::string fmt(const char *f, unsigned a, unsigned b);
 bool pc_popn(const std::string &game);
 bool pc_iidx(const std::string &game);
 
-// A player record's parts, as the later pop'n games read them (easerver_hc.cpp, easerver_p24.cpp):
+// A player record's parts, as the later pop'n games read them (server_hc.cpp, server_p24.cpp):
 // a field: its name, AVS type, count (0: one value) and a new player's value
 struct Field {
     const char *name, *type;
@@ -108,4 +98,4 @@ void keep(Record &p, const char *part, const Field (&fields)[N], const std::stri
 }
 
 
-}  // namespace hk::py
+}  // namespace hk::ea

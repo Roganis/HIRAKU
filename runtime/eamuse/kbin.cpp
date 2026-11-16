@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-#include "python/kbin.h"
+#include "eamuse/kbin.h"
 
 #include <algorithm>
 #include <cstdint>
@@ -10,7 +10,7 @@
 #include <utility>
 #include <vector>
 
-namespace hk::py::kbin {
+namespace hk::ea::kbin {
 
 namespace {
 
@@ -527,4 +527,4 @@ std::string lz77_unpack(const std::string &in) {
     return out;
 }
 
-}  // namespace hk::py::kbin
+}  // namespace hk::ea::kbin

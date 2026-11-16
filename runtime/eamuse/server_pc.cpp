@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// pop'n music 15-18 on the server (PC games: runtime/pc/) (easerver.h).
-#include "python/easerver_parts.h"
+// pop'n music 15-18 on the server (PC games: runtime/pc/) (server.h).
+#include "eamuse/server_parts.h"
 #include <algorithm>
 #include <cctype>
 #include <cstdio>
@@ -9,10 +9,10 @@
 #include <iterator>
 #include <set>
 #include <ctime>
-#include "python/kbin.h"
-#include "python/lobby.h"
+#include "eamuse/kbin.h"
+#include "eamuse/lobby.h"
 
-namespace hk::py {
+namespace hk::ea {
 
 // pop'n 15 ADVENTURE (G15: popn15.exe through hiraku-pc, docs/EAMUSE3.md). Its module's methods
 // are type_method (game_get, playerdata_get...); the method table is at 0x568700, each with its
@@ -37,7 +37,7 @@ namespace hk::py {
 //   0x948 the NET TAISEN credits played (the server's count), then NET TAISEN's fields (netvs,
 //   below; as pop'n 14's in other places). set's matching (how many players the match had) and
 //   room_num are the operator's statistics, not kept
-std::string EamuseServer::answer_g15(const Request &r) {
+std::string Server::answer_g15(const Request &r) {
     const std::string &f = r.method;
     const std::string open = "<G15 status=\"0\"";
     constexpr size_t RECORD = 0xb38, SONGS = 0x2fb;
@@ -329,7 +329,7 @@ std::string EamuseServer::answer_g15(const Request &r) {
 // settings and phase, netvs_phase, ir_phase, private_phase, normal_secret_phase, all_hiscore_phase;
 // playerdata.get (0x435680) needs f_compress, its record 0x6784 bytes (pop'n 15's 0xb38 when the
 // game asks for that one, to carry it over).
-std::string EamuseServer::answer_j39(const std::string &game, const Request &r) {
+std::string Server::answer_j39(const std::string &game, const Request &r) {
     const std::string &m = r.module, &f = r.method;
     const bool p16 = game == "H16", p17 = game == "I17", packed = p16 || p17;
     const size_t RECORD = p16 ? 0x6784 : p17 ? 0x74bc : 0x1700;
@@ -848,4 +848,4 @@ std::string EamuseServer::answer_j39(const std::string &game, const Request &r) 
     return "<playerdata status=\"0\"/>";
 }
 
-}  // namespace hk::py
+}  // namespace hk::ea

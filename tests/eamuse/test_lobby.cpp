@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// NET TAISEN's lobby (runtime/python/lobby.h): what anyone who reaches it can make it hold is
+// NET TAISEN's lobby (runtime/eamuse/lobby.h): what anyone who reaches it can make it hold is
 // bounded. An entry is kept an hour at most, whatever it asks, and 1024 entries at most.
 #include <cstdio>
 #include <cstring>
 #include <vector>
 
-#include "python/lobby.h"
+#include "eamuse/lobby.h"
 
 static int failed = 0;
 static void check(bool ok, const char *what) {
@@ -41,7 +41,7 @@ static std::vector<uint8_t> entry(uint16_t port, uint16_t seconds) {
 }
 
 // the ports listed for room 1 (the PC dialect: the header's byte 11 counts them, 0x1c bytes each)
-static std::vector<uint16_t> listed(hk::py::Lobby &l, double now) {
+static std::vector<uint16_t> listed(hk::ea::Lobby &l, double now) {
     const std::vector<uint8_t> ask = packet(1, {0, 0, 0, 1});
     const std::vector<uint8_t> a = l.handle(ask.data(), ask.size(), now);
     std::vector<uint16_t> ports;
@@ -52,7 +52,7 @@ static std::vector<uint16_t> listed(hk::py::Lobby &l, double now) {
 
 int main() {
     {
-        hk::py::Lobby l(true);
+        hk::ea::Lobby l(true);
         const auto e = entry(5700, 30);
         check(!l.handle(e.data(), e.size(), 0).empty() && listed(l, 10).size() == 1 && listed(l, 31).empty(), "an entry is kept for the seconds it asks");
         const auto forever = entry(5701, 65535);
@@ -60,7 +60,7 @@ int main() {
         check(listed(l, 100 + 3599).size() == 1 && listed(l, 100 + 3601).empty(), "... an hour at most, whatever it asks");
     }
     {
-        hk::py::Lobby l(true);
+        hk::ea::Lobby l(true);
         for (int i = 0; i < 3000; i++) {
             const auto e = entry((uint16_t)(1000 + i), 65535);
             l.handle(e.data(), e.size(), 0);

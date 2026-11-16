@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // The lobby pop'n music 12-14's NET TAISEN finds its opponents through (lobby.h).
-#include "python/lobby.h"
+#include "eamuse/lobby.h"
 
 #include <algorithm>
 #include <cstring>
 
-namespace hk::py {
+namespace hk::ea {
 
 namespace {
 
@@ -95,4 +95,4 @@ std::vector<uint8_t> Lobby::handle(const uint8_t *d, size_t n, double now) {
     return out;
 }
 
-}  // namespace hk::py
+}  // namespace hk::ea

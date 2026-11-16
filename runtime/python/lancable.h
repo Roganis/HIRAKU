@@ -20,16 +20,14 @@
 #include <string>
 #include <vector>
 
+#include "eamuse/packet.h"
+
 namespace hk::py {
 
 class LanCable {
 public:
     // A datagram on the LAN: addresses as 32-bit numbers (192.168.50.2 = 0xc0a83202)
-    struct Packet {
-        uint32_t src = 0, dst = 0;
-        uint16_t sport = 0, dport = 0;
-        std::vector<uint8_t> data;
-    };
+    using Packet = ea::Packet;
 
     ~LanCable();
     // host: listen at `where` and wait for cabinets - 1 guests; else connect to it. false: a

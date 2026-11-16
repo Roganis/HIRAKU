@@ -447,7 +447,7 @@ def ticket_files(p: dict, nvram: str) -> list[str]:
 
 
 def read_record(path: str) -> dict:
-    """One record of HIRAKU's server (runtime/python/easerver.cpp): tab-separated key=value."""
+    """One record of HIRAKU's server (runtime/eamuse/server.cpp): tab-separated key=value."""
     line = open(path, encoding="utf-8").readline().rstrip("\n")
     return dict(f.partition("=")[::2] for f in line.split("\t") if f)
 

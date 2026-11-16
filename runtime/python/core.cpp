@@ -97,10 +97,10 @@
 #include "python/ethnet.h"
 #include "python/gfdmcard.h"
 #include "eamuse/remote.h"
-#include "python/easerver.h"
+#include "eamuse/server.h"
 #include "python/lancable.h"
-#include "python/lobby.h"
-#include "python/netrelay.h"
+#include "eamuse/lobby.h"
+#include "eamuse/netrelay.h"
 #include "shell/cabinet.h"
 #include "shell/core.h"
 #include "shell/eaoptions.h"
@@ -530,8 +530,8 @@ public:
                     if (net_log_) {
                         std::lock_guard<std::mutex> l(net_log_mutex_);
                         fprintf(net_log_, "online %s:%u %s\n  -> %s\n", t.services ? remote_->host().c_str() : t.host.c_str(),
-                                t.services ? remote_->port() : t.port, hk::py::EamuseServer::clear(req).c_str(),
-                                answer.empty() ? ("failed: " + error).c_str() : hk::py::EamuseServer::clear(answer).c_str());
+                                t.services ? remote_->port() : t.port, hk::ea::Server::clear(req).c_str(),
+                                answer.empty() ? ("failed: " + error).c_str() : hk::ea::Server::clear(answer).c_str());
                         fflush(net_log_);
                     }
                     if (answer.empty()) fprintf(stderr, "e-AMUSEMENT: %s\n", error.c_str());
@@ -562,7 +562,7 @@ public:
                 hk::ea::merge_folder(ea_dir, shared_saves_ + "/eamuse");   // (eamuse/merge.h)
                 ea_dir = shared_saves_ + "/eamuse";
             }
-            server_ = std::make_unique<hk::py::EamuseServer>(ea_dir);
+            server_ = std::make_unique<hk::ea::Server>(ea_dir);
             // the cabinet's clock (init_emulator: 2003-06-01 12:00 JST) plus the machine's own time
             server_->now = [this] { return (int64_t)1054468800 + (int64_t)seconds(); };
             // -autopin: pop'n 14 asks for the PIN 3 seconds after the card is read, and takes it at
@@ -579,10 +579,10 @@ public:
             // online: NET TAISEN through the server's relay, when it is hiraku-eamuse (netrelay.h)
             if (remote_ && lan_where_.empty()) {
                 std::string why;
-                if (relay_.open(remote_->host(), hk::py::Lobby::PORT, 3, &why, remote_->key())) {
+                if (relay_.open(remote_->host(), hk::ea::Lobby::PORT, 3, &why, remote_->key())) {
                     const uint32_t a = relay_.address();
                     printf("e-AMUSEMENT: NET TAISEN online through %s:%u, this cabinet %u.%u.%u.%u\n", remote_->host().c_str(),
-                           hk::py::Lobby::PORT, a >> 24, (a >> 16) & 255, (a >> 8) & 255, a & 255);
+                           hk::ea::Lobby::PORT, a >> 24, (a >> 16) & 255, (a >> 8) & 255, a & 255);
                     net_->set_online(a);
                     net_->cable = [this](std::vector<hk::py::LanCable::Packet> &out, std::vector<hk::py::LanCable::Packet> &in) {
                         relay_.exchange(out, in);
@@ -633,7 +633,7 @@ public:
         eth_ = std::make_unique<hk::py::EtherNet>();
         // e-AMUSEMENT (on in the game's NETWORK OPTIONS): the server inside HIRAKU, its files beside
         // the run's NVRAM
-        server_ = std::make_unique<hk::py::EamuseServer>(run_dir_ + "/eamuse");
+        server_ = std::make_unique<hk::ea::Server>(run_dir_ + "/eamuse");
         server_->now = [this] { return (int64_t)1054468800 + (int64_t)seconds(); };
         eth_->http = [this](const std::string &req) { return server_->handle(req); };
         // the card unit (gfdmcard.h: the 573 GuitarFreaks and DrumMania's magnetic card reader and
@@ -1255,12 +1255,12 @@ private:
     hk::py::CardUnit *card_unit_ = nullptr;   // the card unit, while it shows an older game's card
     std::string shared_saves_;   // the saves' folder when this game's is in its default place there, else ""
     hk::py::LanCable lan_;   // --lan-host/--lan-join
-    hk::py::RelayClient relay_;   // online NET TAISEN (-url with hiraku-eamuse)
+    hk::ea::RelayClient relay_;   // online NET TAISEN (-url with hiraku-eamuse)
     std::string lan_where_;
     bool lan_host_ = false;
     int lan_cabinets_ = 2;
     FILE *net_log_ = nullptr;
-    std::unique_ptr<hk::py::EamuseServer> server_;
+    std::unique_ptr<hk::ea::Server> server_;
     std::vector<std::pair<uint32_t, uint32_t>> watch_;   // HK_PY_WATCH: address, last value
     std::unique_ptr<hk::ea::Remote> remote_;   // -url: online
     hk::EaOptions ea_;   // spice2x's e-AMUSEMENT options
@@ -1271,10 +1271,10 @@ private:
     std::string on_call(std::string &req, std::function<void(std::string)> &done) {
         bool numbering = false, getnewid = false, portfw = false;
         const std::string &number = ea_.card[0];
-        hk::py::EamuseServer::edit(req, [&](std::string &xml) {
+        hk::ea::Server::edit(req, [&](std::string &xml) {
             if (!ea_.pcbid.empty()) {
-                hk::py::EamuseServer::set_attr(xml, "srcid", ea_.pcbid);
-                hk::py::EamuseServer::set_attr(xml, "gpcb_id", ea_.pcbid);
+                hk::ea::Server::set_attr(xml, "srcid", ea_.pcbid);
+                hk::ea::Server::set_attr(xml, "gpcb_id", ea_.pcbid);
             }
             numbering = xml.find("<numbering") != std::string::npos && xml.find("method=\"assign\"") != std::string::npos;
             // carrying the older card's player over: the game asks about it (pop'n 10/11 read
@@ -1288,7 +1288,7 @@ private:
             // card (card_id "-"): one card for all, the card's number goes along, so the server
             // finds the player of this card whatever was typed
             if (!number.empty() && xml.find("model=\"E13\"") != std::string::npos && xml.find("\"playerdata\"") != std::string::npos)
-                hk::py::EamuseServer::set_attr(xml, "card_id", number);
+                hk::ea::Server::set_attr(xml, "card_id", number);
             portfw = (xml.find("<portfw") != std::string::npos || xml.find("<facility") != std::string::npos) &&
                      xml.find("method=\"get\"") != std::string::npos;
             // pop'n 13 numbers a new card with cardmng.getnewid (a card id and its player's ref id):
@@ -1306,7 +1306,7 @@ private:
                 fflush(net_log_);
             }
             done = [done = std::move(done), number](std::string answer) {
-                hk::py::EamuseServer::edit(answer, [&](std::string &xml) {
+                hk::ea::Server::edit(answer, [&](std::string &xml) {
                     if (const size_t at = xml.find("<cardmng"); at != std::string::npos) xml.insert(at + 8, " cardid=\"" + number + "\"");
                 });
                 done(std::move(answer));
@@ -1326,7 +1326,7 @@ private:
                 fflush(net_log_);
             }
             done = [done = std::move(done), ip = std::string(ip)](std::string answer) {
-                hk::py::EamuseServer::edit(answer, [&](std::string &xml) {
+                hk::ea::Server::edit(answer, [&](std::string &xml) {
                     if (const size_t g = xml.find("<globalip>"); g != std::string::npos) {   // facility
                         const size_t e = xml.find("</globalip>", g);
                         if (e != std::string::npos) xml.replace(g + 10, e - g - 10, ip);
@@ -1337,8 +1337,8 @@ private:
                     const size_t end = xml.find('>', at);
                     const std::string el = xml.substr(at, end == std::string::npos ? std::string::npos : end - at);
                     if (el.find(" globalip=\"") == std::string::npos) xml.insert(at + 7, " globalip=\"\" port=\"\"");
-                    hk::py::EamuseServer::set_attr(xml, "globalip", ip);
-                    hk::py::EamuseServer::set_attr(xml, "port", "5700");
+                    hk::ea::Server::set_attr(xml, "globalip", ip);
+                    hk::ea::Server::set_attr(xml, "port", "5700");
                 });
                 done(std::move(answer));
             };

@@ -13,7 +13,7 @@
 // Broadcasts (a shop's LAN) go nowhere.
 //
 // Nothing here is in lockstep: datagrams arrive when the network brings them, and each cabinet
-// takes them at its next frame, as real cabinets took theirs. (The LAN cable, lancable.h, is
+// takes them at its next frame, as real cabinets took theirs. (The LAN cable, python/lancable.h, is
 // the reproducible way, for cabinets on one PC or a LAN.)
 //
 // Over the connection: a hello each way, then datagrams, each a header (sender, receiver, their
@@ -29,10 +29,10 @@
 #include <thread>
 #include <vector>
 
-#include "python/lancable.h"
+#include "eamuse/packet.h"
 #include "shell/keyed.h"
 
-namespace hk::py {
+namespace hk::ea {
 
 // The cabinet's side
 class RelayClient {
@@ -44,7 +44,7 @@ public:
     // the address the relay gave this cabinet (192.168.50.2 = 0xc0a83202 style)
     uint32_t address() const { return address_; }
     // A frame's end: ours out, whatever came since in (never blocks on the network for long)
-    void exchange(std::vector<LanCable::Packet> &out, std::vector<LanCable::Packet> &in);
+    void exchange(std::vector<Packet> &out, std::vector<Packet> &in);
 
 private:
     void reader();
@@ -55,7 +55,7 @@ private:
     uint32_t address_ = 0;
     std::thread thread_;
     std::mutex mutex_;
-    std::vector<LanCable::Packet> came_;
+    std::vector<Packet> came_;
     bool lost_ = false;
 };
 
@@ -81,4 +81,4 @@ private:
     std::thread thread_;
 };
 
-}  // namespace hk::py
+}  // namespace hk::ea

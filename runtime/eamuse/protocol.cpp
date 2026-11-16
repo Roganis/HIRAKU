@@ -263,27 +263,25 @@ std::vector<Record> from_lines(const std::string &text) {
     return out;
 }
 
-std::string Store::read(const std::string &name) const {
-    if (dir_.empty() || !safe_file(name)) return "";
-    std::ifstream f(dir_ + "/" + name, std::ios::binary);
-    return std::string(std::istreambuf_iterator<char>(f), std::istreambuf_iterator<char>());
-}
-
-sys::FileLock Store::lock() const {
-    if (!dir_.empty()) sys::make_dir(dir_);
-    return sys::FileLock(dir_.empty() ? "" : dir_ + "/" + FOLDER_LOCK);
-}
-
-void Store::write(const std::string &name, const std::string &data) const {
-    if (dir_.empty()) return;
-    if (!safe_file(name)) {
-        fprintf(stderr, "e-AMUSEMENT: not written: a call's field made no file name (%zu bytes)\n", name.size());
-        return;
+bool read_request(const std::function<long(char *, size_t)> &recv, std::string &req, std::chrono::steady_clock::time_point until) {
+    char buf[4096];
+    for (;;) {
+        if (std::chrono::steady_clock::now() > until) return false;
+        const size_t he = req.find("\r\n\r\n");
+        if (he != std::string::npos) {
+            std::string head = req.substr(0, he);
+            for (char &c : head) c = (char)std::tolower((unsigned char)c);
+            size_t body = 0;
+            if (const size_t cl = head.find("\r\ncontent-length:"); cl != std::string::npos)
+                body = std::strtoul(head.c_str() + cl + 17, nullptr, 10);
+            if (body > (1u << 20)) return false;
+            if (req.size() >= he + 4 + body) return true;
+        }
+        if (req.size() > (1u << 21)) return false;
+        const long n = recv(buf, sizeof buf);
+        if (n <= 0) return false;
+        req.append(buf, (size_t)n);
     }
-    sys::make_dir(dir_);
-    // whole or not at all: a full or failing disk keeps the player's file from before
-    const std::string path = dir_ + "/" + name;
-    if (!sys::write_file(path, data)) fprintf(stderr, "e-AMUSEMENT: cannot write %s: the one from before is kept\n", path.c_str());
 }
 
 void set_srcid(std::string &request, const std::string &pcbid) {

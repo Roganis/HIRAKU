@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // beatmania IIDX 9th style (model C02, a PC game: runtime/pc/, PLAN.md section 33) on the server
-// (easerver.h): its module "C02", the scores and the rankings.
+// (server.h): its module "C02", the scores and the rankings.
 //
 // A call is <C02 method="music" command="reg CARD 1 908 12 5 7 0"/>: a method and a command line
 // (sonet.dll's builders, one per request kind, print its fields in turn; names in EUC-JP). The
@@ -27,7 +27,7 @@
 // The week's song and the courses were Konami's server's to choose: here a file in the server's
 // folder (iidx9-weekly-song: a song number; iidx9-courses: rid c0 ... c5) or, without one, a
 // song played on this server (a different one each week) and courses 0-5.
-#include "python/easerver_parts.h"
+#include "eamuse/server_parts.h"
 
 #include <algorithm>
 #include <array>
@@ -37,7 +37,7 @@
 #include <map>
 #include <sstream>
 
-namespace hk::py {
+namespace hk::ea {
 
 namespace {
 
@@ -66,7 +66,7 @@ std::string a(const char *name, const std::string &v) { return std::string(" ") 
 
 }  // namespace
 
-std::string EamuseServer::answer_c02(const Request &r) {
+std::string Server::answer_c02(const Request &r) {
     const std::string method = r.method;
     const std::vector<std::string> w = words(attr(r.attrs, "command"));
     const std::string cmd = w.empty() ? "" : w[0];
@@ -293,7 +293,7 @@ std::string EamuseServer::answer_c02(const Request &r) {
 // 0x4ea288 shop, 0x4ea318 grade, 0x4ea368 weekly, 0x4ea3b8 ranking, 0x4ea528 music, 0x4ea698 pc:
 // per command its handlers by element depth, its name and its field count). An answer is matched
 // to its command by method, the method and the command's first word run together (musicgetrank).
-std::string EamuseServer::answer_iidx_red(const std::string &game, const Request &r) {
+std::string Server::answer_iidx_red(const std::string &game, const Request &r) {
     const std::string method = r.method;
     const std::vector<std::string> w = words(attr(r.attrs, "command"));
     const std::string cmd = w.empty() ? "" : w[0];
@@ -429,14 +429,14 @@ std::string EamuseServer::answer_iidx_red(const std::string &game, const Request
 // <FDD status="0" method="pcget">: named after the model, as RED's (the game adds its modules as one,
 // FDD, and its library, eam3lib, takes an answer by that name: one named pc was dropped and the call
 // failed, a returning pass then played as a guest); status a number this time (0 fine), method the
-// module's and the call's names (else the call fails). The pass is cardmng's (easerver_popn.cpp): a new one is
+// module's and the call's names (else the call fails). The pass is cardmng's (server_popn.cpp): a new one is
 // registered by the game (its PIN twice, getrefid), then its DJ name entered and sent with pc reg.
 //   pc reg rid name pid cid: the player made; the answer's id is the IIDX ID
 //   pc get rid: the player (JAG 0x4ce840: <pc id idstr name pid spnum dpnum sach dach sflg0-2 gno hdsd
 //     sp_opt dp_opt dp_opt2 mcomb ncomb mode/>, then grade, ex, skin, rlist, ocrs, weekly: not kept yet)
 //   pc save iidxid cltype ... after the credit: its fields kept and given back by pc get
 //   music reg, getrank: GOLD's (below); music breg (BEGINNER's stages, no chart): not kept
-std::string EamuseServer::answer_iidx_fdd(const std::string &game, const Request &r) {
+std::string Server::answer_iidx_fdd(const std::string &game, const Request &r) {
     // DistorteD's calls (FDD) and GOLD's (GLD, over libavs): each answer's fields as the game's reply
     // parsers read them (GOLD 0x495e70 pc.get, 0x497b80 pc.reg, ...: docs/EAMUSE3.md); a field or
     // element they read and don't find fails the call (the network library's status -10), and the
@@ -684,4 +684,4 @@ std::string EamuseServer::answer_iidx_fdd(const std::string &game, const Request
     return ok();
 }
 
-}  // namespace hk::py
+}  // namespace hk::ea

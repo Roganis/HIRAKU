@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // NET TAISEN for the PC pop'n games (pop'n 15: docs/EAMUSE3.md, "NET TAISEN"): the cabinets'
-// network, carried by HIRAKU's relay (runtime/python/netrelay.h, the one pop'n 12-14 meet through
+// network, carried by HIRAKU's relay (runtime/eamuse/netrelay.h, the one pop'n 12-14 meet through
 // online) instead of a shop's LAN and the internet.
 //
 // The game's battle network (libcomm, and globbyc for the lobby) does all it does through
@@ -31,7 +31,7 @@
 
 #include "cabinet.h"
 
-#define LOBBY_PORT 5741          // runtime/python/lobby.h: Lobby::PC_PORT, one port a game from it
+#define LOBBY_PORT 5741          // runtime/eamuse/lobby.h: Lobby::PC_PORT, one port a game from it
 #define NSOCK 32                 // as libsocket
 #define QUEUE_MAX 256            // datagrams kept for a socket that doesn't read them
 enum { K_DGRAM, K_OPEN, K_OPENED, K_DATA, K_CLOSED, K_REFUSED };

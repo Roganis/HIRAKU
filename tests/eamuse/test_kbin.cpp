@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// runtime/python/kbin.h: text -> kbin -> text keeps every element, attribute, type and value
+// runtime/eamuse/kbin.h: text -> kbin -> text keeps every element, attribute, type and value
 // (arrays, the small types kbin packs in shared words, strings, binary, ip4, floats), and the
 // bytes of a small call are kbin's as mon's kbinxml writes them. Exit 0 when all hold.
 #include <cstdio>
 #include <string>
 
-#include "python/kbin.h"
+#include "eamuse/kbin.h"
 
 static int g_fail;
 static void check(bool ok, const char *what) {
@@ -14,7 +14,7 @@ static void check(bool ok, const char *what) {
 }
 
 int main() {
-    using namespace hk::py::kbin;
+    using namespace hk::ea::kbin;
     const std::string xml =
         "<?xml version=\"1.0\"?><call model=\"J39:J:A:A:2010040500\" srcid=\"0\"><game method=\"get\">"
         "<a __type=\"u8\">7</a><b __type=\"s16\">-2</b><c __type=\"u8\">255</c><d __type=\"s32\">-100000</d>"

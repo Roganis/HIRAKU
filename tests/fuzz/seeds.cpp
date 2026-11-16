@@ -8,7 +8,7 @@
 #include <fstream>
 #include <string>
 
-#include "python/kbin.h"
+#include "eamuse/kbin.h"
 
 namespace {
 
@@ -40,7 +40,7 @@ int main(int argc, char **argv) {
             "POST /core HTTP/1.0\r\nX-Eamuse-Info: 1-5cf9445d-0dfe\r\nX-Compress: none\r\nContent-Length: " + std::to_string(xml.size()) + "\r\n\r\n" + xml);
         put(dir + "/kbin/text" + std::to_string(n) + ".xml", xml);
         std::string bin;
-        if (hk::py::kbin::from_text(xml, bin)) put(dir + "/kbin/packed" + std::to_string(n) + ".bin", bin);
+        if (hk::ea::kbin::from_text(xml, bin)) put(dir + "/kbin/packed" + std::to_string(n) + ".bin", bin);
         n++;
     }
     put(dir + "/kbin/lz77.bin", std::string("\x00" "abcdefgh" "\x02" "i" "\x00\x13" "jklmnop", 20));

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // The last 32-bit PC pop'n (M39, popn22.dll: runtime/pc32/, PLAN.md section 35) on the server
-// (easerver.h): its modules info24 and player24, the protocol pop'n 24 on use (bemaniutils, public
+// (server.h): its modules info24 and player24, the protocol pop'n 24 on use (bemaniutils, public
 // domain, answers pop'n 24-27 the same way).
 //
 // The game reads each part of an answer into a struct through AVS2's struct reader
@@ -8,14 +8,14 @@
 // entries (a type byte, an array's 0x41 above its values'; a flags byte, 1: may be left out; the
 // struct offset; the size, or an array's count; the node's name; a default). The parts' fields below
 // are the game's, in its order, from those descriptors; a new player's values after bemaniutils.
-#include "python/easerver_parts.h"
+#include "eamuse/server_parts.h"
 
 #include <algorithm>
 #include <cstdlib>
 #include <ctime>
 #include <random>
 
-namespace hk::py {
+namespace hk::ea {
 
 namespace {
 
@@ -181,7 +181,7 @@ std::string common_info(long netvs) {
 
 }  // namespace
 
-std::string EamuseServer::answer_p24(const Request &r) {
+std::string Server::answer_p24(const Request &r) {
     const std::string &m = r.module, &f = r.method;
     std::string setting = read_file("netvs-M39");
     const long netvs = setting.empty() ? 1 : std::strtol(setting.c_str(), nullptr, 10);
@@ -344,7 +344,7 @@ std::string EamuseServer::answer_p24(const Request &r) {
 // The rooms are a file of the data folder (lobby24-M39), so that cabinets each with its own server
 // on one folder meet as on one server; a cabinet's own rooms (its PCBID, this server) are left out of
 // its list, and each is dropped after its wait and half a minute more
-std::string EamuseServer::answer_lobby24(const Request &r) {
+std::string Server::answer_lobby24(const Request &r) {
     const std::string &f = r.method;
     const int64_t t = now ? now() : (int64_t)time(nullptr);
     if (self_.empty()) self_ = std::to_string(std::random_device{}());
@@ -397,4 +397,4 @@ std::string EamuseServer::answer_lobby24(const Request &r) {
     return out;
 }
 
-}  // namespace hk::py
+}  // namespace hk::ea

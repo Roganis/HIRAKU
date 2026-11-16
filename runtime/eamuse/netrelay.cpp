@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // NET TAISEN online through hiraku-eamuse's relay (netrelay.h).
-#include "python/netrelay.h"
+#include "eamuse/netrelay.h"
 
 #include <chrono>
 #include <cstdio>
@@ -9,9 +9,9 @@
 
 #include "shell/net.h"
 
-#include "python/lobby.h"
+#include "eamuse/lobby.h"
 
-namespace hk::py {
+namespace hk::ea {
 
 namespace {
 
@@ -60,7 +60,7 @@ bool recv_all(int fd, void *p, size_t n) {
 }
 
 // A datagram as it goes over the connection
-std::string packet_bytes(const LanCable::Packet &k) {
+std::string packet_bytes(const Packet &k) {
     const PacketHeader h{k.src, k.dst, k.sport, k.dport, (uint32_t)k.data.size()};
     std::string s((const char *)&h, sizeof h);
     s.append((const char *)k.data.data(), k.data.size());
@@ -145,7 +145,7 @@ void RelayClient::reader() {
     for (;;) {
         PacketHeader h{};
         if (!take(&h, sizeof h) || h.size > 65536) break;
-        LanCable::Packet k{h.src, h.dst, h.sport, h.dport, std::vector<uint8_t>(h.size)};
+        Packet k{h.src, h.dst, h.sport, h.dport, std::vector<uint8_t>(h.size)};
         if (h.size && !take(k.data.data(), h.size)) break;
         std::lock_guard<std::mutex> l(mutex_);
         came_.push_back(std::move(k));
@@ -154,7 +154,7 @@ void RelayClient::reader() {
     lost_ = true;
 }
 
-void RelayClient::exchange(std::vector<LanCable::Packet> &out, std::vector<LanCable::Packet> &in) {
+void RelayClient::exchange(std::vector<Packet> &out, std::vector<Packet> &in) {
     if (fd_ < 0) return;
     bool lost;
     {
@@ -164,7 +164,7 @@ void RelayClient::exchange(std::vector<LanCable::Packet> &out, std::vector<LanCa
         lost = lost_;
     }
     if (!lost)
-        for (const LanCable::Packet &k : out) {
+        for (const Packet &k : out) {
             const std::string bytes = packet_bytes(k);
             if (!put(bytes.data(), bytes.size())) { lost = true; break; }
         }
@@ -232,7 +232,7 @@ void RelayServer::run() {
         c.out.seal(p, n, wire);
         return send_all(fd, wire.data(), wire.size());
     };
-    auto put_packet = [&](int fd, const LanCable::Packet &k) {
+    auto put_packet = [&](int fd, const Packet &k) {
         const std::string bytes = packet_bytes(k);
         return put(fd, bytes.data(), bytes.size());
     };
@@ -314,7 +314,7 @@ void RelayServer::run() {
                 memcpy(&h, c.in.data(), sizeof h);
                 if (h.size > 65536) { gone.push_back(fd); break; }
                 if (c.in.size() < sizeof h + h.size) break;
-                LanCable::Packet k{c.address, h.dst, h.sport, h.dport,
+                Packet k{c.address, h.dst, h.sport, h.dport,
                                    std::vector<uint8_t>(c.in.begin() + sizeof h, c.in.begin() + (ptrdiff_t)(sizeof h + h.size))};
                 c.in.erase(0, sizeof h + h.size);
                 // to a cabinet: passed on, from the sender's address
@@ -346,4 +346,4 @@ void RelayServer::run() {
     }
 }
 
-}  // namespace hk::py
+}  // namespace hk::ea

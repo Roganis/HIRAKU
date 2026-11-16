@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // e-AMUSEMENT for the System 573 GuitarFreaks and DrumMania (9th to 11th Mix): the network the
-// network PCB unit is on (runtime/eamuse/lan.h), and the server's answers these games want
-// (PLAN.md section 19, "e-AMUSEMENT"). The protocol is pop'n music 9's e-AMUSE3; the games add
-// their own modules (gamedata, shoprank, landdata, binary, session).
+// network PCB unit is on (runtime/eamuse/lan.h), and the server it reaches: HIRAKU's own inside the
+// core (runtime/eamuse/server.h; these games' answers: server_gfdm.cpp) or one online (PLAN.md section
+// 19, "e-AMUSEMENT").
 #pragma once
 
 #include <cstdint>
@@ -27,9 +27,6 @@ public:
     bool open(const std::string &where, const std::string &dir, const std::string &log, std::function<int64_t()> now,
               const std::string &pcbid = "", const std::string &key = "");
     ea::Lan *lan() { return lan_.get(); }
-
-    // the GuitarFreaks and DrumMania modules (Server::Game)
-    static std::string answer(ea::Server &s, const ea::Call &c, const ea::Request &r, const std::string &host);
 
 private:
     std::unique_ptr<ea::Lan> lan_;

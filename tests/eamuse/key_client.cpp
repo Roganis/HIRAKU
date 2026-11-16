@@ -17,7 +17,7 @@
 #include <string>
 #include <thread>
 
-#include "python/netrelay.h"
+#include "eamuse/netrelay.h"
 #include "shell/keyed.h"
 #include "shell/net.h"
 
@@ -82,12 +82,12 @@ int main(int argc, char **argv) {
         return 0;
     }
     if (mode == "relay") {
-        py::RelayClient r;
+        ea::RelayClient r;
         if (!r.open(host, port, 3, &why, key)) { printf("error: %s\n", why.c_str()); return 1; }
         const uint32_t a = r.address();
         printf("address %u.%u.%u.%u\n", a >> 24, a >> 16 & 255, a >> 8 & 255, a & 255);
         fflush(stdout);
-        std::vector<py::LanCable::Packet> out, in;
+        std::vector<ea::Packet> out, in;
         if (argc > 5) {
             unsigned b[4];
             sscanf(argv[5], "%u.%u.%u.%u", &b[0], &b[1], &b[2], &b[3]);

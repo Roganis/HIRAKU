@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // The 64-bit PC pop'n (M39: runtime/pc64/, PLAN.md section 32) on the server
-// (easerver.h): its module "player".
+// (server.h): its module "player".
 //
 // The game reads each part of a player's record into a struct through AVS2's struct reader
 // (avs2-core XCgsqzn00000b2: node, struct, descriptor). A descriptor is a list of 24-byte entries
@@ -17,7 +17,7 @@
 // Below, each part's fields (those that may be left out last), with a new player's values. read's <result>: 0 the
 // record follows, 1 a player of an older game to carry over (name, chara, con_type, medal_cnt),
 // 2 none (the game asks for a name, then sends player.new).
-#include "python/easerver_parts.h"
+#include "eamuse/server_parts.h"
 
 #include <algorithm>
 #include <cctype>
@@ -25,7 +25,7 @@
 #include <cstdlib>
 #include <iterator>
 
-namespace hk::py {
+namespace hk::ea {
 
 namespace {
 
@@ -138,7 +138,7 @@ std::string items(const Record &p, bool every_song) {
 
 }  // namespace
 
-std::string EamuseServer::answer_hc(const Request &r) {
+std::string Server::answer_hc(const Request &r) {
     const std::string &f = r.method;
     if (r.module == "info") return f == "common" ? "<info status=\"0\">" + common(read_file("phases-phc")) + "</info>" : "<info status=\"0\"/>";
     std::string ref = child(r.inner, "ref_id");
@@ -250,4 +250,4 @@ std::string EamuseServer::answer_hc(const Request &r) {
     return "<player status=\"0\"/>";   // end, logout, ...
 }
 
-}  // namespace hk::py
+}  // namespace hk::ea

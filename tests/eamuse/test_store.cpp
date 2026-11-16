@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // The e-AMUSEMENT server's store (runtime/eamuse/store.h, tables.h): the folder back end names every
-// table's files as HIRAKU always has, refuses a key that would name a file outside the folder, keeps
-// within the folder's file limit, and keeps aside what isn't a record.
+// table's files as HIRAKU always has (and finds each file's table and key again), refuses a key that
+// would name a file outside the folder, keeps within the folder's file limit, and keeps aside what
+// isn't a record.
 #include <cstdio>
 #include <ctime>
 #include <filesystem>
@@ -10,6 +11,7 @@
 #include <iterator>
 #include <set>
 #include <string>
+#include <vector>
 
 #include "eamuse/store.h"
 #include "eamuse/tables.h"
@@ -168,6 +170,36 @@ int main() {
         put_file(dir / "limit-files", "0\n");
         FolderStore full(dir.string());
         check(!full.put(tables::cards, {}, "x") && !fs::exists(dir / "format"), "no stamp when nothing new is kept");
+    }
+
+    // 6. keys: a folder with a made-up file of every table (and files of none): each file is one
+    // table's, the singleton's over a pattern's, the most specific pattern's over the owner's {}-{}
+    {
+        fs::remove_all(dir);
+        fs::create_directories(dir);
+        for (const Named &n : names) put_file(dir / n.file, "x");
+        for (const char *other : {"format", ".lock", "pdata-F14-R1.unread-20261116-120000", "cards.tmp", "a-b-c-d"}) put_file(dir / other, "x");
+        put_file(dir / "limit-cards", "5\n");   // the owner's, a {}-{} too
+        fs::create_directories(dir / "sub-dir");
+        FolderStore st(dir.string());
+        bool each = true;
+        for (const Named &n : names) {
+            std::vector<Key> want = {n.key};
+            if (&n.table == &tables::setting) want = {{"limit", "cards"}, {"phase", "H16"}};
+            const std::vector<Key> got = st.keys(n.table);
+            if (got != want) {
+                each = false;
+                printf("       %s: %zu keys\n", n.table.name, got.size());
+            }
+        }
+        check(each, "keys: every table's file is its own, and only its");
+        Key k;
+        check(FolderStore::table_of("gfdmv-cards", k) == &tables::gfdmv_cards && FolderStore::table_of("gfdmv-77", k) == &tables::gfdmv &&
+                  FolderStore::table_of("userdata-C20-X", k) == &tables::userdata && k == Key{"C20", "X"} &&
+                  FolderStore::table_of("userdata-X", k) == &tables::userdata_c00 && FolderStore::table_of("p24-plays", k) == &tables::p24_plays &&
+                  FolderStore::table_of("E13-rank-exp", k) == &tables::rank_exp && FolderStore::table_of("net_event-F14", k) == &tables::setting &&
+                  !FolderStore::table_of("format", k),
+              "table_of: the singleton, then the most specific pattern");
     }
 
     fs::remove_all(top);

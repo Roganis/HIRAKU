@@ -161,8 +161,8 @@ private:
     std::string src_;       // the asking cabinet (the call's srcid)
     std::string self_;      // this server, among those sharing its data folder (a random number)
     // What a server others can reach keeps is bounded (a call registers a card, writes a card's file):
-    // the store's things (FolderStore: limit-files) and cards (the store's limit "cards", 65536); a
-    // card's userdata, 128 KiB
+    // the store's things (FolderStore: limit-files) and cards (the store's limit "cards"; both
+    // defaults in games.cpp); a card's userdata, 128 KiB
     static constexpr size_t USERDATA_MAX = 0x20000;
     mutable bool cards_full_said_ = false;
 };

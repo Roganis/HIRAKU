@@ -180,6 +180,13 @@ gives, running from there; `--tz 9`, the cabinets' time zone in hours from UTC (
 pop'n 9's title screen on every cabinet from its next start. A number in `limit-cards` or
 `limit-files` changes how many cards (65536) and files (200000) it keeps.
 
+**What the folder holds:** `hiraku-eamuse --data DIR --players` lists every card, its ref id and
+each game's player on it with its name; `--scores CARD [GAME]` the card's scores (game, song,
+chart, score, clear, plays; -1 where the game keeps none). `--settings [GAME]` lists every setting
+above and the games' others (value, default, range, what it does); `--set GAME NAME VALUE` changes
+one, checked against its range (GAME `server` for the message and the limits; VALUE `""` puts the
+default back). Each prints tab-separated lines and ends; no PIN or password is printed.
+
 **Other servers:** any server that implements [EAMUSE3.md](EAMUSE3.md) works, through the same
 EA Service URL. For pop'n 9 on bemaniutils there is a patch for server owners' own installs,
 `tools/eamuse/bemaniutils/popn9-python.patch`. `tools/eamuse/check.py URL` checks a server.

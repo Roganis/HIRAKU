@@ -27,7 +27,7 @@ namespace hk::ea {
 // pop'n 9 keeps only a cleared bit per chart, byte 0x416 + song, bits 0-3 in pop'n 12's order
 // (pop'n 10 makes them its flags 0x100, 0x200, 0x800, 0x400 and pop'n 11 those marks of 1). The
 // marks travel; each game's own bits (flags, scores) stay its own.
-namespace {
+namespace popn {
 
 // the songs each game has (its song table's entries but the "-" ones left in place of songs taken
 // out; pop'n 14 renamed some genres and comments, the songs the same)
@@ -59,7 +59,12 @@ bool has_song(const std::string &game, size_t n) {
     return false;
 }
 
-constexpr size_t SONG_MAX = 1024;
+}  // namespace popn
+
+using popn::has_song;
+using popn::SONG_MAX;
+
+namespace {
 
 uint8_t swap34(uint8_t m) { return (uint8_t)((m & 0x0f) | (m & 0x30) << 2 | (m & 0xc0) >> 2); }
 
@@ -85,8 +90,10 @@ Words words_of(const std::string &game) {
     return {0x416, 1};   // C00: a byte a song
 }
 
+}  // namespace
+
 // a song's marks as the game keeps them, in pop'n 12's order
-uint8_t marks_in(const std::string &game, const std::string &d, size_t n) {
+uint8_t popn::marks_in(const std::string &game, const std::string &d, size_t n) {
     const Words w = words_of(game);
     const size_t at = w.at + w.bytes * n;
     if (at + w.bytes > d.size()) return 0;
@@ -106,6 +113,9 @@ uint8_t marks_in(const std::string &game, const std::string &d, size_t n) {
     if (game == "D11") return swap34((uint8_t)lo);
     return (uint8_t)lo;
 }
+
+namespace {
+using popn::marks_in;
 
 // a song's marks put into the game's data: each chart the better of the two
 void marks_out(const std::string &game, std::string &d, size_t n, uint8_t m) {
@@ -211,11 +221,11 @@ long hiscore_at(const std::string &h, size_t i) {
 // a player's best scores in one game, by song and sheet: 12-15's kept here a line a chart
 // (pscore-<game>-<who>), 16's and 17's in their records (32 bits a chart, chart-major: 16 0x8dc,
 // 846 a chart; 17 0xcd4, 950), 18's as its <hiscore> (pscore-J39-<who>)
-std::map<std::pair<long, long>, long> Server::scores_of(const std::string &game, const std::string &who) const {
+std::map<std::pair<long, long>, long> popn::scores_of(const Store &store, const std::string &game, const std::string &who) {
     std::map<std::pair<long, long>, long> out;
     if (!safe_name(who)) return out;
     if (game == "H16" || game == "I17") {
-        const std::string rec = store_->get(tables::pdata, {game, who});
+        const std::string rec = store.get(tables::pdata, {game, who});
         const size_t at = game == "H16" ? 0x8dc : 0xcd4, per = game == "H16" ? 846 : 950;
         for (size_t sheet = 0; sheet < 7; sheet++)
             for (size_t n = 0; n < per; n++) {
@@ -228,16 +238,20 @@ std::map<std::pair<long, long>, long> Server::scores_of(const std::string &game,
         return out;
     }
     if (game == "J39") {
-        const std::string h = store_->get(tables::pscore, {"J39", who});
+        const std::string h = store.get(tables::pscore, {"J39", who});
         for (size_t i = 0; i < HISCORES && (i + 1) * HISCORE_BITS <= h.size() * 8; i++)
             if (const long v = hiscore_at(h, i); v > 0) out[{(long)(i / 7), (long)(i % 7)}] = v;
         return out;
     }
-    for (const Record &e : from_lines(store_->get(tables::pscore, {game, who}))) {
+    for (const Record &e : from_lines(store.get(tables::pscore, {game, who}))) {
         long &v = out[{num(e, "num"), num(e, "sheet")}];
         v = std::max(v, num(e, "score"));
     }
     return out;
+}
+
+std::map<std::pair<long, long>, long> Server::scores_of(const std::string &game, const std::string &who) const {
+    return popn::scores_of(*store_, game, who);
 }
 
 // the player's key in each game: pop'n 12's the card, 13 on the ref id

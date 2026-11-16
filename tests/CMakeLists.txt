@@ -217,6 +217,8 @@ if(Python3_Interpreter_FOUND AND NOT WIN32)
   # ... every game family's calls against the answers recorded for them (eamuse/transcripts/), and the
   # data folder's files as they leave it: what work on the server must not change
   add_test(NAME eamuse_transcripts COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/eamuse/test_transcripts.py $<TARGET_FILE:hiraku-eamuse>)
+  # ... what it keeps read back (players, names, scores) and the owner's settings changed (--players, --set...)
+  add_test(NAME eamuse_readers COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/eamuse/test_readers.py $<TARGET_FILE:hiraku-eamuse>)
   # ... and calls no game would send (it listens on a network): answered or dropped, the server goes on
   add_test(NAME eamuse_malformed COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/eamuse/test_malformed.py $<TARGET_FILE:hiraku-eamuse>)
   # ... told which cabinets to answer (cabinets.txt) and which addresses to take (--allow); the relay's

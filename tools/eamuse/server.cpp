@@ -12,6 +12,7 @@
 //                 [--key-file FILE] [--clock "2003-06-01 12:00:00"] [--tz 9] [--quiet] [--no-relay]
 //   hiraku-eamuse [--data DIR] [--cabinets FILE] --new-cabinet [NAME]
 //   hiraku-eamuse [--data DIR] [--key-file FILE] --new-key
+//   hiraku-eamuse [--data DIR] --players | --scores CARD [GAME] | --settings [GAME] | --set GAME NAME VALUE
 //     --data   where it keeps what it must remember (default ./eamuse-data)
 //     --allow  the addresses it takes connections from, calls and relay: 192.168.1.0/24,10.0.0.5
 //              (and this computer's own); without it, any
@@ -24,6 +25,12 @@
 //              goes over the network in clear, and who hasn't the key is answered nothing. Each
 //              cabinet is given the same key (-eakey KEY; the launcher: Settings, e-AMUSEMENT, Server key)
 //     --new-key  a key nobody can guess, written to that file and printed
+//     --players, --scores, --settings, --set: what the data folder holds, printed (tab-separated, a
+//              line a thing; names as the games keep them, their bytes), or a setting changed
+//              (runtime/eamuse/readers.h, games.h), then it ends. No PIN or password is printed.
+//              GAME: a game's id (popn14, iidx16...: --settings lists them) or model (E03), or
+//              "server" for the settings that are no game's. --set's VALUE is checked against the
+//              setting's range; "" puts the default back (the setting's file emptied, as if none)
 //     --clock  the cabinets' time (ntp.get), running from this start (default: the host's clock)
 //     --tz     with the host's clock: the cabinets' time zone, hours from UTC (default 9, Japan: the
 //              games set their clocks to what ntp.get says and stamp their own times "+9")
@@ -48,7 +55,9 @@
 #include "eamuse/access.h"
 #include "eamuse/lobby.h"
 #include "eamuse/netrelay.h"
+#include "eamuse/readers.h"
 #include "eamuse/server.h"
+#include "eamuse/tables.h"
 #include "shell/keyed.h"
 #include "shell/net.h"
 #include "shell/sys.h"
@@ -91,6 +100,88 @@ int64_t parse_clock(const char *s) {
     return (int64_t)hk::sys::from_utc(tm);
 }
 
+// --players, --scores, --settings, --set (above): what the data folder holds, or a setting changed
+namespace ea = hk::ea;
+
+std::string label(const ea::Game &g) { return *g.id ? g.id : g.model; }
+
+ea::Identity identity(const ea::Store &st, const std::string &card) {
+    for (const ea::Identity &id : ea::players(st))
+        if (id.card == card) return id;
+    return {card, ""};
+}
+
+std::string trimmed(std::string v) {
+    while (!v.empty() && std::isspace((unsigned char)v.back())) v.pop_back();
+    return v;
+}
+
+int print_players(const ea::Store &st) {
+    for (const ea::Identity &id : ea::players(st)) {
+        std::string line = id.card + "\t" + (id.ref.empty() ? "-" : id.ref);
+        for (const ea::Game &g : ea::games()) {
+            ea::Profile p;
+            if (ea::profile(st, g, id, p)) line += "\t" + label(g) + "\t" + p.name;
+        }
+        fwrite(line.data(), 1, line.size(), stdout);
+        fputc('\n', stdout);
+    }
+    return 0;
+}
+
+int print_scores(const ea::Store &st, const std::string &card, const ea::Game *only) {
+    const ea::Identity id = identity(st, card);
+    for (const ea::Game &g : ea::games()) {
+        if (only && &g != only) continue;
+        for (const ea::Score &s : ea::scores(st, g, id))
+            printf("%s\t%ld\t%ld\t%ld\t%d\t%ld\n", label(g).c_str(), s.song, s.chart, s.score, s.clear, s.plays);
+    }
+    return 0;
+}
+
+void print_setting(const std::string &game, const ea::Setting &s, const std::string &now) {
+    const std::string range = s.kind == ea::Setting::number ? std::to_string(s.min) + ".." + std::to_string(s.max) : "text";
+    const std::string line = game + "\t" + s.name + "\t" + trimmed(now) + "\t" + s.by_default + "\t" + range + "\t" + s.help;
+    fwrite(line.data(), 1, line.size(), stdout);
+    fputc('\n', stdout);
+}
+
+int print_settings(const ea::Store &st, const std::string &which) {
+    if (which.empty() || which == "server")
+        for (const ea::Setting &s : ea::server_settings()) print_setting("server", s, ea::setting(st, s.name));
+    for (const ea::Game &g : ea::games())
+        if (*g.model && (which.empty() || &g == ea::game_by_id(which)))   // (a model the table doesn't name: its own phase-MODEL)
+            for (const ea::Setting &s : g.settings) print_setting(label(g), s, ea::setting(st, g, s.name));
+    return 0;
+}
+
+int set_setting(ea::Store &st, const std::string &game, const std::string &name, const std::string &value) {
+    const ea::Game *g = game == "server" ? nullptr : ea::game_by_id(game);
+    if (!g && game != "server") { fprintf(stderr, "hiraku-eamuse: --set: no game %s (--settings lists them)\n", game.c_str()); return 2; }
+    const ea::Setting *s = ea::find_setting(g, name.c_str());
+    if (!s) { fprintf(stderr, "hiraku-eamuse: --set: %s has no setting %s (--settings %s lists them)\n", game.c_str(), name.c_str(), game.c_str()); return 2; }
+    if (g && s->table == &ea::tables::setting && (!*g->model || strchr(g->model, '?'))) { fprintf(stderr, "hiraku-eamuse: --set: %s has no settings of its own\n", game.c_str()); return 2; }
+    if (value.find_first_of("\r\n") != std::string::npos) { fprintf(stderr, "hiraku-eamuse: --set: one line\n"); return 2; }
+    if (s->kind == ea::Setting::number && !value.empty()) {
+        char *end = nullptr;
+        const long n = strtol(value.c_str(), &end, 10);
+        if (*end || n < s->min || n > s->max) {
+            fprintf(stderr, "hiraku-eamuse: --set: %s's %s is a number from %ld to %ld\n", game.c_str(), name.c_str(), s->min, s->max);
+            return 2;
+        }
+    }
+    const ea::Key key = ea::setting_key(g, *s);
+    const auto held = st.hold();
+    // "": the default back. A setting's empty file reads as none (the answers take the default), so
+    // one that is kept is emptied; one that isn't stays so
+    if (value.empty() ? !st.get(*s->table, key).empty() && !st.put(*s->table, key, "") : !st.put(*s->table, key, value + "\n")) {
+        fprintf(stderr, "hiraku-eamuse: --set: %s not written\n", st.label(*s->table, key).c_str());
+        return 1;
+    }
+    printf("%s\t%s\t%s\n", game.c_str(), name.c_str(), value.empty() ? s->by_default : value.c_str());
+    return 0;
+}
+
 }  // namespace
 
 int main(int argc, char **argv) {
@@ -100,6 +191,7 @@ int main(int argc, char **argv) {
     int tz_hours = 9;
     bool quiet = false, relay_on = true, new_cabinet = false, new_key = false;
     std::string cabinets_file, new_name, key_file;
+    std::string report, report_card, report_game, set_name, set_value;   // --players, --scores, --settings, --set
     hk::ea::AddressList allowed;
     for (int i = 1; i < argc; i++) {
         const std::string a = argv[i];
@@ -125,20 +217,45 @@ int main(int argc, char **argv) {
         else if (a == "--new-key") new_key = true;
         else if (a == "--quiet") quiet = true;
         else if (a == "--no-relay") relay_on = false;
-        else {
+        else if (a == "--players") report = a;
+        else if (a == "--scores" || a == "--settings") {   // (--settings' game is optional, as --scores')
+            report = a;
+            if (a == "--scores") report_card = val();
+            if (i + 1 < argc && argv[i + 1][0] != '-') report_game = argv[++i];
+        } else if (a == "--set") {
+            report = a;
+            report_game = val(), set_name = val(), set_value = val();
+        } else {
             fprintf(stderr, "usage: hiraku-eamuse [--port N] [--bind ADDR] [--data DIR] [--allow ADDRESSES] [--cabinets FILE] "
                             "[--key-file FILE] [--clock \"YYYY-MM-DD HH:MM:SS\"] [--tz H] [--quiet] [--no-relay]\n"
                             "       hiraku-eamuse [--data DIR] [--cabinets FILE] --new-cabinet [NAME]\n"
                             "       hiraku-eamuse [--data DIR] [--key-file FILE] --new-key\n"
+                            "       hiraku-eamuse [--data DIR] --players | --scores CARD [GAME] | --settings [GAME] | --set GAME NAME VALUE\n"
                             "  --allow ADDRESSES   take connections only from these (192.168.1.0/24,10.0.0.5) and this computer\n"
                             "  --cabinets FILE     answer only the cabinets whose PCBIDs it lists, one a line\n"
                             "                      (default: cabinets.txt in the data folder, when there is one)\n"
                             "  --new-cabinet NAME  add a new PCBID to that file and print it, for the cabinet's -p\n"
                             "  --key-file FILE     the server's key (default: key.txt in the data folder, when there is one):\n"
                             "                      calls and relay only behind it, nothing in clear on the network\n"
-                            "  --new-key           make a key, write it to that file and print it, for the cabinets' -eakey\n");
+                            "  --new-key           make a key, write it to that file and print it, for the cabinets' -eakey\n"
+                            "  --players           every card the data folder knows, its ref id, each game's player on it and its name\n"
+                            "  --scores CARD [GAME]  the card's scores: game, song, chart, score, clear, plays (-1: not kept)\n"
+                            "  --settings [GAME]   the owner's settings: game, name, value, default, range, what it does\n"
+                            "  --set GAME NAME VALUE  change one (GAME \"server\": the server's own); VALUE \"\": back to the default\n");
             return a == "--help" || a == "-h" ? 0 : 2;
         }
+    }
+    if (!report.empty()) {   // what the data folder holds, or a setting changed, and no server
+        if (!hk::sys::exists(data)) { fprintf(stderr, "hiraku-eamuse: no folder %s (--data)\n", data.c_str()); return 1; }
+        if (!report_game.empty() && report_game != "server" && !hk::ea::game_by_id(report_game)) {
+            fprintf(stderr, "hiraku-eamuse: no game %s (--settings lists them)\n", report_game.c_str());
+            return 2;
+        }
+        hk::ea::FolderStore st(data);
+        if (report == "--players") return print_players(st);
+        if (report == "--scores") return print_scores(st, report_card, hk::ea::game_by_id(report_game));
+        if (report == "--settings") return print_settings(st, report_game);
+        return set_setting(st, report_game, set_name, set_value);
     }
     hk::sys::make_dir(data);
     // The cabinets it answers (eamuse/access.h)

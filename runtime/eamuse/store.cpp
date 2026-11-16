@@ -2,7 +2,9 @@
 // The e-AMUSEMENT server's folder back end (store.h): a file a thing kept, named from its table's
 // pattern and its key.
 #include "eamuse/store.h"
+#include "eamuse/games.h"
 #include "eamuse/protocol.h"
+#include "eamuse/tables.h"
 #include "shell/sys.h"
 
 #include <algorithm>
@@ -93,13 +95,67 @@ long FolderStore::limit(const char *what, long by_default) const {
     return end != set.c_str() && n >= 0 ? n : by_default;
 }
 
+namespace {
+// The pattern's key in a file's name, a part a {} (no '-' in it): false if the name isn't the pattern's.
+// Its letters of its own, for the most specific pattern
+bool matches(const char *pattern, const std::string &file, Key &key, size_t &letters) {
+    key.clear();
+    letters = 0;
+    size_t at = 0;
+    for (const char *p = pattern; *p; p++) {
+        if (p[0] == '{' && p[1] == '}') {
+            size_t end = at;
+            while (end < file.size() && file[end] != '-') end++;
+            const std::string part = file.substr(at, end - at);
+            if (!ea::safe_name(part)) return false;
+            key.push_back(part);
+            at = end;
+            p++;
+        } else {
+            if (at >= file.size() || file[at] != *p) return false;
+            at++, letters++;
+        }
+    }
+    return at == file.size();
+}
+}  // namespace
+
+const Table *FolderStore::table_of(const std::string &file, Key &key) {
+    const Table *best = nullptr;
+    size_t most = 0;
+    for (const Table *t : tables::all) {
+        Key k;
+        size_t letters = 0;
+        if (!matches(t->file, file, k, letters)) continue;
+        if (k.empty()) {   // (a name with no {}: that file is the table)
+            key.clear();
+            return t;
+        }
+        if (!best || letters > most) best = t, most = letters, key = k;
+    }
+    return best;
+}
+
+std::vector<Key> FolderStore::keys(const Table &t) const {
+    std::vector<Key> out;
+    if (dir_.empty()) return out;
+    std::error_code ec;
+    for (const auto &e : std::filesystem::directory_iterator(dir_, ec)) {
+        const std::string name = e.path().filename().string();
+        Key k;
+        if (e.is_regular_file(ec) && table_of(name, k) == &t) out.push_back(k);
+    }
+    std::sort(out.begin(), out.end());
+    return out;
+}
+
 bool FolderStore::room_for_file() {
     if (files_ < 0) {
         files_ = 0;
         std::error_code ec;
         for (const auto &e : std::filesystem::directory_iterator(dir_, ec)) (void)e, files_++;
     }
-    const long most = limit("files", 200000);
+    const long most = limit("files", std::strtol(find_setting(nullptr, "limit-files")->by_default, nullptr, 10));
     if (files_ >= most) {
         if (!files_full_said_) fprintf(stderr, "e-AMUSEMENT: %s holds %ld files, as many as it may (the file limit-files there sets another number): nothing new is kept\n", dir_.c_str(), files_);
         files_full_said_ = true;

@@ -14,6 +14,16 @@
 
 namespace hk::ea {
 
+namespace {
+// A setting of pop'n 15 or 16's game get as an attribute: its text, trailing white space cut (none
+// left: the declared default)
+std::string as_set(const Store &st, const Game &g, const Setting &s) {
+    std::string v = setting(st, g, s.name);
+    while (!v.empty() && std::isspace((unsigned char)v.back())) v.pop_back();
+    return std::string(" ") + s.name + "=\"" + esc(v.empty() ? s.by_default : v) + "\"";
+}
+}  // namespace
+
 // pop'n 15 ADVENTURE (G15: popn15.exe through hiraku-pc, docs/EAMUSE3.md). Its module's methods
 // are type_method (game_get, playerdata_get...); the method table is at 0x568700, each with its
 // request builder and answer parser. The player is a record of 0xb38 bytes, sent LZSS'd in <b>
@@ -37,7 +47,7 @@ namespace hk::ea {
 //   0x948 the NET TAISEN credits played (the server's count), then NET TAISEN's fields (netvs,
 //   below; as pop'n 14's in other places). set's matching (how many players the match had) and
 //   room_num are the operator's statistics, not kept
-std::string Server::answer_g15(const Game &, const Call &, const Request &r, const std::string &) {
+std::string Server::answer_g15(const Game &g, const Call &, const Request &r, const std::string &) {
     if (r.module != "G15") return "";
     const std::string &f = r.method;
     const std::string open = "<G15 status=\"0\"";
@@ -52,10 +62,7 @@ std::string Server::answer_g15(const Game &, const Call &, const Request &r, con
         }
         return out;
     };
-    auto setting = [&](const char *name, long fallback) {   // the owner's choice, a file in the data folder
-        const std::string v = store_->get(tables::setting, {name, "G15"});
-        return v.empty() ? fallback : std::strtol(v.c_str(), nullptr, 10);
-    };
+    auto number = [&](const char *name) { return std::strtol(setting(*store_, g, name).c_str(), nullptr, 10); };   // games.cpp
 
     if (f == "game_get") {
         // phase (0-2, the songs' event stage, 0x427130: the cabinet's own unless the server's is
@@ -65,10 +72,10 @@ std::string Server::answer_g15(const Game &, const Call &, const Request &r, con
         // net_event (0-3, 0x4270f0): NET TAISEN from 1, on unless the data folder says 0 (its lobby
         // entries carry the number)
         std::string a;
-        if (const long ph = setting("phase", -1); ph >= 0) a += " phase=\"" + std::to_string(ph) + "\"";
-        a += " ir_ranking=\"" + std::to_string(setting("ir_ranking", 2)) + "\"";
-        a += " net_event=\"" + std::to_string(setting("net_event", 1)) + "\"";
-        // NET TAISEN's settings, each the data folder's NAME-G15 if there is one. Konami's values
+        if (const long ph = number("phase"); ph >= 0) a += " phase=\"" + std::to_string(ph) + "\"";
+        a += " ir_ranking=\"" + std::to_string(number("ir_ranking")) + "\"";
+        a += " net_event=\"" + std::to_string(number("net_event")) + "\"";
+        // NET TAISEN's settings (games.cpp: the rest of the game's, in this order). Konami's values
         // went with its server; these follow what the game does with them and what players
         // described (docs/EAMUSE3.md, "pop'n music 15"): cabinets of one shop may meet; a
         // cabinet waits in the lobby matching_sec for others (0: it leaves at once; 120, pop'n
@@ -81,15 +88,8 @@ std::string Server::answer_g15(const Game &, const Call &, const Request &r, con
         // percent (the magician's ojama longer x1.5, the warrior's shorter x0.5, the fighter's
         // gauge faster x1.5; 0x42d200, 0x48e7f1). job_exp_rate, cpu_higher_release,
         // shop_event_ranking: read, never used.
-        static const struct { const char *name, *value; } netvs[] = {
-            {"local_matching_enable", "1"}, {"matching_sec", "120"}, {"ojama_gauge_rate", "100"},
-            {"cpu_level", "100,100,100,100,100,100,100,100,100,100"}, {"downlimit_win", "0"}, {"downlimit_class", "10"},
-            {"job_sp_rate", "30,150,30,50,30,150,30,100,0,0,30,0,30,100,100,0,30,0,30,0,30,0,30,0,30,0"}, {"job_exp_rate", "100"}};
-        for (const auto &n : netvs) {
-            std::string v = store_->get(tables::setting, {n.name, "G15"});
-            while (!v.empty() && std::isspace((unsigned char)v.back())) v.pop_back();
-            a += std::string(" ") + n.name + "=\"" + esc(v.empty() ? n.value : v) + "\"";
-        }
+        for (const Setting &s : g.settings)
+            if (strcmp(s.name, "phase") && strcmp(s.name, "ir_ranking") && strcmp(s.name, "net_event")) a += as_set(*store_, g, s);
         return open + a + " message=\"" + esc(message()) + "\"/>";
     }
     // the expert courses' board; its entries keep their four stages' scores for the records
@@ -330,7 +330,7 @@ std::string Server::answer_g15(const Game &, const Call &, const Request &r, con
 // settings and phase, netvs_phase, ir_phase, private_phase, normal_secret_phase, all_hiscore_phase;
 // playerdata.get (0x435680) needs f_compress, its record 0x6784 bytes (pop'n 15's 0xb38 when the
 // game asks for that one, to carry it over).
-std::string Server::answer_j39(const Game &, const Call &call, const Request &r, const std::string &) {
+std::string Server::answer_j39(const Game &g, const Call &call, const Request &r, const std::string &) {
     const std::string game = call.model.substr(0, 3), &m = r.module, &f = r.method;
     if (m != "game" && m != "playerdata" && m != "ranking") return "";
     const bool p16 = game == "H16", p17 = game == "I17", packed = p16 || p17;
@@ -343,37 +343,20 @@ std::string Server::answer_j39(const Game &, const Call &call, const Request &r,
         return o;
     };
     if (m == "game" && f == "get") {
-        if (p16) {   // as pop'n 15's game_get, each the data folder's NAME-H16 if there is one
-            static const struct { const char *name, *value; } fields16[] = {
-                {"netvs_phase", "1"}, {"ir_phase", "0"}, {"private_phase", "1"}, {"normal_secret_phase", "1"},
-                {"all_hiscore_phase", "1"}, {"local_matching_enable", "1"}, {"matching_sec", "120"}, {"ojama_gauge_rate", "100"},
-                {"cpu_level", "100,100,100,100,100,100,100,100,100,100"}, {"downlimit_win", "0"}, {"downlimit_class", "10"},
-                {"job_exp_rate", "100"}, {"cpu_higher_release", "0"},
-                {"job_sp_rate", "30,150,30,50,30,150,30,100,0,0,30,0,30,100,100,0,30,0,30,0,30,0,30,0,30,0"}};
+        if (p16) {   // as pop'n 15's game_get: the phase (none set: none sent), then the rest of the game's settings in order (games.cpp)
             std::string a;
-            if (const std::string ph = store_->get(tables::setting, {"phase", "H16"}); !ph.empty()) a += " phase=\"" + std::to_string(std::strtol(ph.c_str(), nullptr, 10)) + "\"";
-            for (const auto &fd : fields16) {
-                std::string v = store_->get(tables::setting, {fd.name, "H16"});
-                while (!v.empty() && std::isspace((unsigned char)v.back())) v.pop_back();
-                a += std::string(" ") + fd.name + "=\"" + esc(v.empty() ? fd.value : v) + "\"";
-            }
+            if (const std::string ph = setting(*store_, g, "phase"); !ph.empty()) a += " phase=\"" + std::to_string(std::strtol(ph.c_str(), nullptr, 10)) + "\"";
+            for (const Setting &s : g.settings)
+                if (strcmp(s.name, "phase")) a += as_set(*store_, g, s);
             return "<game status=\"0\"" + a + " message=\"" + esc(message()) + "\"/>";
         }
-        struct Field { const char *name; long value; };
-        // guesses but matching_sec (pop'n 15's): to be worked out from each one's users
-        static const Field fields18[] = {{"game_phase", 2}, {"ir_phase", 0}, {"event_phase", 1}, {"netvs_phase", 1},
-                                         {"license_phase", 1}, {"psp_phase", 0}, {"psp_sale_month", 1}, {"psp_sale_day", 1},
-                                         {"local_matching_enable", 1}, {"matching_sec", 120}, {"boss_diff", 0}, {"boss_battle_point", 0}},
-                            // 17's e_amuse_phase (0-15) opens its content by stages, NET対戦 from 4 (0x49adab:
-                            // the mode select's fifth mode); its tables run to 14 (0x4c73bd, 0x4521d1), taken
-                            // as the last
-                            fields17[] = {{"game_phase", 2}, {"e_amuse_phase", 14}, {"local_matching_enable", 1}, {"matching_sec", 120}};
+        // 17 and 18: each of the game's settings (games.cpp), a number. Guesses but matching_sec
+        // (pop'n 15's): to be worked out from each one's users. 17's e_amuse_phase (0-15) opens its
+        // content by stages, NET対戦 from 4 (0x49adab: the mode select's fifth mode); its tables run
+        // to 14 (0x4c73bd, 0x4521d1), taken as the last
         std::string a;
-        for (const Field &fd : p17 ? std::vector<Field>(std::begin(fields17), std::end(fields17))
-                                   : std::vector<Field>(std::begin(fields18), std::end(fields18))) {
-            const std::string v = store_->get(tables::setting, {fd.name, game});
-            a += std::string(" ") + fd.name + "=\"" + std::to_string(v.empty() ? fd.value : std::strtol(v.c_str(), nullptr, 10)) + "\"";
-        }
+        for (const Setting &s : g.settings)
+            a += std::string(" ") + s.name + "=\"" + std::to_string(std::strtol(setting(*store_, g, s.name).c_str(), nullptr, 10)) + "\"";
         return "<game status=\"0\"" + a + "/>";
     }
     if (m == "game") return "<game status=\"0\"/>";   // active

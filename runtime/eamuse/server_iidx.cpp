@@ -68,6 +68,7 @@ std::string a(const char *name, const std::string &v) { return std::string(" ") 
 
 std::string Server::answer_c02(const Game &, const Call &, const Request &r, const std::string &) {
     if (r.module != "C02") return "";
+    const Game &g = game_of("C02");   // (its settings are 9th style's, whatever model calls)
     const std::string method = r.method;
     const std::vector<std::string> w = words(attr(r.attrs, "command"));
     const std::string cmd = w.empty() ? "" : w[0];
@@ -89,7 +90,7 @@ std::string Server::answer_c02(const Game &, const Call &, const Request &r, con
     std::vector<Record> scores = from_lines(store_->get(tables::iidx9_scores, {}));
     // the week's song: the operator's, else one of the songs played here, a different one a week
     auto weekly_song = [&]() -> long {
-        if (const std::string s = store_->get(tables::iidx9_weekly_song, {}); !s.empty()) return std::strtol(s.c_str(), nullptr, 10);
+        if (const std::string s = setting(*store_, g, "weekly_song"); !s.empty()) return std::strtol(s.c_str(), nullptr, 10);
         std::set<long> songs;
         for (const Record &s : scores) songs.insert(field(s, "mid"));
         if (songs.empty()) return 0;
@@ -207,8 +208,8 @@ std::string Server::answer_c02(const Game &, const Call &, const Request &r, con
 
     if (method == "ranking") {
         // the ranking and its six courses: the operator's, else one ranking of courses 0-5
-        std::vector<std::string> info = words(store_->get(tables::iidx9_courses, {}));
-        if (info.size() < 7) info = {"1", "0", "1", "2", "3", "4", "5"};
+        std::vector<std::string> info = words(setting(*store_, g, "courses"));
+        if (info.size() < 7) info = words(find_setting(&g, "courses")->by_default);   // (the owner's, cut short)
         const std::string rid = info[0];
         std::vector<Record> entries = from_lines(store_->get(tables::iidx9_ranking, {}));
         if (cmd == "getinfo") {

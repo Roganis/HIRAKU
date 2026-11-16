@@ -8,11 +8,13 @@
 #include <vector>
 
 #include "eamuse/protocol.h"
+#include "eamuse/store.h"
 
 namespace hk::ea {
 
 class Server;
 struct Game;
+struct Readers;   // readers.h: what code outside the answers reads of a game's players
 
 // One way of answering: a request to its answer, "" to leave it to the next in the game's chain
 using Answer = std::string (Server::*)(const Game &, const Call &, const Request &, const std::string &host);
@@ -31,15 +33,46 @@ enum class Family {
     unknown,          // a model the table doesn't name
 };
 
+// A setting the owner may give (a file of the data folder): what it is, its range, and the value
+// the server takes without it. A game's are kept by name and model (tables::setting: NAME-MODEL)
+// unless their table is one of their own (a file named once: tables::phases_phc...); the server's
+// own (server_settings) are their table's alone, or for tables::setting the name split at its '-'
+// ("limit-cards": limit-cards).
+struct Setting {
+    const char *name;
+    const char *label;        // for a person to read
+    enum Kind { number, text } kind;
+    long min, max;            // a number's range
+    const char *by_default;   // the value without the owner's ("" for some: what that means is in help)
+    const char *help;
+    const Table *table;
+};
+
 struct Game {
     const char *id;       // HIRAKU's id of the game ("popn12", as games/<id>/), or of the family for a row of several
     const char *title;    // for a person to read
     const char *model;    // the call's model's first three letters ("E12"); '?' stands for any one letter ("?39")
     Family family;
     std::vector<Answer> chain;   // tried in order; after the last, <MODULE status="0"/>
+    std::vector<Setting> settings = {};   // what the owner may set for it
+    const Readers *readers = nullptr;     // its players, names and scores (readers.h); null: not read yet
 };
 
 const std::vector<Game> &games();                 // the one table: every game the server answers
 const Game &game_of(const std::string &model);    // exact rows first, then rows with '?', then the row for a model it doesn't know
+const Game *game_by_id(const std::string &id);    // a row by its id, or by its model for a row without one; null: none
+
+// The settings that are no game's: the title message, the data folder's limits
+const std::vector<Setting> &server_settings();
+// A setting's declaration (game null: the server's); null if it has none of that name
+const Setting *find_setting(const Game *, const char *name);
+// The key a setting is kept under (model: as setting()'s; "" and a row without a model: none)
+Key setting_key(const Game *, const Setting &, const std::string &model = "");
+// A setting's value: the owner's as kept (the file's text as it is, when it isn't empty), else the
+// declared default. One that isn't declared reads as "". model: the call's model's three letters,
+// the key's for a row that has no model of its own (a model the table doesn't name: phase-Z99);
+// without them such a row has only its defaults.
+std::string setting(const Store &, const Game &, const char *name, const std::string &model = "");
+std::string setting(const Store &, const char *name);   // the server's
 
 }  // namespace hk::ea

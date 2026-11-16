@@ -95,6 +95,16 @@ void keep(Record &p, const char *part, const Field (&fields)[N], const std::stri
     for (const Field &f : fields)
         if (from.find(std::string("<") + f.name + " ") != std::string::npos) p[std::string(part) + "." + f.name] = child(from, f.name);
 }
-
+// pop'n music 9-18's records (server_share.cpp), for the answers and the readers (readers.h). A
+// game is its model's three letters ("E12")
+namespace popn {
+constexpr size_t SONG_MAX = 1024;   // the songs a record has room for, at most
+bool has_song(const std::string &game, size_t n);   // the game has song n
+// song n's clear marks as the game keeps them (d: its record, pop'n 9-11's userdata decoded), in
+// pop'n 12's order: two bits a chart, Normal, Hyper, 5 buttons, EX
+uint8_t marks_in(const std::string &game, const std::string &d, size_t n);
+// a player's best scores in one game, by song and sheet (who: its card for 12, ref id from 13)
+std::map<std::pair<long, long>, long> scores_of(const Store &, const std::string &game, const std::string &who);
+}  // namespace popn
 
 }  // namespace hk::ea

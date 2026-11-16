@@ -187,6 +187,11 @@ model J39:J:A:A:2010040500
 model I17:J:A:A:2009022500
 > <playerdata method="score" ref_id="48524B0000000001" music_num="900" sheet_num="1" s_challenge="0"/>
 < 200 <response><playerdata status="0" score="99999" nr_active_friend="0"></playerdata></response>
+# pop'n 16 with the owner's phase -1: sent as it is
+model H16:J:A:A:2008052700
+file phase-H16 -1
+> <game method="get"/>
+< 200 <response><game status="0" phase="-1" netvs_phase="1" ir_phase="0" private_phase="1" normal_secret_phase="1" all_hiscore_phase="1" local_matching_enable="1" matching_sec="60" ojama_gauge_rate="100" cpu_level="100,100,100,100,100,100,100,100,100,100" downlimit_win="0" downlimit_class="10" job_exp_rate="100" cpu_higher_release="0" job_sp_rate="30,150,30,50,30,150,30,100,0,0,30,0,30,100,100,0,30,0,30,0,30,0,30,0,30,0" message="HELLO"></game></response>
 = ad6fca238f58f9858f9f748ad92e072fab40bd7af0c0b36fcf99def962c3a901 155 G15-rank-exp
 = f8955d93970c327512bdea8c6aa5228d58730e9a86084fa7779145a721d69db6 137 H16-rank-exp
 = c689b0572fa625405331723281a9bf9bacbaad3ca98c1ebb2dcc702ec189f064 164 I17-rank-exp
@@ -206,7 +211,7 @@ model I17:J:A:A:2009022500
 = aa79880a55f3f21b48626ad6bc93f78a2ec23e4b91237849beabf97249f160ca 5888 pdata-J39-48524B0000000001
 = 095696d892962582a6ac8a2eb482937151e8bd969ab181b6345839ceceba5eb6 5888 pdata-J39-48524B0000000002
 = 53c234e5e8472b6ac51c1ae1cab3fe06fad053beb8ebfd8977b010655bfdd3c3 2 phase-G15
-= 1121cfccd5913f0a63fec40a6ffd44ea64f9dc135c66634ba001d10bcf4302a2 2 phase-H16
+= ee3aa64bb94a50845d5024cd4bd20202a4567aed5cd5328c0d97e9920775fc28 3 phase-H16
 = e6a33b17bc4d5655dab9e5f5207c93996135652192bf7120cdd92a383f79e80f 30 pplays-G15-48524B0000000001
 = cf48d10cabe769f6cbff2eb075615ea2498417f9c981f71ef3278e48a9b08445 15 pplays-H16-48524B0000000001
 = a5bc7e45cde0fe71a71891277bdc06d6c1f401d8c50569c5833d69f7f28cc7a8 16 pplays-I17-48524B0000000001

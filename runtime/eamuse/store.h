@@ -34,6 +34,8 @@ public:
     virtual std::string label(const Table &, const Key &) const = 0;
     // The owner's limit on `what` ("cards", "files"), or by_default
     virtual long limit(const char *what, long by_default) const = 0;
+    // Every key the store holds of a table (in no promised order)
+    virtual std::vector<Key> keys(const Table &) const = 0;
     struct Hold {
         virtual ~Hold() = default;
     };
@@ -57,11 +59,17 @@ public:
     void aside(const Table &, const Key &, const std::string &had) override;
     std::string label(const Table &, const Key &) const override;
     long limit(const char *what, long by_default) const override;
+    std::vector<Key> keys(const Table &) const override;
     std::unique_ptr<Hold> hold() override;
 
     // A table's file name for a key: the pattern's {} each replaced by the key's next part ("" if
     // the key has another number of parts). Not checked: get and put refuse a name safe_file refuses.
     static std::string file_name(const Table &, const Key &);
+    // The table a file of the folder belongs to, and its key; null for a file no table names. A file
+    // is one table's: a pattern with no {} that is the name wins; else the matching pattern with the
+    // most letters of its own, a key's part never holding a '-' ("gfdmv-cards" is the singleton, not
+    // gfdmv-{}; "userdata-C20-X" userdata-{}-{}; the owner's {}-{} takes only what nothing else does)
+    static const Table *table_of(const std::string &file, Key &key);
 
 private:
     std::string read(const std::string &name) const;
@@ -75,8 +83,8 @@ private:
 
     std::string dir_;
     // What a server others can reach keeps is bounded (a call registers a card, writes a card's
-    // file): the data folder's files (limit-files, default 200000), a number in a file of the folder
-    // for an owner who wants another
+    // file): the data folder's files (limit-files: its default is games.cpp's server_settings'), a
+    // number in a file of the folder for an owner who wants another
     long files_ = -1;   // the folder's files, as counted and made since
     bool files_full_said_ = false;
 };

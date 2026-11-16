@@ -113,7 +113,7 @@ std::string Server::answer_later(const Game &g, const Call &call, const Request 
         const std::string cardtype = attr(r.attrs, "cardtype");
         std::vector<Record> cards = from_lines(store_->get(tables::cards, {}));
         auto add = [&](const std::string &id) {   // a new card and its player ("": the server keeps no more cards)
-            if ((long)cards.size() >= store_->limit("cards", 65536)) {
+            if ((long)cards.size() >= store_->limit("cards", std::strtol(find_setting(nullptr, "limit-cards")->by_default, nullptr, 10))) {
                 if (!cards_full_said_) fprintf(stderr, "e-AMUSEMENT: %zu cards are kept, as many as may be (the file limit-cards in the data folder sets another number): no new card is taken\n", cards.size());
                 cards_full_said_ = true;
                 return std::string();
@@ -275,8 +275,7 @@ std::string Server::answer_later(const Game &g, const Call &call, const Request 
     }
     if (m == "message" && f == "get") {   // (0x19f4e0) phase: the event phase, set online when >= 0
         // (0x18dee0); -1 leaves the cabinet's own. text: the owner's message.
-        const std::string ph = store_->get(tables::setting, {"phase", game});
-        const long phase = ph.empty() ? -1 : std::strtol(ph.c_str(), nullptr, 10);
+        const long phase = std::strtol(setting(*store_, g, "phase", game).c_str(), nullptr, 10);
         return "<message status=\"0\" phase=\"" + std::to_string(phase) + "\" text=\"" + esc(message()) + "\"/>";
     }
     if (m == "eemall" && f == "get") {   // (0x19eda8) points, then <item num/> and <kisekae path pri/>
@@ -343,12 +342,12 @@ std::string Server::answer_game(const std::string &game, const Request &r) {
                std::to_string(e.place) + "\" hi_score=\"" + esc(attr(e.kept, "score")) + "\" hi_cool=\"" + esc(attr(e.kept, "cool")) + "\"/>";
     }
     if (type == "game" && f == "get") {   // phase: as pop'n 10's message.get (-1: the cabinet's own)
-        const std::string ph = store_->get(tables::setting, {"phase", game});
-        const long phase = ph.empty() ? -1 : std::strtol(ph.c_str(), nullptr, 10);
+        const Game &g = game_of(game);
+        const long phase = std::strtol(setting(*store_, g, "phase", game).c_str(), nullptr, 10);
         // pop'n 13 and 14 also read net_event (14's 0x17e9308), the network event running: 1 the
         // INTERNET RANKING (14's 0x17fdc78: the attract mode's course boards, the courses' results
         // and high scores online; every use asks for exactly 1), 2 NET TAISEN, one or the other.
-        // 2 unless the data folder's net_event-GAME says otherwise
+        // the setting net_event (games.cpp)
         std::string flags;
         // NET TAISEN on (docs/EAMUSE3.md): pop'n 12 by play_enable (0x191160); pop'n 13 and 14 by
         // net_event 2 (13's 0x17edd48, 14's 0x17ddef8). Cabinets of
@@ -358,8 +357,7 @@ std::string Server::answer_game(const std::string &game, const Request &r) {
         // the game's own (pop'n 12: an ojama 1000 ms at least, 0x126f38)
         if (game == "E12") flags += " play_enable=\"1\"";
         if (game == "E13" || game == "F14") {
-            const std::string ne = store_->get(tables::setting, {"net_event", game});
-            flags += " net_event=\"" + std::to_string(ne.empty() ? 2 : std::strtol(ne.c_str(), nullptr, 10)) + "\"";
+            flags += " net_event=\"" + std::to_string(std::strtol(setting(*store_, g, "net_event", game).c_str(), nullptr, 10)) + "\"";
         }
         if (game == "E12" || game == "E13" || game == "F14") flags += " local_matching_enable=\"1\" matching_sec=\"30\"";
         if (game == "E12" || game == "E13") flags += " room_num=\"0,0,0,0,0,0,0,0,0,0\"";

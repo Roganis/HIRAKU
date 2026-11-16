@@ -266,7 +266,7 @@ std::string Server::next_number() {
 // The owner's message for the cabinets' title screens (tables::message), at most 255 bytes,
 // one line; Shift-JIS or ASCII as the owner writes it.
 std::string Server::message() const {
-    std::string t = store_->get(tables::message, {});
+    std::string t = setting(*store_, "message");
     if (const size_t nl = t.find_first_of("\r\n"); nl != std::string::npos) t.erase(nl);
     if (t.size() > 255) t.resize(255);
     return t;

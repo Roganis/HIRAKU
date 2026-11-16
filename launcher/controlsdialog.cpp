@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "controlsdialog.h"
 
+#include "theme.h"
+#include "../third_party/mdi/icons.h"
+
 #include <QApplication>
 #include <QComboBox>
 #include <QDialogButtonBox>
@@ -651,7 +654,7 @@ void ControlsDialog::refreshRows() {
         if (clashes.contains(k)) tip += "\n\n" + clashes[k].join("\n");
         row.button->setToolTip(tip + "\n\nClick to bind; the arrow (or a right-click) adds or removes one binding.");
         row.button->setToolButtonStyle(clashes.contains(k) ? Qt::ToolButtonTextBesideIcon : Qt::ToolButtonTextOnly);
-        row.button->setIcon(clashes.contains(k) ? style()->standardIcon(QStyle::SP_MessageBoxWarning) : QIcon());
+        row.button->setIcon(clashes.contains(k) ? theme::icon(mdi::alert_circle) : QIcon());
         if (row.meter) row.meter->setVisible(row.meter->hasAxis());
     }
 }

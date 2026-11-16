@@ -41,6 +41,8 @@ public:
 protected:
     void closeEvent(QCloseEvent *e) override;
     void resizeEvent(QResizeEvent *e) override;   // a small window (640x480): the Details panel a share of it
+    void changeEvent(QEvent *e) override;         // the desktop's colours changed (night mode): the icons again
+    QRgb m_iconInk = 0;                           // the text colour the icons were last drawn in
     bool m_narrow = false;
     void dragEnterEvent(QDragEnterEvent *e) override;
     void dropEvent(QDropEvent *e) override;

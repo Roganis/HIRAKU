@@ -25,6 +25,7 @@
 
 #include "config.h"
 #include "theme.h"
+#include "../third_party/mdi/icons.h"
 
 namespace {
 
@@ -131,17 +132,17 @@ MusicPlayer::MusicPlayer(QWidget *parent) : QWidget(parent) {
     m_position = new QSlider(Qt::Horizontal);
     m_position->setRange(0, 0);
     m_position->setToolTip("Where the song is: drag to move in it");
-    m_prev = button(this, style()->standardIcon(QStyle::SP_MediaSkipBackward), "|<", "Previous song (or this one again)");
-    m_toggle = button(this, style()->standardIcon(QStyle::SP_MediaPlay), ">", "Play");
-    m_next = button(this, style()->standardIcon(QStyle::SP_MediaSkipForward), ">|", "Next song");
-    m_shuffle = button(this, QIcon::fromTheme("media-playlist-shuffle"), QString::fromUtf8("⇄"), "Shuffle");
+    m_prev = button(this, theme::icon(mdi::skip_previous), "|<", "Previous song (or this one again)");
+    m_toggle = button(this, theme::icon(mdi::play), ">", "Play");
+    m_next = button(this, theme::icon(mdi::skip_next), ">|", "Next song");
+    m_shuffle = button(this, theme::icon(mdi::shuffle_variant), QString::fromUtf8("⇄"), "Shuffle");
     m_shuffle->setCheckable(true);
     m_shuffle->setChecked(cfg::settings().value("music/shuffle", true).toBool());
     m_autoplay = button(this, QIcon(), "Autoplay", "Start the music when the launcher opens");
     m_autoplay->setCheckable(true);
     m_autoplay->setFont(small);
     m_autoplay->setChecked(cfg::settings().value("music/autoplay", true).toBool());
-    m_folder = button(this, style()->standardIcon(QStyle::SP_DirOpenIcon), "...", "Open the music folder");
+    m_folder = button(this, theme::icon(mdi::folder_music), "...", "Open the music folder");
     m_speaker = new QLabel;
     m_volume = new QSlider(Qt::Horizontal);
     m_volume->setRange(0, 100);
@@ -483,10 +484,12 @@ void MusicPlayer::themeChanged() {
     m_toggle->setObjectName(theme::pop() ? "hkMusicPlay" : "");   // (Pop: a round orange button)
     const bool pop = theme::pop();
     const QColor ink = QApplication::palette().color(QPalette::WindowText);
-    m_prev->setIcon(pop ? theme::glyph("prev", ink) : style()->standardIcon(QStyle::SP_MediaSkipBackward));
-    m_next->setIcon(pop ? theme::glyph("next", ink) : style()->standardIcon(QStyle::SP_MediaSkipForward));
-    m_speaker->setPixmap((pop ? theme::glyph("speaker", ink) : style()->standardIcon(QStyle::SP_MediaVolume)).pixmap(16, 16));
-    m_folder->setIcon(style()->standardIcon(QStyle::SP_DirOpenIcon));
+    // (Material Design Icons in the system's look too, not the desktop's icon theme)
+    m_prev->setIcon(pop ? theme::glyph("prev", ink) : theme::icon(mdi::skip_previous));
+    m_next->setIcon(pop ? theme::glyph("next", ink) : theme::icon(mdi::skip_next));
+    m_speaker->setPixmap((pop ? theme::glyph("speaker", ink) : theme::icon(mdi::volume_high)).pixmap(16, 16));
+    m_folder->setIcon(theme::icon(mdi::folder_music));
+    m_shuffle->setIcon(theme::icon(mdi::shuffle_variant));
     m_toggle->style()->unpolish(m_toggle);
     m_toggle->style()->polish(m_toggle);
     updateButtons();
@@ -495,7 +498,7 @@ void MusicPlayer::themeChanged() {
 
 void MusicPlayer::updateButtons() {
     if (theme::pop()) m_toggle->setIcon(theme::glyph(m_playing ? "pause" : "play", Qt::white));
-    else m_toggle->setIcon(style()->standardIcon(m_playing ? QStyle::SP_MediaPause : QStyle::SP_MediaPlay));
+    else m_toggle->setIcon(theme::icon(m_playing ? mdi::pause : mdi::play));
     m_toggle->setToolTip(m_playing ? (m_held ? "Pause (the music waits for the game to end)" : "Pause") : "Play");
     m_prev->setEnabled(!m_songs.isEmpty());
     m_next->setEnabled(!m_songs.isEmpty());

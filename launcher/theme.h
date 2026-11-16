@@ -40,6 +40,15 @@ QPixmap wordmark(int height, qreal dpr);
 // an icon's 24x24 path (third_party/mdi/icons.h: absolute M, L, C, Z) filled into box
 void drawIcon(QPainter *p, const char *path, const QRectF &box, QColor colour);
 
+// An icon from its MDI path (third_party/mdi/icons.h) in this look: in the text's colour, or, with
+// `tile` 0..5 in Pop, white on a rounded square of that one of the six (the toolbar's own); a
+// paler one when disabled. The desktop's icon theme isn't asked: every look has the same icons.
+QIcon icon(const char *path, int tile = -1);
+// ... kept on an action or a button (a QAction or QAbstractButton), and made again by restyle for
+// the look it is then
+void mark(QObject *o, const char *path, int tile = -1);
+void restyle(QObject *root);   // every one marked under root (and root)
+
 // a style sheet for the check boxes under the widget it's given to: each a switch, on in this
 // colour (the settings' pages, launcher/settingsdialog.cpp)
 QString switches(QColor on, QColor off);

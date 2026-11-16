@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "picturedialog.h"
 
+#include "theme.h"
+#include "../third_party/mdi/icons.h"
+
 #include <QComboBox>
 #include <QDialogButtonBox>
 #include <QDir>
@@ -308,7 +311,7 @@ void PictureDialog::buildPage(int s) {
         row.spin->setSingleStep(step);
         row.spin->setMinimumWidth(80);
         row.reset = new QToolButton;
-        row.reset->setIcon(QIcon::fromTheme("edit-undo"));
+        row.reset->setIcon(theme::icon(mdi::undo));
         row.reset->setText("↺");
         row.reset->setAutoRaise(true);
         g->addWidget(row.label, r, 0);

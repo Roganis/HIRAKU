@@ -2,6 +2,8 @@
 #include "theme.h"
 
 #include <QApplication>
+#include <QAction>
+#include <QAbstractButton>
 #include <QFile>
 #include <QFont>
 #include <QFontMetricsF>
@@ -447,6 +449,52 @@ QColor mix(QColor a, QColor b, double amount) {
 }
 
 QColor onYellow() { return g_look == Night ? colours().paper : g_look == Pop ? colours().ink : QColor("#232629"); }
+
+QIcon icon(const char *path, int tile) {
+    const QPalette pal = QApplication::palette();
+    const bool tiled = tile >= 0 && tile < 6 && pop();
+    QIcon out;
+    for (int size : {16, 20, 22, 24, 32, 44, 48, 64})
+        for (QIcon::Mode mode : {QIcon::Normal, QIcon::Disabled}) {
+            const bool off = mode == QIcon::Disabled;
+            QPixmap pm(size, size);
+            pm.fill(Qt::transparent);
+            QPainter p(&pm);
+            p.setRenderHint(QPainter::Antialiasing);
+            if (tiled) {
+                QColor ground = rainbow(tile);
+                if (off) ground = mix(ground, pal.color(QPalette::Window), 0.6);
+                p.setPen(Qt::NoPen);
+                p.setBrush(ground);
+                p.drawRoundedRect(QRectF(0.5, 0.5, size - 1, size - 1), size * 0.3, size * 0.3);
+                drawIcon(&p, path, QRectF(size * 0.17, size * 0.17, size * 0.66, size * 0.66), tile == 2 ? onYellow() : QColor(Qt::white));
+            } else {
+                const QColor ink = pal.color(off ? QPalette::Disabled : QPalette::Active, QPalette::WindowText);
+                drawIcon(&p, path, QRectF(size * 0.04, size * 0.04, size * 0.92, size * 0.92), off ? mix(ink, pal.color(QPalette::Window), 0.3) : ink);
+            }
+            p.end();
+            out.addPixmap(pm, mode);
+        }
+    return out;
+}
+
+void mark(QObject *o, const char *path, int tile) {
+    o->setProperty("hkIconPath", QVariant::fromValue((quintptr)path));
+    o->setProperty("hkIconTile", tile);
+    restyle(o);
+}
+
+void restyle(QObject *root) {
+    QList<QObject *> all = root->findChildren<QObject *>();
+    all.prepend(root);
+    for (QObject *o : all) {
+        const QVariant at = o->property("hkIconPath");
+        if (!at.isValid()) continue;
+        const QIcon i = icon((const char *)at.value<quintptr>(), o->property("hkIconTile").toInt());
+        if (auto *a = qobject_cast<QAction *>(o)) a->setIcon(i);
+        else if (auto *b = qobject_cast<QAbstractButton *>(o)) b->setIcon(i);
+    }
+}
 
 QColor against(QColor c, QColor ground) {
     const bool dark = ground.lightnessF() < 0.5;

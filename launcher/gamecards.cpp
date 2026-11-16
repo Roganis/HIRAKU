@@ -24,6 +24,7 @@
 #include "config.h"
 #include "games.h"
 #include "theme.h"
+#include "../third_party/mdi/icons.h"
 
 namespace {
 
@@ -553,8 +554,10 @@ GameHead::GameHead(QWidget *parent) : QWidget(parent) {
     v->addWidget(m_play);
     m_buttons = new QGridLayout;
     m_buttons->setSpacing(6);
-    m_controls = new QPushButton(QIcon::fromTheme("input-gaming"), "Controls");
-    m_unlocks = new QPushButton(QIcon::fromTheme("unlock", QIcon::fromTheme("object-unlocked")), "Unlocks…");
+    m_controls = new QPushButton("Controls");
+    theme::mark(m_controls, mdi::gamepad_variant);
+    m_unlocks = new QPushButton("Unlocks…");
+    theme::mark(m_unlocks, mdi::lock_open_variant);
     m_mods = new QPushButton("Mods…");
     for (int k = 0; QPushButton *b : {m_controls, m_unlocks, m_mods}) m_buttons->addWidget(b, 0, k++);
     m_buttons->setColumnStretch(3, 1);
@@ -599,6 +602,7 @@ void GameHead::themeChanged() {
     const bool pop = theme::pop();
     m_play->setIcon(theme::glyph("play", Qt::white));
     m_play->setIconSize(QSize(22, 22));
+    theme::restyle(this);   // (Controls' and Unlocks' icons, in this look)
     QFont f = font();
     f.setPointSizeF(f.pointSizeF() * 1.3);
     f.setBold(true);

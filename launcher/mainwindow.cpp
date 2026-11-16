@@ -153,20 +153,26 @@ MainWindow::MainWindow() {
     resize(900, 600);
 
     // ---- actions ----
-    m_play = new QAction(QIcon::fromTheme("media-playback-start"), "Play", this);
+    // (their icons: Material Design Icons in the look, theme::mark; made again when it changes)
+    m_play = new QAction("Play", this);
     m_play->setShortcut(QKeySequence(Qt::Key_Return));
-    m_stop = new QAction(QIcon::fromTheme("media-playback-stop"), "Stop", this);
-    m_controls = new QAction(QIcon::fromTheme("input-gaming"), "Controls", this);
-    m_lights = new QAction(QIcon::fromTheme("dialog-information", QIcon::fromTheme("weather-clear")), "Lights", this);
-    auto *settings = new QAction(QIcon::fromTheme("preferences-system"), "Settings", this);
-    auto *pictureAct = new QAction(QIcon::fromTheme("video-display", QIcon::fromTheme("preferences-desktop-display")), "Picture", this);
+    m_stop = new QAction("Stop", this);
+    m_controls = new QAction("Controls", this);
+    theme::mark(m_controls, mdi::gamepad_variant, 0);
+    m_lights = new QAction("Lights", this);
+    theme::mark(m_lights, mdi::lightbulb_on, 2);
+    auto *settings = new QAction("Settings", this);
+    theme::mark(settings, mdi::cog, 5);
+    auto *pictureAct = new QAction("Picture", this);
+    theme::mark(pictureAct, mdi::television_classic, 3);
     pictureAct->setToolTip("Sharp pixels or a CRT (light, full, analog), and the CRT's settings: for all games, or the selected one");
     connect(pictureAct, &QAction::triggered, this, [this] {
         auto *g = selected();
         PictureDialog d(g ? g->id : QString(), g ? g->title : QString(), false, this);
         if (d.exec() == QDialog::Accepted) showDetails();
     });
-    auto *addFiles = new QAction(QIcon::fromTheme("list-add"), "Add game files…", this);
+    auto *addFiles = new QAction("Add game files…", this);
+    theme::mark(addFiles, mdi::file_plus);
     addFiles->setToolTip("Add a game from its files: the MAME ROM set (.zip/.7z), CHDs or disc images,\n"
                          "or a Konami Python game's .py1 (PCSX2 Reliquary's descriptor).\n"
                          "You can also drop them on this window.");
@@ -175,13 +181,15 @@ MainWindow::MainWindow() {
             "Game files (*.zip *.7z *.chd *.cue *.iso *.img *.bin *.py1);;All files (*)");
         if (!f.isEmpty()) addGameFiles(f);
     });
-    auto *addFolder = new QAction(QIcon::fromTheme("folder-new"), "Add a game folder…", this);
+    auto *addFolder = new QAction("Add a game folder…", this);
+    theme::mark(addFolder, mdi::folder_plus);
     connect(addFolder, &QAction::triggered, this, [this] {
         QString d = QFileDialog::getExistingDirectory(this, "Add a game folder (its ROM set, CHDs, images)");
         if (!d.isEmpty()) addGameFiles({d});
     });
     setAcceptDrops(true);
-    auto *refreshAct = new QAction(QIcon::fromTheme("view-refresh"), "Refresh", this);
+    auto *refreshAct = new QAction("Refresh", this);
+    theme::mark(refreshAct, mdi::refresh);
     refreshAct->setShortcut(QKeySequence::Refresh);
     m_showAll = new QAction("Show games not added yet", this);
     m_showAll->setToolTip("Every game HIRAKU runs, with what each needs to be added");
@@ -250,8 +258,10 @@ MainWindow::MainWindow() {
     spacer->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
     tb->addWidget(spacer);
     // the games as cards or as the list (View > Cards, List)
-    m_asCards = new QAction(QIcon::fromTheme("view-list-icons", QIcon::fromTheme("view-grid")), "Cards", this);
-    m_asList = new QAction(QIcon::fromTheme("view-list-details", QIcon::fromTheme("view-list-text")), "List", this);
+    m_asCards = new QAction("Cards", this);
+    theme::mark(m_asCards, mdi::view_grid);
+    m_asList = new QAction("List", this);
+    theme::mark(m_asList, mdi::view_list);
     m_asCards->setToolTip("The games as cards, with pictures of their title screens, a shelf for each series");
     m_asList->setToolTip("The games as a list, by series and system");
     auto *asGroup = new QActionGroup(this);
@@ -389,9 +399,11 @@ MainWindow::MainWindow() {
         auto *buttons = new QGridLayout;
         buttons->setColumnStretch(0, 1);
         buttons->setColumnStretch(3, 1);
-        auto *bFiles = new QPushButton(QIcon::fromTheme("list-add"), "Add game files…");
+        auto *bFiles = new QPushButton("Add game files…");
+        theme::mark(bFiles, mdi::file_plus);
         connect(bFiles, &QPushButton::clicked, addFiles, &QAction::trigger);
-        auto *bFolder = new QPushButton(QIcon::fromTheme("folder-new"), "Add a game folder…");
+        auto *bFolder = new QPushButton("Add a game folder…");
+        theme::mark(bFolder, mdi::folder_plus);
         connect(bFolder, &QPushButton::clicked, addFolder, &QAction::trigger);
         auto *bAll = new QPushButton("Show every game HIRAKU runs");
         bAll->setToolTip("With what each one needs (View > Show games not added yet)");
@@ -753,6 +765,17 @@ void MainWindow::resizeEvent(QResizeEvent *e) {
         });
 }
 
+// The icons are drawn in the text's colour (theme::icon), not taken from the desktop's icon theme:
+// in the system's look they are drawn again when the desktop's colours change (its night mode)
+void MainWindow::changeEvent(QEvent *e) {
+    QMainWindow::changeEvent(e);
+    if (e->type() != QEvent::PaletteChange || theme::pop()) return;
+    const QRgb ink = QApplication::palette().color(QPalette::WindowText).rgb();
+    if (ink == m_iconInk) return;
+    m_iconInk = ink;
+    QTimer::singleShot(0, this, [this] { themeChanged(); });
+}
+
 bool MainWindow::eventFilter(QObject *o, QEvent *e) {
     if (e->type() == QEvent::KeyPress) {
         // where the key is first given (the focus), not again on its way up to the parents
@@ -788,8 +811,9 @@ void MainWindow::themeChanged() {
     lp.setDevicePixelRatio(devicePixelRatio());
     m_logo->setIcon(QIcon(lp));
     m_logo->setIconSize(lp.deviceIndependentSize().toSize());
-    m_play->setIcon(pop ? theme::glyph("play", Qt::white) : QIcon::fromTheme("media-playback-start"));
-    m_stop->setIcon(pop ? theme::glyph("stop", Qt::white) : QIcon::fromTheme("media-playback-stop"));
+    m_play->setIcon(pop ? theme::glyph("play", Qt::white) : theme::icon(mdi::play));
+    m_stop->setIcon(pop ? theme::glyph("stop", Qt::white) : theme::icon(mdi::stop));
+    theme::restyle(this);   // (the toolbar's, the menus' and the buttons' icons, in this look)
     m_music->themeChanged();
     m_cards->themeChanged();
     m_head->themeChanged();
@@ -1749,14 +1773,14 @@ void MainWindow::fillGameMenu(QMenu *menu, const Game &g) {
         if (d.exec() == QDialog::Accepted) gameChanged();
     });
     menu->addSeparator();
-    menu->addAction(QIcon::fromTheme("input-gaming"), "Controls for " + cfg::controlsSetName(cfg::controlsSet(family)) + "…", this, [this, family] {
+    menu->addAction(theme::icon(mdi::gamepad_variant), "Controls for " + cfg::controlsSetName(cfg::controlsSet(family)) + "…", this, [this, family] {
         controls(family);
     });
     menu->addAction("Lights for " + cfg::familyName(family) + "…", this, [this, family] {
         LightsDialog d(family, this);
         d.exec();
     });
-    menu->addAction(QIcon::fromTheme("video-display"), "Picture for " + title + "…", this, [this, id, title] {
+    menu->addAction(theme::icon(mdi::television_classic), "Picture for " + title + "…", this, [this, id, title] {
         PictureDialog d(id, title, true, this);
         if (d.exec() == QDialog::Accepted) showDetails();
     });
@@ -1766,7 +1790,7 @@ void MainWindow::fillGameMenu(QMenu *menu, const Game &g) {
         const QString dir = cfg::menuPicturesDir();
         const QFileInfoList own = QDir(dir).entryInfoList({id + ".*"}, QDir::Files);
         const QString kept = dir + "/auto/" + id + ".bmp";
-        auto *pic = menu->addMenu(QIcon::fromTheme("image-x-generic"), "Picture in the game menu");
+        auto *pic = menu->addMenu(theme::icon(mdi::image), "Picture in the game menu");
         pic->setToolTipsVisible(true);
         pic->addAction("Choose a picture…", this, [this, id, title, dir] {
             const QString f = QFileDialog::getOpenFileName(this, "A picture for " + title + " in the game menu", QString(),
@@ -1801,12 +1825,12 @@ void MainWindow::fillGameMenu(QMenu *menu, const Game &g) {
             if (d.exec() == QDialog::Accepted) gameChanged();
         })->setToolTip("The board's switches: coinage (Free Play), difficulty, demo sounds, hidden modes");
     if (UnlocksDialog::available(id))
-        menu->addAction(QIcon::fromTheme("unlock", QIcon::fromTheme("object-unlocked")), "Unlocks…", this, [this, id, title] {
+        menu->addAction(theme::icon(mdi::lock_open_variant), "Unlocks…", this, [this, id, title] {
             UnlocksDialog d(id, title, m_running == id, this);
             d.exec();
         });
     if (g.family == "bm3") {   // beatmania III's floppy drive (runtime/dev/fdc.h): where a player's disk goes
-        auto *floppy = menu->addMenu(QIcon::fromTheme("media-floppy"), "Floppy disk");
+        auto *floppy = menu->addMenu(theme::icon(mdi::floppy), "Floppy disk");
         floppy->setToolTipsVisible(true);
         auto *group = new QActionGroup(floppy);
         const QString now = cfg::settings().value("floppy/" + id).toString();
@@ -1910,10 +1934,10 @@ void MainWindow::fillGameMenu(QMenu *menu, const Game &g) {
     }
     menu->addSeparator();
     QString nv = cfg::nvramDir(id);
-    auto *open = menu->addAction(QIcon::fromTheme("folder-open"), "Open the save folder", this,
+    auto *open = menu->addAction(theme::icon(mdi::folder_open), "Open the save folder", this,
                                 [nv] { QDesktopServices::openUrl(QUrl::fromLocalFile(nv)); });
     open->setEnabled(QFileInfo::exists(nv));
-    auto *reset = menu->addAction(QIcon::fromTheme("edit-delete"), "Reset save data…", this, [this, nv, title, id] {
+    auto *reset = menu->addAction(theme::icon(mdi::delete_), "Reset save data…", this, [this, nv, title, id] {
         if (m_running == id) {
             QMessageBox::information(this, title, "Stop the game first.");
             return;

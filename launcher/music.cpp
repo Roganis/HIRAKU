@@ -302,8 +302,7 @@ void MusicPlayer::arrange(bool bar) {
         song->setSpacing(0);
         song->addWidget(m_title);
         song->addWidget(m_status);
-        for (QLabel *l : {m_title, m_status}) l->setFixedWidth(260);
-        h->addLayout(song);
+        h->addLayout(song);   // (its width: fitBar)
         m_levels->setFixedWidth(150);
         h->addWidget(m_levels, 0, Qt::AlignVCenter);
         h->addSpacing(10);
@@ -321,6 +320,7 @@ void MusicPlayer::arrange(bool bar) {
         v->setContentsMargins(8, 4, 8, 6);
         v->setSpacing(2);
         for (QLabel *l : {m_title, m_status}) l->setMinimumWidth(1), l->setMaximumWidth(QWIDGETSIZE_MAX);
+        for (QWidget *w : {(QWidget *)m_levels, (QWidget *)m_autoplay}) w->setVisible(true);   // (as fitBar may have left them)
         m_levels->setMinimumWidth(0);
         m_levels->setMaximumWidth(QWIDGETSIZE_MAX);
         v->addWidget(m_title);
@@ -347,11 +347,24 @@ void MusicPlayer::arrange(bool bar) {
         v->addLayout(row);
     }
     setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);   // (the docks above take the height)
+    fitBar();
     showSong();
+}
+
+// The bar on a small screen (640x480: a CRT's) gives way: a shorter title, no levels under 980
+// pixels, no Autoplay switch under 700 (the panel has it)
+void MusicPlayer::fitBar() {
+    if (!m_bar) return;
+    const int w = width();
+    const int title = w >= 980 ? 260 : w >= 800 ? 200 : 130;
+    for (QLabel *l : {m_title, m_status}) l->setFixedWidth(title);
+    m_levels->setVisible(w >= 980);
+    m_autoplay->setVisible(w >= 700);
 }
 
 void MusicPlayer::resizeEvent(QResizeEvent *e) {
     QWidget::resizeEvent(e);
+    fitBar();
     showSong();
 }
 

@@ -54,6 +54,7 @@ private:
     void openFolder();
     QString folder() const;
     void showSong();                     // the title, the line under it, the times
+    void fitBar();                       // the bar to the window's width: less in it on a small screen
     void showStatus(const QString &text, const QString &tip = QString());   // a problem, under the title
     void showTimes();
     void updateButtons();

@@ -12,6 +12,8 @@
 #include <QString>
 #include <QWidget>
 
+class QComboBox;
+class QGridLayout;
 class QLabel;
 class QListWidget;
 class QPushButton;
@@ -36,6 +38,7 @@ public:
     const Card *card(int row) const;           // the open shelf's row'th (the cards' painter)
 protected:
     bool eventFilter(QObject *o, QEvent *e) override;
+    void resizeEvent(QResizeEvent *e) override;   // a small window (640x480): the shelves as a drop-down
 signals:
     void picked(const QString &id);
     void activated(const QString &id);         // double-clicked: play it
@@ -45,6 +48,7 @@ private:
     void showShelf(bool pickFirst);
     void fitGrid();
     QListWidget *m_shelves, *m_grid;
+    QComboBox *m_pick;    // the shelves in a small window, in their list's place (the same rows)
     QLabel *m_head, *m_sub;
     QList<Card> m_all;
     QList<int> m_shown;   // m_all's cards on the open shelf
@@ -76,8 +80,12 @@ signals:
     void controls();
     void unlocks();
     void mods();
+protected:
+    void resizeEvent(QResizeEvent *e) override;
 private:
     QWidget *m_art;   // the picture, title, line and chips, painted (gamecards.cpp: HeadArt)
     QPushButton *m_play, *m_controls, *m_unlocks, *m_mods;
+    QGridLayout *m_buttons;   // Controls, Unlocks and Mods: in a row, or two rows in a narrow panel (resizeEvent)
+    bool m_twoRows = false;
     Head m_h;
 };

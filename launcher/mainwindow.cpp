@@ -35,6 +35,7 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QFrame>
+#include <QGridLayout>
 #include <QHBoxLayout>
 #include <QHeaderView>
 #include <QImage>
@@ -384,8 +385,10 @@ MainWindow::MainWindow() {
         howRow->addWidget(how);
         howRow->addStretch(1);
         ev->addLayout(howRow);
-        auto *buttons = new QHBoxLayout;
-        buttons->addStretch(1);
+        // (two side by side and one under them: the page fits a 640x480 screen's window)
+        auto *buttons = new QGridLayout;
+        buttons->setColumnStretch(0, 1);
+        buttons->setColumnStretch(3, 1);
         auto *bFiles = new QPushButton(QIcon::fromTheme("list-add"), "Add game files…");
         connect(bFiles, &QPushButton::clicked, addFiles, &QAction::trigger);
         auto *bFolder = new QPushButton(QIcon::fromTheme("folder-new"), "Add a game folder…");
@@ -393,8 +396,9 @@ MainWindow::MainWindow() {
         auto *bAll = new QPushButton("Show every game HIRAKU runs");
         bAll->setToolTip("With what each one needs (View > Show games not added yet)");
         connect(bAll, &QPushButton::clicked, m_showAll, [this] { m_showAll->setChecked(true); });
-        for (auto *b : {bFiles, bFolder, bAll}) buttons->addWidget(b);
-        buttons->addStretch(1);
+        buttons->addWidget(bFiles, 0, 1);
+        buttons->addWidget(bFolder, 0, 2);
+        buttons->addWidget(bAll, 1, 1, 1, 2);
         ev->addLayout(buttons);
         ev->addStretch(2);
     }
@@ -404,6 +408,16 @@ MainWindow::MainWindow() {
     // the cards: a card picked picks its game in the list, which the rest goes by
     m_cards = new GameCards;
     m_listStack->addWidget(m_cards);
+    // only the page shown counts for the window's width (on a 640x480 screen a page out of sight
+    // would take the Details panel's room)
+    const auto onlyShown = [this](int shown) {
+        for (int k = 0; k < m_listStack->count(); k++)
+            m_listStack->widget(k)->setSizePolicy(k == shown ? QSizePolicy::Preferred : QSizePolicy::Ignored,
+                                                  k == shown ? QSizePolicy::Preferred : QSizePolicy::Ignored);
+        m_listStack->updateGeometry();
+    };
+    connect(m_listStack, &QStackedWidget::currentChanged, this, onlyShown);
+    onlyShown(m_listStack->currentIndex());
     connect(m_cards, &GameCards::picked, this, [this](const QString &id) {
         if (QTreeWidgetItem *it = itemFor(id)) m_list->setCurrentItem(it);
     });
@@ -721,6 +735,22 @@ void MainWindow::boxLook(QProcessEnvironment &env) {
     env.insert("HK_UI_FONT", m_boxFont);
     env.insert("HK_UI_LOGO", m_boxLogo);
     env.insert("HK_UI_SCALE", QString::number(m_boxScale, 'f', 3));
+}
+
+// A window under 900 pixels wide (a 640x480 screen's, a CRT's): the Details panel beside the list
+// or the cards gets a share it can show the chosen game in (a layout saved on a larger screen may
+// leave it a sliver), and keeps it until the window is wide again; the player may move it meanwhile
+void MainWindow::resizeEvent(QResizeEvent *e) {
+    QMainWindow::resizeEvent(e);
+    const bool narrow = width() < 900;
+    if (narrow == m_narrow) return;
+    m_narrow = narrow;
+    m_list->setColumnHidden(Year, narrow);   // (the Details panel says it: the titles get the room)
+    if (narrow && m_detailsDock->isVisible() && dockWidgetArea(m_detailsDock) == Qt::RightDockWidgetArea)
+        QTimer::singleShot(0, this, [this] {
+            const int share = std::clamp(width() - 150 - 240, 240, width() * 45 / 100);   // (the shelves', one card's)
+            resizeDocks({m_detailsDock}, {share}, Qt::Horizontal);
+        });
 }
 
 bool MainWindow::eventFilter(QObject *o, QEvent *e) {

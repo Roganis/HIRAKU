@@ -4,9 +4,12 @@
 #include <QDateTime>
 #include <QEvent>
 #include <QFileInfo>
+#include <QGridLayout>
 #include <QHBoxLayout>
 #include <QHash>
 #include <QImageReader>
+#include <QComboBox>
+#include <QSignalBlocker>
 #include <QLabel>
 #include <QListWidget>
 #include <QPainter>
@@ -234,9 +237,13 @@ private:
     int place(int w, QPainter *p) const {
         if (!h || w <= 0) return 0;
         const QPalette pal = palette();
-        const QRectF pic(0, 0, w, std::round(w * 0.75));
-        if (p) paintPicture(p, pic, h->card, font(), pal, true);
-        double y = pic.bottom() + 12;
+        // the picture 4:3 across the panel; none in a short window (a 480-line screen's: the card
+        // beside it has it), so that Play shows under the title without a scroll
+        const int tall = window() ? window()->height() : 0;
+        const bool picture = !(tall > 0 && tall < 600);
+        const QRectF pic(0, 0, w, picture ? std::round(w * 0.75) : 0);
+        if (p && picture) paintPicture(p, pic, h->card, font(), pal, true);
+        double y = picture ? pic.bottom() + 12 : 4;
         auto text = [&](const QFont &f, const QColor &c, const QString &t, double after) {
             const QRect r = QFontMetrics(f).boundingRect(QRect(0, 0, w, 100000), Qt::TextWordWrap, t);
             if (p) {
@@ -315,6 +322,13 @@ GameCards::GameCards(QWidget *parent) : QWidget(parent) {
     big.setBold(true);
     m_head->setFont(big);
     rv->addWidget(m_head);
+    m_pick = new QComboBox;
+    m_pick->setToolTip("The shelf: all the games, or a series'");
+    m_pick->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
+    m_pick->setMinimumContentsLength(12);
+    m_pick->hide();
+    rv->addWidget(m_pick);
+    connect(m_pick, &QComboBox::activated, this, [this](int k) { m_shelves->setCurrentRow(k); });
     m_sub = new QLabel;
     rv->addWidget(m_sub);
     rv->addSpacing(6);
@@ -340,6 +354,10 @@ GameCards::GameCards(QWidget *parent) : QWidget(parent) {
         m_shelf = it->data(kSeries).toString();
         cfg::settings().setValue("ui/shelf", m_shelf);
         showShelf(true);
+    });
+    connect(m_shelves, &QListWidget::currentRowChanged, this, [this](int k) {   // (the drop-down follows, however it changed)
+        const QSignalBlocker quiet(m_pick);
+        m_pick->setCurrentIndex(k);
     });
     connect(m_grid, &QListWidget::currentItemChanged, this, [this](QListWidgetItem *it) {
         if (m_quiet || !it) return;
@@ -404,6 +422,23 @@ void GameCards::fillShelves() {
             if (most.isEmpty() || it.value() > counts[s].families[most] || (it.value() == counts[s].families[most] && it.key() < most)) most = it.key();
         add(s, s, familyColour(most), counts[s].n);
     }
+    // ... and the drop-down a small window has in their place
+    const QSignalBlocker quiet(m_pick);
+    m_pick->clear();
+    for (int k = 0; k < m_shelves->count(); k++) {
+        const QListWidgetItem *it = m_shelves->item(k);
+        QPixmap dot(12, 12);
+        dot.fill(Qt::transparent);
+        if (const QColor c = it->data(kColour).value<QColor>(); c.isValid()) {
+            QPainter p(&dot);
+            p.setRenderHint(QPainter::Antialiasing);
+            p.setPen(Qt::NoPen);
+            p.setBrush(c);
+            p.drawEllipse(QRectF(1, 1, 10, 10));
+        }
+        m_pick->addItem(QIcon(dot), it->text() + "  (" + it->data(kCount).toString() + ")");
+    }
+    m_pick->setCurrentIndex(m_shelves->currentRow());
     m_quiet = false;
 }
 
@@ -493,6 +528,17 @@ bool GameCards::eventFilter(QObject *o, QEvent *e) {
     return QWidget::eventFilter(o, e);
 }
 
+// In a window under 900 pixels wide (a 640x480 screen's) the shelves give the cards and the chosen
+// game's panel their room: a drop-down over the cards instead of the list beside them
+void GameCards::resizeEvent(QResizeEvent *e) {
+    QWidget::resizeEvent(e);
+    const bool narrow = window()->width() < 900;
+    if (narrow == m_pick->isVisible()) return;
+    m_shelves->setVisible(!narrow);
+    m_head->setVisible(!narrow);
+    m_pick->setVisible(narrow);
+}
+
 GameHead::GameHead(QWidget *parent) : QWidget(parent) {
     auto *v = new QVBoxLayout(this);
     v->setContentsMargins(10, 10, 10, 2);
@@ -505,18 +551,32 @@ GameHead::GameHead(QWidget *parent) : QWidget(parent) {
     m_play->setCursor(Qt::PointingHandCursor);
     m_play->setToolTip("Play this game (Enter)");
     v->addWidget(m_play);
-    auto *row = new QHBoxLayout;
-    row->setSpacing(6);
+    m_buttons = new QGridLayout;
+    m_buttons->setSpacing(6);
     m_controls = new QPushButton(QIcon::fromTheme("input-gaming"), "Controls");
     m_unlocks = new QPushButton(QIcon::fromTheme("unlock", QIcon::fromTheme("object-unlocked")), "Unlocks…");
     m_mods = new QPushButton("Mods…");
-    for (QPushButton *b : {m_controls, m_unlocks, m_mods}) row->addWidget(b);
-    row->addStretch(1);
-    v->addLayout(row);
+    for (int k = 0; QPushButton *b : {m_controls, m_unlocks, m_mods}) m_buttons->addWidget(b, 0, k++);
+    m_buttons->setColumnStretch(3, 1);
+    v->addLayout(m_buttons);
     connect(m_play, &QPushButton::clicked, this, &GameHead::play);
     connect(m_controls, &QPushButton::clicked, this, &GameHead::controls);
     connect(m_unlocks, &QPushButton::clicked, this, &GameHead::unlocks);
     connect(m_mods, &QPushButton::clicked, this, &GameHead::mods);
+}
+
+// a panel too narrow for the three buttons in a row (a 640x480 screen's): Mods under the others
+void GameHead::resizeEvent(QResizeEvent *e) {
+    QWidget::resizeEvent(e);
+    int need = 2 * m_buttons->spacing();
+    for (QPushButton *b : {m_controls, m_unlocks, m_mods})
+        if (!b->isHidden()) need += b->sizeHint().width();
+    const auto m = layout()->contentsMargins();
+    const bool two = width() - m.left() - m.right() < need;
+    if (two == m_twoRows) return;
+    m_twoRows = two;
+    m_buttons->removeWidget(m_mods);
+    m_buttons->addWidget(m_mods, two ? 1 : 0, two ? 0 : 2);
 }
 
 void GameHead::set(const Head &h) {

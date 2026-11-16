@@ -40,6 +40,8 @@ public:
     void setEcho(bool on) { m_echo = on; }   // the log on stderr too (hiraku --add from a terminal)
 protected:
     void closeEvent(QCloseEvent *e) override;
+    void resizeEvent(QResizeEvent *e) override;   // a small window (640x480): the Details panel a share of it
+    bool m_narrow = false;
     void dragEnterEvent(QDragEnterEvent *e) override;
     void dropEvent(QDropEvent *e) override;
     bool eventFilter(QObject *o, QEvent *e) override;   // the keys typed in the window (secretKeys)

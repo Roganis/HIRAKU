@@ -10,3 +10,12 @@ race:libgallium
 # its connection and its message queue each have a lock, taken in either order by the one thread
 # that uses it here
 deadlock:libdbus
+
+# Qt's raster painter: a big antialiased fill (QPainter on a QImage or QPixmap: the launcher's
+# switches, tests/launcher/test_theme) is split over Qt's own pool of paint threads, whose
+# allocations ThreadSanitizer sees but not the locks Qt hands the work over and back with (each
+# side's last frame inside libQt6Core or libQt6Gui), and whose threads, idle, are joined only
+# after the test has ended
+race:libQt6Core
+race:libQt6Gui
+thread:libQt6Core

@@ -37,7 +37,8 @@ namespace hk::ea {
 //   0x948 the NET TAISEN credits played (the server's count), then NET TAISEN's fields (netvs,
 //   below; as pop'n 14's in other places). set's matching (how many players the match had) and
 //   room_num are the operator's statistics, not kept
-std::string Server::answer_g15(const Request &r) {
+std::string Server::answer_g15(const Game &, const Call &, const Request &r, const std::string &) {
+    if (r.module != "G15") return "";
     const std::string &f = r.method;
     const std::string open = "<G15 status=\"0\"";
     constexpr size_t RECORD = 0xb38, SONGS = 0x2fb;
@@ -329,8 +330,9 @@ std::string Server::answer_g15(const Request &r) {
 // settings and phase, netvs_phase, ir_phase, private_phase, normal_secret_phase, all_hiscore_phase;
 // playerdata.get (0x435680) needs f_compress, its record 0x6784 bytes (pop'n 15's 0xb38 when the
 // game asks for that one, to carry it over).
-std::string Server::answer_j39(const std::string &game, const Request &r) {
-    const std::string &m = r.module, &f = r.method;
+std::string Server::answer_j39(const Game &, const Call &call, const Request &r, const std::string &) {
+    const std::string game = call.model.substr(0, 3), &m = r.module, &f = r.method;
+    if (m != "game" && m != "playerdata" && m != "ranking") return "";
     const bool p16 = game == "H16", p17 = game == "I17", packed = p16 || p17;
     const size_t RECORD = p16 ? 0x6784 : p17 ? 0x74bc : 0x1700;
     constexpr size_t SCORES = 0x1ab7, SCORE_BITS = 17;

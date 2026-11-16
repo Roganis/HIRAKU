@@ -7,7 +7,8 @@
 // body is XML, RC4-encrypted with key = MD5(the 6 bytes of "X-Eamuse-Info: 1-xxxxxxxx-xxxx" + a shared
 // secret). A request is <call srcid=.. model=..><MODULE method=.. .../></call>; the answer
 // <response><MODULE status="0" ...>...</MODULE></response>. A call goes to its game's answers by its
-// model's first three letters (server.cpp's answer); the games' answers, a file a family:
+// model's first three letters, its row in the table of games (games.h), whose answers it is tried on
+// in order (server.cpp's answer); the games' answers, a file a family:
 //   server_popn.cpp    pop'n music 9 to 14 (Konami Python 1), and what the later games share with them
 //                      (services, cards and PINs, the shop); pop'n 9's own modules are server.cpp's
 //   server_pc.cpp      pop'n music 15 to 18 (PC games)
@@ -24,6 +25,7 @@
 #include <string>
 #include <vector>
 
+#include "eamuse/games.h"
 #include "eamuse/protocol.h"
 
 namespace hk::ea {
@@ -32,12 +34,6 @@ class Server {
 public:
     // dir: where the server keeps what it must remember (cards, player data), or "" for nothing
     explicit Server(std::string dir) : dir_(std::move(dir)) {}
-    // The System 573 GuitarFreaks (model xx39) and DrumMania (xx40), "D40:J:A:A"; J39 and M39 are pop'n
-    // music's (18, and the later PC games)
-    static bool gfdm573(const std::string &model) {
-        return model.size() >= 3 && (model.compare(1, 2, "39") == 0 || model.compare(1, 2, "40") == 0) &&
-               model.compare(0, 3, "J39") != 0 && model.compare(0, 3, "M39") != 0;
-    }
 
     // One HTTP request (head and body, as sent) to the whole HTTP response.
     std::string handle(const std::string &request);
@@ -83,13 +79,21 @@ public:
     };
 
 private:
+    friend const std::vector<Game> &games();   // (the table names the answers below)
     static bool parse(const std::string &xml, Call &c);
+    // A call's request to its answer: its game's answers (games.h) tried in order
     std::string answer(const Call &c, const Request &r, const std::string &host);
+
+    // The games' answers, each a link of a game's chain (games.h's Answer): "" leaves the request to
+    // the next.
     // The modules pop'n music 9 and the System 573 games answer alike (a card's number, KONAMI ID,
-    // posevent's sales): "" for any other
-    std::string answer_shared(const Request &r);
-    // The System 573 GuitarFreaks and DrumMania's own (server_gfdm.cpp), "" for the rest
-    std::string answer_gfdm(const Call &c, const Request &r, const std::string &host);
+    // posevent's sales)
+    std::string answer_shared(const Game &, const Call &, const Request &r, const std::string &);
+    // pop'n music 9's own modules (userdata, rank, eemall, services, ntp, package), which every game
+    // but the System 573 ones falls back to
+    std::string answer_popn9(const Game &, const Call &, const Request &r, const std::string &host);
+    // The System 573 GuitarFreaks and DrumMania's own (server_gfdm.cpp)
+    std::string answer_gfdm(const Game &, const Call &call, const Request &r, const std::string &host);
     // services.get's answer: each name with this server's URL
     static std::string services(const std::string &host, const std::vector<const char *> &names);
     std::string message() const;   // the owner's title-screen message (package "message"), or ""
@@ -106,28 +110,33 @@ private:
     std::string rank_table(const std::string &game);
     std::string rank_b(const std::string &game);
     void rank_shop(const std::string &game, const Request &r, const char *mask, const char *mask_hi);
-    // pop'n 10 on: their own calls and answers ("" leaves the call to pop'n 9's)
-    std::string answer_later(const std::string &game, const Request &r, const std::string &host);
-    // GuitarFreaks and DrumMania V (Konami Python 2: E02, F02, E03, F03), "" for the rest
-    std::string answer_gfdmv(const std::string &game, const Request &r);
+    // pop'n 10 on: their own calls and answers, and what the later games share with them
+    std::string answer_later(const Game &g, const Call &call, const Request &r, const std::string &host);
+    // GuitarFreaks and DrumMania V (Konami Python 2: E02, F02, E03, F03)
+    std::string answer_gfdmv(const Game &, const Call &, const Request &r, const std::string &);
     std::string answer_game(const std::string &game, const Request &r);
     std::string answer_playerdata(const std::string &game, const Request &r);
     // pop'n 15 (G15, a PC game: runtime/pc/): <G15 method="type_method" ...>
-    std::string answer_g15(const Request &r);
-    // pop'n 16, 17 and 18 (H16, I17, J39, PC games: runtime/pc/): modules game and playerdata, binary XML
-    std::string answer_j39(const std::string &game, const Request &r);
-    // the 64-bit PC pop'n (M39: runtime/pc64/): its module "player"
-    std::string answer_hc(const Request &r);
-    std::string answer_p24(const Request &r);   // the last 32-bit PC pop'n: info24, player24 (server_p24.cpp)
-    std::string answer_lobby24(const Request &r);   // and its NET TAISEN lobby
+    std::string answer_g15(const Game &, const Call &, const Request &r, const std::string &);
+    // pop'n 16, 17 and 18 (H16, I17, J39, PC games: runtime/pc/): modules game, playerdata and
+    // ranking, binary XML
+    std::string answer_j39(const Game &, const Call &call, const Request &r, const std::string &);
+    // the 64-bit PC pop'n (M39: runtime/pc64/): its modules "player" and "info"
+    std::string answer_hc(const Game &, const Call &, const Request &r, const std::string &);
+    // the last 32-bit PC pop'n (also M39): info24, player24, lobby24 (server_p24.cpp)
+    std::string answer_p24(const Game &, const Call &, const Request &r, const std::string &);
+    std::string answer_lobby24(const Request &r);   // its NET TAISEN lobby
     // beatmania IIDX 9th style (C02: runtime/pc/): its module "C02" (music, weekly, ranking, grade)
-    std::string answer_c02(const Request &r);
-    // beatmania IIDX RED, HAPPY SKY and DistorteD (E11, ECO, FDD): their module named after the model
-    // (pc, music, ranking, weekly, grade, shop), 9th style's way with the player's record added
-    std::string answer_iidx_red(const std::string &game, const Request &r);
-    // ... and DistorteD (FDD): the same calls as modules of their own with attributes (pc, music,
-    // ranking, shop, grade), the player found by the card's refid (cardmng)
-    std::string answer_iidx_fdd(const std::string &game, const Request &r);
+    std::string answer_c02(const Game &, const Call &, const Request &r, const std::string &);
+    // beatmania IIDX 10th style, RED, HAPPY SKY and DistorteD (D01, E11, ECO, FDD): their module named
+    // after the model (pc, music, ranking, weekly, grade, shop), 9th style's way with the player's
+    // record added
+    std::string answer_iidx_red(const Game &, const Call &call, const Request &r, const std::string &);
+    // ... and DistorteD (FDD) and GOLD on: the same calls as modules of their own with attributes (pc,
+    // music, ranking, shop, grade), the player found by the card's refid (cardmng)
+    std::string answer_iidx_fdd(const Game &, const Call &call, const Request &r, const std::string &);
+    // beatmania IIDX 9th style to DistorteD's player: the card's record as the game wrote it, a file a game
+    std::string answer_iidx_userdata(const Game &, const Call &call, const Request &r, const std::string &);
     // One card for all (docs/EAMUSE3.md): every chart's best clear mark over all the pop'n games
     // a card has played, by song (pop'n 12's word low byte: two bits a chart), and a game's own
     // player data with them put in

@@ -138,7 +138,8 @@ std::string items(const Record &p, bool every_song) {
 
 }  // namespace
 
-std::string Server::answer_hc(const Request &r) {
+std::string Server::answer_hc(const Game &, const Call &, const Request &r, const std::string &) {
+    if (r.module != "player" && r.module != "info") return "";
     const std::string &f = r.method;
     if (r.module == "info") return f == "common" ? "<info status=\"0\">" + common(read_file("phases-phc")) + "</info>" : "<info status=\"0\"/>";
     std::string ref = child(r.inner, "ref_id");

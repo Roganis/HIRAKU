@@ -117,10 +117,6 @@ void Server::rc4(const std::vector<uint8_t> &k, std::string &d) { ea::rc4(k, d);
 std::string Server::clear(const std::string &m) { return ea::clear(m); }
 bool Server::parse(const std::string &x, Call &c) { return ea::parse(x, c); }
 
-// The PC pop'n games, libavs-win32's e-AMUSEMENT (runtime/pc/): pop'n 15, 16, 17, 18
-bool pc_popn(const std::string &game) { return game == "G15" || game == "H16" || game == "I17" || game == "J39"; }
-// The PC beatmania IIDX games on libavs's e-AMUSE3 (runtime/pc/, PLAN.md section 36): GOLD, DJ TROOPERS, EMPRESS
-bool pc_iidx(const std::string &game) { return game == "GLD" || game == "HDD" || game == "I00"; }
 std::string Server::read_file(const std::string &name) const {
     if (dir_.empty() || !ea::safe_file(name)) return "";
     std::ifstream f(dir_ + "/" + name, std::ios::binary);
@@ -179,52 +175,18 @@ void Server::keep_aside(const std::string &name, const std::string &had) const {
 }
 
 std::string Server::answer(const Call &c, const Request &r, const std::string &host) {
-    const std::string &m = r.module, &f = r.method;
     src_ = c.srcid;
-    // The System 573 GuitarFreaks and DrumMania (server_gfdm.cpp): their own modules, then the ones
-    // they share with pop'n 9; nothing kept for the rest
-    if (gfdm573(c.model)) {
-        if (std::string a = answer_gfdm(c, r, host); !a.empty()) return a;
-        if (std::string a = answer_shared(r); !a.empty()) return a;
-        return "<" + m + " status=\"0\"/>";
-    }
-    // pop'n 10 on (model C20, D11, E12, ...): their own calls and answer formats; pop'n 9 (C00)
-    // and anything not handled there go on below
-    const std::string game = c.model.substr(0, 3);
-    // beatmania IIDX 9th style (model C02, the PC's e-AMUSE3, PLAN.md section 33): pop'n 9's calls
-    // (numbering, userid, ntp, posevent, package: below) and two of its own
-    // 10th style, RED, HAPPY SKY and DistorteD (D01, E11, ECO, FDD) the same way, their module named
-    // after the model
-    const bool iidx_red = game == "D01" || game == "E11" || game == "ECO" || game == "FDD";
-    // GOLD on: DistorteD's modules and cards over libavs (pop'n 15's transport)
-    if (pc_iidx(game) && (m == "pc" || m == "music" || m == "ranking" || m == "shop" || m == "grade"))
-        return answer_iidx_fdd(game, r);
-    if (game == "C02" || iidx_red) {
-        // its module: method music / weekly / ranking / grade with a command line (server_iidx.cpp)
-        if (m == "C02") return answer_c02(r);
-        if (iidx_red && m == game) return answer_iidx_red(game, r);
-        // DistorteD: its own modules, and its IC cards through the later games' services, cardmng and
-        // facility (as pop'n 13's)
-        if (game == "FDD" && (m == "pc" || m == "music" || m == "ranking" || m == "shop" || m == "grade"))
-            return answer_iidx_fdd(game, r);
-        if (game == "FDD")
-            if (std::string a = answer_later(game, r, host); !a.empty()) return a;
-        // the player: the card's record as the game wrote it (its DJ name, PIN, ...), its own file
-        const std::string card = attr(r.attrs, "card");
-        if (m == "userdata" && f == "read") {
-            const std::string data = safe_name(card) ? read_file("userdata-" + game + "-" + card) : "";
-            return data.empty() ? "<userdata status=\"109\"/>" : data;   // 109: none
-        }
-        if (m == "userdata" && f == "write") {
-            if (!safe_name(card) || r.inner.size() > USERDATA_MAX) return "<userdata status=\"1\"/>";
-            write_file("userdata-" + game + "-" + card, "<userdata status=\"0\" time=\"" + esc(attr(r.attrs, "time")) + "\">" + r.inner + "</userdata>");
-            return "<userdata status=\"0\"/>";
-        }
-    } else if (!game.empty() && game != "C00") {
-        if (std::string a = answer_later(game, r, host); !a.empty()) return a;
-    }
-    // (a card's number, KONAMI ID, posevent's sales: the modules the System 573 games answer alike)
-    if (std::string a = answer_shared(r); !a.empty()) return a;
+    const Game &g = game_of(c.model);
+    for (const Answer a : g.chain)
+        if (std::string out = (this->*a)(g, c, r, host); !out.empty()) return out;
+    // services this server keeps nothing for: pcbtracker alive, posevent income, package intend,
+    // p_friend get/state/ask
+    return "<" + r.module + " status=\"0\"/>";
+}
+
+// pop'n music 9's own modules (C00), which the other games fall back to
+std::string Server::answer_popn9(const Game &, const Call &, const Request &r, const std::string &host) {
+    const std::string &m = r.module, &f = r.method;
     if (m == "userdata" && f == "read") {   // 109: not registered (0x184ca0)
         const std::string card = attr(r.attrs, "card");
         const std::string data = safe_name(card) ? read_file("userdata-" + card) : "";
@@ -282,12 +244,10 @@ std::string Server::answer(const Call &c, const Request &r, const std::string &h
         return "<package status=\"0\"><item url=\"http://" + esc(host) + "/message\" name=\"message\" desc=\"\" size=\"" +
                std::to_string(text.size() + 1) + "\" pkgtype=\"all\" sumtype=\"\" sum=\"\" from=\"\" till=\"\"/></package>";
     }
-    // services this server keeps nothing for: pcbtracker alive, posevent income, package intend,
-    // p_friend get/state/ask
-    return "<" + m + " status=\"0\"/>";
+    return "";
 }
 
-std::string Server::answer_shared(const Request &r) {
+std::string Server::answer_shared(const Game &, const Call &, const Request &r, const std::string &) {
     const std::string &m = r.module, &f = r.method;
     if (m == "numbering" && f == "assign")   // a new card's number (0x197530): 16 digits
         return "<numbering status=\"0\" number=\"" + next_number() + "\"/>";

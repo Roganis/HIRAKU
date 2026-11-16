@@ -66,7 +66,8 @@ std::string a(const char *name, const std::string &v) { return std::string(" ") 
 
 }  // namespace
 
-std::string Server::answer_c02(const Request &r) {
+std::string Server::answer_c02(const Game &, const Call &, const Request &r, const std::string &) {
+    if (r.module != "C02") return "";
     const std::string method = r.method;
     const std::vector<std::string> w = words(attr(r.attrs, "command"));
     const std::string cmd = w.empty() ? "" : w[0];
@@ -293,7 +294,9 @@ std::string Server::answer_c02(const Request &r) {
 // 0x4ea288 shop, 0x4ea318 grade, 0x4ea368 weekly, 0x4ea3b8 ranking, 0x4ea528 music, 0x4ea698 pc:
 // per command its handlers by element depth, its name and its field count). An answer is matched
 // to its command by method, the method and the command's first word run together (musicgetrank).
-std::string Server::answer_iidx_red(const std::string &game, const Request &r) {
+std::string Server::answer_iidx_red(const Game &, const Call &call, const Request &r, const std::string &) {
+    const std::string game = call.model.substr(0, 3);
+    if (r.module != game) return "";
     const std::string method = r.method;
     const std::vector<std::string> w = words(attr(r.attrs, "command"));
     const std::string cmd = w.empty() ? "" : w[0];
@@ -436,7 +439,9 @@ std::string Server::answer_iidx_red(const std::string &game, const Request &r) {
 //     sp_opt dp_opt dp_opt2 mcomb ncomb mode/>, then grade, ex, skin, rlist, ocrs, weekly: not kept yet)
 //   pc save iidxid cltype ... after the credit: its fields kept and given back by pc get
 //   music reg, getrank: GOLD's (below); music breg (BEGINNER's stages, no chart): not kept
-std::string Server::answer_iidx_fdd(const std::string &game, const Request &r) {
+std::string Server::answer_iidx_fdd(const Game &, const Call &call, const Request &r, const std::string &) {
+    const std::string game = call.model.substr(0, 3);
+    if (r.module != "pc" && r.module != "music" && r.module != "ranking" && r.module != "shop" && r.module != "grade") return "";
     // DistorteD's calls (FDD) and GOLD's (GLD, over libavs): each answer's fields as the game's reply
     // parsers read them (GOLD 0x495e70 pc.get, 0x497b80 pc.reg, ...: docs/EAMUSE3.md); a field or
     // element they read and don't find fails the call (the network library's status -10), and the
@@ -682,6 +687,23 @@ std::string Server::answer_iidx_fdd(const std::string &game, const Request &r) {
     if (mod == "shop" && method == "getname")   // the shop's name (the location's), its prefecture, its closing time
         return ok(a("opname", "HIRAKU") + a("pid", "13") + a("cls_opt", "0") + a("hr", "0") + a("mi", "0"));
     return ok();
+}
+
+// beatmania IIDX 9th style to DistorteD's player: the card's record as the game wrote it (its DJ name,
+// PIN, ...), its own file
+std::string Server::answer_iidx_userdata(const Game &, const Call &call, const Request &r, const std::string &) {
+    const std::string game = call.model.substr(0, 3), &m = r.module, &f = r.method;
+    const std::string card = attr(r.attrs, "card");
+    if (m == "userdata" && f == "read") {
+        const std::string data = safe_name(card) ? read_file("userdata-" + game + "-" + card) : "";
+        return data.empty() ? "<userdata status=\"109\"/>" : data;   // 109: none
+    }
+    if (m == "userdata" && f == "write") {
+        if (!safe_name(card) || r.inner.size() > USERDATA_MAX) return "<userdata status=\"1\"/>";
+        write_file("userdata-" + game + "-" + card, "<userdata status=\"0\" time=\"" + esc(attr(r.attrs, "time")) + "\">" + r.inner + "</userdata>");
+        return "<userdata status=\"0\"/>";
+    }
+    return "";
 }
 
 }  // namespace hk::ea

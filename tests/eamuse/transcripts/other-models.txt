@@ -1,0 +1,26 @@
+# Models no game row names (runtime/eamuse/games.h): a model the server doesn't know is answered
+# as a later pop'n (pop'n 10 on's answers, then pop'n 9's); K39 as a System 573 GuitarFreaks (the
+# ?39 pattern); a call with no model as pop'n 9. Made-up cards and data.
+model Z99:J:A:A
+>e <services method="get"/>
+< 200 info=1-484b0001-0001 <response><services expire="600" status="0"><item name="posevent" url="http://cabinet.test:8080/"/><item name="pcbtracker" url="http://cabinet.test:8080/"/><item name="numbering" url="http://cabinet.test:8080/"/><item name="package" url="http://cabinet.test:8080/"/><item name="userdata" url="http://cabinet.test:8080/"/><item name="userid" url="http://cabinet.test:8080/"/><item name="local" url="http://cabinet.test:8080/"/><item name="eemall" url="http://cabinet.test:8080/"/><item name="shopinf" url="http://cabinet.test:8080/"/><item name="message" url="http://cabinet.test:8080/"/><item name="cardmng" url="http://cabinet.test:8080/"/><item name="cardreis" url="http://cabinet.test:8080/"/><item name="facility" url="http://cabinet.test:8080/"/></services></response>
+> <ntp method="get"/>
+< 200 <response><ntp status="0" time="2003-06-01 12:00:*+9"></ntp></response>
+> <cardmng method="inquire" cardtype="1" cardid="E004010000000Z01" update="0"/>
+< 200 <response><cardmng status="0" refid="48524B0000000001" binded="0" expired="0" newflag="1"></cardmng></response>
+> <userdata method="read" card="2003010000000099" label=""/>
+< 200 <response><userdata status="109"></userdata></response>
+>e <Z99 method="get" type="common"/>
+< 200 info=1-484b0002-0002 <response><Z99 status="0"></Z99></response>
+model K39:J:A:A
+>e <services method="get"/>
+< 200 info=1-484b0003-0003 <response><services expire="600" status="0"><item name="posevent" url="http://cabinet.test:8080/"/><item name="pcbtracker" url="http://cabinet.test:8080/"/><item name="numbering" url="http://cabinet.test:8080/"/><item name="userid" url="http://cabinet.test:8080/"/><item name="local" url="http://cabinet.test:8080/"/><item name="keepalive" url="ping://192.168.50.1/?pa=192.168.50.1&amp;ga=192.168.50.1"/><item name="ntp" url="ntp://192.168.50.1/"/></services></response>
+> <gamedata method="dataget" sid="020304050607"><favorite nr="10"/></gamedata>
+< 200 <response><gamedata status="0"><system status="0"/></gamedata></response>
+model
+>e <services method="get"/>
+< 200 info=1-484b0004-0004 <response><services expire="600" status="0"><item name="posevent" url="http://cabinet.test:8080/"/><item name="pcbtracker" url="http://cabinet.test:8080/"/><item name="numbering" url="http://cabinet.test:8080/"/><item name="package" url="http://cabinet.test:8080/"/><item name="userdata" url="http://cabinet.test:8080/"/><item name="userid" url="http://cabinet.test:8080/"/><item name="local" url="http://cabinet.test:8080/"/></services></response>
+> <ntp method="get"/>
+< 200 <response><ntp status="0"><time year="2003" month="6" day="1" hour="12" min="0" sec="*"></time></ntp></response>
+= 4eb9ca313263d12e9af16f4cbdef76cc0cd2fd109a3517d0653a43d462bb9eb2 58 cards
+= 53c234e5e8472b6ac51c1ae1cab3fe06fad053beb8ebfd8977b010655bfdd3c3 2 refid

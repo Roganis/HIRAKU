@@ -515,7 +515,9 @@ The card holds no player data, only an identity.
 
 Each later pop'n speaks the same transport, cipher and envelope, with its own `model` (`C20:J:A:A`
 pop'n 10, `D11:J:A:A` 11, `E12:J:A:B` 12, `E13:J:A:E` 13, `F14:J:A:B` 14). HIRAKU's server picks
-the game by the model's first three characters; pop'n 9's answers are unchanged. Player data is
+the game by the model's first three characters, its row in the server's table of games
+(`runtime/eamuse/games.cpp`: each game's answers in the order they are tried; how to add a game is
+said there); pop'n 9's answers are unchanged. Player data is
 kept per game (`userdata-C20-CARD`, ...). Turning e-AMUSEMENT on: test mode > NETWORK OPTIONS >
 e-AMUSEMENT OPTIONS, as in pop'n 9 (pop'n 13 and 14 start their menus' cursors on EXIT).
 

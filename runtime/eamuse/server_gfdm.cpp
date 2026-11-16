@@ -72,7 +72,7 @@ std::vector<long> all_skills(const Server::Files &st, const std::string &game, c
 }  // namespace
 
 // What GuitarFreaks and DrumMania ask beyond the common modules
-std::string Server::answer_gfdm(const Call &call, const Request &r, const std::string &host) {
+std::string Server::answer_gfdm(const Game &, const Call &call, const Request &r, const std::string &host) {
     const Files files{*this};
     const std::string &m = r.module, &f = r.method;
     if (m == "services" && f == "get") {

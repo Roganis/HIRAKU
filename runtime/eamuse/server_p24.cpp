@@ -181,8 +181,9 @@ std::string common_info(long netvs) {
 
 }  // namespace
 
-std::string Server::answer_p24(const Request &r) {
+std::string Server::answer_p24(const Game &, const Call &, const Request &r, const std::string &) {
     const std::string &m = r.module, &f = r.method;
+    if (m != "player24" && m != "info24" && m != "lobby24") return "";
     std::string setting = read_file("netvs-M39");
     const long netvs = setting.empty() ? 1 : std::strtol(setting.c_str(), nullptr, 10);
     if (m == "info24") return f == "common" ? "<info24 status=\"0\">" + common_info(netvs) + "</info24>" : "<info24 status=\"0\"/>";

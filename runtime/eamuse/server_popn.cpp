@@ -16,12 +16,12 @@
 
 namespace hk::ea {
 
-// pop'n music 10 on (docs/EAMUSE3.md, "Later games"): game is the model's first three
-// characters. "" leaves the call to pop'n 9's answers (services, numbering, userid, posevent, ...).
-std::string Server::answer_later(const std::string &game, const Request &r, const std::string &host) {
-    const std::string &m = r.module, &f = r.method;
-    if (game == "E02" || game == "F02" || game == "E03" || game == "F03")
-        if (std::string a = answer_gfdmv(game, r); !a.empty()) return a;
+// pop'n music 10 on (docs/EAMUSE3.md, "Later games"), and what the later games share with them: game
+// is the model's first three characters, g its row (games.h). "" leaves the call to pop'n 9's
+// answers (services, numbering, userid, posevent, ...).
+std::string Server::answer_later(const Game &g, const Call &call, const Request &r, const std::string &host) {
+    const std::string game = call.model.substr(0, 3), &m = r.module, &f = r.method;
+    const bool popn15_18 = g.family == Family::popn_pc, iidx_gold_on = g.family == Family::iidx14_16;
     if (m == "services" && f == "get") {   // as pop'n 9, and eemall/shopinf look up their own names
         // message: pop'n 13 fails its start-up without it (the library looks a call's URL up by its
         // module, 0x17d94c0: -10 when missing); cardmng, cardreis: pop'n 13's cards; facility:
@@ -40,7 +40,7 @@ std::string Server::answer_later(const std::string &game, const Request &r, cons
         // library's keepalive (ea3-keepalive.c) pings the router, center and server whose addresses
         // this item gives (ga/ma, pa/ia, the host), and ntp sets its clock; HIRAKU's network for
         // Python 2 (ethnet.h) answers both at 10.50.0.1
-        if (game == "E02" || game == "F02" || game == "E03" || game == "F03")
+        if (g.family == Family::gfdm_v)
             items += "<item name=\"ntp\" url=\"ntp://10.50.0.1/\"/><item name=\"keepalive\" url=\"http://10.50.0.1/keepalive?pa=10.50.0.1&amp;ia=10.50.0.1&amp;"
                      "ga=10.50.0.1&amp;ma=10.50.0.1&amp;t1=2&amp;t2=10\"/>";
         // The PC pop'n games (G15: pop'n 15, runtime/pc/): the same keepalive, its router where the
@@ -48,12 +48,12 @@ std::string Server::answer_later(const std::string &game, const Request &r, cons
         // HIRAKU's DLL answers their pings
         // and NET TAISEN's lobby (the PC games' own: Lobby::PC_PORT, at the relay, which the DLL
         // reaches whatever the address: runtime/pc/vsock.c)
-        if (pc_popn(game))   // each its own (pop'n 16-18: the same lobby and libraries, built into the program)
+        if (popn15_18)   // each its own (pop'n 16-18: the same lobby and libraries, built into the program)
             items += "<item name=\"globby\" url=\"globby://" + esc(host.substr(0, host.find(':'))) + ":" + std::to_string(Lobby::pc_port(game)) + "/\"/>";
-        if (pc_iidx(game))   // the PC IIDX games' own modules (GOLD's table at 0x548c64)
+        if (iidx_gold_on)   // the PC IIDX games' own modules (GOLD's table at 0x548c64)
             for (const char *mod : {"pc", "music", "grade", "ranking", "shop"})
                 items += std::string("<item name=\"") + mod + "\" url=\"http://" + esc(host) + "/\"/>";
-        if (pc_popn(game) || pc_iidx(game))
+        if (popn15_18 || iidx_gold_on)
             items += "<item name=\"pcbevent\" url=\"http://" + esc(host) + "/\"/>"
                      "<item name=\"keepalive\" url=\"http://127.0.0.1/keepalive?pa=127.0.0.1&amp;ia=127.0.0.1&amp;"
                      "ga=192.168.0.1&amp;ma=127.0.0.1&amp;t1=2&amp;t2=10\"/>";
@@ -63,16 +63,16 @@ std::string Server::answer_later(const std::string &game, const Request &r, cons
         // their calls before sending (the boot check's NETWORK ERROR)
         // (the last 32-bit PC pop'n, also M39, PLAN.md §35: info24 and player24 of its own, and
         // lobby24 found under the name lobby2)
-        if (game == "M39")
+        if (g.family == Family::popn_pc_later)
             for (const char *mod : {"pcbevent", "pcb", "info", "player", "info24", "player24", "lobby24", "loctest24", "sidmgr",
                                     "sppass", "eacoin", "dlstatus", "ins", "apsmanager", "local2", "local3", "lobby2"})
                 items += std::string("<item name=\"") + mod + "\" url=\"http://" + esc(host) + "/\"/>";
-        if (game == "M39")   // the keepalive as pop'n 15-18's (its pings answered by HIRAKU's loader)
+        if (g.family == Family::popn_pc_later)   // the keepalive as pop'n 15-18's (its pings answered by HIRAKU's loader)
             items += "<item name=\"keepalive\" url=\"http://127.0.0.1/keepalive?pa=127.0.0.1&amp;ia=127.0.0.1&amp;"
                      "ga=192.168.0.1&amp;ma=127.0.0.1&amp;t1=2&amp;t2=10\"/>";
         return "<services expire=\"600\" status=\"0\">" + items + "</services>";
     }
-    if (m == "facility" && f == "get" && game == "M39") {   // the 64-bit PC pop'n: pcb.boot reads the location
+    if (m == "facility" && f == "get" && g.family == Family::popn_pc_later) {   // the 64-bit PC pop'n: pcb.boot reads the location
         // as text (avs2-ea3's facility query 4: id, type, name, country, region, customercode,
         // companycode; a missing or other-typed one fails its start-up), then portfw's address and port;
         // in Japan the region as ISO 3166-2 (0x18008a500 takes the number after "JP-", or throws)
@@ -87,9 +87,7 @@ std::string Server::answer_later(const std::string &game, const Request &r, cons
                "<arcadefan>www.konami.jp/am</arcadefan><konaminetdx>http://am.573.jp</konaminetdx>"
                "<konamiid>http://id.konami.jp</konamiid><eagate>http://eagate.573.jp</eagate></url></share></facility>";
     }
-    if ((m == "player" || m == "info") && game == "M39") return answer_hc(r);   // the 64-bit PC pop'n's (server_hc.cpp)
-    if ((m == "player24" || m == "info24" || m == "lobby24") && game == "M39") return answer_p24(r);   // the last 32-bit PC pop'n's (server_p24.cpp)
-    if (m == "facility" && f == "get" && (pc_popn(game) || pc_iidx(game))) {   // pop'n 15's library (libavs ea3_facility): every
+    if (m == "facility" && f == "get" && (popn15_18 || iidx_gold_on)) {   // pop'n 15's library (libavs ea3_facility): every
         // field it imports (location, line, portfw, public, share), or it fails the start-up (5-2009);
         // pop'n 18's (J39) also the location's name and type, the line's class and share/eacoin
         // (its map in libavs-win32-ea3.dll, from 0x35fe0)
@@ -150,7 +148,8 @@ std::string Server::answer_later(const std::string &game, const Request &r, cons
             // beatmania IIDX 13: a pass the server doesn't know is 112 (not registered): the game asks the
             // new PIN twice and registers it (getrefid), then its DJ name (pc reg); binded, a DistorteD
             // player for the pass (server_iidx.cpp)
-            if (game == "FDD" || pc_iidx(game)) {
+            // (of the IIDX games with their module named after the model, only DistorteD's calls come here)
+            if (g.family == Family::iidx10_13 || iidx_gold_on) {
                 if (fresh) return "<cardmng status=\"112\"/>";
                 bool binded = false;
                 for (const Record &pl : from_lines(read_file("iidx-" + game + "-players"))) binded = binded || attr(pl, "rid") == ref;
@@ -161,8 +160,7 @@ std::string Server::answer_later(const std::string &game, const Request &r, cons
             // Only at the card's first reading: not when the game asks for an older game's player of the
             // card (model="I17"), nor at the credit's end (pop'n 15-18's update="1"; pop'n 14 reads a
             // card with update="1" from the start): no PIN asked then
-            const bool pc_popn = game == "G15" || game == "H16" || game == "I17" || game == "J39";
-            if (!fresh && on_card_pin && attr(r.attrs, "model").empty() && !(pc_popn && attr(r.attrs, "update") == "1"))
+            if (!fresh && on_card_pin && attr(r.attrs, "model").empty() && !(popn15_18 && attr(r.attrs, "update") == "1"))
                 for (const Record &c : cards)
                     if (attr(c, "cardid") == id && !attr(c, "pass").empty()) on_card_pin(attr(c, "pass"));
             // pop'n 15 asks for its own player (binded 0: the card has none yet, the game makes one
@@ -308,8 +306,6 @@ std::string Server::answer_later(const std::string &game, const Request &r, cons
         }
         return "<portfw status=\"0\"/>";
     }
-    if (m == game && game == "G15") return answer_g15(r);
-    if ((game == "J39" || game == "I17" || game == "H16") && (m == "game" || m == "playerdata" || m == "ranking")) return answer_j39(game, r);
     if (m == game) return answer_game(game, r);   // pop'n 11 on: <D11 type=.. method=..>
     return "";
 }

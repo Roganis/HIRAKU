@@ -30,7 +30,7 @@ namespace hk::ea {
 //     0x94c890), towerdata, kingdata. Answered without them so far.
 // The players: the data folder's gfdmv-cards (cardid, gdid, then pass and name once registered);
 // gdids are 10 digits from gfdmv-gdid.
-std::string Server::answer_gfdmv(const std::string &game, const Request &r) {
+std::string Server::answer_gfdmv(const Game &, const Call &, const Request &r, const std::string &) {
     const std::string &m = r.module, &f = r.method;
     std::vector<Record> cards = from_lines(read_file("gfdmv-cards"));
     auto find = [&](const std::string &id) -> Record * {
@@ -142,7 +142,6 @@ std::string Server::answer_gfdmv(const std::string &game, const Request &r) {
         }
         return out + "</gametop>";
     }
-    (void)game;
     return "";
 }
 

@@ -23,6 +23,12 @@ struct ApiOptions {
     bool insecure_cookies = false;       // --api-insecure-cookies: the session cookie without Secure (tests on plain HTTP)
     bool trust_proxy = false;            // --api-trust-proxy: the caller is X-Forwarded-For's last hop
     bool quiet = false;
+    // The web pages (web/, docs/SERVER.md) served at / on the API's listener: --web DIR, else the
+    // first folder with an index.html of: "web" beside the program, ../share/hiraku-server/web
+    // beside it, the checkout's web/ when the program is in a build tree (its CMakeCache.txt says
+    // where); --no-web: none
+    bool web_enabled = true;
+    std::string web;
 
     // argv[i] taken if it is one of the API's options, i moved past its value: 1 taken, 0 not one of
     // them, 2 wrong (said)

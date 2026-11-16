@@ -291,6 +291,10 @@ try:
     check(api('POST', f'/cards/{CARD_C}/unlock', who=admin)[0] == 200, '... the admin unlocks it')
     check(api('POST', '/me/cards', {'card': CARD_C, 'pin': PIN_C}, who=dave)[0] == 201, '... then it links')
     check(api('DELETE', f'/me/cards/{CARD_B}', who=bob)[0] == 404, "unlinking another's card: 404")
+    st, j, _ = api('GET', '/users/bob/cards', who=admin)
+    check(st == 200 and [c['card'] for c in j['cards']] == [CARD_A], "GET /users/NAME/cards: an admin lists a user's cards")
+    check(api('GET', '/users/bob/cards', who=carol)[0] == 403 and api('GET', '/users/nobody/cards', who=admin)[0] == 404,
+          '... a player is refused (403); no such user: 404')
     codes = [api('POST', '/me/cards', {'card': '2010010000000F99', 'pin': '1111'}, who=erin) for _ in range(21)]
     check(all(c[0] == 404 for c in codes[:20]) and codes[20][0] == 429 and codes[20][2].get('retry-after'),
           'card links: 20 an hour an account, then 429 with Retry-After')

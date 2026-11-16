@@ -11,6 +11,8 @@
 #include <cstring>
 #include <ctime>
 #include <exception>
+#include <filesystem>
+#include <fstream>
 #include <functional>
 #include <map>
 #include <mutex>
@@ -24,6 +26,7 @@
 
 #include "accounts.h"
 #include "eamuse/games.h"
+#include "shell/sys.h"
 
 #if !defined(_WIN32) && __has_include(<iconv.h>)
 #include <iconv.h>
@@ -346,6 +349,85 @@ json games_settings_json(const Accounts &acc, const std::vector<SettingLine> &li
     return games;
 }
 
+// --- the web pages (web/): the files of one folder, by a plain relative path, never anything else
+
+// on every page's answer: nothing but the server's own (no inline script or style), no framing
+void page_headers(Response &res) {
+    res.set_header("Content-Security-Policy", "default-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'");
+    res.set_header("X-Content-Type-Options", "nosniff");
+    res.set_header("Referrer-Policy", "same-origin");
+    res.set_header("Cache-Control", "no-cache");
+}
+
+void page_missing(Response &res) {
+    page_headers(res);
+    res.status = 404;
+    res.set_content("not found\n", "text/plain; charset=utf-8");
+}
+
+// a file's type by its ending; null: not one served
+const char *web_type(const std::string &name) {
+    static const char *const TYPES[][2] = {
+        {".html", "text/html; charset=utf-8"}, {".js", "text/javascript; charset=utf-8"}, {".css", "text/css; charset=utf-8"},
+        {".svg", "image/svg+xml"},             {".png", "image/png"},                      {".ico", "image/x-icon"},
+        {".json", "application/json; charset=utf-8"}, {".txt", "text/plain; charset=utf-8"}};
+    const size_t dot = name.rfind('.');
+    if (dot == std::string::npos) return nullptr;
+    const std::string end = lower(name.substr(dot));
+    for (const auto &t : TYPES)
+        if (end == t[0]) return t[1];
+    return nullptr;
+}
+
+// A request's path (decoded) as a file of the folder: "" when it isn't one that may be (a part
+// empty, "." or ".." or a dot-file, a character other than a letter, digit, '.', '_' or '-')
+std::string web_relative(const std::string &path) {
+    if (path.empty() || path[0] != '/' || path.size() > 256) return "";
+    const std::string rel = path.substr(1);
+    if (rel.empty()) return "index.html";
+    for (size_t at = 0;;) {
+        size_t e = rel.find('/', at);
+        if (e == std::string::npos) e = rel.size();
+        if (e == at || rel[at] == '.') return "";
+        for (size_t k = at; k < e; k++)
+            if (!std::isalnum((unsigned char)rel[k]) && rel[k] != '.' && rel[k] != '_' && rel[k] != '-') return "";
+        if (e == rel.size()) return rel;
+        at = e + 1;
+    }
+}
+
+// The file's bytes, when it is a plain file inside the folder (a link out of it isn't)
+bool web_file(const std::string &root, const std::string &rel, std::string &body) {
+    namespace fs = std::filesystem;
+    std::error_code ec;
+    const fs::path file = fs::path(root) / rel;
+    if (!fs::is_regular_file(file, ec) || fs::file_size(file, ec) > 8u << 20 || ec) return false;
+    const fs::path real = fs::canonical(file, ec), base = fs::canonical(root, ec);
+    if (ec) return false;
+    const fs::path inside = real.lexically_relative(base);
+    if (inside.empty() || *inside.begin() == "..") return false;
+    std::ifstream in(real, std::ios::binary);
+    body.assign(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
+    return !in.bad();
+}
+
+// The pages' folder when --web named none: the first with an index.html (api.h says which)
+std::string find_web() {
+    namespace fs = std::filesystem;
+    std::error_code ec;
+    const std::string exe = hk::sys::exe_path();
+    if (exe.empty()) return "";
+    const fs::path dir = fs::path(exe).parent_path();
+    std::vector<fs::path> tries{dir / "web", dir / ".." / "share" / "hiraku-server" / "web"};
+    std::ifstream cache(dir / "CMakeCache.txt");   // (a build tree's: the checkout it is built from)
+    const std::string home = "CMAKE_HOME_DIRECTORY:INTERNAL=";
+    for (std::string line; std::getline(cache, line);)
+        if (line.rfind(home, 0) == 0) tries.push_back(fs::path(line.substr(home.size())) / "web");
+    for (const fs::path &t : tries)
+        if (fs::is_regular_file(t / "index.html", ec)) return fs::weakly_canonical(t, ec).string();
+    return "";
+}
+
 }  // namespace
 
 int ApiOptions::option(int argc, char **argv, int &i) {
@@ -353,7 +435,11 @@ int ApiOptions::option(int argc, char **argv, int &i) {
     if (a == "--no-api") enabled = false;
     else if (a == "--api-insecure-cookies") insecure_cookies = true;
     else if (a == "--api-trust-proxy") trust_proxy = true;
-    else if (a == "--api") {
+    else if (a == "--no-web") web_enabled = false;
+    else if (a == "--web") {
+        if (i + 1 >= argc) { fprintf(stderr, "--web needs a folder\n"); return 2; }
+        web = argv[++i];
+    } else if (a == "--api") {
         if (i + 1 >= argc) { fprintf(stderr, "--api needs ADDRESS:PORT\n"); return 2; }
         const std::string v = argv[++i];
         const size_t colon = v.rfind(':');
@@ -832,6 +918,13 @@ void Api::Impl::routes() {
         acc.user(c.who, u.name, u);
         answer(res, user_json(u));
     });
+    route("GET", "/users/:name/cards", admin, [this](Caller &c, const Request &req, In &, Response &res) {   // (the pages' Cards)
+        std::vector<LinkedCard> list;
+        if (const auto why = acc.cards(c.who, req.path_params.at("name"), list); !why.empty()) return refused(res, why);
+        json out = json::array();
+        for (const LinkedCard &l : list) out.push_back({{"card", l.card}, {"linked", l.linked}});
+        answer(res, {{"name", req.path_params.at("name")}, {"cards", out}});
+    });
     route("DELETE", "/users/:name", admin, [this](Caller &c, const Request &req, In &, Response &res) {
         if (const auto why = acc.remove_user(c.who, req.path_params.at("name")); !why.empty()) return refused(res, why);
         answer(res, {{"ok", true}});
@@ -925,9 +1018,15 @@ bool Api::start(std::string &error) {
     m.http.set_write_timeout(10);
     m.http.set_keep_alive_timeout(5);
     m.http.set_keep_alive_max_count(100);
-    m.http.set_error_handler([](const Request &, Response &res) {
+    m.http.set_error_handler([](const Request &req, Response &res) {
         if (!res.body.empty()) return httplib::Server::HandlerResponse::Unhandled;   // (a route's own answer)
         const int s = res.status;
+        if (req.path.rfind("/api/", 0) != 0) {   // (the pages' side: plain text)
+            page_headers(res);
+            res.set_content(s == 404 ? "not found\n" : "not a request the server takes\n", "text/plain; charset=utf-8");
+            res.status = s;
+            return httplib::Server::HandlerResponse::Handled;
+        }
         fail(res, s, s == 404 ? "not_found" : s == 413 ? "too_large" : s == 405 ? "no_such_method" : "bad_request",
              s == 404 ? "no such thing in the API" : s == 413 ? "the body is 64 KiB at most" : "the request isn't one the API takes");
         res.status = s;
@@ -935,6 +1034,24 @@ bool Api::start(std::string &error) {
     });
     m.http.set_exception_handler([](const Request &, Response &res, std::exception_ptr) { fail(res, 500, "server_error", "the server could not answer that"); });
     m.routes();
+    std::string pages;   // the web pages' folder, served at / (after the API's routes: /api/ stays theirs)
+    if (m.o.web_enabled) {
+        pages = m.o.web.empty() ? find_web() : m.o.web;
+        std::error_code ec;
+        if (!m.o.web.empty() && !std::filesystem::is_regular_file(std::filesystem::path(pages) / "index.html", ec))
+            return error = "no index.html in " + pages + " (--web DIR, or --no-web)", false;
+    }
+    if (!pages.empty()) {
+        m.http.Get("/.*", [pages](const Request &req, Response &res) {
+            if (req.path.rfind("/api/", 0) == 0) return fail(res, 404, "not_found", "no such thing in the API");
+            const std::string rel = web_relative(req.path);
+            const char *type = rel.empty() ? nullptr : web_type(rel);
+            std::string body;
+            if (!type || !web_file(pages, rel, body)) return page_missing(res);
+            page_headers(res);
+            res.set_content(std::move(body), type);
+        });
+    }
     if (!m.http.bind_to_port(m.o.host, m.o.port)) {
         error = "cannot listen on " + m.o.host + ":" + std::to_string(m.o.port);
         return false;
@@ -942,6 +1059,8 @@ bool Api::start(std::string &error) {
     m.thread = std::thread([&m] { m.http.listen_after_bind(); });
     if (!m.o.quiet) {
         printf("hiraku-server: the API on http://%s:%d/api/v1/ (put TLS in front of it: docs/SERVER.md)\n", m.o.host.c_str(), m.o.port);
+        if (!pages.empty()) printf("hiraku-server: the web pages from %s on http://%s:%d/\n", pages.c_str(), m.o.host.c_str(), m.o.port);
+        else printf("hiraku-server: no web pages (%s)\n", m.o.web_enabled ? "no web folder found: --web DIR" : "--no-web");
         fflush(stdout);
     }
     return true;

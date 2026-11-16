@@ -268,6 +268,10 @@ if(SQLite3_FOUND AND Python3_FOUND AND NOT CMAKE_CROSSCOMPILING)   # (hiraku-ser
   add_test(NAME eamuse_api COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/eamuse/test_api.py
            $<TARGET_FILE:hiraku-server> $<TARGET_FILE:key_client>)
   set_tests_properties(eamuse_api PROPERTIES TIMEOUT 180)
+  # ... and its web pages (web/) on the API's port: types, security headers, paths refused, the files' text
+  add_test(NAME eamuse_web COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/eamuse/test_web.py
+           $<TARGET_FILE:hiraku-server> ${CMAKE_SOURCE_DIR}/web)
+  set_tests_properties(eamuse_web PROPERTIES TIMEOUT 120)
 endif()
 # The lists a server on a network keeps (runtime/eamuse/access.h): addresses, cabinets by PCBID
 add_executable(test_access_lists eamuse/test_access_lists.cpp)

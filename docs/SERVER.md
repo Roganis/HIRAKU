@@ -22,6 +22,23 @@ The API's other options: `--api-trust-proxy` takes the caller's address from `X-
 hop (only behind your own proxy), `--api-insecure-cookies` leaves `Secure` off the log-in cookie (tests
 on plain HTTP only).
 
+## The web pages
+
+`serve` also serves the server's web pages at `/` on the API's port (`http://127.0.0.1:8081/` by
+default): sign-in and sign-up, a player's cards, stats, players and games' best scores, an
+operator's arcades, machines (a new machine's key shown once) and arcade settings, and an admin's
+users, sign-up, cards, server settings and audit log. Each person sees the pages of their role.
+
+They are plain files in `web/` (HTML, CSS and JavaScript, no build step), read from the first folder
+with an `index.html` among: `--web DIR`; `web` beside the program; `../share/hiraku-server/web`
+beside it; the checkout's `web/` when the program is in a build tree. `serve` prints the folder it
+took; `--no-web` serves none. Only that folder's own files are served (no `..`, no dot-files, no
+links out of it), each with `Content-Security-Policy: default-src 'self'` and no framing.
+
+The pages call this server's API only: nothing is loaded from another site (no fonts, no scripts, no
+analytics), and nothing is kept in the browser but the log-in's cookie. Songs are shown by their
+number. Behind a proxy, `/` goes to the same port as `/api/` (below).
+
 ## The first admin
 
 The first database is made with one account, `admin`, and a random password printed once. Log in
@@ -32,7 +49,7 @@ choose how people sign up: open, by invitation, or closed (`PUT /config`).
 ## TLS in front: Caddy
 
     games.example.org {
-        reverse_proxy /api/* 127.0.0.1:8081
+        reverse_proxy 127.0.0.1:8081   # the API (/api/) and the web pages (/)
     }
 
 Start serve with `--api-trust-proxy` so the limits count each caller, not the proxy. The game port
@@ -86,6 +103,7 @@ links 20 an hour an account, anything else 600 a minute a session or token.
 | POST | /machines/{pcbid}/key | operator | a new key (once); the old one stops |
 | GET | /users | admin | every account |
 | GET, PUT, DELETE | /users/{name} | admin | `{role, disabled, hide_stats}` |
+| GET | /users/{name}/cards | admin | the cards linked to that account |
 | POST | /users/{name}/reset | admin | a reset code (once, for a day) |
 | GET, PUT | /config | admin | `{name, signup: "open"\|"invite"\|"closed", list_all_games}` |
 | POST | /config/invites | admin | `{uses, days}`: an invitation code (once) |

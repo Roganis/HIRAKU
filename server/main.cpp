@@ -6,7 +6,7 @@
 //
 //   hiraku-server serve --db FILE [--port 8080] [--bind 0.0.0.0] [--allow ADDRESSES] [--cabinets FILE]
 //                 [--key-file FILE] [--clock "2003-06-01 12:00:00"] [--tz 9] [--quiet] [--no-relay] [--no-keys]
-//                 [--api 127.0.0.1:8081 | --no-api] [--api-insecure-cookies] [--api-trust-proxy]
+//                 [--api 127.0.0.1:8081 | --no-api] [--api-insecure-cookies] [--api-trust-proxy] [--web DIR | --no-web]
 //   hiraku-server serve --db FILE [--cabinets FILE] --new-cabinet [NAME]  |  [--key-file FILE] --new-key
 //   hiraku-server import FOLDER --db FILE     a data folder's files into the database (made if none)
 //   hiraku-server export FOLDER --db FILE     the database as a data folder (a new or empty one)
@@ -57,6 +57,7 @@ int usage(int status) {
             "usage: hiraku-server serve --db FILE [--port N] [--bind ADDR] [--allow ADDRESSES] [--cabinets FILE]\n"
             "                     [--key-file FILE] [--clock \"YYYY-MM-DD HH:MM:SS\"] [--tz H] [--quiet] [--no-relay] [--no-keys]\n"
             "                     [--api ADDR:PORT | --no-api] [--api-insecure-cookies] [--api-trust-proxy]\n"
+            "                     [--web DIR | --no-web]\n"
             "       hiraku-server serve --db FILE [--cabinets FILE] --new-cabinet [NAME]\n"
             "       hiraku-server serve --db FILE [--key-file FILE] --new-key\n"
             "       hiraku-server import FOLDER --db FILE   a data folder's files into the database (made if none)\n"
@@ -74,6 +75,8 @@ int usage(int status) {
             "  --api: the JSON API's address (127.0.0.1:8081; docs/SERVER.md), behind a reverse proxy's TLS;\n"
             "  --api-insecure-cookies: its log-in cookie without Secure (plain HTTP, tests); --api-trust-proxy:\n"
             "  the caller's address is X-Forwarded-For's last hop\n"
+            "  --web: the web pages' folder, served at / on the API's port (default: web beside the program,\n"
+            "  ../share/hiraku-server/web, or a build tree's checkout's web/); --no-web: none\n"
             "accounts, cards, arcades, machines (--db FILE; --as USER acts as that user, else the command line, an admin;\n"
             "a password, PIN or code is read from stdin, a line each, or asked for):\n"
             "  user add NAME [--role player|operator|admin]   a new account (password)\n"

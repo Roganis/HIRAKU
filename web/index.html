@@ -1,0 +1,37 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<!-- hiraku-server's pages (docs/SERVER.md): served by the server itself; nothing from another site -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<meta name="referrer" content="same-origin">
+<title>HIRAKU</title>
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="style.css">
+<script type="module" src="app.js"></script>
+</head>
+<body data-section="none" class="signed-out">
+<a class="skip" href="#main">Skip to the page</a>
+<header class="top">
+  <a class="brand" href="#/home" aria-label="HIRAKU: home">
+    <span class="word" aria-hidden="true"><span class="l l1">H</span><span class="l l2">I</span><span class="l l3">R</span><span class="l l4">A</span><span class="l l5">K</span><span class="l l6">U</span></span>
+  </a>
+  <span class="server-name" id="server-name"></span>
+  <span class="who" id="who"></span>
+  <button type="button" class="menu btn btn-quiet" id="menu" aria-controls="nav" aria-expanded="false" hidden>Menu</button>
+</header>
+<div class="shell">
+  <nav class="nav" id="nav" aria-label="Pages"></nav>
+  <main class="main" id="main" tabindex="-1">
+    <p class="loading">Loading…</p>
+    <noscript><p class="note note-info">These pages need JavaScript (this server’s own: nothing from anywhere else).</p></noscript>
+  </main>
+</div>
+<footer class="foot">
+  <p>HIRAKU e-AMUSEMENT server. These pages talk to this server only.</p>
+</footer>
+<div class="toasts" id="toasts" aria-live="polite"></div>
+</body>
+</html>

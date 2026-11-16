@@ -5,7 +5,7 @@
 //   - the list the launcher writes, and where the player is in it
 //   - every cabinet: each family that a games/*/game.toml names can choose, change shelf and play
 //     with controls it has, and the lamps named for them are its own
-//   - the picture is drawn at both sizes
+//   - the picture is drawn at both sizes, and in the launcher's look (its colours, the shelves')
 //   - HIRAKU's logo: its pictures read, and where it is when (opening, up to the top, closing)
 // test_menu GAMES_DIR                      the checks
 // test_menu GAMES_DIR --ppm FILE FAMILY [wide]   a picture of the menu for that cabinet, to look at
@@ -234,6 +234,55 @@ static void test_draw() {
     empty.set(none);
     std::vector<uint32_t> px(640 * 480, 0);
     menu::draw(empty, "popn", 0, px.data(), 640, 480);   // says there is none, and doesn't fall over
+}
+
+// The launcher's look (--look): its colours read, a light ground's defaults, the shelves' colours
+// from the list; drawn with them (no amber left), and the menu's own colours again after
+static void test_look() {
+    menu::Look l;
+    std::string err;
+    CHECK(l.parse("ground=#120d26,foot=#1d1440,ink=#f3eeff,dim=#948bc0,line=#2e2556,bar=#8b52ff,point=#ffd23a,"
+                  "stripe=#4a7bff:#2bd268:#ffd23a:#ff8f33:#ff4757:#9a5cff,round=17", err));
+    CHECK(l.ground == 0x120d26 && l.foot == 0x1d1440 && l.bar == 0x8b52ff && l.round == 17);
+    CHECK(l.stripe.size() == 6 && l.stripe[0] == 0x4a7bff && l.stripe[5] == 0x9a5cff);
+    menu::Look day;
+    CHECK(day.parse("ground=#fff8ee,bar=#6b2be0", err));   // the rest: a light look's, the foot the ground's
+    CHECK(day.foot == 0xfff8ee && day.ink == 0x232629 && day.bar == 0x6b2be0 && menu::light(day.ground) && !menu::light(day.ink));
+    menu::Look none;
+    CHECK(none.parse("", err) && none.ground == menu::Look().ground && none.bar == 0xffb830);
+    for (const char *bad : {"ground=#12", "ground=red", "colour=#000000", "round=x", "round=99", "stripe=#fff:#000000"}) {
+        menu::Look b;
+        err.clear();
+        CHECK(!b.parse(bad, err) && !err.empty());
+    }
+
+    menu::List list;
+    CHECK(list.parse(std::string(kList) + "shelf\tbeatmania IIDX\t#3a2e7a\n", err));   // (anywhere in the list)
+    CHECK(list.shelves.size() == 3 && !list.shelves[0].has_colour && list.shelves[1].has_colour && list.shelves[1].colour == 0x3a2e7a);
+    menu::List odd;
+    CHECK(!odd.parse("hiraku-menu-list 1\nshelf\tx\tblue\n", err) && err.find("line 2") != std::string::npos);
+
+    // drawn: the ground, the shelf's colour on its pill, the six under the top, no amber
+    list.current = "bmiidx";
+    menu::State s;
+    s.set(list);
+    menu::set_look(l);
+    std::vector<uint32_t> px(640 * 480, 0);
+    menu::draw(s, "popn", kUp, px.data(), 640, 480);
+    const std::set<uint32_t> colours(px.begin(), px.end());
+    CHECK(px[(size_t)2 * 640 + 320] == (0xff000000u | 0x120d26));   // the top's ground (the foot further down)
+    CHECK(colours.count(0xff000000u | 0x3a2e7a));                   // the pill
+    CHECK(px[(size_t)48 * 640 + 40] == (0xff000000u | 0x4a7bff) && px[(size_t)48 * 640 + 600] == (0xff000000u | 0x9a5cff));
+    CHECK(!colours.count(0xffffb830u));
+    CHECK(colours.count(0xff000000u | 0x2bd268));                   // pop'n's "Green buttons": its dot
+    // a light ground: the logo's black box stands on it
+    menu::set_look(day);
+    menu::draw(s, "popn", kUp, px.data(), 640, 480);
+    CHECK(px[(size_t)470 * 640 + 320] == (0xff000000u | 0xfff8ee));
+    // the menu's own again
+    menu::own_look();
+    menu::draw(s, "iidx", kUp, px.data(), 640, 480);
+    CHECK(std::set<uint32_t>(px.begin(), px.end()).count(0xffffb830u) == 1);
 }
 
 // A game's picture: a frame kept by the shell (host/menupic.h) is what the menu reads and shows
@@ -517,6 +566,11 @@ int main(int argc, char **argv) {
         if (getenv("HK_MENU_NOTICE")) s.set_notice(getenv("HK_MENU_NOTICE"));
         if (std::string why; getenv("HK_MENU_FONT") && !menu::set_font(getenv("HK_MENU_FONT"), why)) fprintf(stderr, "%s\n", why.c_str());
         if (getenv("HK_MENU_LOGO")) menu::set_logo(getenv("HK_MENU_LOGO"));
+        if (const char *look = getenv("HK_MENU_LOOK")) {   // (the launcher's --look)
+            menu::Look lk;
+            if (std::string why; lk.parse(look, why)) menu::set_look(lk);
+            else fprintf(stderr, "%s\n", why.c_str());
+        }
         menu::draw(s, argv[4], frame, px.data(), w, 480);
         write_ppm(argv[3], px, w, 480);
         return 0;
@@ -532,6 +586,7 @@ int main(int argc, char **argv) {
     test_state();
     test_cabinets(argv[1]);
     test_draw();
+    test_look();
     test_logo();
     test_picture(argc > 2 ? argv[2] : ".");
     test_font(argc > 2 ? argv[2] : ".");

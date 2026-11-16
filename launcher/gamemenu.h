@@ -5,6 +5,7 @@
 
 #include <QFile>
 #include <QList>
+#include <QMap>
 #include <QString>
 
 namespace gamemenu {
@@ -28,12 +29,14 @@ struct Row {
     QString picture;                    // a BMP file's path, "" if the game has no picture
 };
 
-// The list file's text: the rows in the order given (a shelf's games together), and the game the
-// menu opens on. Tabs and line ends can't be in a field: they'd be taken for the next one.
-inline QByteArray listText(const QList<Row> &rows, const QString &current) {
+// The list file's text: the rows in the order given (a shelf's games together), the game the
+// menu opens on, and the shelves' colours by name ("#rrggbb": the series', drawn when the menu has
+// the launcher's look). Tabs and line ends can't be in a field: they'd be taken for the next one.
+inline QByteArray listText(const QList<Row> &rows, const QString &current, const QMap<QString, QString> &shelfColours = {}) {
     const auto field = [](QString s) { return s.replace('\t', ' ').replace('\n', ' ').replace('\r', ' '); };
     QString text = "hiraku-menu-list 1\n";
     if (!current.isEmpty()) text += "current\t" + field(current) + "\n";
+    for (auto it = shelfColours.cbegin(); it != shelfColours.cend(); ++it) text += "shelf\t" + field(it.key()) + "\t" + field(it.value()) + "\n";
     for (const Row &r : rows)
         text += "game\t" + field(r.id) + "\t" + field(r.shelf) + "\t" + field(r.title) + "\t" + field(r.detail) +
                 (r.picture.isEmpty() ? QString() : "\t" + field(r.picture)) + "\n";

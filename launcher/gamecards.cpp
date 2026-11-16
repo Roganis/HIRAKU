@@ -39,13 +39,7 @@ QColor between(QColor a, QColor b, double t) {
                             a.blueF() * (1 - t) + b.blueF() * t, a.alphaF() * (1 - t) + b.alphaF() * t);
 }
 
-// a series' colour where it is seen against `ground`: one too close to it (IIDX's near-black on a
-// dark list) made lighter or darker until it shows
-QColor against(QColor c, QColor ground) {
-    const bool dark = ground.lightnessF() < 0.5;
-    for (int k = 0; k < 6 && std::abs(c.lightnessF() - ground.lightnessF()) < 0.22; k++) c = dark ? c.lighter(150) : c.darker(130);
-    return c;
-}
+using theme::against;
 
 // a title screen at a card's size, cropped to fill it; kept while its file stays the same
 QPixmap picture(const QString &path, QSize size, qreal dpr) {

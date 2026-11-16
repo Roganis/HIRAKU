@@ -448,4 +448,39 @@ QColor mix(QColor a, QColor b, double amount) {
 
 QColor onYellow() { return g_look == Night ? colours().paper : g_look == Pop ? colours().ink : QColor("#232629"); }
 
+QColor against(QColor c, QColor ground) {
+    const bool dark = ground.lightnessF() < 0.5;
+    for (int k = 0; k < 6 && std::abs(c.lightnessF() - ground.lightnessF()) < 0.22; k++) c = dark ? c.lighter(150) : c.darker(130);
+    return c;
+}
+
+QString menuLook() {
+    QStringList out;
+    auto put = [&](const char *name, QColor c) { out << QString("%1=%2").arg(name, c.name()); };
+    if (pop()) {
+        const Colours &c = colours();
+        put("ground", c.paper);
+        put("foot", g_look == Night ? QColor("#1d1440") : QColor("#f6ecff"));
+        put("ink", c.ink);
+        put("dim", c.muted);
+        put("line", c.line);
+        put("bar", c.accent);
+        put("point", g_look == Night ? c.six[2] : c.six[3]);   // (yellow is too pale on paper)
+        QStringList six;
+        for (const QColor &k : c.six) six << k.name();
+        out << "stripe=" + six.join(':') << "round=17";
+    } else {
+        const QPalette p = QApplication::palette();
+        put("ground", p.color(QPalette::Window));
+        put("foot", p.color(QPalette::Window));
+        put("ink", p.color(QPalette::WindowText));
+        put("dim", mix(p.color(QPalette::WindowText), p.color(QPalette::Window), 0.45));   // (the placeholder's is see-through)
+        put("line", mix(p.color(QPalette::WindowText), p.color(QPalette::Window), 0.8));
+        put("bar", p.color(QPalette::Highlight));
+        put("point", p.color(QPalette::Highlight));
+        out << "round=6";
+    }
+    return out.join(',');
+}
+
 }  // namespace theme

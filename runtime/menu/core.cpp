@@ -43,6 +43,7 @@ public:
         else if (name == "--notice") notice_ = value();
         else if (name == "--font") font_path_ = value();
         else if (name == "--logo") logo_path_ = value();
+        else if (name == "--look") look_ = value();
         else return false;
         return true;
     }
@@ -54,7 +55,9 @@ public:
                "  --wide            a 16:9 picture (848x480) instead of 4:3 (640x480)\n"
                "  --notice TEXT     said on opening, until the first move (\"a line|a smaller line\")\n"
                "  --font FILE       the launcher's fonts for the text (menu/font.h); else an 8x8 ASCII font\n"
-               "  --logo FILE       HIRAKU's name as a picture (a BMP, white on black) for the top\n";
+               "  --logo FILE       HIRAKU's name as a picture (a BMP, white on black) for the top\n"
+               "  --look COLOURS    the launcher's colours, \"ground=#rrggbb,ink=...\" (menu/menu.h: Look);\n"
+               "                    else amber on night blue\n";
     }
 
     bool init(const Options &o) override {
@@ -72,6 +75,11 @@ public:
         state_.set_notice(notice_);
         if (std::string why; !font_path_.empty() && !menu::set_font(font_path_, why)) fprintf(stderr, "menu: %s: the 8x8 font instead\n", why.c_str());
         menu::set_logo(logo_path_);
+        if (!look_.empty()) {
+            menu::Look look;
+            if (std::string why; look.parse(look_, why)) menu::set_look(look);
+            else fprintf(stderr, "menu: --look: %s: its own colours instead\n", why.c_str());
+        }
         window_ = o.window;
         w_ = wide_ ? 848 : 640;
         frame_px_.assign((size_t)w_ * h_, 0);
@@ -297,7 +305,7 @@ private:
         exit(0);
     }
 
-    std::string family_ = "iidx", list_path_, choice_path_, notice_, font_path_, logo_path_;
+    std::string family_ = "iidx", list_path_, choice_path_, notice_, font_path_, logo_path_, look_;
     bool wide_ = false, window_ = false;
     menu::Pads pads_;
     bool pads_set_ = false, by_pad_ = false;   // by_pad_: the last control used was a gamepad's

@@ -8,8 +8,10 @@
 //     hiraku-menu-list 1
 //     current <id>                        the game just left: where the menu opens
 //     game <id> <shelf> <title> <detail> [<picture>]  in the order shown; a shelf is its games in a row
+//     shelf <shelf> <#rrggbb>             a shelf's colour (its series'), drawn with --look
 // and reads the choice (--choice FILE: the id and a new line; no file when the menu was closed).
 // --notice "LINE|LINE" is said on opening: a game that came back here because it ended with an error.
+// --look "name=#rrggbb,..." draws it in the launcher's colours (Look below); without, amber on night blue.
 // Text is drawn in the launcher's fonts where it gives them (--font: menu/font.h), any alphabet;
 // else in SDL's 8x8 font, ASCII (anything else shows as '?'). A game's picture is a BMP
 // file's path, shown behind the list while the game is the one chosen: the player's own, or the
@@ -29,6 +31,8 @@ struct Game {
 struct Shelf {
     std::string name;
     std::vector<Game> games;
+    uint32_t colour = 0;   // its series' (0xrrggbb), with has_colour
+    bool has_colour = false;
 };
 struct List {
     std::vector<Shelf> shelves;
@@ -99,6 +103,20 @@ private:
 };
 
 // --- the picture (menu/draw.cpp) -------------------------------------------------
+// The launcher's look (--look): its ground, fading to `foot` down the screen; its text and the
+// text's quieter shade; lines; the bar under the chosen game; the arrows; the six colours under the
+// top (or a line); how round the shelf's name is. Each "name=#rrggbb", commas between; stripe's
+// colours with colons between. A name not given keeps the colour of the look it is like (dark or
+// light, by its ground).
+struct Look {
+    uint32_t ground = 0x0a0d1c, foot = 0x141a38, ink = 0xe8ecf4, dim = 0x8088a4, line = 0x3a4060, bar = 0xffb830, point = 0xffb830;
+    std::vector<uint32_t> stripe;
+    int round = 6;
+    bool parse(const std::string &text, std::string &error);
+};
+void set_look(const Look &l);   // (no call: the menu's own, amber on night blue)
+void own_look();                 // ... and back to that
+bool light(uint32_t rgb);         // a colour a light ground would be (dark text on it)
 // The menu's frame, w x h (640 or 848 by 480), ARGB
 void draw(const State &s, const std::string &family, uint64_t frame, uint32_t *px, int w, int h);
 // The launcher's fonts for it (--font: menu/font.h; false and why if the file isn't one), and

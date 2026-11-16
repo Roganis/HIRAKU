@@ -1569,13 +1569,22 @@ void MainWindow::openMenu(const QString &left, const QString &notice) {
     if (QSaveFile f(m_menuFont); f.open(QIODevice::WriteOnly)) fonts = f.write(menufont::build(font(), text)) > 0 && f.commit();
     const bool logo = menufont::logo(QImage(":/logo.png")).save(m_menuLogo, "BMP");
     QList<gamemenu::Row> rows;
+    QMap<QString, QMap<QString, int>> families;   // each shelf's games by family: its colour is its most common's
     for (const Listed &l : listed) {
         const QString detail = l.g->year + "  " + l.sh.system;
         rows << (fonts ? gamemenu::Row{l.g->id, l.sh.series, l.g->title, detail, menuPicture(l.g->id)}
                        : gamemenu::Row{l.g->id, gamemenu::plainTitle(l.sh.series), gamemenu::plainTitle(l.g->title, l.g->latin),
                                        gamemenu::plainTitle(detail), menuPicture(l.g->id)});
+        families[rows.last().shelf][l.g->family]++;
     }
-    if (QSaveFile f(m_menuList); !f.open(QIODevice::WriteOnly) || f.write(gamemenu::listText(rows, from->id)) < 0 || !f.commit())
+    QMap<QString, QString> shelfColours;   // as the cards' shelves', seen on the menu's ground
+    for (auto it = families.cbegin(); it != families.cend(); ++it) {
+        QString most;
+        for (auto f = it->cbegin(); f != it->cend(); ++f)
+            if (most.isEmpty() || f.value() > it->value(most)) most = f.key();
+        shelfColours[it.key()] = theme::against(familyColour(most), QApplication::palette().color(QPalette::Window)).name();
+    }
+    if (QSaveFile f(m_menuList); !f.open(QIODevice::WriteOnly) || f.write(gamemenu::listText(rows, from->id, shelfColours)) < 0 || !f.commit())
         return giveUp("The game menu's list couldn't be written to " + m_menuList);
     // the display, sound and cabinet as a game of that family gets them; no saves of its own
     QStringList a = {"--window", QString::number(s.value("video/scale", 2).toInt()), "--nvram", "",
@@ -1586,6 +1595,7 @@ void MainWindow::openMenu(const QString &left, const QString &notice) {
     if (!notice.isEmpty()) a << "--notice" << (fonts ? notice : gamemenu::plainTitle(notice));
     if (fonts) a << "--font" << m_menuFont;
     if (logo) a << "--logo" << m_menuLogo;
+    a << "--look" << theme::menuLook();   // the launcher's colours (the menu's own amber without)
     audioArguments(a);
     cabinetArguments(a, from->family);
     a << QProcess::splitCommand(QString::fromLocal8Bit(qgetenv("HK_MENU_ARGS")));   // (tests: a script to drive it)

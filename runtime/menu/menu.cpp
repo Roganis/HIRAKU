@@ -3,7 +3,10 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
 #include <fstream>
+#include <map>
+#include <set>
 #include <sstream>
 
 namespace hk::menu {
@@ -21,7 +24,19 @@ std::vector<std::string> fields(const std::string &line) {
     }
 }
 
+// "#rrggbb" as 0xrrggbb
+bool colour(const std::string &text, uint32_t &rgb) {
+    if (text.size() != 7 || text[0] != '#') return false;
+    char *end = nullptr;
+    const unsigned long v = std::strtoul(text.c_str() + 1, &end, 16);
+    if (*end) return false;
+    rgb = (uint32_t)v;
+    return true;
+}
+
 }  // namespace
+
+bool light(uint32_t rgb) { return ((rgb >> 16 & 255) * 2 + (rgb >> 8 & 255) * 5 + (rgb & 255)) / 8 > 128; }
 
 bool List::parse(const std::string &text, std::string &error) {
     shelves.clear();
@@ -29,6 +44,7 @@ bool List::parse(const std::string &text, std::string &error) {
     std::istringstream in(text);
     std::string line;
     int n = 0;
+    std::map<std::string, uint32_t> colours;   // the shelves', by name (shelf lines)
     while (std::getline(in, line)) {
         n++;
         if (!line.empty() && line.back() == '\r') line.pop_back();
@@ -41,12 +57,19 @@ bool List::parse(const std::string &text, std::string &error) {
             }
         } else if (f[0] == "current" && f.size() >= 2) {
             current = f[1];
+        } else if (f[0] == "shelf" && f.size() >= 3) {
+            uint32_t rgb;
+            if (!colour(f[2], rgb)) {
+                error = "line " + std::to_string(n) + ": a shelf's colour isn't #rrggbb";
+                return false;
+            }
+            colours[f[1]] = rgb;
         } else if (f[0] == "game" && f.size() >= 4 && !f[1].empty()) {
             const std::string &shelf = f[2];
             if (shelves.empty() || shelves.back().name != shelf) shelves.push_back({shelf, {}});
             shelves.back().games.push_back({f[1], f[3], f.size() > 4 ? f[4] : std::string(), f.size() > 5 ? f[5] : std::string()});
         } else {
-            error = "line " + std::to_string(n) + ": not \"current ID\" or \"game ID SHELF TITLE DETAIL\", tabs between";
+            error = "line " + std::to_string(n) + ": not \"current ID\", \"game ID SHELF TITLE DETAIL\" or \"shelf NAME #rrggbb\", tabs between";
             return false;
         }
     }
@@ -54,6 +77,67 @@ bool List::parse(const std::string &text, std::string &error) {
         error = "empty";
         return false;
     }
+    for (Shelf &sh : shelves)
+        if (const auto it = colours.find(sh.name); it != colours.end()) sh.colour = it->second, sh.has_colour = true;
+    return true;
+}
+
+// a look's colours by name
+std::map<std::string, uint32_t *> look_colours(Look &l) {
+    return {{"ground", &l.ground}, {"foot", &l.foot}, {"ink", &l.ink}, {"dim", &l.dim}, {"line", &l.line}, {"bar", &l.bar}, {"point", &l.point}};
+}
+
+bool Look::parse(const std::string &text, std::string &error) {
+    Look given;
+    std::map<std::string, uint32_t *> names = look_colours(given);
+    std::set<std::string> seen;
+    std::istringstream in(text);
+    std::string item;
+    while (std::getline(in, item, ',')) {
+        if (item.empty()) continue;
+        const size_t eq = item.find('=');
+        const std::string name = item.substr(0, eq), value = eq == std::string::npos ? "" : item.substr(eq + 1);
+        if (name == "stripe") {
+            std::istringstream six(value);
+            std::string c;
+            given.stripe.clear();
+            while (std::getline(six, c, ':')) {
+                uint32_t rgb;
+                if (!colour(c, rgb)) {
+                    error = "stripe: \"" + c + "\" isn't #rrggbb";
+                    return false;
+                }
+                given.stripe.push_back(rgb);
+            }
+        } else if (name == "round") {
+            char *end = nullptr;
+            const long r = std::strtol(value.c_str(), &end, 10);
+            if (value.empty() || *end || r < 0 || r > 40) {
+                error = "round: not a number of pixels (0-40)";
+                return false;
+            }
+            given.round = (int)r;
+        } else if (const auto it = names.find(name); it != names.end()) {
+            if (!colour(value, *it->second)) {
+                error = name + ": \"" + value + "\" isn't #rrggbb";
+                return false;
+            }
+            seen.insert(name);
+        } else {
+            error = "\"" + name + "\" isn't one of ground, foot, ink, dim, line, bar, point, stripe, round";
+            return false;
+        }
+    }
+    // what wasn't given: a light look's on a light ground (the dark one's are the defaults); the
+    // foot, the ground (no fade)
+    if (seen.count("ground") && light(given.ground)) {
+        Look day;
+        day.ground = day.foot = 0xffffff, day.ink = 0x232629, day.dim = 0x70777e, day.line = 0xd3d4d5, day.bar = day.point = 0x3daee9;
+        for (const auto &[name, at] : look_colours(day))
+            if (!seen.count(name)) *names[name] = *at;
+    }
+    if (!seen.count("foot") && seen.count("ground")) given.foot = given.ground;
+    *this = given;
     return true;
 }
 

@@ -46,6 +46,11 @@ QString switches(QColor on, QColor off);
 
 // a colour, `amount` of the way to another (0: the first, 1: the other)
 QColor mix(QColor a, QColor b, double amount);
-QColor onYellow();            // what is drawn on the yellow in Pop (a light glyph there is lost)
+QColor onYellow();
+// a series' colour where it is seen against `ground`: one too close to it (IIDX's near-black on a
+// dark list) made lighter or darker until it shows
+QColor against(QColor c, QColor ground);
+// the game menu's look (runtime/menu/menu.h, --look): this look's colours, as "name=#rrggbb,..."
+QString menuLook();            // what is drawn on the yellow in Pop (a light glyph there is lost)
 
 }  // namespace theme

@@ -34,6 +34,10 @@ int main(int argc, char **argv) {
                   "game\todd\ta shelf\ta title over two lines\t\n"
                   "game\tshown\ts\tt\td\t/a folder/shown.bmp\n");   // a picture's path, where there is one
     CHECK(gamemenu::listText({}, "") == "hiraku-menu-list 1\n");
+    // the shelves' colours, before the games
+    CHECK(gamemenu::listText(rows.mid(0, 1), "", {{"beatmania", "#4a7bff"}, {"a\tb", "#000000"}}) ==
+          "hiraku-menu-list 1\nshelf\ta b\t#000000\nshelf\tbeatmania\t#4a7bff\n"
+          "game\tbm7thmix\tbeatmania\tbeatmania 7th MIX\t2002  DJ Main\n");
 
     const QString choice = dir + "/choice";
     QFile::remove(choice);

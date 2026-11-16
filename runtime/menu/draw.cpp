@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // The game menu's picture: the shelf across the top, its games down the middle with the chosen one
 // on a bar that stays put (the list moves under it), and what this cabinet's controls do at the
-// bottom. Drawn by hand in SDL's 8x8 font, two and three times its size: plain, and readable on a
-// cabinet's tube from where the player stands. Everything moves by the frame count alone, so a
-// scripted run's pictures are the same every time.
+// bottom. Drawn by hand, in the launcher's fonts or SDL's 8x8 font two and three times its size:
+// plain, and readable on a cabinet's tube from where the player stands. In amber on night blue, or
+// with the launcher's look (--look): its colours, the shelf's name on a pill of its series' colour,
+// the six colours under the top, a bar that fades across, a dot of each control's colour.
+// Everything moves by the frame count alone, so a scripted run's pictures are the same every time.
 #include <SDL3/SDL.h>
 
 #include <algorithm>
@@ -21,7 +23,10 @@ namespace hk::menu {
 
 namespace {
 
-constexpr uint32_t kAmber = 0xffb830, kText = 0xe8ecf4, kDim = 0x8088a4, kDark = 0x10121c;
+constexpr uint32_t kDark = 0x10121c;   // text on the amber bar, and shadows
+
+Look g_look;            // the colours (--look; the defaults: amber on night blue)
+bool g_styled = false;  // ... and the launcher's look's shapes with them
 
 // The launcher's fonts (--font), where it gave them: the text's sizes 1, 2 and 3 below are its
 // small, row and heading sizes
@@ -74,6 +79,19 @@ struct Canvas {
         for (int yy = ya; yy < yb; yy++)
             for (int xx = xa; xx < xb; xx++) put(xx, yy, rgb, a);
     }
+    // a rectangle with round corners (radius r), its edges smoothed
+    void round_rect(int x, int y, int fw, int fh, int r, uint32_t rgb, int a = 255) {
+        r = std::min({r, fw / 2, fh / 2});
+        const int xa = std::max(x, x0), ya = std::max(y, y0), xb = std::min(x + fw, x1), yb = std::min(y + fh, y1);
+        for (int yy = ya; yy < yb; yy++)
+            for (int xx = xa; xx < xb; xx++) {
+                const double px = xx + 0.5, py = yy + 0.5;
+                const double cx = std::clamp(px, (double)x + r, (double)x + fw - r), cy = std::clamp(py, (double)y + r, (double)y + fh - r);
+                const double d = std::hypot(px - cx, py - cy), cover = std::clamp(r - d + 0.5, 0.0, 1.0);
+                if (cover > 0) put(xx, yy, rgb, (int)(a * cover));
+            }
+    }
+    void disc(int cx, int cy, int r, uint32_t rgb, int a = 255) { round_rect(cx - r, cy - r, 2 * r, 2 * r, r, rgb, a); }
     // text at size k (1 small, 2 a row's, 3 a heading's), in a box 8 k high from y: the launcher's
     // fonts, centred in that box; or the 8x8 font k times its size, 8 k a character
     void text(int x, int y, const std::string &given, int k, uint32_t rgb, int a = 255) {
@@ -184,15 +202,53 @@ bool set_font(const std::string &path, std::string &error) {
 
 void set_logo(const std::string &path) { g_logo = path; }
 
+void set_look(const Look &l) {
+    g_look = l;
+    g_styled = true;
+}
+
+void own_look() {
+    g_look = Look();
+    g_styled = false;
+}
+
 namespace {
+
+// a colour, `t` 256ths of the way to another
+uint32_t mix(uint32_t a, uint32_t b, int t) {
+    uint32_t out = 0;
+    for (int sh = 0; sh < 24; sh += 8) out |= (uint32_t)(((int)(a >> sh & 255) * (256 - t) + (int)(b >> sh & 255) * t) >> 8) << sh;
+    return out;
+}
+
+// the colour a control is called by (pop'n's "Blue buttons"), from the look's six; else the
+// i'th of them (or the bar's)
+uint32_t control_colour(const std::string &control, int i) {
+    const std::vector<uint32_t> &six = g_look.stripe;
+    const auto has = [&](const char *word) { return control.find(word) != std::string::npos; };
+    const auto pick = [&](int k, uint32_t plain) { return six.size() == 6 ? six[(size_t)k] : plain; };
+    if (has("Blue")) return pick(0, 0x2f7de1);
+    if (has("Green")) return pick(1, 0x27ae60);
+    if (has("Yellow")) return pick(2, 0xf1c40f);
+    if (has("Red")) return pick(4, 0xda4453);
+    if (has("White")) return 0xf4f4f4;
+    if (has("Black")) return 0x2a2a30;
+    return six.size() == 6 ? six[(size_t)(i * 2 % 6)] : g_look.bar;
+}
 
 // the menu under the logo
 void draw_menu(const State &s, const std::string &family, uint64_t frame, uint32_t *px, int w, int h) {
     Canvas c{px, w, h, 0, 0, w, h};
-    // the ground: night blue, a little lighter towards the bottom
+    const Look &L = g_look;
+    const bool day = light(L.ground);
+    // the ground: night blue, a little lighter towards the bottom (the look's: its ground to its foot)
     for (int y = 0; y < h; y++) {
-        const uint32_t t = (uint32_t)y * 255 / (uint32_t)std::max(1, h - 1);
-        const uint32_t rgb = (10 + t * 10 / 255) << 16 | (13 + t * 13 / 255) << 8 | (28 + t * 28 / 255);
+        const int t = y * 255 / std::max(1, h - 1);
+        uint32_t rgb = 0;
+        for (int sh = 0; sh < 24; sh += 8) {
+            const int from = (int)(L.ground >> sh & 255), to = (int)(L.foot >> sh & 255);
+            rgb |= (uint32_t)(from + t * (to - from) / 255) << sh;
+        }
         std::fill(px + (size_t)y * w, px + (size_t)(y + 1) * w, 0xff000000u | rgb);
     }
     const int mx = 24;   // the side margins (a tube's overscan)
@@ -201,28 +257,39 @@ void draw_menu(const State &s, const std::string &family, uint64_t frame, uint32
     if (logo::ready()) {
         // (drawn last, over the rest)
     } else if (const Picture *logo = picture(g_logo, 30, w / 2)) {
+        if (day) c.fill(mx - 4, 5, logo->w + 8, logo->h + 8, 0);   // (white letters: on black, on a light ground)
         for (int y = 0; y < logo->h; y++)
             for (int x = 0; x < logo->w; x++) {
                 const uint32_t p = logo->px[(size_t)y * logo->w + x];
-                c.put(mx + x, 9 + y, kText, (int)((p >> 16 & 0xff) * 2 + (p >> 8 & 0xff) * 5 + (p & 0xff)) / 8);
+                c.put(mx + x, 9 + y, day ? 0xffffff : L.ink, (int)((p >> 16 & 0xff) * 2 + (p >> 8 & 0xff) * 5 + (p & 0xff)) / 8);
             }
-    } else c.text(mx, 16, "HIRAKU", 3, kAmber);
-    c.text(w - mx - width("GAME MENU", 2), 20, "GAME MENU", 2, kText);
-    c.fill(mx, 48, w - 2 * mx, 2, kAmber);
+    } else c.text(mx, 16, "HIRAKU", 3, L.point);
+    c.text(w - mx - width("GAME MENU", 2), 20, "GAME MENU", 2, L.ink);
+    if (g_styled && !L.stripe.empty()) {   // the six, side by side
+        const int n = (int)L.stripe.size();
+        for (int i = 0; i < n; i++) {
+            const int a = mx + (w - 2 * mx) * i / n, b = mx + (w - 2 * mx) * (i + 1) / n;
+            c.fill(a, 47, b - a, 3, L.stripe[(size_t)i]);
+        }
+    } else if (g_styled) c.fill(mx, 48, w - 2 * mx, 1, L.line);
+    else c.fill(mx, 48, w - 2 * mx, 2, L.bar);
 
     const List &list = s.list();
     const int list_y = 112, row_h = 24, rows = 11, bar_y = list_y + rows / 2 * row_h;
     const Game *sel = s.selected();
     if (!sel) {
         const char *none = "No game is ready to play";
-        c.text((w - width(none, 2)) / 2, bar_y + 4, none, 2, kText);
+        c.text((w - width(none, 2)) / 2, bar_y + 4, none, 2, L.ink);
         const char *how = "Add your games in HIRAKU's window first";
-        c.text((w - width(how, 1)) / 2, bar_y + 32, how, 1, kDim);
+        c.text((w - width(how, 1)) / 2, bar_y + 32, how, 1, L.dim);
         return;
     }
     const Shelf &shelf = list.shelves[(size_t)s.shelf()];
     const bool started = s.chosen() != nullptr;
     const uint64_t started_for = started ? frame - s.chosen_at() : 0;
+    // the shelf's colour (its series'), and what is written on it
+    const uint32_t shelf_c = shelf.has_colour ? shelf.colour : L.bar;
+    const uint32_t on_shelf = ((shelf_c >> 16 & 255) * 2 + (shelf_c >> 8 & 255) * 5 + (shelf_c & 255)) / 8 > 175 ? 0x1c1c24 : 0xffffff;
 
     // the shelf, between its arrows: it slides in from the side it was called from
     {
@@ -232,15 +299,23 @@ void draw_menu(const State &s, const std::string &family, uint64_t frame, uint32
         const int a = s.shelf_dir() && t < 8 ? 95 + (int)t * 20 : 255;
         const int y = 64 + (3 - k) * 4;
         c.clip(mx + 32, 0, w - mx - 32, h);
-        c.text((w - width(shelf.name, k)) / 2 + slide, y, shelf.name, k, kText, a);
+        if (g_styled) {   // on a pill of its colour
+            const int tw = width(shelf.name, k), pw = tw + 10 * k + 10, ph = 8 * k + 10;
+            c.round_rect((w - pw) / 2 + slide, y - 5, pw, ph, std::min(L.round, ph / 2), shelf_c, a);
+            c.text((w - tw) / 2 + slide, y, shelf.name, k, on_shelf, a);
+        } else c.text((w - width(shelf.name, k)) / 2 + slide, y, shelf.name, k, L.ink, a);
         c.unclip();
         if (list.shelves.size() > 1) {
             const bool blink = frame / 30 % 2 == 0;
-            c.text(mx, 64, "<", 3, blink ? kAmber : kDim);
-            c.text(w - mx - 24, 64, ">", 3, blink ? kAmber : kDim);
+            c.text(mx, 64, "<", 3, blink ? L.point : L.dim);
+            c.text(w - mx - 24, 64, ">", 3, blink ? L.point : L.dim);
             // a mark for each shelf, this one's lit
             const int n = (int)list.shelves.size(), step = 14, x0 = (w - (n * step - 6)) / 2;
-            for (int i = 0; i < n; i++) c.fill(x0 + i * step, g_real.loaded() ? 100 : 96, 8, 4, i == s.shelf() ? kAmber : 0x3a4060);
+            for (int i = 0; i < n; i++) {
+                const int my = g_real.loaded() ? 100 : 96;
+                if (g_styled) c.round_rect(x0 + i * step, my, 8, 4, 2, i == s.shelf() ? shelf_c : L.line);
+                else c.fill(x0 + i * step, my, 8, 4, i == s.shelf() ? L.bar : L.line);
+            }
         }
     }
 
@@ -249,6 +324,18 @@ void draw_menu(const State &s, const std::string &family, uint64_t frame, uint32
     const int bar_x = mx - 8, bar_end = w - (mx - 8);
     const Picture *pic = picture(sel->picture, rows * row_h, (bar_end - bar_x) * 6 / 10);
     int solid_to = bar_end, clear_from = bar_end;   // the bar's amber: whole up to the first, gone from the second
+    // with the launcher's look, a game without a picture has a stand-in: its shelf's colour,
+    // coming up from the titles' side, a light circle in its corner
+    const bool stand_in = !pic && g_styled && shelf.has_colour;
+    if (stand_in) {
+        const int pw = (bar_end - bar_x) * 48 / 100, left = bar_end - pw, ph = rows * row_h, ramp = pw / 2;
+        const uint64_t since = frame - s.moved_at();
+        const int top = since < 8 ? 205 * ((int)since + 1) / 9 : 205;
+        for (int x = 0; x < pw; x++) c.fill(left + x, list_y, 1, ph, shelf_c, top * std::min(x, ramp) / ramp);
+        Canvas in = c;
+        in.clip(left, list_y, bar_end, list_y + ph);
+        in.disc(left + pw * 87 / 100, list_y + ph / 5, ph * 42 / 100, 0xffffff, top / 6);
+    }
     if (pic) {
         const int left = bar_end - pic->w, ramp = std::max(2, pic->w * 45 / 100);
         const uint64_t since = frame - s.moved_at();
@@ -263,12 +350,21 @@ void draw_menu(const State &s, const std::string &family, uint64_t frame, uint32
     // the bar thins out to two lines, so that the middle of a title screen (its name) shows whole
     const int n = (int)shelf.games.size();
     const bool flash = started && started_for / 3 % 2 == 0;
-    const uint32_t bar = flash ? 0xffffff : kAmber;
-    c.fill(bar_x, bar_y, solid_to - bar_x, row_h, bar);
-    for (int x = solid_to; x < clear_from; x++) c.fill(x, bar_y, 1, row_h, bar, 255 * (clear_from - x) / (clear_from - solid_to));
-    c.fill(solid_to, bar_y, bar_end - solid_to, 2, bar, 170);
-    c.fill(solid_to, bar_y + row_h - 2, bar_end - solid_to, 2, bar, 170);
-    const int bar_text_to = (solid_to + clear_from) / 2;   // dark on the amber up to here, light after
+    const uint32_t bar = flash ? 0xffffff : L.bar;
+    int bar_text_to = (solid_to + clear_from) / 2;   // dark on the amber up to here, light after
+    if (g_styled) {   // the look's: its colour fading across, a white edge at its start; white on it
+        const int bw = bar_end - bar_x;
+        for (int x = 0; x < bw; x++) c.fill(bar_x + x, bar_y, 1, row_h, bar, 255 - 225 * x / bw);
+        c.round_rect(bar_x - 2, bar_y, 4, row_h, 2, 0xffffff);
+        bar_text_to = bar_x;
+    } else {
+        c.fill(bar_x, bar_y, solid_to - bar_x, row_h, bar);
+        for (int x = solid_to; x < clear_from; x++) c.fill(x, bar_y, 1, row_h, bar, 255 * (clear_from - x) / (clear_from - solid_to));
+        c.fill(solid_to, bar_y, bar_end - solid_to, 2, bar, 170);
+        c.fill(solid_to, bar_y + row_h - 2, bar_end - solid_to, 2, bar, 170);
+    }
+    const bool over_picture = pic || stand_in;   // (the rows' years and systems: the chosen game's alone)
+    const bool shadowed = pic && !day;           // the titles: light with a shadow over a picture on a dark ground
     c.clip(0, list_y, w, list_y + rows * row_h);
     for (int i = 0; i < n; i++) {
         const double off = i - s.shown_row();
@@ -278,7 +374,7 @@ void draw_menu(const State &s, const std::string &family, uint64_t frame, uint32
         const bool on_bar = i == s.row();
         const int a = on_bar ? 255 : std::max(60, 235 - (int)(std::fabs(off) * 34));
         const int detail_w = width(g.detail, 1), title_x = mx + 8;
-        const bool detail = !pic || on_bar;   // the year and the system: every row's, or over a picture the chosen game's alone
+        const bool detail = !over_picture || on_bar;   // the year and the system: every row's, or over a picture the chosen game's alone
         const int room = w - 2 * (mx + 8) - (detail && detail_w ? detail_w + 16 : 0);
         const int over = width(g.title, 2) - room;
         Canvas row = c;
@@ -288,53 +384,59 @@ void draw_menu(const State &s, const std::string &family, uint64_t frame, uint32
             Canvas on = row, past = row;
             on.x1 = std::min(row.x1, bar_text_to), past.x0 = std::max(row.x0, bar_text_to);
             on.text(tx, y, g.title, 2, kDark);
-            past.text(tx + 2, y + 2, g.title, 2, kDark, 190);
-            past.text(tx, y, g.title, 2, kText);
-        } else if (over > 0) {   // cut short, with dots
-            const std::string shown = cut(g.title, 2, room);
-            if (pic) row.text(title_x + 2, y + 2, shown, 2, kDark, a * 3 / 4);   // (a shadow, over a picture)
-            row.text(title_x, y, shown, 2, kText, a);
-        } else {
-            if (pic) row.text(title_x + 2, y + 2, g.title, 2, kDark, a * 3 / 4);
-            row.text(title_x, y, g.title, 2, kText, a);
+            past.text(tx + 2, y + 2, g.title, 2, kDark, g_styled ? 90 : 190);
+            past.text(tx, y, g.title, 2, g_styled ? 0xffffff : L.ink);
+        } else {   // cut short with dots, if it is too long
+            const std::string shown = over > 0 ? cut(g.title, 2, room) : g.title;
+            if (shadowed) row.text(title_x + 2, y + 2, shown, 2, kDark, a * 3 / 4);
+            row.text(title_x, y, shown, 2, L.ink, a);
         }
-        if (pic && on_bar) c.text(w - mx - 8 - detail_w + 1, y + 5, g.detail, 1, kDark, 220);
-        if (detail) c.text(w - mx - 8 - detail_w, y + 4, g.detail, 1, pic ? kText : on_bar ? kDark : kDim, a);
+        if (over_picture && on_bar) c.text(w - mx - 8 - detail_w + 1, y + 5, g.detail, 1, kDark, 220);
+        if (detail)
+            c.text(w - mx - 8 - detail_w, y + 4, g.detail, 1,
+                   over_picture ? (day ? 0xffffff : L.ink) : on_bar ? (g_styled ? L.ink : kDark) : L.dim, a);
     }
     c.unclip();
     {   // where the bar is in the shelf
         char at[32];
         snprintf(at, sizeof at, "%d / %d", s.row() + 1, n);
-        c.text(w - mx - width(at, 1), 100, at, 1, kDim);
+        c.text(w - mx - width(at, 1), 100, at, 1, L.dim);
     }
 
     // what this cabinet's controls do; once a game is started, that it is
     const int legend_y = list_y + rows * row_h + 12;
-    c.fill(mx, legend_y - 6, w - 2 * mx, 1, 0x3a4060);
+    c.fill(mx, legend_y - 6, w - 2 * mx, 1, L.line);
     if (started) {
         const std::string line = "Starting " + sel->title;
         const int k = width(line, 2) <= w - 2 * mx ? 2 : 1;
-        c.text((w - width(line, k)) / 2, legend_y + 28, line, k, kText);
+        c.text((w - width(line, k)) / 2, legend_y + 28, line, k, L.ink);
         return;
     }
     if (!s.notice().empty()) {   // said first: a box in the controls' place, until the first move
         const size_t bar_at = s.notice().find('|');
         const std::string first = cut(s.notice().substr(0, bar_at), 2, w - 2 * mx - 32);
         const std::string second = bar_at == std::string::npos ? "" : cut(s.notice().substr(bar_at + 1), 1, w - 2 * mx - 32);
-        c.fill(mx, legend_y, w - 2 * mx, 72, kAmber);
-        c.fill(mx + 2, legend_y + 2, w - 2 * mx - 4, 68, kDark);
-        c.text((w - width(first, 2)) / 2, legend_y + (second.empty() ? 28 : 16), first, 2, kText);
-        c.text((w - width(second, 1)) / 2, legend_y + 44, second, 1, kAmber);
+        c.fill(mx, legend_y, w - 2 * mx, 72, L.point);
+        c.fill(mx + 2, legend_y + 2, w - 2 * mx - 4, 68, g_styled ? L.foot : kDark);
+        c.text((w - width(first, 2)) / 2, legend_y + (second.empty() ? 28 : 16), first, 2, L.ink);
+        c.text((w - width(second, 1)) / 2, legend_y + 44, second, 1, day ? L.ink : L.point);
         return;
     }
     const std::vector<Hint> hints = legend(family);
     int longest = 0, does = 0;
     for (const Hint &hint : hints) longest = std::max(longest, width(hint.control, 2)), does = std::max(does, width(hint.does, 2));
-    const int gap = width("mm", 2), x = std::max(mx, (w - (longest + gap + does)) / 2);
+    const int dot = g_styled ? 22 : 0;   // the look's: a dot of the control's colour before it
+    const int gap = width("mm", 2), x = std::max(mx + dot, (w - (dot + longest + gap + does)) / 2 + dot);
     for (size_t i = 0; i < hints.size(); i++) {
         const int y = legend_y + 4 + (int)i * 24;
-        c.text(x, y, hints[i].control, 2, kAmber);
-        c.text(x + longest + gap, y, hints[i].does, 2, kText);
+        if (g_styled) {
+            c.disc(x - 15, y + 8, 7, control_colour(hints[i].control, (int)i));
+            c.text(x, y, hints[i].control, 2, L.ink);
+            c.text(x + longest + gap, y, hints[i].does, 2, mix(L.ink, L.dim, 80));
+        } else {
+            c.text(x, y, hints[i].control, 2, L.bar);
+            c.text(x + longest + gap, y, hints[i].does, 2, L.ink);
+        }
     }
 }
 
@@ -415,6 +517,7 @@ void draw(const State &s, const std::string &family, uint64_t frame, uint32_t *p
     const LogoAt at = logo_at(s, frame, w, h);
     Canvas c{px, w, h, 0, 0, w, h};
     if (at.dark) c.fill(0, 0, w, h, 0, at.dark);
+    if (at.anim >= 0 && light(g_look.ground)) c.fill(at.x, at.y, at.w, at.h, 0);   // (its white lines: on black, on a light ground)
     if (at.anim >= 0) draw_logo(c, at);
 }
 

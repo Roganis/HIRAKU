@@ -1,0 +1,14 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Caddy in front of hiraku-server's API and web pages (docs/SERVER.md, "Behind Caddy"): HTTPS with a
+# certificate Caddy gets itself for the name, the requests passed to serve's API on 127.0.0.1:8081
+# (server.conf: api = 127.0.0.1:8081, api-trust-proxy = true). Put in /etc/caddy/Caddyfile, with
+# your own name for games.example.org.
+#
+# The games' port (8080) is NOT proxied: the cabinets speak to it directly, in plain TCP, each
+# call encrypted by its machine's key (hk2.PCBID.SECRET), which a proxy would neither have nor
+# need. Open that port in the firewall as it is; never send it through Caddy or any HTTP proxy.
+games.example.org {
+	encode zstd gzip
+	# /api/ and the web pages (/) on the same port
+	reverse_proxy 127.0.0.1:8081
+}

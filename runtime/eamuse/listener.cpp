@@ -12,6 +12,7 @@
 #include <fstream>
 #include <map>
 #include <mutex>
+#include <regex>
 #include <string>
 #include <thread>
 
@@ -62,7 +63,68 @@ int64_t parse_clock(const char *s) {
     return (int64_t)hk::sys::from_utc(tm);
 }
 
+// A word of a log line: printable ASCII but space and '"', at most 40 bytes; "-" for none
+std::string word_of(const std::string &s) {
+    std::string w;
+    for (const char ch : s.substr(0, 40)) w += ch > ' ' && ch < 127 && ch != '"' ? ch : '?';
+    return w.empty() ? "-" : w;
+}
+
+// A call's line (call_lines): when, the machine (PCBID, "name"), the model, module.method of each
+// request, the answer's HTTP status, how long its answer took. `said`: what the server logged of the
+// call (its body: read here, never written out), srcid: the cabinet admit() was asked about
+std::string call_line(const std::string &said, const std::string &srcid, const std::string &answer, long ms,
+                      const std::function<std::string(const std::string &)> &machine_name) {
+    Call c;
+    std::string what;
+    if (said.rfind("e-AMUSE3 call", 0) == 0) {
+        const size_t from = said.find(": "), to = said.find("\ne-AMUSE3 answer: ");
+        if (from != std::string::npos && from < to) parse(said.substr(from + 2, to == std::string::npos ? to : to - from - 2), c);
+        for (const Request &r : c.requests)
+            what += (what.empty() ? "" : ",") + word_of(r.module) + "." + word_of(r.method.empty() ? attr(r.attrs, "type") : r.method);
+    } else if (said.rfind("GET ", 0) == 0) {   // a package's download (the message)
+        what = "GET:" + word_of(said.substr(4, said.find(' ', 4) - 4));
+    }
+    if (c.srcid.empty()) c.srcid = srcid;
+    const std::string pcbid = pcbid_of(c.srcid);
+    std::string name = pcbid.empty() || !machine_name ? "" : machine_name(pcbid);
+    for (char &ch : name) if ((unsigned char)ch < ' ' || ch == '"' || ch == 127) ch = '?';
+    const std::string status = answer.size() >= 12 && answer.rfind("HTTP/", 0) == 0 ? answer.substr(9, 3) : "-";
+    return utc_now() + " call " + (pcbid.empty() ? word_of(c.srcid) : pcbid) + " " + (name.empty() ? "-" : "\"" + name + "\"") + " " +
+           word_of(c.model) + " " + (what.empty() ? "-" : what) + " " + status + " " + std::to_string(ms) + "ms";
+}
+
 }  // namespace
+
+std::string utc_now() {
+    const time_t t = time(nullptr);
+    struct tm tm {};
+#ifdef _WIN32
+    gmtime_s(&tm, &t);
+#else
+    gmtime_r(&t, &tm);
+#endif
+    char s[32];
+    strftime(s, sizeof s, "%Y-%m-%dT%H:%M:%SZ", &tm);
+    return s;
+}
+
+void say_line(const std::string &line) {
+    const std::string l = line + "\n";
+    fwrite(l.data(), 1, l.size(), stdout);   // (stdio's lock: one write is whole)
+    fflush(stdout);
+}
+
+std::string hidden(const std::string &text) {
+    static const std::regex attrs(R"re(([\s<])(pass|passwd|password|ea_passwd|cpass|pin)(\s*=\s*)("[^"]*"|'[^']*'))re", std::regex::icase);
+    static const std::regex elements(R"re(<(pass|passwd|password|ea_passwd|cpass|pin)(\s[^>]*[^/>])?>[^<]*</)re", std::regex::icase);
+    static const std::regex reg1(R"re((\smethod="pc"[^>]*\scommand="reg\s+[^\s"]+\s+[^\s"]+\s+)[^\s"]+)re");
+    static const std::regex reg2(R"re((\scommand="reg\s+[^\s"]+\s+[^\s"]+\s+)[^\s"]+([^>]*\smethod="pc"))re");
+    std::string t = std::regex_replace(text, attrs, "$1$2$3\"***\"");
+    t = std::regex_replace(t, elements, "<$1$2>***</");
+    t = std::regex_replace(t, reg1, "$1***");
+    return std::regex_replace(t, reg2, "$1***$2");
+}
 
 int Listener::option(int argc, char **argv, int &i) {
     const std::string a = argv[i];
@@ -138,6 +200,25 @@ int Listener::start(const std::string &folder, bool new_cabinet, const std::stri
     return -1;
 }
 
+int Listener::open() {
+#ifdef SIGPIPE
+    signal(SIGPIPE, SIG_IGN);
+#endif
+    sockaddr_in sa{};
+    sa.sin_family = AF_INET;
+    sa.sin_port = htons((uint16_t)port);
+    if (inet_pton(AF_INET, bind.c_str(), &sa.sin_addr) != 1) { fprintf(stderr, "--bind: an IPv4 address\n"); return 2; }
+    const int ls = net::socket(AF_INET, SOCK_STREAM, 0);
+    net::set_int(ls, SOL_SOCKET, SO_REUSEADDR, 1);
+    if (::bind(ls, (sockaddr *)&sa, sizeof sa) != 0 || listen(ls, 16) != 0) {
+        fprintf(stderr, "%s: the games' port %s:%d: %s (--port, --bind)\n", program, bind.c_str(), port, net::error().c_str());
+        net::close(ls);
+        return 1;
+    }
+    fd = ls;
+    return -1;
+}
+
 int Listener::serve(Server &server, const std::string &kept) {
     const int64_t started = (int64_t)time(nullptr);
     const int64_t clock0 = clock_start;
@@ -146,7 +227,30 @@ int Listener::serve(Server &server, const std::string &kept) {
     server.now = [clock0, tz, started] {
         return clock0 < 0 ? (int64_t)time(nullptr) + tz * 3600 : clock0 + ((int64_t)time(nullptr) - started);
     };
-    if (!quiet) server.log = [](const std::string &s) { printf("%s\n", s.c_str()); fflush(stdout); };
+    // What the server says of each call (one at a time): hiraku-eamuse the whole of it; hiraku-server
+    // a line a call made of it (call_line), or with --log-calls the whole of it, PINs hidden
+    std::string said;
+    std::function<void(const std::string &)> relay_log;
+    if (quiet) {
+    } else if (call_lines && !log_calls) {
+        server.log = [&said](const std::string &s) { said = s; };
+        relay_log = [](const std::string &s) { say_line(utc_now() + " " + s); };
+    } else if (call_lines) {
+        server.log = [](const std::string &s) {
+            std::string t = s;
+            // a body that isn't XML (shown in hex): not shown at all, whatever it holds
+            if (const size_t at = t.find(": "); t.rfind("e-AMUSE3 call", 0) == 0 && at != std::string::npos && at + 2 < t.size() && t[at + 2] != '<') {
+                const size_t end = t.find("\ne-AMUSE3 answer: ");
+                const size_t n = (end == std::string::npos ? t.size() : end) - at - 2;
+                t.replace(at + 2, n, "(" + std::to_string(n / 2) + " bytes, not XML: not shown)");
+            }
+            say_line(utc_now() + " " + hidden(t));
+        };
+        relay_log = [](const std::string &s) { say_line(utc_now() + " " + s); };
+    } else {
+        server.log = [](const std::string &s) { printf("%s\n", s.c_str()); fflush(stdout); };
+        relay_log = server.log;
+    }
     const char *const me = program;
     // What was refused, said whatever --quiet says (a cabinet that gets no answer is looked for here), each
     // once a minute at the most
@@ -174,7 +278,9 @@ int Listener::serve(Server &server, const std::string &kept) {
     };
     std::string asking;   // the address the call being answered came from (the calls are answered one at a time)
     std::string proven;   // ... the machine its connection's key is ("": none, or a key for all)
+    std::string admitting;   // ... the cabinet it says it is from (call_line's when nothing else said)
     server.admit = [&](const std::string &srcid) {
+        admitting = srcid;
         if (!proven.empty() && pcbid_of(srcid) != proven) {
             note("cabinet " + srcid + " as " + proven, "refused: a call from " + asking + " behind machine " + proven + "'s key as cabinet " +
                                                            (pcbid_of(srcid).empty() ? "\"" + srcid.substr(0, 40) + "\" (not a PCBID)" : pcbid_of(srcid)) +
@@ -194,20 +300,10 @@ int Listener::serve(Server &server, const std::string &kept) {
         return false;
     };
 
-#ifdef SIGPIPE
-    signal(SIGPIPE, SIG_IGN);
-#endif
-    const int ls = net::socket(AF_INET, SOCK_STREAM, 0);
-    net::set_int(ls, SOL_SOCKET, SO_REUSEADDR, 1);
-    sockaddr_in sa{};
-    sa.sin_family = AF_INET;
-    sa.sin_port = htons((uint16_t)port);
-    if (inet_pton(AF_INET, bind.c_str(), &sa.sin_addr) != 1) { fprintf(stderr, "--bind: an IPv4 address\n"); return 2; }
-    if (::bind(ls, (sockaddr *)&sa, sizeof sa) != 0 || listen(ls, 16) != 0) {
-        fprintf(stderr, "%s: %s:%d: %s\n", me, bind.c_str(), port, net::error().c_str());
-        return 1;
-    }
-    printf("%s: e-AMUSE3 on %s:%d, data in %s\n", me, bind.c_str(), port, kept.c_str());
+    if (fd < 0)
+        if (const int status = open(); status >= 0) return status;
+    const int ls = fd;
+    printf("%s: e-AMUSE3 on %s:%d, data in %s%s\n", me, bind.c_str(), port, kept.c_str(), version.empty() ? "" : (", build " + version).c_str());
     // e-AMUSE3 has no log-in of its own: a cabinet is whoever sends its calls, unless told which to take
     if (!allowed.empty()) printf("%s: connections taken from %s and this computer only\n", me, allowed.text().c_str());
     if (cabinets.in_force()) {
@@ -230,7 +326,7 @@ int Listener::serve(Server &server, const std::string &kept) {
     };
     RelayServer relay_server;
     if (relay) {
-        relay_server.log = server.log;
+        relay_server.log = relay_log;
         relay_server.key = key;
         relay_server.machine_key = machine_key;
         relay_server.machines_only = machines_only;
@@ -248,6 +344,22 @@ int Listener::serve(Server &server, const std::string &kept) {
     std::mutex answering;
     std::atomic<int> connections{0};
     for (;;) {
+        if (stop) {   // (a signal ends no wait: the stop is looked at every 200 ms)
+            pollfd w = net::watch(ls, POLLIN);
+            if (!*stop && net::poll(&w, 1, 200) <= 0 && !*stop) continue;
+            if (*stop) {
+                net::close(ls);
+                fd = -1;
+                const auto until = std::chrono::steady_clock::now() + std::chrono::seconds(kStopSeconds);
+                while (connections > 0 && std::chrono::steady_clock::now() < until) sys::sleep_for(std::chrono::milliseconds(20));
+                std::lock_guard<std::mutex> last(answering);   // (no call answered after this one)
+                if (connections > 0)
+                    say_line(std::string(me) + ": " + std::to_string(connections.load()) + " connection" + (connections == 1 ? "" : "s") +
+                             " still open after " + std::to_string(kStopSeconds) + " seconds: not answered");
+                if (stopped) stopped();
+                return 0;
+            }
+        }
         sockaddr_in peer{};
         const int fd = net::accept(ls, &peer);
         if (fd < 0) {   // (no descriptors left, say: not a loop that spins)
@@ -322,7 +434,15 @@ int Listener::serve(Server &server, const std::string &kept) {
                     std::lock_guard<std::mutex> one(answering);
                     asking = dotted(ip);
                     proven = machine_id;
+                    said.clear();
+                    admitting.clear();
+                    const auto t0 = std::chrono::steady_clock::now();
                     answer = server.handle(req);
+                    if (call_lines && !log_calls && !quiet) {
+                        const long ms = (long)std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - t0).count();
+                        say_line(call_line(said, admitting, answer, ms, machine_name));
+                        if (said.rfind("e-AMUSE3 call not answered", 0) == 0) say_line(utc_now() + " " + said);
+                    }
                 }
                 if (with_key) {
                     keyed.send(answer.data(), answer.size());

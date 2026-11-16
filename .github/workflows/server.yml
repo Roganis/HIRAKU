@@ -1,0 +1,100 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# hiraku-server, the hosted e-AMUSEMENT server (docs/SERVER.md), on its own: built with only what it
+# needs on Debian 12, its tests, its package (tools/package-server.sh) made and tried
+# (tools/smoke-server.sh) and kept as the run's artifact; and its container image (deploy/Dockerfile)
+# built and run until its health check passes. Nothing is published: no release, no registry.
+# (The desktop packages are release.yml's; they leave hiraku-server out.)
+name: server
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "server/**"
+      - "runtime/eamuse/**"
+      - "web/**"
+      - "deploy/**"
+      - "tools/package-server.sh"
+      - "tools/smoke-server.sh"
+      - ".github/workflows/server.yml"
+  pull_request:
+    paths:
+      - "server/**"
+      - "runtime/eamuse/**"
+      - "web/**"
+      - "deploy/**"
+      - "tools/package-server.sh"
+      - "tools/smoke-server.sh"
+      - ".github/workflows/server.yml"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    container: debian:12
+    timeout-minutes: 60
+    steps:
+      # what deploy/Dockerfile's build stage installs, and Python (the tests), git (the checkout's
+      # files, tools/package-files.sh) and xz (the package)
+      - name: Build tools
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends g++ cmake ninja-build zlib1g-dev libzstd-dev libsqlite3-dev \
+            python3 git ca-certificates xz-utils binutils
+      - uses: actions/checkout@v7
+      # SDL3, Qt and pkg-config's libraries switched off: the server needs none of them
+      - name: Build hiraku-server and its tests
+        run: |
+          cmake -S . -B build/server -G Ninja -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_DISABLE_FIND_PACKAGE_SDL3=ON -DCMAKE_DISABLE_FIND_PACKAGE_Qt6=ON -DCMAKE_DISABLE_FIND_PACKAGE_PkgConfig=ON
+          ninja -C build/server hiraku-server hiraku-eamuse key_client test_kbin test_crypt test_keyed test_lzss \
+            test_store test_access_lists test_merge test_lobby
+      - name: Unit tests
+        run: ctest --test-dir build/server -R "eamuse|kbin|keyed|crypt" --output-on-failure
+      - name: Package
+        run: tools/package-server.sh build/server dist
+      - name: The package, tried
+        run: tools/smoke-server.sh dist/hiraku-server-linux-x86_64.tar.xz
+      - uses: actions/upload-artifact@v7
+        with:
+          name: hiraku-server-linux
+          path: dist/hiraku-server-linux-x86_64.tar.xz
+          retention-days: 14
+
+  image:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build the image (not pushed anywhere)
+        run: docker build -f deploy/Dockerfile --build-arg GITHUB_SHA=${{ github.sha }} -t hiraku-server:ci .
+      # Its own health check (HEALTHCHECK: hiraku-server health) passing, the API reached through the
+      # published port, then a clean stop (SIGTERM: exit 0). The first admin's password is left out
+      # of what the log shows.
+      - name: Run it until it is healthy
+        run: |
+          docker run -d --name hk -v hk-data:/data -p 127.0.0.1:8080:8080 -p 127.0.0.1:8081:8081 \
+            --health-interval 2s --health-start-period 5s hiraku-server:ci
+          status=starting
+          for _ in $(seq 60); do
+            status=$(docker inspect -f '{{.State.Health.Status}}' hk)
+            [ "$status" = healthy ] && break
+            sleep 2
+          done
+          docker logs hk 2>&1 | grep -v 'the first admin is'
+          echo "health: $status"
+          [ "$status" = healthy ]
+          curl -fsS http://127.0.0.1:8081/api/v1/health
+          echo
+          docker stop -t 20 hk
+          docker logs hk 2>&1 | grep -F 'stopped (SIGTERM)'
+          [ "$(docker inspect -f '{{.State.ExitCode}}' hk)" = 0 ]
+      - name: Clean up
+        if: always()
+        run: docker rm -f hk || true

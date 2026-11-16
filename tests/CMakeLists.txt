@@ -272,6 +272,15 @@ if(SQLite3_FOUND AND Python3_FOUND AND NOT CMAKE_CROSSCOMPILING)   # (hiraku-ser
   add_test(NAME eamuse_web COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/eamuse/test_web.py
            $<TARGET_FILE:hiraku-server> ${CMAKE_SOURCE_DIR}/web)
   set_tests_properties(eamuse_web PROPERTIES TIMEOUT 120)
+  # ... and run as a service: health, the log (nothing secret), --log-calls, the config file, backups kept, SIGTERM
+  add_test(NAME eamuse_service COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/eamuse/test_service.py
+           $<TARGET_FILE:hiraku-server> $<TARGET_FILE:key_client>)
+  set_tests_properties(eamuse_service PROPERTIES TIMEOUT 180)
+  # ... and under load for 3 seconds (tools/eamuse/load.py: made-up cabinets playing credits, health
+  # polled, a backup in the middle; its long runs are docs/SERVER.md's numbers)
+  add_test(NAME eamuse_load_smoke COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/tools/eamuse/load.py
+           $<TARGET_FILE:hiraku-server> --cabinets 6 --seconds 3 --workers 2 --quiet)
+  set_tests_properties(eamuse_load_smoke PROPERTIES TIMEOUT 120)
 endif()
 # The lists a server on a network keeps (runtime/eamuse/access.h): addresses, cabinets by PCBID
 add_executable(test_access_lists eamuse/test_access_lists.cpp)

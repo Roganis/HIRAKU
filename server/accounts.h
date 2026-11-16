@@ -221,6 +221,10 @@ public:
     // a disabled one, one without a key. Read from the database each time (a change made by the
     // command line while serve runs holds at once)
     bool machine_key(const std::string &pcbid, uint8_t key[32]);
+    // A machine's name by its PCBID, "" if none (serve's log lines)
+    std::string machine_name(const std::string &pcbid);
+    // Whether the database answers a query that reads its file (the API's /health)
+    bool alive();
 
 private:
     struct Tx;

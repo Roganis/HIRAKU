@@ -1234,4 +1234,17 @@ ea::Cabinet Accounts::cabinet(const std::string &srcid) {
     return c;
 }
 
+std::string Accounts::machine_name(const std::string &pcbid) {
+    if (!db_) return "";
+    St q(db_, "SELECT name FROM machines WHERE pcbid=?1");
+    q.bind(1, pcbid);
+    return q.row() ? q.text(0) : "";
+}
+
+bool Accounts::alive() {
+    if (!db_) return false;
+    St q(db_, "SELECT COUNT(*) FROM meta");
+    return q.row();
+}
+
 }  // namespace hk::srv

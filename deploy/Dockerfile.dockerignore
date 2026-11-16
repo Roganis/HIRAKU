@@ -1,0 +1,21 @@
+# What `docker build -f deploy/Dockerfile .` leaves out of its context (BuildKit reads this file,
+# beside the Dockerfile and named after it): builds, game data, notes, git's own folder
+.git
+.cache
+.claude
+out
+build
+dumps
+local
+analyze
+user
+**/__pycache__
+*.tar.xz
+*.tar.gz
+*.zip
+*.7z
+*.chd
+*.bin
+*.iso
+*.img
+compile_commands.json

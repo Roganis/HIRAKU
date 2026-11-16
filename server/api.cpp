@@ -26,6 +26,7 @@
 
 #include "accounts.h"
 #include "eamuse/games.h"
+#include "eamuse/listener.h"
 #include "shell/sys.h"
 
 #if !defined(_WIN32) && __has_include(<iconv.h>)
@@ -134,6 +135,21 @@ bool whole_number(const std::string &s, long &v, long min, long max) {
 }
 
 json when(int64_t t) { return t ? json(t) : json(nullptr); }
+
+// --- the log: a line a request (Api::start), its start and its user kept by the thread answering it
+thread_local std::chrono::steady_clock::time_point t_began{};
+thread_local std::string t_user;
+
+// A request's path for the log: no query (httplib's path has none), a card's number as *
+std::string logged_path(const std::string &path) {
+    std::string p;
+    for (const char ch : path.substr(0, 200)) p += ch > ' ' && ch < 127 ? ch : '?';
+    for (size_t at = p.find("/cards/"); at != std::string::npos; at = p.find("/cards/", at + 1)) {
+        const size_t from = at + 7, to = p.find('/', from);
+        if (from < p.size()) p.replace(from, to == std::string::npos ? std::string::npos : to - from, "*");
+    }
+    return p;
+}
 
 // --- answers
 
@@ -463,6 +479,7 @@ struct Api::Impl {
     Limits limits;
     httplib::Server http;
     std::thread thread;
+    const std::chrono::steady_clock::time_point started = std::chrono::steady_clock::now();
 
     Impl(const std::string &file, ea::Store &store, const ApiOptions &opt) : acc(file, store), o(opt) {}
 
@@ -537,6 +554,7 @@ struct Api::Impl {
                 c.address = address(req);
             }
         }
+        if (c.auth != Auth::none) t_user = c.who.name;
         if (rule.need != Need::anyone || c.auth != Auth::none) {
             if (c.auth == Auth::none) return fail(res, 401, "not_signed_in", "log in first");
             const std::string key = c.auth == Auth::token ? "t:" + std::to_string(c.token) : "s:" + c.session.substr(0, 24);
@@ -599,6 +617,11 @@ void Api::Impl::routes() {
     password.while_changing = true;
 
     // --- anyone
+    route("GET", "/health", anyone, [this](Caller &, const Request &, In &, Response &res) {
+        const bool ok = acc.alive();
+        const auto up = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now() - started).count();
+        answer(res, {{"ok", ok}, {"version", hk::sys::build_id()}, {"uptime", (long long)up}}, ok ? 200 : 503);
+    });
     route("GET", "/server", anyone, [this](Caller &, const Request &, In &, Response &res) {
         const auto mode = acc.sign_up_mode();
         json games = json::array();
@@ -1056,6 +1079,23 @@ bool Api::start(std::string &error) {
         error = "cannot listen on " + m.o.host + ":" + std::to_string(m.o.port);
         return false;
     }
+    if (!m.o.quiet) {   // a line a request: when, method, path, status, ms, the user if one is logged in
+        m.http.set_pre_routing_handler([](const Request &, Response &) {
+            t_began = std::chrono::steady_clock::now();
+            t_user.clear();
+            return httplib::Server::HandlerResponse::Unhandled;
+        });
+        m.http.set_logger([](const Request &req, const Response &res) {
+            const bool timed = t_began != std::chrono::steady_clock::time_point{};
+            const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - t_began).count();
+            std::string user;
+            for (const char ch : t_user) user += (unsigned char)ch > ' ' && ch != 127 ? ch : '?';
+            ea::say_line(ea::utc_now() + " api " + logged_path(req.method) + " " + logged_path(req.path) + " " + std::to_string(res.status) + " " +
+                         (timed ? std::to_string((long long)ms) + "ms" : "-") + " " + (user.empty() ? "-" : user));
+            t_began = {};
+            t_user.clear();
+        });
+    }
     m.thread = std::thread([&m] { m.http.listen_after_bind(); });
     if (!m.o.quiet) {
         printf("hiraku-server: the API on http://%s:%d/api/v1/ (put TLS in front of it: docs/SERVER.md)\n", m.o.host.c_str(), m.o.port);
@@ -1064,6 +1104,28 @@ bool Api::start(std::string &error) {
         fflush(stdout);
     }
     return true;
+}
+
+int health(const std::string &address, int port) {
+    const std::string host = address == "0.0.0.0" ? "127.0.0.1" : address == "::" ? "::1" : address;
+    const std::string where = (host.find(':') != std::string::npos ? "[" + host + "]" : host) + ":" + std::to_string(port);
+    httplib::Client cli(host, port);
+    cli.set_connection_timeout(5);
+    cli.set_read_timeout(5);
+    const auto r = cli.Get("/api/v1/health");
+    if (!r) {
+        printf("hiraku-server: not healthy: no answer on %s (%s)\n", where.c_str(), httplib::to_string(r.error()).c_str());
+        return 1;
+    }
+    const json j = json::parse(r->body, nullptr, false);
+    const bool ok = r->status == 200 && j.is_object() && j.contains("ok") && j["ok"] == true;
+    std::string version = "?";
+    long long up = -1;
+    if (j.is_object() && j.contains("version") && j["version"].is_string()) version = j["version"].get<std::string>();
+    if (j.is_object() && j.contains("uptime") && j["uptime"].is_number_integer()) up = j["uptime"].get<long long>();
+    if (ok) printf("hiraku-server: healthy on %s, build %s, up %lld s\n", where.c_str(), version.c_str(), up);
+    else printf("hiraku-server: not healthy on %s: HTTP %d%s\n", where.c_str(), r->status, r->status == 503 ? ", the database doesn't answer" : "");
+    return ok ? 0 : 1;
 }
 
 void Api::stop() {

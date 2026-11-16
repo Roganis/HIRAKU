@@ -1,0 +1,13 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# hiraku-server-backup.service once a day; a day missed while the machine was off is made up at
+# its next start (Persistent)
+[Unit]
+Description=HIRAKU e-AMUSEMENT server: a daily backup of its database
+
+[Timer]
+OnCalendar=daily
+RandomizedDelaySec=30min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

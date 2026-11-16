@@ -7,12 +7,16 @@
 //   hiraku-server serve --db FILE [--port 8080] [--bind 0.0.0.0] [--allow ADDRESSES] [--cabinets FILE]
 //                 [--key-file FILE] [--clock "2003-06-01 12:00:00"] [--tz 9] [--quiet] [--no-relay] [--no-keys]
 //                 [--api 127.0.0.1:8081 | --no-api] [--api-insecure-cookies] [--api-trust-proxy] [--web DIR | --no-web]
+//                 [--log-calls] [--config FILE]
 //   hiraku-server serve --db FILE [--cabinets FILE] --new-cabinet [NAME]  |  [--key-file FILE] --new-key
 //   hiraku-server import FOLDER --db FILE     a data folder's files into the database (made if none)
 //   hiraku-server export FOLDER --db FILE     the database as a data folder (a new or empty one)
 //   hiraku-server put NAME --db FILE          stdin kept as the thing a data folder's file NAME would be
 //   hiraku-server get NAME --db FILE          ... and that thing to stdout
 //   hiraku-server backup FILE --db FILE       a copy of the database (safe while serve runs)
+//   hiraku-server backup --dir DIR [--keep N] --db FILE   ... named by the time, the newest N kept
+//   hiraku-server health [--api ADDRESS:PORT]  whether a serve answers (exit 0) or not (1)
+//   hiraku-server --version
 //   hiraku-server players | scores CARD [GAME] | settings [GAME] | set GAME NAME VALUE  --db FILE
 //   hiraku-server user|card|arcade|machine|config|audit ... --db FILE [--as USER]   (usage() lists them)
 //     serve's options are hiraku-eamuse's; its cabinets.txt and key.txt are beside the database
@@ -24,15 +28,22 @@
 //     each behind its own key (machine add, machine key; shell/keyed.h) and as itself only;
 //     --no-keys: by the PCBID a call says it is, for a private network or a VPN. serve's JSON API
 //     (server/api.h, docs/SERVER.md) listens on --api, a port of its own, behind a reverse proxy's TLS.
+#include <algorithm>
+#include <atomic>
 #include <cctype>
+#include <csignal>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <ctime>
 #include <filesystem>
+#include <fstream>
 #include <mutex>
+#include <set>
 #include <string>
 #include <vector>
+
+#include <sqlite3.h>
 
 #include "accounts.h"
 #include "api.h"
@@ -57,7 +68,7 @@ int usage(int status) {
             "usage: hiraku-server serve --db FILE [--port N] [--bind ADDR] [--allow ADDRESSES] [--cabinets FILE]\n"
             "                     [--key-file FILE] [--clock \"YYYY-MM-DD HH:MM:SS\"] [--tz H] [--quiet] [--no-relay] [--no-keys]\n"
             "                     [--api ADDR:PORT | --no-api] [--api-insecure-cookies] [--api-trust-proxy]\n"
-            "                     [--web DIR | --no-web]\n"
+            "                     [--web DIR | --no-web] [--log-calls] [--config FILE]\n"
             "       hiraku-server serve --db FILE [--cabinets FILE] --new-cabinet [NAME]\n"
             "       hiraku-server serve --db FILE [--key-file FILE] --new-key\n"
             "       hiraku-server import FOLDER --db FILE   a data folder's files into the database (made if none)\n"
@@ -65,6 +76,10 @@ int usage(int status) {
             "       hiraku-server put NAME --db FILE        stdin kept as the data folder's file NAME would be\n"
             "       hiraku-server get NAME --db FILE        that thing to stdout\n"
             "       hiraku-server backup FILE --db FILE     a copy of the database, safe while serve runs\n"
+            "       hiraku-server backup --dir DIR [--keep N] --db FILE   DIR/hiraku-server-YYYYMMDD-HHMMSS.db (UTC),\n"
+            "                                               checked, then its own older ones beyond the newest N (14) removed\n"
+            "       hiraku-server health [--api ADDR:PORT]  whether serve's API and database answer: exit 0, else 1\n"
+            "       hiraku-server --version                 the build\n"
             "       hiraku-server players --db FILE         every card, its ref id, each game's player on it and its name\n"
             "       hiraku-server scores CARD [GAME] --db FILE   the card's scores: game, song, chart, score, clear, plays\n"
             "       hiraku-server settings [GAME] --db FILE      the owner's settings: game, name, value, default, range, what it does\n"
@@ -77,6 +92,10 @@ int usage(int status) {
             "  the caller's address is X-Forwarded-For's last hop\n"
             "  --web: the web pages' folder, served at / on the API's port (default: web beside the program,\n"
             "  ../share/hiraku-server/web, or a build tree's checkout's web/); --no-web: none\n"
+            "  serve's log: a line a game call and a line an API request, no body, card, PIN or password;\n"
+            "  --log-calls: the calls' bodies too (PINs and passwords as ***), for finding a fault; --quiet: neither\n"
+            "  --config FILE: lines \"name = value\" (# comments), the names serve's long options without the\n"
+            "  dashes (port = 8080, no-relay = true, db = FILE); an option on the command line wins\n"
             "accounts, cards, arcades, machines (--db FILE; --as USER acts as that user, else the command line, an admin;\n"
             "a password, PIN or code is read from stdin, a line each, or asked for):\n"
             "  user add NAME [--role player|operator|admin]   a new account (password)\n"
@@ -399,11 +418,218 @@ void report(const ea::Copied &c, const char *from, const char *to) {
     printf("%s: %zu things from %s to %s%s\n", ME, c.things, from, to, c.not_put.empty() ? "" : " (some not written)");
 }
 
+// --- serve's config file (--config): "name = value" lines, the names serve's long options
+
+// The options a config file may name: those taking a value, and the switches (true or false)
+const std::set<std::string> VALUED{"db", "port", "bind", "allow", "cabinets", "key-file", "clock", "tz", "api", "web"};
+const std::set<std::string> SWITCHES{"quiet", "no-relay", "no-keys", "no-api", "api-insecure-cookies", "api-trust-proxy", "no-web", "log-calls"};
+
+bool whole(const std::string &s, long lo, long hi, long &v) {
+    char *end = nullptr;
+    v = std::strtol(s.c_str(), &end, 10);
+    return !s.empty() && !*end && v >= lo && v <= hi;
+}
+
+// A value of serve's options: "" fits, else why not
+std::string value_wrong(const std::string &name, const std::string &v) {
+    long n = 0;
+    if (name == "port") return whole(v, 1, 65535, n) ? "" : "a port, 1 to 65535";
+    if (name == "tz") return whole(v, -12, 14, n) ? "" : "hours from UTC, -12 to 14";
+    if (name == "bind") {
+        int a, b, c, d;
+        char extra;
+        return sscanf(v.c_str(), "%d.%d.%d.%d%c", &a, &b, &c, &d, &extra) == 4 && a >= 0 && a < 256 && b >= 0 && b < 256 && c >= 0 && c < 256 && d >= 0 && d < 256
+                   ? "" : "an IPv4 address (0.0.0.0: every one)";
+    }
+    if (name == "api") {
+        const size_t colon = v.rfind(':');
+        return colon != std::string::npos && colon > 0 && whole(v.substr(colon + 1), 1, 65535, n) ? "" : "ADDRESS:PORT (127.0.0.1:8081)";
+    }
+    if (name == "clock") {
+        int y, mo, d;
+        return sscanf(v.c_str(), "%d-%d-%d", &y, &mo, &d) == 3 ? "" : "\"YYYY-MM-DD[ HH:MM:SS]\"";
+    }
+    if (name == "allow") {
+        ea::AddressList list;
+        std::string error;
+        return list.add(v, &error) ? "" : error;
+    }
+    return v.empty() ? "a value" : "";
+}
+
+// The options of the config file named on the command line (--config), as command-line words, those
+// the command line names itself left out (it wins). -1: read (or none named); else the exit status (said)
+int read_config(int argc, char **argv, std::vector<std::string> &out) {
+    std::string file;
+    std::set<std::string> given;
+    for (int i = 1; i < argc; i++) {
+        const std::string a = argv[i];
+        if (a == "--config") {
+            if (i + 1 >= argc) { fprintf(stderr, "%s: --config needs a file\n", ME); return 2; }
+            file = argv[++i];
+        } else if (a.rfind("--", 0) == 0) {
+            given.insert(a.substr(2));
+        }
+    }
+    if (file.empty()) return -1;
+    std::ifstream f(file);
+    if (!f) { fprintf(stderr, "%s: --config: cannot read %s\n", ME, file.c_str()); return 1; }
+    std::string text;
+    for (int n = 1; std::getline(f, text); n++) {
+        auto trim = [](std::string s) {
+            const size_t a = s.find_first_not_of(" \t\r"), b = s.find_last_not_of(" \t\r");
+            return a == std::string::npos ? std::string() : s.substr(a, b - a + 1);
+        };
+        if (const size_t hash = text.find('#'); hash != std::string::npos) text.erase(hash);
+        text = trim(text);
+        if (text.empty()) continue;
+        const size_t eq = text.find('=');
+        const std::string name = trim(text.substr(0, eq));
+        std::string value = eq == std::string::npos ? "" : trim(text.substr(eq + 1));
+        if (value.size() >= 2 && value.front() == '"' && value.back() == '"') value = value.substr(1, value.size() - 2);
+        auto wrong = [&](const std::string &why) {
+            fprintf(stderr, "%s: %s, line %d: %s\n", ME, file.c_str(), n, why.c_str());
+            return 1;
+        };
+        if (eq == std::string::npos || name.empty()) return wrong("not \"name = value\"");
+        if (!VALUED.count(name) && !SWITCHES.count(name)) return wrong("no setting \"" + name + "\" (serve's long options, without the dashes)");
+        if (SWITCHES.count(name)) {
+            const bool yes = value == "true" || value == "yes" || value == "1" || value == "on";
+            if (!yes && value != "false" && value != "no" && value != "0" && value != "off") return wrong(name + ": true or false");
+            if (yes && !given.count(name)) out.push_back("--" + name);
+            continue;
+        }
+        if (const std::string why = value_wrong(name, value); !why.empty()) return wrong(name + " = " + value + ": " + why);
+        if (given.count(name)) continue;
+        out.push_back("--" + name);
+        out.push_back(value);
+    }
+    return -1;
+}
+
+// --- serve's stop (SIGTERM, SIGINT): the first asks for it, a second ends the program at once
+std::atomic<int> stop_signal{0};
+
+extern "C" void on_stop_signal(int sig) {
+    if (stop_signal.exchange(sig)) std::_Exit(128 + sig);
+}
+
+void catch_stop_signals() {
+#ifdef _WIN32
+    signal(SIGINT, on_stop_signal);   // (Ctrl-C; a second one ends it as Windows does)
+    signal(SIGTERM, on_stop_signal);
+#else
+    struct sigaction sa {};
+    sa.sa_handler = on_stop_signal;
+    sigemptyset(&sa.sa_mask);
+    sigaction(SIGINT, &sa, nullptr);
+    sigaction(SIGTERM, &sa, nullptr);
+#endif
+}
+
+// --- start-up checks: one line each, what and where
+
+// The database's folder there and written to (its file, and SQLite's -wal and -shm beside it)
+bool db_place_ok(const std::string &db) {
+    const std::string dir = beside(db);
+    std::error_code ec;
+    if (!std::filesystem::is_directory(dir, ec)) {
+        fprintf(stderr, "%s: the database's folder %s isn't there (--db)\n", ME, dir.c_str());
+        return false;
+    }
+#ifndef _WIN32
+    if (::access(dir.c_str(), W_OK | X_OK) != 0) {
+        fprintf(stderr, "%s: the database's folder %s can't be written to (--db): the database and its -wal file are kept there\n", ME, dir.c_str());
+        return false;
+    }
+    if (hk::sys::exists(db) && ::access(db.c_str(), R_OK | W_OK) != 0) {
+        fprintf(stderr, "%s: the database %s can't be read and written (--db)\n", ME, db.c_str());
+        return false;
+    }
+#endif
+    return true;
+}
+
+// --- backup --dir: the database copied by the time it was, checked, the oldest of its kind removed
+
+// A name backup --dir gives: hiraku-server-YYYYMMDD-HHMMSS.db
+bool backup_name(const std::string &n) {
+    static const std::string head = "hiraku-server-";
+    if (n.size() != head.size() + 18 || n.compare(0, head.size(), head) != 0 || n.compare(n.size() - 3, 3, ".db") != 0) return false;
+    for (size_t i = head.size(); i < head.size() + 15; i++)
+        if (i == head.size() + 8 ? n[i] != '-' : !std::isdigit((unsigned char)n[i])) return false;
+    return true;
+}
+
+// The file a sound SQLite database: PRAGMA integrity_check says "ok"
+bool intact(const std::string &file, std::string &why) {
+    sqlite3 *db = nullptr;
+    if (sqlite3_open_v2(file.c_str(), &db, SQLITE_OPEN_READWRITE, nullptr) != SQLITE_OK) {
+        why = db ? sqlite3_errmsg(db) : "cannot open it";
+        sqlite3_close(db);
+        return false;
+    }
+    std::string said;
+    char *error = nullptr;
+    const int rc = sqlite3_exec(db, "PRAGMA integrity_check", [](void *to, int n, char **v, char **) {
+        if (n > 0 && v[0] && static_cast<std::string *>(to)->empty()) *static_cast<std::string *>(to) = v[0];
+        return 0;
+    }, &said, &error);
+    if (rc != SQLITE_OK) said = error ? error : "the check didn't run";
+    sqlite3_free(error);
+    sqlite3_close(db);
+    if (rc == SQLITE_OK && said == "ok") return true;
+    why = said;
+    return false;
+}
+
+int backup_to_dir(ea::SqliteStore &st, const std::string &db, const std::string &dir, long keep) {
+    namespace fs = std::filesystem;
+    std::error_code ec;
+    fs::create_directories(dir, ec);
+    if (!fs::is_directory(dir, ec)) { fprintf(stderr, "%s: backup: no folder %s, and it can't be made\n", ME, dir.c_str()); return 1; }
+    const time_t t = time(nullptr);
+    struct tm tm {};
+#ifdef _WIN32
+    gmtime_s(&tm, &t);
+#else
+    gmtime_r(&t, &tm);
+#endif
+    char name[48];
+    strftime(name, sizeof name, "hiraku-server-%Y%m%d-%H%M%S.db", &tm);
+    const std::string to = (fs::path(dir) / name).string();
+    std::string error;
+    if (!st.backup(to, error)) { fprintf(stderr, "%s: backup: %s\n", ME, error.c_str()); return 1; }
+    if (!intact(to, error)) {
+        fs::remove(to, ec);
+        fprintf(stderr, "%s: backup: the copy %s failed its check (%s): removed, the older backups kept\n", ME, to.c_str(), error.c_str());
+        return 1;
+    }
+    std::vector<std::string> ours;   // (only files of the name it gives: nothing else in the folder is touched)
+    for (const fs::directory_entry &e : fs::directory_iterator(dir, ec))
+        if (backup_name(e.path().filename().string()) && e.is_regular_file(ec) && !e.is_symlink(ec)) ours.push_back(e.path().filename().string());
+    std::sort(ours.rbegin(), ours.rend());   // newest first
+    size_t removed = 0;
+    for (size_t i = (size_t)keep; i < ours.size(); i++) removed += fs::remove(fs::path(dir) / ours[i], ec);
+    printf("%s: %s copied to %s and checked; %zu older backup%s removed, %zu kept\n", ME, db.c_str(), to.c_str(), removed, removed == 1 ? "" : "s",
+           std::min(ours.size(), (size_t)keep));
+    return 0;
+}
+
 }  // namespace
 
-int main(int argc, char **argv) {
-    std::string db;
-    bool new_cabinet = false, new_key = false, no_keys = false;
+int main(int argc0, char **argv0) {
+    // serve's config file's options first (--config), then the command line's: the last one said wins
+    std::vector<std::string> configured;
+    if (const int status = read_config(argc0, argv0, configured); status >= 0) return status;
+    std::vector<char *> args{argv0[0]};
+    for (std::string &w : configured) args.push_back(w.data());
+    for (int i = 1; i < argc0; i++) args.push_back(argv0[i]);
+    const int argc = (int)args.size();
+    char **const argv = args.data();
+    std::string db, backup_dir, config;
+    long keep = 14;
+    bool new_cabinet = false, new_key = false, no_keys = false, keep_given = false, log_calls = false;
     std::string new_name;
     std::vector<std::string> words;   // the command and its own words
     AccountOptions ao;
@@ -412,7 +638,25 @@ int main(int argc, char **argv) {
     srv::ApiOptions api;
     for (int i = 1; i < argc; i++) {
         const std::string a = argv[i];
-        if (const int taken = listener.option(argc, argv, i)) {
+        if (a == "--version") {
+            printf("%s %s\n", ME, hk::sys::build_id());
+            return 0;
+        }
+        if ((a == "--port" || a == "--tz") && i + 1 < argc)   // (the listener takes any number: serve's are checked here)
+            if (const std::string why = value_wrong(a.substr(2), argv[i + 1]); !why.empty()) {
+                fprintf(stderr, "%s: %s %s: %s\n", ME, a.c_str(), argv[i + 1], why.c_str());
+                return 2;
+            }
+        if (a == "--config") {
+            config = argv[++i];   // (read_config read it)
+        } else if (a == "--dir" || a == "--keep") {
+            if (i + 1 >= argc) { fprintf(stderr, "%s needs a value\n", a.c_str()); return 2; }
+            if (a == "--dir") backup_dir = argv[++i];
+            else if (!whole(argv[++i], 1, 100000, keep)) { fprintf(stderr, "%s: --keep: how many backups to keep, 1 or more\n", ME); return 2; }
+            else keep_given = true;
+        } else if (a == "--log-calls") {
+            log_calls = true;
+        } else if (const int taken = listener.option(argc, argv, i)) {
             if (taken == 2) return 2;
         } else if (const int api_taken = api.option(argc, argv, i)) {
             if (api_taken == 2) return 2;
@@ -436,6 +680,13 @@ int main(int argc, char **argv) {
     const std::string cmd = words[0];
     const size_t n = words.size() - 1;
     auto word = [&](size_t i) { return i < words.size() ? words[i] : std::string(); };
+    if (!config.empty() && cmd != "serve") { fprintf(stderr, "%s: --config is serve's\n", ME); return 2; }
+    if ((!backup_dir.empty() || keep_given) && cmd != "backup") { fprintf(stderr, "%s: --dir and --keep are backup's\n", ME); return 2; }
+    if (keep_given && backup_dir.empty()) { fprintf(stderr, "%s: backup: --keep goes with --dir\n", ME); return 2; }
+    if (cmd == "health") {
+        if (n != 0) return usage(2);
+        return srv::health(api.host, api.port);
+    }
     const bool accounts = cmd == "user" || cmd == "card" || cmd == "arcade" || cmd == "machine" || cmd == "config" || cmd == "audit";
     if (accounts) {
         if (db.empty()) { fprintf(stderr, "%s: %s: which database? (--db FILE)\n", ME, cmd.c_str()); return 2; }
@@ -448,7 +699,8 @@ int main(int argc, char **argv) {
         return accounts_command(acc, words, ao);
     }
     const bool fits = cmd == "serve" || cmd == "players" ? n == 0
-                      : cmd == "import" || cmd == "export" || cmd == "put" || cmd == "get" || cmd == "backup" ? n == 1
+                      : cmd == "backup" ? n == (backup_dir.empty() ? 1u : 0u)
+                      : cmd == "import" || cmd == "export" || cmd == "put" || cmd == "get" ? n == 1
                       : cmd == "scores" ? n == 1 || n == 2
                       : cmd == "settings" ? n <= 1
                       : cmd == "set" ? n == 3 : false;
@@ -461,34 +713,43 @@ int main(int argc, char **argv) {
     }
 
     if (cmd == "serve") {
+        const bool serving = !new_cabinet && !new_key;
+        // what would stop it, said before anything else in one line each: the database's folder, the
+        // web pages' folder, the cabinets' list and the key, the games' port
+        if (serving && !db_place_ok(db)) return 1;
+        if (serving && api.enabled && api.web_enabled && !api.web.empty()) {
+            std::error_code ec;
+            if (!std::filesystem::is_regular_file(std::filesystem::path(api.web) / "index.html", ec)) {
+                fprintf(stderr, "%s: the web pages' folder %s has no index.html (--web DIR, or --no-web)\n", ME, api.web.c_str());
+                return 1;
+            }
+        }
         if (const int status = listener.start(beside(db), new_cabinet, new_name, new_key); status >= 0) return status;
+        if (const int status = listener.open(); status >= 0) return status;
         auto store = std::make_unique<ea::SqliteStore>(db);
         if (!store->ok()) return 1;
         ea::SqliteStore &kept = *store;
-        srv::Accounts acc(db, *store);   // (the store lives as long as the server, this function)
-        if (!acc.ok()) return 1;
-        first_admin(acc);
-        ea::Server server(std::move(store));   // every game's, by a call's model (runtime/eamuse/server.cpp)
+        // (the store lives as long as the server; both closed when serve stops, below)
+        auto acc = std::make_unique<srv::Accounts>(db, *store);
+        if (!acc->ok()) return 1;
+        first_admin(*acc);   // (said at once: shown this once, even if the start goes no further)
+        auto server = std::make_unique<ea::Server>(std::move(store));   // every game's, by a call's model (runtime/eamuse/server.cpp)
         // the machines answered and their arcades (server/accounts.h), and their keys: asked by the
         // calls (one at a time), the connections' threads and the relay's, so one at a time
         std::mutex one;
-        listener.machines = [&acc, &one](const std::string &srcid) { std::lock_guard<std::mutex> l(one); return acc.admits(srcid); };
-        server.cabinet = [&acc, &one](const std::string &srcid) { std::lock_guard<std::mutex> l(one); return acc.cabinet(srcid); };
+        srv::Accounts &a = *acc;
+        listener.machines = [&a, &one](const std::string &srcid) { std::lock_guard<std::mutex> l(one); return a.admits(srcid); };
+        server->cabinet = [&a, &one](const std::string &srcid) { std::lock_guard<std::mutex> l(one); return a.cabinet(srcid); };
+        listener.machine_name = [&a, &one](const std::string &pcbid) { std::lock_guard<std::mutex> l(one); return a.machine_name(pcbid); };
         if (!no_keys) {
-            listener.machine_key = [&acc, &one](const std::string &pcbid, hk::net::Key &key) {
+            listener.machine_key = [&a, &one](const std::string &pcbid, hk::net::Key &key) {
                 std::lock_guard<std::mutex> l(one);
                 uint8_t k[32];
-                if (!acc.machine_key(pcbid, k)) return false;
+                if (!a.machine_key(pcbid, k)) return false;
                 key = hk::net::Key::kept(pcbid, k);
                 return true;
             };
-            listener.machines_only = [&acc, &one] { std::lock_guard<std::mutex> l(one); return acc.machine_count() > 0; };
-        }
-        if (const size_t m = acc.machine_count()) {
-            printf("%s: calls answered for the database's enabled machines only (%zu machine%s; machine list)%s\n", ME, m, m == 1 ? "" : "s",
-                   no_keys ? ", by the PCBID a call says (--no-keys)" : ", each behind its own key");
-            if (const size_t u = acc.machines_without_key(); u && !no_keys)
-                printf("%s: %zu machine%s no key, and %s answered: machine key PCBID makes one\n", ME, u, u == 1 ? " has" : "s have", u == 1 ? "isn't" : "aren't");
+            listener.machines_only = [&a, &one] { std::lock_guard<std::mutex> l(one); return a.machine_count() > 0; };
         }
         // the JSON API: its own threads and its own connection to the database (server/api.h)
         api.quiet = listener.quiet;
@@ -500,7 +761,35 @@ int main(int argc, char **argv) {
                 return 1;
             }
         }
-        return listener.serve(server, db);
+        if (const size_t m = a.machine_count()) {
+            printf("%s: calls answered for the database's enabled machines only (%zu machine%s; machine list)%s\n", ME, m, m == 1 ? "" : "s",
+                   no_keys ? ", by the PCBID a call says (--no-keys)" : ", each behind its own key");
+            if (const size_t u = a.machines_without_key(); u && !no_keys)
+                printf("%s: %zu machine%s no key, and %s answered: machine key PCBID makes one\n", ME, u, u == 1 ? " has" : "s have", u == 1 ? "isn't" : "aren't");
+        }
+        // the log: a line a call (eamuse/listener.h), or with --log-calls their bodies, PINs hidden
+        listener.call_lines = true;
+        listener.log_calls = log_calls;
+        listener.version = hk::sys::build_id();
+        if (log_calls && !listener.quiet)
+            printf("%s: --log-calls: every call's body is logged, cards and names in it (PINs and passwords as ***): "
+                   "for finding a fault, not for every day\n", ME);
+        // SIGTERM or SIGINT: no more connections, the calls in hand answered, the API stopped, the
+        // database closed (its WAL folded in), exit 0. Nothing is asked of the accounts or the store
+        // after it (`one` stays held), and the program ends there
+        listener.stop = &stop_signal;
+        listener.stopped = [&] {
+            web.reset();
+            one.lock();
+            acc.reset();
+            server.reset();
+            const int sig = stop_signal.load();
+            ea::say_line(std::string(ME) + ": stopped (" + (sig == SIGTERM ? "SIGTERM" : sig == SIGINT ? "SIGINT" : "signal " + std::to_string(sig)) +
+                         "): the calls in hand answered, the database closed");
+            std::_Exit(0);
+        };
+        catch_stop_signals();
+        return listener.serve(*server, db);
     }
     ea::SqliteStore st(db);
     if (!st.ok()) return 1;
@@ -548,6 +837,7 @@ int main(int argc, char **argv) {
         if (!st.put_named(named, data)) { fprintf(stderr, "%s: %s not written\n", ME, word(1).c_str()); return 1; }
         return 0;
     }
+    if (cmd == "backup" && !backup_dir.empty()) return backup_to_dir(st, db, backup_dir, keep);
     if (cmd == "backup") {
         std::string error;
         if (!st.backup(word(1), error)) { fprintf(stderr, "%s: backup: %s\n", ME, error.c_str()); return 1; }

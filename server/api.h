@@ -51,4 +51,8 @@ private:
     std::unique_ptr<Impl> impl_;
 };
 
+// hiraku-server health: asks the API at address:port (0.0.0.0: this computer) for /api/v1/health and
+// says so in one line; 0 healthy (the server answers and its database does), else 1
+int health(const std::string &address, int port);
+
 }  // namespace hk::srv

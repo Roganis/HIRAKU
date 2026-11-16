@@ -1,0 +1,69 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# hiraku-server as a system service (docs/SERVER.md, "Installing"). The package unpacked in
+# /opt/hiraku-server, a system user and group hiraku-server, the options in
+# /etc/hiraku-server/server.conf (deploy/server.conf.example). Its data in /var/lib/hiraku-server:
+# the database, key.txt and cabinets.txt beside it, and backups/ (hiraku-server-backup.timer).
+#
+#   sudo useradd --system --user-group --home-dir /var/lib/hiraku-server --shell /usr/sbin/nologin hiraku-server
+#   sudo cp hiraku-server.service hiraku-server-backup.service hiraku-server-backup.timer /etc/systemd/system/
+#   sudo install -D -m 0644 server.conf.example /etc/hiraku-server/server.conf
+#   sudo systemctl daemon-reload && sudo systemctl enable --now hiraku-server hiraku-server-backup.timer
+#   journalctl -u hiraku-server      (the first admin's password, printed once at the first start)
+[Unit]
+Description=HIRAKU e-AMUSEMENT server (hiraku-server)
+Documentation=file:/opt/hiraku-server/share/doc/hiraku-server/SERVER.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=exec
+User=hiraku-server
+Group=hiraku-server
+ExecStart=/opt/hiraku-server/bin/hiraku-server serve --config /etc/hiraku-server/server.conf
+# SIGTERM: no new connections, the calls in hand answered (3 s at most), the database closed, exit 0
+KillSignal=SIGTERM
+KillMode=mixed
+TimeoutStopSec=20
+Restart=on-failure
+RestartSec=5s
+# /var/lib/hiraku-server (the database, its key and cabinet files, backups/), the service's own
+StateDirectory=hiraku-server
+StateDirectoryMode=0750
+# /etc/hiraku-server (server.conf: no secrets in it), read only
+ConfigurationDirectory=hiraku-server
+WorkingDirectory=/var/lib/hiraku-server
+UMask=0027
+# many cabinets: a connection each while a call is answered
+LimitNOFILE=65536
+
+# Hardening: the program needs its state folder, its two ports and nothing else
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+PrivateUsers=yes
+ProtectHostname=yes
+ProtectClock=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectProc=invisible
+ProcSubset=pid
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+RemoveIPC=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources
+SystemCallErrorNumber=EPERM
+
+[Install]
+WantedBy=multi-user.target

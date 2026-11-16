@@ -1,0 +1,58 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# hiraku-server serve's options (serve --config FILE; docs/SERVER.md, "The config file"): one
+# "name = value" a line, the names serve's long options without their dashes; "#" starts a comment.
+# An option given on the command line as well wins over this file. For the system service:
+# /etc/hiraku-server/server.conf (deploy/hiraku-server.service). Whole paths: a relative one is
+# taken from the folder serve starts in.
+
+# The database (made at the first start, with the first admin, whose password the log shows once).
+# Its folder must be writable: SQLite keeps its -wal and -shm files beside it.
+db = /var/lib/hiraku-server/server.db
+
+# The games' port, on every address: the cabinets' calls, each machine behind its own key
+# (hk2.PCBID.SECRET). Plain TCP: forward it as it is, never through an HTTP proxy.
+port = 8080
+bind = 0.0.0.0
+
+# Connections to the games' port taken from these addresses only (A.B.C.D or A.B.C.D/BITS, commas
+# or spaces between); none: every address (each machine's key still decides)
+# allow = 192.0.2.0/24, 198.51.100.7
+
+# The API and the web pages: on the loopback address only, behind a reverse proxy that makes the
+# HTTPS (deploy/Caddyfile.example)
+api = 127.0.0.1:8081
+
+# The API's caller is X-Forwarded-For's last hop: on behind your own proxy only, so the limits on
+# log-ins and sign-ups count each person, not the proxy
+api-trust-proxy = true
+
+# The web pages' folder (it must hold index.html); none: the package's
+# share/hiraku-server/web beside the program
+# web = /opt/hiraku-server/share/hiraku-server/web
+
+# Before the database has machines: the cabinets answered (a list by PCBID) and a key for all.
+# None: cabinets.txt and key.txt beside the database
+# cabinets = /var/lib/hiraku-server/cabinets.txt
+# key-file = /var/lib/hiraku-server/key.txt
+
+# The games' time zone, hours from UTC (-12 to 14; 9, Japan, by default)
+# tz = 9
+
+# The games' clock started at a set time, for tests only; none: the host's
+# clock = "2026-01-01 12:00:00"
+
+# Switches: true or false (yes/no, on/off, 1/0)
+# Only the start-up lines, refusals and errors in the log (no line a call or a request)
+quiet = false
+# Every call's body in the log (PINs and passwords as ***): for finding a fault, never left on
+log-calls = false
+# No NET TAISEN lobby and relay
+no-relay = false
+# Machines answered by the PCBID a call says, without their keys: a private network or a VPN only
+no-keys = false
+# No API and no web pages
+no-api = false
+# The API without the web pages
+no-web = false
+# The log-in cookie without Secure: plain-HTTP tests only, never on a server people use
+api-insecure-cookies = false

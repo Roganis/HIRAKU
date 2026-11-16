@@ -1,0 +1,48 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# A backup of hiraku-server's database, started by hiraku-server-backup.timer (docs/SERVER.md,
+# "Backups"): SQLite's online backup, safe while serve runs, checked; the newest 14 kept in
+# /var/lib/hiraku-server/backups. The database's path is the one server.conf gives serve.
+[Unit]
+Description=HIRAKU e-AMUSEMENT server: a backup of its database
+Documentation=file:/opt/hiraku-server/share/doc/hiraku-server/SERVER.md
+After=hiraku-server.service
+
+[Service]
+Type=oneshot
+User=hiraku-server
+Group=hiraku-server
+ExecStart=/opt/hiraku-server/bin/hiraku-server backup --dir /var/lib/hiraku-server/backups --keep 14 --db /var/lib/hiraku-server/server.db
+StateDirectory=hiraku-server
+StateDirectoryMode=0750
+WorkingDirectory=/var/lib/hiraku-server
+UMask=0027
+Nice=10
+IOSchedulingClass=idle
+
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+PrivateUsers=yes
+PrivateNetwork=yes
+ProtectHostname=yes
+ProtectClock=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectProc=invisible
+ProcSubset=pid
+RestrictAddressFamilies=AF_UNIX
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources
+SystemCallErrorNumber=EPERM

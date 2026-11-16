@@ -51,6 +51,11 @@ class Serve:
                 break
             except OSError:
                 time.sleep(0.1)
+        # (its ports take connections a moment before its first lines are in the file: the port is
+        # opened, then the line that says so is printed and flushed)
+        for _ in range(100 if wait else 0):
+            if self.p.poll() is not None or 'e-AMUSE3 on' in self.said(): break
+            time.sleep(0.05)
 
     def said(self):
         self.log.flush()

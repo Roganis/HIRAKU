@@ -162,44 +162,40 @@ void fail(Response &res, int status, const char *code, const std::string &messag
     answer(res, json{{"error", code}, {"message", message}}, status);
 }
 
-// An accounts' refusal (a sentence for a person) as an HTTP status and a code
-struct Kind {
-    const char *text;
-    int status;
-    const char *code;
-};
-const Kind KINDS[] = {
-    {"wrong name or password", 401, "wrong_password"},
-    {"not allowed", 403, "not_allowed"},
-    {"only an admin", 403, "not_allowed"},
-    {"an admin's", 403, "not_allowed"},
-    {"another operator's", 403, "not_allowed"},
-    {"shown to its owner only", 403, "not_allowed"},
-    {"keeps their stats to themselves", 403, "stats_hidden"},
-    {"is disabled", 403, "disabled"},
-    {"sign-up is", 403, "signup_refused"},
-    {"invitation's code", 403, "signup_refused"},
-    {"reset code", 403, "bad_code"},
-    {"old password isn't right", 403, "wrong_password"},
-    {"locked", 403, "card_locked"},
-    {"wrong PIN", 403, "wrong_pin"},
-    {"is taken", 409, "conflict"},
-    {"already", 409, "conflict"},
-    {"another account's", 409, "conflict"},
-    {"last admin", 409, "conflict"},
-    {"tokens at most", 409, "conflict"},
-    {"isn't linked", 404, "not_found"},
-    {"newer HIRAKU", 503, "read_only"},
-    {"the database", 500, "server_error"},
-    {"random numbers", 500, "server_error"},
-    {"not written", 500, "server_error"},
-};
-
-void refused(Response &res, const std::string &why) {
-    for (const Kind &k : KINDS)
-        if (why.find(k.text) != std::string::npos) return fail(res, k.status, k.code, why);
-    if (why.rfind("no ", 0) == 0) return fail(res, 404, "not_found", why);
-    fail(res, 400, "bad_request", why);
+// An accounts' refusal as an HTTP status and an error code, by its kind (accounts.h); its sentence
+// the message. A refused link says the tries left before the card is locked, and whether it is
+void refused(Response &res, const Refusal &why) {
+    struct As {
+        int status;
+        const char *code;
+    };
+    const As as = [&]() -> As {
+        switch (why.code) {
+        case Refused::ok:
+        case Refused::invalid: return {400, "bad_request"};
+        case Refused::incomplete: return {400, "bad_request"};   // (only when nothing was done: the PIN reset's own answer else)
+        case Refused::not_found: return {404, "not_found"};
+        case Refused::not_allowed: return {403, "not_allowed"};
+        case Refused::not_signed_in: return {401, "not_signed_in"};
+        case Refused::wrong_password: return {401, "wrong_password"};
+        case Refused::old_password: return {403, "wrong_password"};
+        case Refused::disabled: return {403, "disabled"};
+        case Refused::stats_hidden: return {403, "stats_hidden"};
+        case Refused::sign_up: return {403, "signup_refused"};
+        case Refused::bad_code: return {403, "bad_code"};
+        case Refused::locked: return {403, "card_locked"};
+        case Refused::wrong_pin: return {403, "wrong_pin"};
+        case Refused::conflict:
+        case Refused::too_many: return {409, "conflict"};
+        case Refused::read_only: return {503, "read_only"};
+        case Refused::failed: return {500, "server_error"};
+        }
+        return {500, "server_error"};
+    }();
+    json j{{"error", as.code}, {"message", why.text}};
+    if (why.tries_left >= 0) j["tries_left"] = why.tries_left;
+    if (why.code == Refused::locked && why.tries_left >= 0) j["locked"] = true;
+    answer(res, j, as.status);
 }
 
 // --- limits on how often, in memory: a count a window, by key
@@ -992,7 +988,21 @@ void Api::Impl::routes() {
         if (const auto why = acc.make_invite(c.who, (int)uses, (int)days, code); !why.empty()) return refused(res, why);
         answer(res, {{"code", code}, {"uses", uses}, {"days", days}}, 201);   // (its only showing)
     });
-    route("POST", "/cards/:card/unlock", admin, [this](Caller &c, const Request &req, In &, Response &res) {
+    route("GET", "/cards/:card", admin, [this](Caller &c, const Request &req, In &, Response &res) {
+        CardInfo i;
+        if (const auto why = acc.card(c.who, req.path_params.at("card"), i); !why.empty()) return refused(res, why);
+        json games = json::array();
+        for (const CardGame &g : i.games) games.push_back({{"id", g.game}, {"title", g.title}, {"player", g.player}});
+        answer(res, {{"card", i.card},
+                     {"known", i.known},
+                     {"user", i.user.empty() ? json(nullptr) : json(i.user)},
+                     {"linked", when(i.linked)},
+                     {"locked", i.locked},
+                     {"wrong_pins", i.tries},
+                     {"tries_left", i.locked ? 0 : std::max(0, Accounts::LOCK_TRIES - i.tries)},
+                     {"games", games}});
+    });
+    route("POST", "/cards/:card/unlock", admin,[this](Caller &c, const Request &req, In &, Response &res) {
         if (const auto why = acc.unlock_card(c.who, req.path_params.at("card")); !why.empty()) return refused(res, why);
         answer(res, {{"ok", true}});
     });

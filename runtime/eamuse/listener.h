@@ -66,6 +66,16 @@ struct Listener {
     std::function<void()> stopped;
     static constexpr int kStopSeconds = 3;
 
+    // How many connections at once. hiraku-eamuse's: 64, any more closed at once. hiraku-server's
+    // (serve --connections, --connections-per-address): wait_at_limit, so at the limit no more is
+    // taken until one ends (they wait in the listen queue, its backlog made to fit) instead of being
+    // closed; and at most per_address at once from one address (0: no limit; this computer's own
+    // addresses have none), any more from it closed and said once a minute
+    int max_connections = 64;
+    bool wait_at_limit = false;
+    int per_address = 0;
+    bool own_exempt = true;   // this computer's addresses outside per_address (false: tests only, HK_TEST_PER_ADDRESS_ALL)
+
     // The games' port opened (serve() opens it if this wasn't called): -1 listening, else the exit
     // status (said in one line)
     int open();

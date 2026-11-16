@@ -10,6 +10,7 @@
 #include <sqlite3.h>
 
 #include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
@@ -82,6 +83,26 @@ struct Use {
 
 }  // namespace
 
+namespace {
+std::atomic<int> g_sync{(int)Sync::full};
+}
+
+void set_sync(Sync s) { g_sync = (int)s; }
+Sync sync_setting() { return (Sync)g_sync.load(); }
+
+void apply_sync(sqlite3 *db) {
+    sqlite3_exec(db, sync_setting() == Sync::normal ? "PRAGMA synchronous=NORMAL" : "PRAGMA synchronous=FULL", nullptr, nullptr, nullptr);
+}
+
+int synchronous_of(sqlite3 *db) {
+    if (!db) return -1;
+    sqlite3_stmt *q = nullptr;
+    int v = -1;
+    if (sqlite3_prepare_v2(db, "PRAGMA synchronous", -1, &q, nullptr) == SQLITE_OK && sqlite3_step(q) == SQLITE_ROW) v = sqlite3_column_int(q, 0);
+    sqlite3_finalize(q);
+    return v;
+}
+
 void SqliteStore::said(const char *what) const {
     fprintf(stderr, "e-AMUSEMENT: %s: %s: %s\n", file_.c_str(), what, db_ ? sqlite3_errmsg(db_) : "not open");
 }
@@ -96,8 +117,9 @@ SqliteStore::SqliteStore(std::string file) : file_(std::move(file)) {
     db_ = db;
     sqlite3_busy_timeout(db_, 15000);   // (another program's call or backup holds it a moment)
     sqlite3_exec(db_, "PRAGMA journal_mode=WAL", nullptr, nullptr, nullptr);
-    // each call's rows on the disk when its answer goes, as the folder's files are
-    sqlite3_exec(db_, "PRAGMA synchronous=FULL", nullptr, nullptr, nullptr);
+    // each call's rows on the disk when its answer goes, as the folder's files are (or, the owner's
+    // choice, NORMAL: at the WAL's checkpoints)
+    apply_sync(db_);
     // the format, and the table if the file is new: in one transaction, two programs making it at once
     bool begun = sqlite3_exec(db_, "BEGIN IMMEDIATE", nullptr, nullptr, nullptr) == SQLITE_OK;
     sqlite3_stmt *v = nullptr;

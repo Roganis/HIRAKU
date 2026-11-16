@@ -54,7 +54,15 @@ function linkCard(done) {
     field('PIN', 'pin', {type: 'password', required: true, inputmode: 'numeric', pattern: '[0-9]{4}', maxlength: 4, autocomplete: 'off',
       help: 'The four digits you enter at the cabinet with this card.'}),
   ], 'Link the card', async (f) => {
-    await post('/me/cards', {card: value(f, 'card').replace(/[\s-]/g, ''), pin: value(f, 'pin')});
+    try {
+      await post('/me/cards', {card: value(f, 'card').replace(/[\s-]/g, ''), pin: value(f, 'pin')});
+    } catch (err) {
+      if (err.triesLeft === undefined) throw err;
+      // (a wrong PIN: how many more before the card is locked for linking, or that it is)
+      return h('div', {}, errorNote(err), err.code === 'card_locked' || err.triesLeft === 0
+        ? note('warn', 'The card is locked for linking: an admin of this server unlocks it.')
+        : note('warn', `${err.triesLeft} ${err.triesLeft === 1 ? 'try' : 'tries'} left before the card is locked for linking.`));
+    }
     f.reset();
     toast('Card linked.');
     done();

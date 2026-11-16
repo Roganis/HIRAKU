@@ -59,7 +59,10 @@ stays a port of its own (8080 here), forwarded as it is.
 
 Everything is under `/api/v1/`, JSON in and out (`application/json; charset=utf-8`). An error is
 `{"error": "code", "message": "plain words"}` with its HTTP status: 400 bad input, 401 not logged in,
-403 not allowed, 404, 409 conflict, 413 a body over 64 KiB, 429 slow down (`Retry-After`).
+403 not allowed, 404, 409 conflict, 413 a body over 64 KiB, 429 slow down (`Retry-After`). A card
+link refused for its PIN says how many wrong PINs are left before the card is locked (`tries_left`,
+also in the message); one refused because the card is locked has `"error": "card_locked"`,
+`"locked": true`, `tries_left` 0.
 
 **Who calls.** `POST /login` answers with a session cookie (`hk_session`, HttpOnly, SameSite=Strict,
 Secure) and a `csrf` value; every change made with the cookie sends that value back in `X-HK-CSRF`.
@@ -108,6 +111,7 @@ links 20 an hour an account, anything else 600 a minute a session or token.
 | POST | /users/{name}/reset | admin | a reset code (once, for a day) |
 | GET, PUT | /config | admin | `{name, signup: "open"\|"invite"\|"closed", list_all_games}` |
 | POST | /config/invites | admin | `{uses, days}`: an invitation code (once) |
+| GET | /cards/{card} | admin | `{card, known, user, linked, locked, wrong_pins, tries_left, games: [{id, title, player}]}`: whether a game has a player on it, its account (`null`: none), its lock, its players; never its PIN |
 | POST | /cards/{card}/unlock | admin | a card locked by wrong PINs |
 | DELETE | /cards/{card} | admin | unlink it from its account |
 | PUT | /cards/{card}/pin | admin | `{pin}` in every place the games keep it |
@@ -153,8 +157,23 @@ taken from the folder serve is started in, so a service's file names whole paths
 | no-web | true or false | the API without the web pages |
 | api-trust-proxy | true or false | the API's caller is `X-Forwarded-For`'s last hop (behind your own proxy only) |
 | api-insecure-cookies | true or false | the log-in cookie without `Secure` (plain-HTTP tests only) |
+| connections | 16 to 4096 | the games' connections served at once (256); at that many, more wait their turn in the port's queue |
+| connections-per-address | 0 to 4096 | at most that many of them from one address (64; 0: no limit); more from it are closed and said once a minute. This computer's own addresses have no limit |
+| sync | full or normal | how hard a change waits for the disk (full; below) |
 
 A switch is `true`, `yes`, `on` or `1`, or `false`, `no`, `off` or `0`.
+
+### How hard a change waits for the disk: `--sync`
+
+`--sync full` (the default): each call that changes something is on the disk before its answer
+goes (SQLite's `synchronous=FULL`). `--sync normal`: the changes reach the disk at the database
+log's checkpoints instead, every few hundred changes (`synchronous=NORMAL`, in WAL mode), and the
+calls stop waiting for the disk. What `normal` gives up: after a power cut or a crash of the whole
+computer, the last moments' calls (a credit's scores, a new player) may be missing. The database
+is never left broken, and a crash or kill of hiraku-server alone loses nothing. Choose it for a
+slow disk (a hard disk, an SD card, a cheap VPS's) under many cabinets, on a computer with a UPS
+or where losing the last seconds before a power cut is no worry; keep `full` otherwise. serve says
+at its start which it is.
 
 ### Start-up
 
@@ -312,41 +331,51 @@ process asks `/api/v1/health` twice a second and one `backup --dir` runs half wa
 3-second run is the unit test `eamuse_load_smoke`.
 
 Measured 2026-11-16 on an 8-core desktop CPU (AMD Zen 3, 16 threads) shared with other work, the
-client in 16 processes on the same machine, 30 seconds a run. "Disk": the database on a 2.5-inch
-laptop hard disk, nearly full, whose `fsync` takes about 33 ms; "RAM": the same runs with the
-database in a memory file system, as a stand-in for a fast SSD.
+client in 16 processes on the same machine, 30 seconds a run, serve's defaults (256 connections at
+once, the cabinets all from this computer). "Disk": the database on a 2.5-inch laptop hard disk,
+nearly full, whose `fsync` takes about 33 ms; "RAM": the database in a memory file system, as a
+stand-in for a fast SSD.
 
-| Cabinets | Where | Calls a second | Credits | p50 | p95 | p99 | max | Refused | Backup | Database |
-|---|---|---|---|---|---|---|---|---|---|---|
-| 20 | disk | 15 | 99 | 1300 ms | 2043 ms | 2330 ms | 3.4 s | 0 | 16.3 s | 2.5 MB |
-| 100 | disk | 30 | 94 | 0.3 ms | 7356 ms | 8313 ms | 11.9 s | 1120 | 15.4 s | 3.7 MB |
-| 300 | disk | 112 | 97 | 0.1 ms | 4335 ms | 7357 ms | 8.4 s | 7247 | 2.4 s | 4.2 MB |
-| 20 | RAM | 1000 | 5777 | 19.0 ms | 41.9 ms | 50.4 ms | 76 ms | 0 | 0.02 s | 11.3 MB |
-| 100 | RAM | 992 | 5586 | 65.1 ms | 120 ms | 137 ms | 1.3 s | 1096 | 0.11 s | 11.2 MB |
-| 300 | RAM | 1079 | 5338 | 59.2 ms | 125 ms | 140 ms | 2.7 s | 7061 | 0.01 s | 11.9 MB |
+| Cabinets | Where | --sync | Calls a second | Credits | p50 | p95 | p99 | max | Errors | Backup | Database |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| 20 | disk | full | 14 | 91 | 1612 ms | 2185 ms | 2360 ms | 2.5 s | 0 | 15.7 s | 2.4 MB |
+| 100 | disk | full | 12 | 100 | 7602 ms | 13837 ms | 14575 ms | 14.8 s | 0 | 15.5 s | 4.6 MB |
+| 300 | disk | full | 7 | 0 | 19718 ms | 29382 ms | 29916 ms | 30.1 s | 435 | 1.3 s | 4.4 MB |
+| 20 | disk | normal | 314 | 1825 | 7.9 ms | 588 ms | 725 ms | 1.3 s | 0 | 0.26 s | 12.7 MB |
+| 100 | disk | normal | 270 | 1645 | 184 ms | 817 ms | 1371 ms | 1.9 s | 0 | 0.74 s | 9.5 MB |
+| 300 | disk | normal | 197 | 1670 | 750 ms | 4098 ms | 4761 ms | 8.0 s | 0 | 1.5 s | 45.1 MB |
+| 20 | RAM | full | 975 | 5637 | 19.5 ms | 42.7 ms | 51.6 ms | 87 ms | 0 | 0.01 s | 11.1 MB |
+| 100 | RAM | full | 954 | 5548 | 104 ms | 197 ms | 226 ms | 438 ms | 0 | 1.9 s | 11.2 MB |
+| 300 | RAM | full | 881 | 5303 | 330 ms | 589 ms | 628 ms | 1.3 s | 0 | 0.01 s | 11.2 MB |
+| 20 | RAM | normal | 991 | 5725 | 19.1 ms | 42.8 ms | 51.9 ms | 88 ms | 0 | 0.12 s | 11.2 MB |
+| 100 | RAM | normal | 956 | 5551 | 103 ms | 199 ms | 218 ms | 417 ms | 0 | 0.02 s | 11.2 MB |
+| 300 | RAM | normal | 903 | 5439 | 323 ms | 605 ms | 664 ms | 1.3 s | 0 | 0.03 s | 11.5 MB |
 
 Calls a second and the latencies count the calls answered; Credits, the credits played to their end
-in the 30 seconds; Refused, the calls whose connection serve turned away (below). The health check
-answered every time in every run (61 of 61, the slowest in 9 ms), and every backup taken in the
-middle of the load passed its check.
+in the 30 seconds; Errors, the calls that failed (each one a connection closed without an answer).
+The health check answered every time in every run (61 of 61, the slowest in 19 ms), and every
+backup taken in the middle of the load passed its check.
+
+What changed since the first measurement: serve no longer closes the connections beyond 64 at
+once but serves 256 and lets the rest wait their turn, so with 100 and 300 cabinets no call is
+turned away any more where thousands were; and `--sync normal` lets a slow disk take some 20 times
+the changes it took with `full`.
 
 What this means:
 
-- **The disk sets the pace.** The database is written with `synchronous=FULL`: each call that
-  changes something waits for the disk to confirm it (a credit's scores survive a power cut). On
-  the hard disk that is 15 to 30 changes a second, and with more cabinets than that the calls
-  queue; on a fast disk the same program answers about 1000 calls a second (a credit is 6 to 9
-  calls), and then the CPU is the limit. Put the database on an SSD.
-- **The only errors are the connection limit.** serve takes 64 connections at once and closes any
-  more straight away (a connection reset, or closed before its answer): with 100 or 300 cabinets
-  calling with no pause at all, there are always more than 64. No answer was wrong. A game whose
-  call fails tries again later, as the test does a second later. On the disk, the larger runs'
-  p50 under a millisecond is the reads (a card read, a cabinet's start) answered at once while
-  the writes queue behind the disk: count the credits, not the calls.
+- **The disk sets the pace.** With `--sync full` each call that changes something waits for the
+  disk to confirm it: on the hard disk 12 to 15 changes a second, and with more cabinets than that
+  the calls queue. At 300 cabinets the queue grows past 15 seconds, a connection's limit, and
+  those calls are closed unanswered (the 435 errors; a game tries again later). On a fast disk the
+  same program answers about 950 calls a second (a credit is 6 to 9 calls), and then the CPU is
+  the limit. Put the database on an SSD, or choose `--sync normal` (above) for a slow disk.
+- **`--sync normal` on the hard disk** takes 200 to 300 calls a second, a third of what a fast disk
+  takes, with no error; its database log (`-wal`) grows while the disk is that busy and is folded
+  in when the load drops.
 - **Real cabinets are far gentler.** A cabinet plays a credit every two or three minutes, which is
   a call every 15 to 20 seconds on average: 300 busy cabinets make 15 to 20 calls a second. That
-  is about what even the slow hard disk took, and a fiftieth of what a fast disk takes.
-- **The database stays small**: about 12 MB after some 5800 credits (a third of them on new
+  is about what the slow hard disk takes with `full`, and a fiftieth of what a fast disk takes.
+- **The database stays small**: about 12 MB after some 5700 credits (a third of them on new
   cards). A backup of it takes a fraction of a second on a fast disk, up to 16 s on the slow one,
   and the calls go on meanwhile.
 

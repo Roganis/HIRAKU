@@ -7,7 +7,7 @@
 //   hiraku-server serve --db FILE [--port 8080] [--bind 0.0.0.0] [--allow ADDRESSES] [--cabinets FILE]
 //                 [--key-file FILE] [--clock "2003-06-01 12:00:00"] [--tz 9] [--quiet] [--no-relay] [--no-keys]
 //                 [--api 127.0.0.1:8081 | --no-api] [--api-insecure-cookies] [--api-trust-proxy] [--web DIR | --no-web]
-//                 [--log-calls] [--config FILE]
+//                 [--log-calls] [--connections 256] [--connections-per-address 64] [--sync full|normal] [--config FILE]
 //   hiraku-server serve --db FILE [--cabinets FILE] --new-cabinet [NAME]  |  [--key-file FILE] --new-key
 //   hiraku-server import FOLDER --db FILE     a data folder's files into the database (made if none)
 //   hiraku-server export FOLDER --db FILE     the database as a data folder (a new or empty one)
@@ -68,7 +68,8 @@ int usage(int status) {
             "usage: hiraku-server serve --db FILE [--port N] [--bind ADDR] [--allow ADDRESSES] [--cabinets FILE]\n"
             "                     [--key-file FILE] [--clock \"YYYY-MM-DD HH:MM:SS\"] [--tz H] [--quiet] [--no-relay] [--no-keys]\n"
             "                     [--api ADDR:PORT | --no-api] [--api-insecure-cookies] [--api-trust-proxy]\n"
-            "                     [--web DIR | --no-web] [--log-calls] [--config FILE]\n"
+            "                     [--web DIR | --no-web] [--log-calls] [--connections N] [--connections-per-address N]\n"
+            "                     [--sync full|normal] [--config FILE]\n"
             "       hiraku-server serve --db FILE [--cabinets FILE] --new-cabinet [NAME]\n"
             "       hiraku-server serve --db FILE [--key-file FILE] --new-key\n"
             "       hiraku-server import FOLDER --db FILE   a data folder's files into the database (made if none)\n"
@@ -94,6 +95,10 @@ int usage(int status) {
             "  ../share/hiraku-server/web, or a build tree's checkout's web/); --no-web: none\n"
             "  serve's log: a line a game call and a line an API request, no body, card, PIN or password;\n"
             "  --log-calls: the calls' bodies too (PINs and passwords as ***), for finding a fault; --quiet: neither\n"
+            "  --connections N: the games' connections served at once (256; 16 to 4096), more wait their turn;\n"
+            "  --connections-per-address N: at most N of them from one address (64; 0: no limit; this computer's: none)\n"
+            "  --sync full|normal: a change waits for the disk (full), or only at the WAL's checkpoints (normal: a power\n"
+            "  cut may lose the last moments' calls, never the database; docs/SERVER.md)\n"
             "  --config FILE: lines \"name = value\" (# comments), the names serve's long options without the\n"
             "  dashes (port = 8080, no-relay = true, db = FILE); an option on the command line wins\n"
             "accounts, cards, arcades, machines (--db FILE; --as USER acts as that user, else the command line, an admin;\n"
@@ -421,7 +426,8 @@ void report(const ea::Copied &c, const char *from, const char *to) {
 // --- serve's config file (--config): "name = value" lines, the names serve's long options
 
 // The options a config file may name: those taking a value, and the switches (true or false)
-const std::set<std::string> VALUED{"db", "port", "bind", "allow", "cabinets", "key-file", "clock", "tz", "api", "web"};
+const std::set<std::string> VALUED{"db", "port", "bind", "allow", "cabinets", "key-file", "clock", "tz", "api", "web",
+                                   "connections", "connections-per-address", "sync"};
 const std::set<std::string> SWITCHES{"quiet", "no-relay", "no-keys", "no-api", "api-insecure-cookies", "api-trust-proxy", "no-web", "log-calls"};
 
 bool whole(const std::string &s, long lo, long hi, long &v) {
@@ -435,6 +441,9 @@ std::string value_wrong(const std::string &name, const std::string &v) {
     long n = 0;
     if (name == "port") return whole(v, 1, 65535, n) ? "" : "a port, 1 to 65535";
     if (name == "tz") return whole(v, -12, 14, n) ? "" : "hours from UTC, -12 to 14";
+    if (name == "connections") return whole(v, 16, 4096, n) ? "" : "how many at once, 16 to 4096";
+    if (name == "connections-per-address") return whole(v, 0, 4096, n) ? "" : "how many at once from one address, 0 (no limit) to 4096";
+    if (name == "sync") return v == "full" || v == "normal" ? "" : "full or normal";
     if (name == "bind") {
         int a, b, c, d;
         char extra;
@@ -629,12 +638,16 @@ int main(int argc0, char **argv0) {
     char **const argv = args.data();
     std::string db, backup_dir, config;
     long keep = 14;
-    bool new_cabinet = false, new_key = false, no_keys = false, keep_given = false, log_calls = false;
+    bool new_cabinet = false, new_key = false, no_keys = false, keep_given = false, log_calls = false, serve_only = false;
+    std::string sync = "full";
     std::string new_name;
     std::vector<std::string> words;   // the command and its own words
     AccountOptions ao;
     ea::Listener listener;
     listener.program = ME;
+    listener.max_connections = 256, listener.per_address = 64, listener.wait_at_limit = true;   // (hiraku-eamuse: 64, more closed)
+    // (a test's: this computer's own connections counted against --connections-per-address as any other's)
+    if (const char *t = std::getenv("HK_TEST_PER_ADDRESS_ALL"); t && *t == '1') listener.own_exempt = false;
     srv::ApiOptions api;
     for (int i = 1; i < argc; i++) {
         const std::string a = argv[i];
@@ -656,6 +669,18 @@ int main(int argc0, char **argv0) {
             else keep_given = true;
         } else if (a == "--log-calls") {
             log_calls = true;
+        } else if (a == "--connections" || a == "--connections-per-address" || a == "--sync") {
+            if (i + 1 >= argc) { fprintf(stderr, "%s needs a value\n", a.c_str()); return 2; }
+            const std::string v = argv[++i];
+            if (const std::string why = value_wrong(a.substr(2), v); !why.empty()) {
+                fprintf(stderr, "%s: %s %s: %s\n", ME, a.c_str(), v.c_str(), why.c_str());
+                return 2;
+            }
+            long num = 0;
+            if (a == "--sync") sync = v;
+            else if (whole(v, 0, 4096, num) && a == "--connections") listener.max_connections = (int)num;
+            else listener.per_address = (int)num;
+            serve_only = true;
         } else if (const int taken = listener.option(argc, argv, i)) {
             if (taken == 2) return 2;
         } else if (const int api_taken = api.option(argc, argv, i)) {
@@ -681,6 +706,7 @@ int main(int argc0, char **argv0) {
     const size_t n = words.size() - 1;
     auto word = [&](size_t i) { return i < words.size() ? words[i] : std::string(); };
     if (!config.empty() && cmd != "serve") { fprintf(stderr, "%s: --config is serve's\n", ME); return 2; }
+    if (serve_only && cmd != "serve") { fprintf(stderr, "%s: --connections, --connections-per-address and --sync are serve's\n", ME); return 2; }
     if ((!backup_dir.empty() || keep_given) && cmd != "backup") { fprintf(stderr, "%s: --dir and --keep are backup's\n", ME); return 2; }
     if (keep_given && backup_dir.empty()) { fprintf(stderr, "%s: backup: --keep goes with --dir\n", ME); return 2; }
     if (cmd == "health") {
@@ -726,6 +752,7 @@ int main(int argc0, char **argv0) {
         }
         if (const int status = listener.start(beside(db), new_cabinet, new_name, new_key); status >= 0) return status;
         if (const int status = listener.open(); status >= 0) return status;
+        ea::set_sync(sync == "normal" ? ea::Sync::normal : ea::Sync::full);   // (every connection opened from here: the store's, the accounts', the API's)
         auto store = std::make_unique<ea::SqliteStore>(db);
         if (!store->ok()) return 1;
         ea::SqliteStore &kept = *store;
@@ -766,6 +793,18 @@ int main(int argc0, char **argv0) {
                    no_keys ? ", by the PCBID a call says (--no-keys)" : ", each behind its own key");
             if (const size_t u = a.machines_without_key(); u && !no_keys)
                 printf("%s: %zu machine%s no key, and %s answered: machine key PCBID makes one\n", ME, u, u == 1 ? " has" : "s have", u == 1 ? "isn't" : "aren't");
+        }
+        // how hard a change waits for the disk, as in force on the store's and the accounts' connections
+        {
+            const int s1 = kept.synchronous(), s2 = a.synchronous(), want = sync == "normal" ? 1 : 2;
+            if (s1 != want || s2 != want) {
+                fprintf(stderr, "%s: the database's synchronous is %d and %d, not the %d asked for (--sync)\n", ME, s1, s2, want);
+                return 1;
+            }
+            printf(want == 2 ? "%s: --sync full: each change on the disk before its answer goes (synchronous=FULL)\n"
+                             : "%s: --sync normal: changes on the disk at the WAL's checkpoints (synchronous=NORMAL): "
+                               "a power cut may lose the last moments' calls, never the database\n",
+                   ME);
         }
         // the log: a line a call (eamuse/listener.h), or with --log-calls their bodies, PINs hidden
         listener.call_lines = true;

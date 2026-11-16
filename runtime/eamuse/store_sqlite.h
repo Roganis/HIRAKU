@@ -24,6 +24,16 @@ struct sqlite3_stmt;
 
 namespace hk::ea {
 
+// How hard a write waits for the disk, for every connection to a database opened after it is set
+// (hiraku-server serve --sync): FULL (the default) or NORMAL, SQLite's synchronous in WAL mode.
+// NORMAL: a crash of the program alone loses nothing; a power cut or a crash of the whole computer
+// may lose the last moments' writes, never leaving the database broken (docs/SERVER.md)
+enum class Sync { full, normal };
+void set_sync(Sync);
+Sync sync_setting();
+void apply_sync(sqlite3 *);          // the setting's PRAGMA on a connection
+int synchronous_of(sqlite3 *);       // the connection's PRAGMA synchronous: 2 FULL, 1 NORMAL (-1 unread)
+
 class SqliteStore : public Store {
 public:
     static constexpr long FORMAT = 1;   // this program's
@@ -51,6 +61,8 @@ public:
     // The whole database copied into `to`, a new file, by SQLite's online backup: safe while another
     // program serves from it. false: not made (error says why)
     bool backup(const std::string &to, std::string &error);
+    // Its connection's PRAGMA synchronous, as in force (synchronous_of)
+    int synchronous() const { return synchronous_of(db_); }
 
 private:
     struct DbHold;

@@ -110,23 +110,38 @@ export async function cards(view) {
   const byUser = form([field('User', 'name', {required: true, maxlength: 32, help: 'Their account’s name: their linked cards.'})], 'Find', async (f) => {
     const j = await get('/users/' + enc(value(f, 'name')) + '/cards');
     clear(out);
-    out.append(card(`${j.name}’s cards`, j.cards.length ? h('ul', {class: 'cards'}, j.cards.map((c) => cardRow(c.card, c.linked, j.name)))
+    out.append(card(`${j.name}’s cards`, j.cards.length ? h('ul', {class: 'cards'}, j.cards.map((c) => cardRow(c.card)))
       : empty('No card is linked to this account.')));
   }, {class: 'form-row'});
   const byNumber = form([field('Card number', 'card', {required: true, maxlength: 24, help: 'The 16 letters and digits the games show. Spaces are fine.'})], 'Open', async (f) => {
-    clear(out).append(card('A card', h('ul', {class: 'cards'}, cardRow(value(f, 'card').replace(/[\s-]/g, ''), 0, null))));
+    clear(out).append(card('A card', h('ul', {class: 'cards'}, cardRow(value(f, 'card').replace(/[\s-]/g, '')))));
   }, {class: 'form-row'});
   view.append(h('div', {class: 'grid-2'}, card('Find by user', byUser), card('Find by number', byNumber)), out);
 
-  function cardRow(number, linked, user) {
+  // A card: what the server knows of it first (GET /cards/CARD), then what may be done to it
+  function cardRow(number) {
+    const facts = h('div', {}, loading());
     const said = h('div', {'aria-live': 'polite'});
     const act = async (fn) => {
       clear(said);
       try { const n = await fn(); if (n) said.append(n); } catch (err) { said.append(errorNote(err)); }
+      await show();   // (drawn again as it now is)
     };
+    async function show() {
+      let c;
+      try { c = await get('/cards/' + enc(number)); } catch (err) { clear(facts).append(errorNote(err)); return; }
+      clear(facts).append(
+        h('p', {class: 'chips'},
+          chip(c.known ? 'played on this server' : 'not known to this server', c.known ? 'ok' : 'warn'),
+          c.locked ? chip('locked for linking', 'bad') : chip(`${c.tries_left} wrong PIN${c.tries_left === 1 ? '' : 's'} before the lock`, c.wrong_pins ? 'warn' : null)),
+        c.user ? h('p', {class: 'muted small'}, `Linked to ${c.user} `, when(c.linked)) : h('p', {class: 'muted small', text: 'Linked to no account.'}),
+        c.wrong_pins ? h('p', {class: 'muted small', text: `Wrong PINs so far: ${c.wrong_pins}.`}) : null,
+        c.games.length ? h('p', {class: 'chips', 'aria-label': 'Games with a player on this card'}, c.games.map((g) => chip(`${g.title}: ${g.player || '(no name)'}`, 'game')))
+          : h('p', {class: 'muted small', text: 'No game has a player on this card.'}));
+    }
+    show();
     return h('li', {class: 'card-item'}, h('div', {class: 'card-face', 'aria-hidden': 'true'}),
-      h('div', {class: 'card-body'}, cardNumber(number),
-        user ? h('p', {class: 'muted small'}, `Linked to ${user} `, when(linked)) : null,
+      h('div', {class: 'card-body'}, cardNumber(number), facts,
         h('div', {class: 'row-actions'},
           button('Unlock', 'small', () => act(async () => {
             await post('/cards/' + enc(number) + '/unlock');

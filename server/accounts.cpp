@@ -14,6 +14,7 @@
 #include "eamuse/access.h"
 #include "eamuse/games.h"
 #include "eamuse/protocol.h"
+#include "eamuse/store_sqlite.h"
 #include "eamuse/tables.h"
 #include "shell/crypt.h"
 #include "shell/keyed.h"
@@ -110,7 +111,7 @@ std::string sha_hex(const std::string &s) {
 // A password's kept form: pbkdf2-sha256$ROUNDS$SALT$HASH (hex); "" if the system gives no random bytes
 std::string hash_password(const std::string &password) {
     uint8_t salt[16], out[32];
-    if (!crypt::random_bytes(salt, sizeof salt)) return "";
+    if (!crypt::random_bytes(salt, sizeof salt)) return {};
     const std::string s(reinterpret_cast<const char *>(salt), sizeof salt);
     crypt::pbkdf2_sha256(password, s, Accounts::ROUNDS, out);
     return "pbkdf2-sha256$" + std::to_string(Accounts::ROUNDS) + "$" + hex(salt, sizeof salt) + "$" + hex(out, sizeof out);
@@ -149,7 +150,7 @@ std::string new_password() {
     std::string out;
     while (out.size() < 20) {
         uint8_t b[32];
-        if (!crypt::random_bytes(b, sizeof b)) return "";
+        if (!crypt::random_bytes(b, sizeof b)) return {};
         for (uint8_t v : b)
             if (v < 256 / N * N && out.size() < 20) out += abc[v % N];
     }
@@ -157,26 +158,26 @@ std::string new_password() {
 }
 
 Accounts::Refusal name_wrong(const std::string &name) {
-    if (name.empty() || name.size() > 32) return "a name is 1 to 32 letters, digits, '.', '_' or '-'";
+    if (name.empty() || name.size() > 32) return {Refused::invalid, "a name is 1 to 32 letters, digits, '.', '_' or '-'"};
     for (char c : name)
-        if (!std::isalnum((unsigned char)c) && c != '.' && c != '_' && c != '-') return "a name is 1 to 32 letters, digits, '.', '_' or '-'";
-    if (name[0] == '-' || name[0] == '.') return "a name doesn't begin with '-' or '.'";
-    return "";
+        if (!std::isalnum((unsigned char)c) && c != '.' && c != '_' && c != '-') return {Refused::invalid, "a name is 1 to 32 letters, digits, '.', '_' or '-'"};
+    if (name[0] == '-' || name[0] == '.') return {Refused::invalid, "a name doesn't begin with '-' or '.'"};
+    return {};
 }
 
 Accounts::Refusal password_wrong(const std::string &p) {
-    if (p.size() < 8) return "a password is 8 characters at least";
-    if (p.size() > 256) return "a password is 256 bytes at most";
-    if (p.find_first_of("\r\n", 0) != std::string::npos || p.find('\0') != std::string::npos) return "a password is one line";
-    return "";
+    if (p.size() < 8) return {Refused::invalid, "a password is 8 characters at least"};
+    if (p.size() > 256) return {Refused::invalid, "a password is 256 bytes at most"};
+    if (p.find_first_of("\r\n", 0) != std::string::npos || p.find('\0') != std::string::npos) return {Refused::invalid, "a password is one line"};
+    return {};
 }
 
 // An arcade's or a machine's name: one line of text, 1 to 64 bytes, no control characters
 Accounts::Refusal label_wrong(const std::string &n) {
-    if (n.empty() || n.size() > 64) return "a name is 1 to 64 bytes";
+    if (n.empty() || n.size() > 64) return {Refused::invalid, "a name is 1 to 64 bytes"};
     for (unsigned char c : n)
-        if (c < 0x20 || c == 0x7f) return "a name is one line, with no tab or control character";
-    return "";
+        if (c < 0x20 || c == 0x7f) return {Refused::invalid, "a name is one line, with no tab or control character"};
+    return {};
 }
 
 bool pref_ok(int pref) { return pref >= 1 && pref <= 47; }
@@ -188,7 +189,7 @@ std::string upper(std::string s) {
 
 bool same_card(const std::string &a, const std::string &b) { return upper(a) == upper(b); }
 
-const char *const NOT_ALLOWED = "not allowed for this account";
+Refusal not_allowed() { return {Refused::not_allowed, "not allowed for this account"}; }
 
 // A machine's key as kept: "pbkdf2-sha256$ROUNDS$" and the 32 bytes its text makes (keyed.h's
 // stretching, its salt fixed there), in hex
@@ -233,7 +234,7 @@ Accounts::Accounts(const std::string &file, ea::Store &store) : file_(file), sto
     db_ = db;
     sqlite3_busy_timeout(db_, 15000);
     sqlite3_exec(db_, "PRAGMA journal_mode=WAL", nullptr, nullptr, nullptr);
-    sqlite3_exec(db_, "PRAGMA synchronous=FULL", nullptr, nullptr, nullptr);
+    ea::apply_sync(db_);   // (serve --sync: store_sqlite.h)
     Tx tx(db_);
     {
         St v(db_, "SELECT value FROM meta WHERE name='accounts'");
@@ -279,10 +280,36 @@ bool Accounts::exec(const char *sql) { return sqlite3_exec(db_, sql, nullptr, nu
 std::string Accounts::error() const { return db_ ? sqlite3_errmsg(db_) : "not open"; }
 
 bool Accounts::writable(Refusal &why) const {
-    if (!db_) why = "the database isn't open";
-    else if (version_ > VERSION) why = "the accounts were made by a newer HIRAKU: nothing is changed";
+    if (!db_) why = {Refused::failed, "the database isn't open"};
+    else if (version_ > VERSION) why = Refusal{Refused::read_only, "the accounts were made by a newer HIRAKU: nothing is changed"};
     else return true;
     return false;
+}
+
+Refusal Accounts::commit(Tx &tx) const { return tx.commit() ? Refusal{} : Refusal{Refused::failed, "the database: " + error()}; }
+
+const char *refused_name(Refused r) {
+    switch (r) {
+    case Refused::ok: return "ok";
+    case Refused::invalid: return "invalid";
+    case Refused::not_found: return "not_found";
+    case Refused::not_allowed: return "not_allowed";
+    case Refused::not_signed_in: return "not_signed_in";
+    case Refused::wrong_password: return "wrong_password";
+    case Refused::old_password: return "old_password";
+    case Refused::disabled: return "disabled";
+    case Refused::stats_hidden: return "stats_hidden";
+    case Refused::sign_up: return "sign_up";
+    case Refused::bad_code: return "bad_code";
+    case Refused::locked: return "locked";
+    case Refused::wrong_pin: return "wrong_pin";
+    case Refused::conflict: return "conflict";
+    case Refused::too_many: return "too_many";
+    case Refused::read_only: return "read_only";
+    case Refused::failed: return "failed";
+    case Refused::incomplete: return "incomplete";
+    }
+    return "?";
 }
 
 void Accounts::log(const Who &who, const std::string &action, const std::string &detail) {
@@ -315,11 +342,11 @@ bool Accounts::admins_left_without(long id) const {
 
 Accounts::Refusal Accounts::as(const std::string &name, Who &who) {
     User u;
-    if (!db_) return "the database isn't open";
-    if (!find_user(name, u)) return "no user " + name;
-    if (u.disabled) return "the user " + u.name + " is disabled";
+    if (!db_) return {Refused::failed, "the database isn't open"};
+    if (!find_user(name, u)) return {Refused::not_found, "no user " + name};
+    if (u.disabled) return {Refused::disabled, "the user " + u.name + " is disabled"};
     who = Who{u.id, u.role, u.name, false};
-    return "";
+    return {};
 }
 
 // --- users
@@ -329,51 +356,51 @@ Accounts::Refusal Accounts::sign_up(const Who &who, const std::string &name, con
     Refusal why;
     if (!writable(why)) return why;
     if (!(why = name_wrong(name)).empty() || !(why = password_wrong(password)).empty()) return why;
-    if (role != Role::player && !who.admin()) return "only an admin gives a new account another role than player";
+    if (role != Role::player && !who.admin()) return {Refused::not_allowed, "only an admin gives a new account another role than player"};
     Tx tx(db_);
-    if (!tx.begun) return "the database: " + error();
+    if (!tx.begun) return {Refused::failed, "the database: " + error()};
     std::string code_hash;
     if (!who.admin()) {
         const SignUp mode = sign_up_mode();
-        if (mode == SignUp::closed) return "sign-up is closed";
+        if (mode == SignUp::closed) return {Refused::sign_up, "sign-up is closed"};
         if (mode == SignUp::invite) {
-            if (invite.empty()) return "sign-up is by invitation: an invitation's code is needed";
+            if (invite.empty()) return {Refused::sign_up, "sign-up is by invitation: an invitation's code is needed"};
             code_hash = sha_hex(invite);
             St q(db_, "SELECT uses_left FROM invites WHERE code_hash=?1 AND expires>?2 AND uses_left>0");
             q.bind(1, code_hash).bind(2, now());
-            if (!q.row()) return "not an invitation's code (or used up, or past its day)";
+            if (!q.row()) return {Refused::sign_up, "not an invitation's code (or used up, or past its day)"};
         }
     }
     User there;
-    if (find_user(name, there)) return "the name " + name + " is taken";
+    if (find_user(name, there)) return {Refused::conflict, "the name " + name + " is taken"};
     const std::string kept = hash_password(password);
-    if (kept.empty()) return "the system gives no random numbers";
+    if (kept.empty()) return {Refused::failed, "the system gives no random numbers"};
     St u(db_, "INSERT INTO users(name, pass, role, created) VALUES(?1, ?2, ?3, ?4)");
     u.bind(1, name).bind(2, kept).bind(3, std::string(role_name(role))).bind(4, now());
-    if (!u.run()) return "the database: " + error();
+    if (!u.run()) return {Refused::failed, "the database: " + error()};
     if (!code_hash.empty()) {
         St d(db_, "UPDATE invites SET uses_left=uses_left-1 WHERE code_hash=?1");
         d.bind(1, code_hash).run();
     }
     log(who, "user.add", name + " (" + role_name(role) + (code_hash.empty() ? "" : ", by invitation") + ")");
-    return tx.commit() ? "" : "the database: " + error();
+    return commit(tx);
 }
 
 Accounts::Refusal Accounts::check_password(const std::string &name, const std::string &password, Who &who, bool &must_change) {
-    if (!db_) return "the database isn't open";
+    if (!db_) return {Refused::failed, "the database isn't open"};
     St q(db_, "SELECT id, name, role, disabled, must_change, pass FROM users WHERE name=?1");
     q.bind(1, name);
     // (a name that isn't there costs as long as a wrong password: nobody learns which names are)
     const bool there = q.row();
     const std::string kept = there ? q.text(5) : "pbkdf2-sha256$" + std::to_string(ROUNDS) + "$00$" + std::string(64, '0');
     const bool right = password_is(kept, password) && there;
-    if (!right) return "wrong name or password";
-    if (q.num(3)) return "the user " + q.text(1) + " is disabled";
+    if (!right) return {Refused::wrong_password, "wrong name or password"};
+    if (q.num(3)) return {Refused::disabled, "the user " + q.text(1) + " is disabled"};
     Role r = Role::player;
     role_named(q.text(2), r);
     who = Who{(long)q.num(0), r, q.text(1), false};
     must_change = q.num(4) != 0;
-    return "";
+    return {};
 }
 
 Accounts::Refusal Accounts::change_password(const Who &who, const std::string &user, const std::string &old_password,
@@ -381,77 +408,77 @@ Accounts::Refusal Accounts::change_password(const Who &who, const std::string &u
     Refusal why;
     if (!writable(why)) return why;
     User u;
-    if (!find_user(user, u)) return "no user " + user;
+    if (!find_user(user, u)) return {Refused::not_found, "no user " + user};
     const bool own = who.user() && who.id == u.id;
-    if (!own && !who.admin()) return NOT_ALLOWED;
+    if (!own && !who.admin()) return not_allowed();
     if (!(why = password_wrong(password)).empty()) return why;
     if (own) {
         St q(db_, "SELECT pass FROM users WHERE id=?1");
         q.bind(1, (int64_t)u.id);
-        if (!q.row() || !password_is(q.text(0), old_password)) return "the old password isn't right";
+        if (!q.row() || !password_is(q.text(0), old_password)) return {Refused::old_password, "the old password isn't right"};
     }
     const std::string kept = hash_password(password);
-    if (kept.empty()) return "the system gives no random numbers";
+    if (kept.empty()) return {Refused::failed, "the system gives no random numbers"};
     Tx tx(db_);
     St s(db_, "UPDATE users SET pass=?1, must_change=?2 WHERE id=?3");
     s.bind(1, kept).bind(2, (int64_t)(own ? 0 : 1)).bind(3, (int64_t)u.id);
-    if (!s.run()) return "the database: " + error();
+    if (!s.run()) return {Refused::failed, "the database: " + error()};
     log(who, "user.password", u.name + (own ? "" : " (to be changed by its user)"));
-    return tx.commit() ? "" : "the database: " + error();
+    return commit(tx);
 }
 
 Accounts::Refusal Accounts::set_role(const Who &who, const std::string &user, Role role) {
     Refusal why;
     if (!writable(why)) return why;
-    if (!who.admin()) return NOT_ALLOWED;
+    if (!who.admin()) return not_allowed();
     User u;
-    if (!find_user(user, u)) return "no user " + user;
+    if (!find_user(user, u)) return {Refused::not_found, "no user " + user};
     Tx tx(db_);
-    if (u.role == Role::admin && role != Role::admin && !admins_left_without(u.id)) return "the last admin stays one";
+    if (u.role == Role::admin && role != Role::admin && !admins_left_without(u.id)) return {Refused::conflict, "the last admin stays one"};
     St s(db_, "UPDATE users SET role=?1 WHERE id=?2");
     s.bind(1, std::string(role_name(role))).bind(2, (int64_t)u.id);
-    if (!s.run()) return "the database: " + error();
+    if (!s.run()) return {Refused::failed, "the database: " + error()};
     log(who, "user.role", u.name + " " + role_name(u.role) + " -> " + role_name(role));
-    return tx.commit() ? "" : "the database: " + error();
+    return commit(tx);
 }
 
 Accounts::Refusal Accounts::set_disabled(const Who &who, const std::string &user, bool disabled) {
     Refusal why;
     if (!writable(why)) return why;
-    if (!who.admin()) return NOT_ALLOWED;
+    if (!who.admin()) return not_allowed();
     User u;
-    if (!find_user(user, u)) return "no user " + user;
+    if (!find_user(user, u)) return {Refused::not_found, "no user " + user};
     Tx tx(db_);
-    if (disabled && u.role == Role::admin && !admins_left_without(u.id)) return "the last admin stays enabled";
+    if (disabled && u.role == Role::admin && !admins_left_without(u.id)) return {Refused::conflict, "the last admin stays enabled"};
     St s(db_, "UPDATE users SET disabled=?1 WHERE id=?2");
     s.bind(1, (int64_t)disabled).bind(2, (int64_t)u.id);
-    if (!s.run()) return "the database: " + error();
+    if (!s.run()) return {Refused::failed, "the database: " + error()};
     log(who, disabled ? "user.disable" : "user.enable", u.name);
-    return tx.commit() ? "" : "the database: " + error();
+    return commit(tx);
 }
 
 Accounts::Refusal Accounts::set_hide_stats(const Who &who, const std::string &user, bool hide) {
     Refusal why;
     if (!writable(why)) return why;
     User u;
-    if (!find_user(user, u)) return "no user " + user;
-    if (!(who.user() && who.id == u.id) && !who.admin()) return NOT_ALLOWED;
+    if (!find_user(user, u)) return {Refused::not_found, "no user " + user};
+    if (!(who.user() && who.id == u.id) && !who.admin()) return not_allowed();
     Tx tx(db_);
     St s(db_, "UPDATE users SET hide_stats=?1 WHERE id=?2");
     s.bind(1, (int64_t)hide).bind(2, (int64_t)u.id);
-    if (!s.run()) return "the database: " + error();
+    if (!s.run()) return {Refused::failed, "the database: " + error()};
     log(who, "user.hide_stats", u.name + (hide ? " on" : " off"));
-    return tx.commit() ? "" : "the database: " + error();
+    return commit(tx);
 }
 
 Accounts::Refusal Accounts::remove_user(const Who &who, const std::string &user) {
     Refusal why;
     if (!writable(why)) return why;
     User u;
-    if (!find_user(user, u)) return "no user " + user;
-    if (!(who.user() && who.id == u.id) && !who.admin()) return NOT_ALLOWED;
+    if (!find_user(user, u)) return {Refused::not_found, "no user " + user};
+    if (!(who.user() && who.id == u.id) && !who.admin()) return not_allowed();
     Tx tx(db_);
-    if (u.role == Role::admin && !admins_left_without(u.id)) return "the last admin stays";
+    if (u.role == Role::admin && !admins_left_without(u.id)) return {Refused::conflict, "the last admin stays"};
     size_t cards = 0;
     {
         St n(db_, "SELECT COUNT(*) FROM cards WHERE user=?1");
@@ -462,51 +489,51 @@ Accounts::Refusal Accounts::remove_user(const Who &who, const std::string &user)
     bool ok = St(db_, "DELETE FROM cards WHERE user=?1").bind(1, id).run() && St(db_, "DELETE FROM resets WHERE user=?1").bind(1, id).run() &&
               St(db_, "DELETE FROM sessions WHERE user=?1").bind(1, id).run() && St(db_, "DELETE FROM tokens WHERE user=?1").bind(1, id).run() &&
               St(db_, "UPDATE arcades SET owner=NULL WHERE owner=?1").bind(1, id).run() && St(db_, "DELETE FROM users WHERE id=?1").bind(1, id).run();
-    if (!ok) return "the database: " + error();
+    if (!ok) return {Refused::failed, "the database: " + error()};
     log(who, "user.remove", u.name + " (" + std::to_string(cards) + " card" + (cards == 1 ? "" : "s") + " unlinked)");
-    return tx.commit() ? "" : "the database: " + error();
+    return commit(tx);
 }
 
 Accounts::Refusal Accounts::users(const Who &who, std::vector<User> &out) {
     out.clear();
-    if (!db_) return "the database isn't open";
-    if (!who.admin()) return NOT_ALLOWED;
+    if (!db_) return {Refused::failed, "the database isn't open"};
+    if (!who.admin()) return not_allowed();
     St q(db_, "SELECT name FROM users ORDER BY id");
     while (q.row()) {
         User u;
         if (find_user(q.text(0), u)) out.push_back(u);
     }
-    return "";
+    return {};
 }
 
 Accounts::Refusal Accounts::user(const Who &who, const std::string &name, User &u) {
-    if (!db_) return "the database isn't open";
-    if (who.nobody) return NOT_ALLOWED;
+    if (!db_) return {Refused::failed, "the database isn't open"};
+    if (who.nobody) return not_allowed();
     User found;   // (u untouched until found: name may be its own)
-    if (!find_user(name, found)) return who.admin() ? "no user " + name : NOT_ALLOWED;
-    if (!(who.user() && who.id == found.id) && !who.admin()) return NOT_ALLOWED;
+    if (!find_user(name, found)) return who.admin() ? Refusal{Refused::not_found, "no user " + name} : not_allowed();
+    if (!(who.user() && who.id == found.id) && !who.admin()) return not_allowed();
     u = found;
-    return "";
+    return {};
 }
 
 Accounts::Refusal Accounts::make_reset(const Who &who, const std::string &user, std::string &code) {
     code.clear();
     Refusal why;
     if (!writable(why)) return why;
-    if (!who.admin()) return NOT_ALLOWED;
+    if (!who.admin()) return not_allowed();
     User u;
-    if (!find_user(user, u)) return "no user " + user;
+    if (!find_user(user, u)) return {Refused::not_found, "no user " + user};
     const std::string c = new_code();
-    if (c.empty()) return "the system gives no random numbers";
+    if (c.empty()) return {Refused::failed, "the system gives no random numbers"};
     Tx tx(db_);
     // (one code a user at a time: a new one takes the old one's place)
     if (!St(db_, "DELETE FROM resets WHERE user=?1 OR expires<=?2").bind(1, (int64_t)u.id).bind(2, now()).run() ||
         !St(db_, "INSERT INTO resets(code_hash, user, expires) VALUES(?1, ?2, ?3)").bind(1, sha_hex(c)).bind(2, (int64_t)u.id).bind(3, now() + 86400).run())
-        return "the database: " + error();
+        return {Refused::failed, "the database: " + error()};
     log(who, "user.reset_code", u.name);
-    if (!tx.commit()) return "the database: " + error();
+    if (!tx.commit()) return {Refused::failed, "the database: " + error()};
     code = c;
-    return "";
+    return {};
 }
 
 Accounts::Refusal Accounts::use_reset(const std::string &user, const std::string &code, const std::string &password) {
@@ -517,22 +544,22 @@ Accounts::Refusal Accounts::use_reset(const std::string &user, const std::string
     if (user.empty()) {   // the code's own user
         St q(db_, "SELECT u.name FROM resets r JOIN users u ON u.id=r.user WHERE r.code_hash=?1");
         q.bind(1, h);
-        if (!q.row() || !find_user(q.text(0), u)) return "not a reset code (or past its day)";
+        if (!q.row() || !find_user(q.text(0), u)) return {Refused::bad_code, "not a reset code (or past its day)"};
     } else if (!find_user(user, u)) {
-        return "not a reset code of that user's (or past its day)";
+        return {Refused::bad_code, "not a reset code of that user's (or past its day)"};
     }
     if (!(why = password_wrong(password)).empty()) return why;
     Tx tx(db_);
     St q(db_, "SELECT user FROM resets WHERE code_hash=?1 AND expires>?2");
     q.bind(1, h).bind(2, now());
-    if (!q.row() || q.num(0) != u.id) return user.empty() ? "not a reset code (or past its day)" : "not a reset code of that user's (or past its day)";
+    if (!q.row() || q.num(0) != u.id) return {Refused::bad_code, user.empty() ? "not a reset code (or past its day)" : "not a reset code of that user's (or past its day)"};
     const std::string kept = hash_password(password);
-    if (kept.empty()) return "the system gives no random numbers";
+    if (kept.empty()) return {Refused::failed, "the system gives no random numbers"};
     if (!St(db_, "DELETE FROM resets WHERE code_hash=?1").bind(1, h).run() ||
         !St(db_, "UPDATE users SET pass=?1, must_change=0 WHERE id=?2").bind(1, kept).bind(2, (int64_t)u.id).run())
-        return "the database: " + error();
+        return {Refused::failed, "the database: " + error()};
     log(Who{u.id, u.role, u.name, false}, "user.reset_used", u.name);
-    return tx.commit() ? "" : "the database: " + error();
+    return commit(tx);
 }
 
 Accounts::SignUp Accounts::sign_up_mode() const {
@@ -543,40 +570,40 @@ Accounts::SignUp Accounts::sign_up_mode() const {
 Accounts::Refusal Accounts::set_sign_up_mode(const Who &who, SignUp mode) {
     Refusal why;
     if (!writable(why)) return why;
-    if (!who.admin()) return NOT_ALLOWED;
+    if (!who.admin()) return not_allowed();
     const std::string m = mode == SignUp::closed ? "closed" : mode == SignUp::invite ? "invite" : "open";
     Tx tx(db_);
-    if (!St(db_, "INSERT OR REPLACE INTO config(name, value) VALUES('signup', ?1)").bind(1, m).run()) return "the database: " + error();
+    if (!St(db_, "INSERT OR REPLACE INTO config(name, value) VALUES('signup', ?1)").bind(1, m).run()) return {Refused::failed, "the database: " + error()};
     log(who, "config.signup", m);
-    return tx.commit() ? "" : "the database: " + error();
+    return commit(tx);
 }
 
 Accounts::Refusal Accounts::make_invite(const Who &who, int uses, int days, std::string &code) {
     code.clear();
     Refusal why;
     if (!writable(why)) return why;
-    if (!who.admin()) return NOT_ALLOWED;
-    if (uses < 1 || uses > 10000) return "an invitation is for 1 to 10000 sign-ups";
-    if (days < 1 || days > 365) return "an invitation lasts 1 to 365 days";
+    if (!who.admin()) return not_allowed();
+    if (uses < 1 || uses > 10000) return {Refused::invalid, "an invitation is for 1 to 10000 sign-ups"};
+    if (days < 1 || days > 365) return {Refused::invalid, "an invitation lasts 1 to 365 days"};
     const std::string c = new_code();
-    if (c.empty()) return "the system gives no random numbers";
+    if (c.empty()) return {Refused::failed, "the system gives no random numbers"};
     Tx tx(db_);
     St(db_, "DELETE FROM invites WHERE expires<=?1 OR uses_left<=0").bind(1, now()).run();
     if (!St(db_, "INSERT INTO invites(code_hash, expires, uses_left) VALUES(?1, ?2, ?3)").bind(1, sha_hex(c)).bind(2, now() + 86400LL * days).bind(3, (int64_t)uses).run())
-        return "the database: " + error();
+        return {Refused::failed, "the database: " + error()};
     log(who, "config.invite", std::to_string(uses) + " sign-up" + (uses == 1 ? "" : "s") + ", " + std::to_string(days) + " day" + (days == 1 ? "" : "s"));
-    if (!tx.commit()) return "the database: " + error();
+    if (!tx.commit()) return {Refused::failed, "the database: " + error()};
     code = c;
-    return "";
+    return {};
 }
 
 Accounts::Refusal Accounts::players(const Who &who, std::vector<std::string> &out) {
     out.clear();
-    if (!db_) return "the database isn't open";
-    if (who.nobody) return NOT_ALLOWED;
+    if (!db_) return {Refused::failed, "the database isn't open"};
+    if (who.nobody) return not_allowed();
     St q(db_, "SELECT name FROM users WHERE hide_stats=0 AND disabled=0 ORDER BY name COLLATE NOCASE");
     while (q.row()) out.push_back(q.text(0));
-    return "";
+    return {};
 }
 
 std::string Accounts::server_name() const {
@@ -587,12 +614,12 @@ std::string Accounts::server_name() const {
 Accounts::Refusal Accounts::set_server_name(const Who &who, const std::string &name) {
     Refusal why;
     if (!writable(why)) return why;
-    if (!who.admin()) return NOT_ALLOWED;
+    if (!who.admin()) return not_allowed();
     if (!(why = label_wrong(name)).empty()) return why;
     Tx tx(db_);
-    if (!St(db_, "INSERT OR REPLACE INTO config(name, value) VALUES('name', ?1)").bind(1, name).run()) return "the database: " + error();
+    if (!St(db_, "INSERT OR REPLACE INTO config(name, value) VALUES('name', ?1)").bind(1, name).run()) return {Refused::failed, "the database: " + error()};
     log(who, "config.name", name);
-    return tx.commit() ? "" : "the database: " + error();
+    return commit(tx);
 }
 
 bool Accounts::list_all_games() const { return db_ && config("list_all_games") == "1"; }
@@ -600,12 +627,12 @@ bool Accounts::list_all_games() const { return db_ && config("list_all_games") =
 Accounts::Refusal Accounts::set_list_all_games(const Who &who, bool on) {
     Refusal why;
     if (!writable(why)) return why;
-    if (!who.admin()) return NOT_ALLOWED;
+    if (!who.admin()) return not_allowed();
     Tx tx(db_);
     if (!St(db_, "INSERT OR REPLACE INTO config(name, value) VALUES('list_all_games', ?1)").bind(1, std::string(on ? "1" : "0")).run())
-        return "the database: " + error();
+        return {Refused::failed, "the database: " + error()};
     log(who, "config.list_all_games", on ? "on" : "off");
-    return tx.commit() ? "" : "the database: " + error();
+    return commit(tx);
 }
 
 bool Accounts::listed(const ea::Game &g) const { return !g.unlisted || list_all_games(); }
@@ -616,28 +643,28 @@ Accounts::Refusal Accounts::open_session(const Who &who, std::string &token, std
     token.clear(), csrf.clear();
     Refusal why;
     if (!writable(why)) return why;
-    if (!who.user()) return NOT_ALLOWED;
+    if (!who.user()) return not_allowed();
     const std::string t = new_secret("hks_"), c = new_secret("");
-    if (t.empty() || c.empty()) return "the system gives no random numbers";
+    if (t.empty() || c.empty()) return {Refused::failed, "the system gives no random numbers"};
     Tx tx(db_);
     St(db_, "DELETE FROM sessions WHERE expires<=?1").bind(1, now()).run();
     if (!St(db_, "INSERT INTO sessions(hash, user, csrf, created, expires) VALUES(?1, ?2, ?3, ?4, ?5)")
              .bind(1, sha_hex(t)).bind(2, (int64_t)who.id).bind(3, c).bind(4, now()).bind(5, now() + SESSION_SECONDS).run())
-        return "the database: " + error();
+        return {Refused::failed, "the database: " + error()};
     log(who, "user.login", who.name);
-    if (!tx.commit()) return "the database: " + error();
+    if (!tx.commit()) return {Refused::failed, "the database: " + error()};
     token = t, csrf = c;
-    return "";
+    return {};
 }
 
 Accounts::Refusal Accounts::session(const std::string &token, Who &who, bool &must_change, std::string &csrf) {
-    if (!db_) return "the database isn't open";
-    if (token.rfind("hks_", 0) != 0) return "not signed in";
+    if (!db_) return {Refused::failed, "the database isn't open"};
+    if (token.rfind("hks_", 0) != 0) return {Refused::not_signed_in, "not signed in"};
     const std::string h = sha_hex(token);
     St q(db_, "SELECT u.id, u.name, u.role, u.must_change, s.csrf, s.expires FROM sessions s JOIN users u ON u.id=s.user"
               " WHERE s.hash=?1 AND s.expires>?2 AND u.disabled=0");
     q.bind(1, h).bind(2, now());
-    if (!q.row()) return "not signed in (or the session ended)";
+    if (!q.row()) return {Refused::not_signed_in, "not signed in (or the session ended)"};
     Role r = Role::player;
     role_named(q.text(2), r);
     who = Who{(long)q.num(0), r, q.text(1), false};
@@ -646,7 +673,7 @@ Accounts::Refusal Accounts::session(const std::string &token, Who &who, bool &mu
     // (its life made whole again, once an hour at most)
     if (q.num(5) - now() < SESSION_SECONDS - 3600 && version_ <= VERSION)
         St(db_, "UPDATE sessions SET expires=?1 WHERE hash=?2").bind(1, now() + SESSION_SECONDS).bind(2, h).run();
-    return "";
+    return {};
 }
 
 void Accounts::close_session(const std::string &token) {
@@ -657,31 +684,31 @@ Accounts::Refusal Accounts::make_token(const Who &who, const std::string &label,
     token.clear(), id = 0;
     Refusal why;
     if (!writable(why)) return why;
-    if (!who.user()) return NOT_ALLOWED;
-    if (!(why = label_wrong(label)).empty()) return "a token's label: " + why;
+    if (!who.user()) return not_allowed();
+    if (!(why = label_wrong(label)).empty()) return {Refused::invalid, "a token's label: " + why.text};
     St n(db_, "SELECT COUNT(*) FROM tokens WHERE user=?1");
     n.bind(1, (int64_t)who.id);
-    if (n.row() && n.num(0) >= 50) return "50 tokens at most: revoke one first";
+    if (n.row() && n.num(0) >= 50) return {Refused::too_many, "50 tokens at most: revoke one first"};
     const std::string t = new_secret("hkt_");
-    if (t.empty()) return "the system gives no random numbers";
+    if (t.empty()) return {Refused::failed, "the system gives no random numbers"};
     Tx tx(db_);
     if (!St(db_, "INSERT INTO tokens(hash, user, label, scope, created) VALUES(?1, ?2, ?3, ?4, ?5)")
              .bind(1, sha_hex(t)).bind(2, (int64_t)who.id).bind(3, label).bind(4, std::string(write ? "write" : "read")).bind(5, now()).run())
-        return "the database: " + error();
+        return {Refused::failed, "the database: " + error()};
     const long made = (long)sqlite3_last_insert_rowid(db_);
     log(who, "token.add", std::to_string(made) + " " + label + (write ? " (write)" : " (read)"));
-    if (!tx.commit()) return "the database: " + error();
+    if (!tx.commit()) return {Refused::failed, "the database: " + error()};
     token = t, id = made;
-    return "";
+    return {};
 }
 
 Accounts::Refusal Accounts::token(const std::string &token, Who &who, bool &must_change, bool &write, long &id) {
-    if (!db_) return "the database isn't open";
-    if (token.rfind("hkt_", 0) != 0) return "not a token";
+    if (!db_) return {Refused::failed, "the database isn't open"};
+    if (token.rfind("hkt_", 0) != 0) return {Refused::not_signed_in, "not a token"};
     St q(db_, "SELECT u.id, u.name, u.role, u.must_change, t.scope, t.id, t.last_used FROM tokens t JOIN users u ON u.id=t.user"
               " WHERE t.hash=?1 AND u.disabled=0");
     q.bind(1, sha_hex(token));
-    if (!q.row()) return "not a token (or revoked)";
+    if (!q.row()) return {Refused::not_signed_in, "not a token (or revoked)"};
     Role r = Role::player;
     role_named(q.text(2), r);
     who = Who{(long)q.num(0), r, q.text(1), false};
@@ -690,31 +717,31 @@ Accounts::Refusal Accounts::token(const std::string &token, Who &who, bool &must
     id = (long)q.num(5);
     if (now() - q.num(6) >= 3600 && version_ <= VERSION)   // (noted once an hour at most)
         St(db_, "UPDATE tokens SET last_used=?1 WHERE id=?2").bind(1, now()).bind(2, (int64_t)id).run();
-    return "";
+    return {};
 }
 
 Accounts::Refusal Accounts::tokens(const Who &who, std::vector<Token> &out) {
     out.clear();
-    if (!db_) return "the database isn't open";
-    if (!who.user()) return NOT_ALLOWED;
+    if (!db_) return {Refused::failed, "the database isn't open"};
+    if (!who.user()) return not_allowed();
     St q(db_, "SELECT id, label, scope, created, last_used FROM tokens WHERE user=?1 ORDER BY id");
     q.bind(1, (int64_t)who.id);
     while (q.row()) out.push_back({(long)q.num(0), q.text(1), q.text(2) == "write", q.num(3), q.num(4)});
-    return "";
+    return {};
 }
 
 Accounts::Refusal Accounts::revoke_token(const Who &who, long id) {
     Refusal why;
     if (!writable(why)) return why;
-    if (!who.user()) return NOT_ALLOWED;
+    if (!who.user()) return not_allowed();
     Tx tx(db_);
     St q(db_, "SELECT label FROM tokens WHERE id=?1 AND user=?2");
     q.bind(1, (int64_t)id).bind(2, (int64_t)who.id);
-    if (!q.row()) return "no token " + std::to_string(id) + " of this account's";
+    if (!q.row()) return {Refused::not_found, "no token " + std::to_string(id) + " of this account's"};
     const std::string label = q.text(0);
-    if (!St(db_, "DELETE FROM tokens WHERE id=?1").bind(1, (int64_t)id).run()) return "the database: " + error();
+    if (!St(db_, "DELETE FROM tokens WHERE id=?1").bind(1, (int64_t)id).run()) return {Refused::failed, "the database: " + error()};
     log(who, "token.revoke", std::to_string(id) + " " + label);
-    return tx.commit() ? "" : "the database: " + error();
+    return commit(tx);
 }
 
 // --- cards
@@ -734,25 +761,25 @@ bool known_card(const ea::Store &st, const std::string &card, ea::Identity &id) 
 Accounts::Refusal Accounts::link_card(const Who &who, const std::string &card, const std::string &pin) {
     Refusal why;
     if (!writable(why)) return why;
-    if (!who.user()) return "a card is linked to an account: act as its user (--as)";
+    if (!who.user()) return {Refused::not_allowed, "a card is linked to an account: act as its user (--as)"};
     ea::Identity id;
-    if (card.empty() || !known_card(store_, card, id)) return "no card " + card + " has played on this server";
+    if (card.empty() || !known_card(store_, card, id)) return {Refused::not_found, "no card " + card + " has played on this server"};
     // (the store read before the accounts' transaction: never the store's lock while holding the
     // database's, which a call's answer may be waiting for with the store's)
     const std::vector<std::string> kept_pins = ea::pins(store_, id);
     Tx tx(db_);
-    if (!tx.begun) return "the database: " + error();
+    if (!tx.begun) return {Refused::failed, "the database: " + error()};
     {
         St q(db_, "SELECT user FROM cards WHERE card=?1");
         q.bind(1, id.card);
-        if (q.row()) return q.num(0) == who.id ? "the card is linked to this account already" : "the card is another account's";
+        if (q.row()) return {Refused::conflict, q.num(0) == who.id ? "the card is linked to this account already" : "the card is another account's"};
     }
     int64_t tries = 0;
     {
         St q(db_, "SELECT tries, locked FROM card_locks WHERE card=?1");
         q.bind(1, id.card);
         if (q.row()) {
-            if (q.num(1)) return "the card is locked after " + std::to_string(LOCK_TRIES) + " wrong PINs: an admin unlocks it";
+            if (q.num(1)) return {Refused::locked, "the card is locked after " + std::to_string(LOCK_TRIES) + " wrong PINs: an admin unlocks it", 0};
             tries = q.num(0);
         }
     }
@@ -764,13 +791,16 @@ Accounts::Refusal Accounts::link_card(const Who &who, const std::string &card, c
         St(db_, "INSERT OR REPLACE INTO card_locks(card, tries, locked) VALUES(?1, ?2, ?3)").bind(1, id.card).bind(2, tries).bind(3, lock ? now() : (int64_t)0).run();
         log(who, "card.link_refused", id.card + " (wrong PIN, " + std::to_string(tries) + " of " + std::to_string(LOCK_TRIES) + (lock ? ": locked)" : ")"));
         tx.commit();
-        return lock ? "wrong PIN: the card is now locked for linking (an admin unlocks it)" : "wrong PIN (or the card has none kept)";
+        if (lock) return {Refused::locked, "wrong PIN: the card is now locked for linking (an admin unlocks it)", 0};
+        const int left = LOCK_TRIES - (int)tries;
+        return {Refused::wrong_pin, "wrong PIN (or the card has none kept): " + std::to_string(left) + (left == 1 ? " try" : " tries") +
+                                        " left before the card is locked for linking", left};
     }
     if (!St(db_, "DELETE FROM card_locks WHERE card=?1").bind(1, id.card).run() ||
         !St(db_, "INSERT INTO cards(card, user, linked) VALUES(?1, ?2, ?3)").bind(1, id.card).bind(2, (int64_t)who.id).bind(3, now()).run())
-        return "the database: " + error();
+        return {Refused::failed, "the database: " + error()};
     log(who, "card.link", id.card);
-    return tx.commit() ? "" : "the database: " + error();
+    return commit(tx);
 }
 
 Accounts::Refusal Accounts::unlink_card(const Who &who, const std::string &card) {
@@ -779,70 +809,96 @@ Accounts::Refusal Accounts::unlink_card(const Who &who, const std::string &card)
     Tx tx(db_);
     St q(db_, "SELECT c.card, c.user, u.name FROM cards c LEFT JOIN users u ON u.id=c.user WHERE c.card=?1");
     q.bind(1, card);
-    if (!q.row()) return who.admin() ? "the card " + card + " isn't linked" : NOT_ALLOWED;
+    if (!q.row()) return who.admin() ? Refusal{Refused::not_found, "the card " + card + " isn't linked"} : not_allowed();
     const std::string c = q.text(0), owner = q.text(2);
-    if (!(who.user() && q.num(1) == who.id) && !who.admin()) return NOT_ALLOWED;
-    if (!St(db_, "DELETE FROM cards WHERE card=?1").bind(1, c).run()) return "the database: " + error();
+    if (!(who.user() && q.num(1) == who.id) && !who.admin()) return not_allowed();
+    if (!St(db_, "DELETE FROM cards WHERE card=?1").bind(1, c).run()) return {Refused::failed, "the database: " + error()};
     log(who, "card.unlink", c + " (" + owner + "'s)");
-    return tx.commit() ? "" : "the database: " + error();
+    return commit(tx);
 }
 
 Accounts::Refusal Accounts::unlock_card(const Who &who, const std::string &card) {
     Refusal why;
     if (!writable(why)) return why;
-    if (!who.admin()) return NOT_ALLOWED;
+    if (!who.admin()) return not_allowed();
     Tx tx(db_);
     St q(db_, "SELECT card FROM card_locks WHERE card=?1");
     q.bind(1, card);
-    if (!q.row()) return "the card " + card + " isn't locked";
+    if (!q.row()) return {Refused::locked, "the card " + card + " isn't locked"};
     const std::string c = q.text(0);
-    if (!St(db_, "DELETE FROM card_locks WHERE card=?1").bind(1, c).run()) return "the database: " + error();
+    if (!St(db_, "DELETE FROM card_locks WHERE card=?1").bind(1, c).run()) return {Refused::failed, "the database: " + error()};
     log(who, "card.unlock", c);
-    return tx.commit() ? "" : "the database: " + error();
+    return commit(tx);
 }
 
 Accounts::Refusal Accounts::reset_card_pin(const Who &who, const std::string &card, const std::string &pin, ea::PinReset &did) {
     did = ea::PinReset{};
     Refusal why;
     if (!writable(why)) return why;
-    if (!who.admin()) return NOT_ALLOWED;
+    if (!who.admin()) return not_allowed();
     ea::Identity id;
-    if (!known_card(store_, card, id)) return "no card " + card + " has played on this server";
-    if (pin.size() != 4 || pin.find_first_not_of("0123456789") != std::string::npos) return "a PIN is four digits";
+    if (!known_card(store_, card, id)) return {Refused::not_found, "no card " + card + " has played on this server"};
+    if (pin.size() != 4 || pin.find_first_not_of("0123456789") != std::string::npos) return {Refused::invalid, "a PIN is four digits"};
     const bool written = ea::reset_pin(store_, id, pin, did);
     std::string places;
     for (const std::string &p : did.done) places += (places.empty() ? "" : "; ") + p;
     Tx tx(db_);
     log(who, "card.pin_reset", id.card + " (" + (places.empty() ? "no place" : places) + (written ? "" : "; some not written") + ")");
     tx.commit();
-    return written ? "" : "some of the card's places weren't written";
+    return written ? Refusal{} : Refusal{Refused::incomplete, "some of the card's places weren't written"};
+}
+
+Accounts::Refusal Accounts::card(const Who &who, const std::string &card, CardInfo &out) {
+    out = CardInfo{};
+    out.card = card;
+    if (!db_) return {Refused::failed, "the database isn't open"};
+    if (!who.admin()) return not_allowed();
+    ea::Identity id;
+    out.known = !card.empty() && known_card(store_, card, id);
+    if (out.known) out.card = id.card;
+    {
+        St q(db_, "SELECT u.name, c.linked FROM cards c LEFT JOIN users u ON u.id=c.user WHERE c.card=?1");
+        q.bind(1, out.card);
+        if (q.row()) out.user = q.text(0), out.linked = q.num(1);
+    }
+    {
+        St q(db_, "SELECT tries, locked FROM card_locks WHERE card=?1");
+        q.bind(1, out.card);
+        if (q.row()) out.tries = (int)q.num(0), out.locked = q.num(1) != 0;
+    }
+    if (!out.known) return {};
+    for (const ea::Game &g : ea::games()) {   // (every game: an admin's, listed or not)
+        ea::Profile p;
+        if (*g.model && ea::profile(store_, g, id, p)) out.games.push_back({*g.id ? g.id : g.model, g.title, p.name});
+    }
+    return {};
 }
 
 Accounts::Refusal Accounts::cards(const Who &who, const std::string &user, std::vector<LinkedCard> &out) {
     out.clear();
-    if (!db_) return "the database isn't open";
+    if (!db_) return {Refused::failed, "the database isn't open"};
     User u;
     if (user.empty()) {
-        if (!who.user()) return who.admin() ? "" : NOT_ALLOWED;   // (the command line holds no card: every one with a user named)
+        if (!who.user()) return who.admin() ? Refusal{} : not_allowed();   // (the command line holds no card: every one with a user named)
         u.id = who.id, u.name = who.name;
     } else if (!find_user(user, u)) {
-        return "no user " + user;
+        return {Refused::not_found, "no user " + user};
     }
-    if (!(who.user() && who.id == u.id) && !who.admin()) return "a card number is shown to its owner only";
+    if (!(who.user() && who.id == u.id) && !who.admin()) return {Refused::not_allowed, "a card number is shown to its owner only"};
     St q(db_, "SELECT card, linked FROM cards WHERE user=?1 ORDER BY linked, card");
     q.bind(1, (int64_t)u.id);
     while (q.row()) out.push_back({q.text(0), u.name, q.num(1)});
-    return "";
+    return {};
 }
 
 Accounts::Refusal Accounts::stats(const Who &who, const std::string &user, std::vector<Stat> &out) {
     out.clear();
-    if (!db_) return "the database isn't open";
-    if (who.nobody) return NOT_ALLOWED;
+    if (!db_) return {Refused::failed, "the database isn't open"};
+    if (who.nobody) return not_allowed();
     User u;
-    if (!find_user(user, u)) return "no user " + user;
+    if (!find_user(user, u)) return {Refused::not_found, "no user " + user};
     const bool own = who.user() && who.id == u.id;
-    if (u.hide_stats && !own && !who.admin()) return u.name + " keeps their stats to themselves";
+    if (u.hide_stats && !own && !who.admin()) return {Refused::stats_hidden, u.name + " keeps their stats to themselves"};
     std::vector<std::string> mine;
     {
         St q(db_, "SELECT card FROM cards WHERE user=?1 ORDER BY linked, card");
@@ -860,15 +916,15 @@ Accounts::Refusal Accounts::stats(const Who &who, const std::string &user, std::
             out.push_back(std::move(s));
         }
     }
-    return "";
+    return {};
 }
 
 Accounts::Refusal Accounts::top(const Who &who, const std::string &game, long song, long chart, size_t limit, std::vector<TopScore> &out) {
     out.clear();
-    if (!db_) return "the database isn't open";
-    if (who.nobody) return NOT_ALLOWED;
+    if (!db_) return {Refused::failed, "the database isn't open"};
+    if (who.nobody) return not_allowed();
     const ea::Game *g = ea::game_by_id(game);
-    if (!g || !*g->model || !g->readers || !listed(*g)) return "no game " + game;
+    if (!g || !*g->model || !g->readers || !listed(*g)) return {Refused::not_found, "no game " + game};
     struct Owner {
         std::string name;
         bool shown;
@@ -890,7 +946,7 @@ Accounts::Refusal Accounts::top(const Who &who, const std::string &game, long so
     }
     std::stable_sort(out.begin(), out.end(), [](const TopScore &a, const TopScore &b) { return a.score > b.score; });
     if (out.size() > limit) out.resize(limit);
-    return "";
+    return {};
 }
 
 // --- arcades and machines
@@ -905,36 +961,36 @@ bool Accounts::find_arcade(long id, Arcade &a, long &owner) const {
 
 Accounts::Refusal Accounts::may_edit_arcade(const Who &who, long id, Arcade &a) const {
     long owner = 0;
-    if (!who.op()) return NOT_ALLOWED;
-    if (!find_arcade(id, a, owner)) return "no arcade " + std::to_string(id);
-    if (!who.admin() && !(who.user() && owner == who.id)) return "the arcade " + std::to_string(id) + " is another operator's";
-    return "";
+    if (!who.op()) return not_allowed();
+    if (!find_arcade(id, a, owner)) return {Refused::not_found, "no arcade " + std::to_string(id)};
+    if (!who.admin() && !(who.user() && owner == who.id)) return {Refused::not_allowed, "the arcade " + std::to_string(id) + " is another operator's"};
+    return {};
 }
 
 Accounts::Refusal Accounts::add_arcade(const Who &who, const std::string &name, int pref, const std::string &owner, long &id) {
     id = 0;
     Refusal why;
     if (!writable(why)) return why;
-    if (!who.op()) return "an arcade is an operator's: " + std::string(NOT_ALLOWED);
+    if (!who.op()) return {Refused::not_allowed, "an arcade is an operator's: " + not_allowed().text};
     if (!(why = label_wrong(name)).empty()) return why;
-    if (!pref_ok(pref)) return "a prefecture is a number from 1 to 47";
+    if (!pref_ok(pref)) return {Refused::invalid, "a prefecture is a number from 1 to 47"};
     int64_t owner_id = who.user() ? who.id : 0;
     std::string owner_name = who.user() ? who.name : "";
     if (!owner.empty()) {
         User o;
-        if (!who.admin() && !same_card(owner, who.name)) return "only an admin gives an arcade to another";
-        if (!find_user(owner, o)) return "no user " + owner;
-        if (o.role < Role::op) return o.name + " isn't an operator (an admin makes one: user role NAME operator)";
+        if (!who.admin() && !same_card(owner, who.name)) return {Refused::not_allowed, "only an admin gives an arcade to another"};
+        if (!find_user(owner, o)) return {Refused::not_found, "no user " + owner};
+        if (o.role < Role::op) return {Refused::invalid, o.name + " isn't an operator (an admin makes one: user role NAME operator)"};
         owner_id = o.id, owner_name = o.name;
     }
     Tx tx(db_);
     St a(db_, "INSERT INTO arcades(owner, name, pref) VALUES(?1, ?2, ?3)");
     if (owner_id) a.bind(1, owner_id);
     a.bind(2, name).bind(3, (int64_t)pref);
-    if (!a.run()) return "the database: " + error();
+    if (!a.run()) return {Refused::failed, "the database: " + error()};
     id = (long)sqlite3_last_insert_rowid(db_);
     log(who, "arcade.add", std::to_string(id) + " " + name + " (prefecture " + std::to_string(pref) + ", " + (owner_name.empty() ? "no one" : owner_name) + "'s)");
-    return tx.commit() ? "" : "the database: " + error();
+    return commit(tx);
 }
 
 Accounts::Refusal Accounts::rename_arcade(const Who &who, long id, const std::string &name) {
@@ -943,9 +999,9 @@ Accounts::Refusal Accounts::rename_arcade(const Who &who, long id, const std::st
     Arcade a;
     if (!(why = may_edit_arcade(who, id, a)).empty() || !(why = label_wrong(name)).empty()) return why;
     Tx tx(db_);
-    if (!St(db_, "UPDATE arcades SET name=?1 WHERE id=?2").bind(1, name).bind(2, (int64_t)id).run()) return "the database: " + error();
+    if (!St(db_, "UPDATE arcades SET name=?1 WHERE id=?2").bind(1, name).bind(2, (int64_t)id).run()) return {Refused::failed, "the database: " + error()};
     log(who, "arcade.rename", std::to_string(id) + " " + a.name + " -> " + name);
-    return tx.commit() ? "" : "the database: " + error();
+    return commit(tx);
 }
 
 Accounts::Refusal Accounts::set_arcade_pref(const Who &who, long id, int pref) {
@@ -953,11 +1009,11 @@ Accounts::Refusal Accounts::set_arcade_pref(const Who &who, long id, int pref) {
     if (!writable(why)) return why;
     Arcade a;
     if (!(why = may_edit_arcade(who, id, a)).empty()) return why;
-    if (!pref_ok(pref)) return "a prefecture is a number from 1 to 47";
+    if (!pref_ok(pref)) return {Refused::invalid, "a prefecture is a number from 1 to 47"};
     Tx tx(db_);
-    if (!St(db_, "UPDATE arcades SET pref=?1 WHERE id=?2").bind(1, (int64_t)pref).bind(2, (int64_t)id).run()) return "the database: " + error();
+    if (!St(db_, "UPDATE arcades SET pref=?1 WHERE id=?2").bind(1, (int64_t)pref).bind(2, (int64_t)id).run()) return {Refused::failed, "the database: " + error()};
     log(who, "arcade.pref", std::to_string(id) + " " + std::to_string(a.pref) + " -> " + std::to_string(pref));
-    return tx.commit() ? "" : "the database: " + error();
+    return commit(tx);
 }
 
 Accounts::Refusal Accounts::remove_arcade(const Who &who, long id) {
@@ -970,36 +1026,36 @@ Accounts::Refusal Accounts::remove_arcade(const Who &who, long id) {
         if (!St(db_, "DELETE FROM machine_keys WHERE pcbid IN (SELECT pcbid FROM machines WHERE arcade=?1)").bind(1, (int64_t)id).run() ||
             !St(db_, "DELETE FROM machines WHERE arcade=?1").bind(1, (int64_t)id).run() ||
             !St(db_, "DELETE FROM arcades WHERE id=?1").bind(1, (int64_t)id).run())
-            return "the database: " + error();
+            return {Refused::failed, "the database: " + error()};
         log(who, "arcade.remove", std::to_string(id) + " " + a.name + " (its machines with it)");
-        if (!tx.commit()) return "the database: " + error();
+        if (!tx.commit()) return {Refused::failed, "the database: " + error()};
     }
     // its settings: emptied (an empty one reads as none)
     const auto held = store_.hold();
     for (const ea::Key &k : store_.keys(ea::tables::arcade))
         if (k.size() == 3 && k[0] == std::to_string(id) && !store_.get(ea::tables::arcade, k).empty()) store_.put(ea::tables::arcade, k, "");
-    return "";
+    return {};
 }
 
 Accounts::Refusal Accounts::arcades(const Who &who, std::vector<Arcade> &out) {
     out.clear();
-    if (!db_) return "the database isn't open";
-    if (!who.op()) return NOT_ALLOWED;
+    if (!db_) return {Refused::failed, "the database isn't open"};
+    if (!who.op()) return not_allowed();
     St q(db_, "SELECT a.id, u.name, a.name, a.pref FROM arcades a LEFT JOIN users u ON u.id=a.owner WHERE ?1 OR a.owner=?2 ORDER BY a.id");
     q.bind(1, (int64_t)who.admin()).bind(2, (int64_t)who.id);
     while (q.row()) out.push_back({(long)q.num(0), q.text(1), q.text(2), (int)q.num(3)});
-    return "";
+    return {};
 }
 
 Accounts::Refusal Accounts::machine_arcade(const Who &who, const std::string &pcbid, Machine &m) const {
-    if (!who.op()) return NOT_ALLOWED;
+    if (!who.op()) return not_allowed();
     St q(db_, "SELECT pcbid, arcade, name, enabled, last_seen FROM machines WHERE pcbid=?1");
     q.bind(1, upper(pcbid));
-    if (!q.row()) return "no machine " + pcbid;
+    if (!q.row()) return {Refused::not_found, "no machine " + pcbid};
     m = {q.text(0), (long)q.num(1), q.text(2), q.num(3) != 0, q.num(4)};
     Arcade a;
     const Refusal why = may_edit_arcade(who, m.arcade, a);
-    return why.empty() ? "" : "the machine " + m.pcbid + " is another operator's";
+    return why.empty() ? Refusal{} : Refusal{Refused::not_allowed, "the machine " + m.pcbid + " is another operator's"};
 }
 
 Accounts::Refusal Accounts::add_machine(const Who &who, long arcade, const std::string &name, std::string &pcbid, std::string *key) {
@@ -1011,17 +1067,17 @@ Accounts::Refusal Accounts::add_machine(const Who &who, long arcade, const std::
     if (!(why = may_edit_arcade(who, arcade, a)).empty() || !(why = label_wrong(name)).empty()) return why;
     const std::string id = ea::new_pcbid();
     const std::string text = key ? net::Key::make_for(id) : "";
-    if (id.empty() || (key && text.empty())) return "the system gives no random numbers";
+    if (id.empty() || (key && text.empty())) return {Refused::failed, "the system gives no random numbers"};
     Tx tx(db_);
     if (!St(db_, "INSERT INTO machines(pcbid, arcade, name, enabled) VALUES(?1, ?2, ?3, 1)").bind(1, id).bind(2, (int64_t)arcade).bind(3, name).run() ||
         !St(db_, "DELETE FROM machine_keys WHERE pcbid=?1").bind(1, id).run() ||
         (key && !St(db_, "INSERT INTO machine_keys(pcbid, kept, made) VALUES(?1, ?2, ?3)").bind(1, id).bind(2, kept_key(text)).bind(3, now()).run()))
-        return "the database: " + error();
+        return {Refused::failed, "the database: " + error()};
     log(who, "machine.add", id + " " + name + " (arcade " + std::to_string(arcade) + ")" + (key ? ", with a key" : ""));
-    if (!tx.commit()) return "the database: " + error();
+    if (!tx.commit()) return {Refused::failed, "the database: " + error()};
     pcbid = id;
     if (key) *key = text;
-    return "";
+    return {};
 }
 
 Accounts::Refusal Accounts::new_machine_key(const Who &who, const std::string &pcbid, std::string &key) {
@@ -1031,14 +1087,14 @@ Accounts::Refusal Accounts::new_machine_key(const Who &who, const std::string &p
     Machine m;
     if (!(why = machine_arcade(who, pcbid, m)).empty()) return why;
     const std::string text = net::Key::make_for(m.pcbid);
-    if (text.empty()) return "the system gives no random numbers";
+    if (text.empty()) return {Refused::failed, "the system gives no random numbers"};
     Tx tx(db_);
     if (!St(db_, "INSERT OR REPLACE INTO machine_keys(pcbid, kept, made) VALUES(?1, ?2, ?3)").bind(1, m.pcbid).bind(2, kept_key(text)).bind(3, now()).run())
-        return "the database: " + error();
+        return {Refused::failed, "the database: " + error()};
     log(who, "machine.key", m.pcbid + " " + m.name + " (a new key; the old one no longer taken)");
-    if (!tx.commit()) return "the database: " + error();
+    if (!tx.commit()) return {Refused::failed, "the database: " + error()};
     key = text;
-    return "";
+    return {};
 }
 
 Accounts::Refusal Accounts::rename_machine(const Who &who, const std::string &pcbid, const std::string &name) {
@@ -1047,9 +1103,9 @@ Accounts::Refusal Accounts::rename_machine(const Who &who, const std::string &pc
     Machine m;
     if (!(why = machine_arcade(who, pcbid, m)).empty() || !(why = label_wrong(name)).empty()) return why;
     Tx tx(db_);
-    if (!St(db_, "UPDATE machines SET name=?1 WHERE pcbid=?2").bind(1, name).bind(2, m.pcbid).run()) return "the database: " + error();
+    if (!St(db_, "UPDATE machines SET name=?1 WHERE pcbid=?2").bind(1, name).bind(2, m.pcbid).run()) return {Refused::failed, "the database: " + error()};
     log(who, "machine.rename", m.pcbid + " " + m.name + " -> " + name);
-    return tx.commit() ? "" : "the database: " + error();
+    return commit(tx);
 }
 
 Accounts::Refusal Accounts::enable_machine(const Who &who, const std::string &pcbid, bool on) {
@@ -1058,9 +1114,9 @@ Accounts::Refusal Accounts::enable_machine(const Who &who, const std::string &pc
     Machine m;
     if (!(why = machine_arcade(who, pcbid, m)).empty()) return why;
     Tx tx(db_);
-    if (!St(db_, "UPDATE machines SET enabled=?1 WHERE pcbid=?2").bind(1, (int64_t)on).bind(2, m.pcbid).run()) return "the database: " + error();
+    if (!St(db_, "UPDATE machines SET enabled=?1 WHERE pcbid=?2").bind(1, (int64_t)on).bind(2, m.pcbid).run()) return {Refused::failed, "the database: " + error()};
     log(who, on ? "machine.enable" : "machine.disable", m.pcbid + " " + m.name);
-    return tx.commit() ? "" : "the database: " + error();
+    return commit(tx);
 }
 
 Accounts::Refusal Accounts::remove_machine(const Who &who, const std::string &pcbid) {
@@ -1071,15 +1127,15 @@ Accounts::Refusal Accounts::remove_machine(const Who &who, const std::string &pc
     Tx tx(db_);
     if (!St(db_, "DELETE FROM machines WHERE pcbid=?1").bind(1, m.pcbid).run() ||
         !St(db_, "DELETE FROM machine_keys WHERE pcbid=?1").bind(1, m.pcbid).run())
-        return "the database: " + error();
+        return {Refused::failed, "the database: " + error()};
     log(who, "machine.remove", m.pcbid + " " + m.name + " (arcade " + std::to_string(m.arcade) + ")");
-    return tx.commit() ? "" : "the database: " + error();
+    return commit(tx);
 }
 
 Accounts::Refusal Accounts::machines(const Who &who, long arcade, std::vector<Machine> &out) {
     out.clear();
-    if (!db_) return "the database isn't open";
-    if (!who.op()) return NOT_ALLOWED;
+    if (!db_) return {Refused::failed, "the database isn't open"};
+    if (!who.op()) return not_allowed();
     if (arcade) {
         Arcade a;
         if (const Refusal why = may_edit_arcade(who, arcade, a); !why.empty()) return why;
@@ -1089,24 +1145,24 @@ Accounts::Refusal Accounts::machines(const Who &who, long arcade, std::vector<Ma
               " WHERE (?1 = 0 OR m.arcade = ?1) AND (?2 OR a.owner = ?3) ORDER BY m.arcade, m.name, m.pcbid");
     q.bind(1, (int64_t)arcade).bind(2, (int64_t)who.admin()).bind(3, (int64_t)who.id);
     while (q.row()) out.push_back({q.text(0), (long)q.num(1), q.text(2), q.num(3) != 0, q.num(4), q.num(5) != 0});
-    return "";
+    return {};
 }
 
 // --- settings
 
 namespace {
-// The checks hiraku-server's set makes (eamuse/admin.cpp): "" or why not
-std::string setting_wrong(const std::string &game, const ea::Game *g, const ea::Setting *s, const std::string &name, const std::string &value) {
-    if (!g && game != "server") return "no game " + game;
-    if (!s) return game + " has no setting " + name;
-    if (value.find_first_of("\r\n") != std::string::npos) return "a setting is one line";
+// The checks hiraku-server's set makes (eamuse/admin.cpp): none, or why not
+Refusal setting_wrong(const std::string &game, const ea::Game *g, const ea::Setting *s, const std::string &name, const std::string &value) {
+    if (!g && game != "server") return {Refused::not_found, "no game " + game};
+    if (!s) return {Refused::invalid, game + " has no setting " + name};
+    if (value.find_first_of("\r\n") != std::string::npos) return {Refused::invalid, "a setting is one line"};
     if (s->kind == ea::Setting::number && !value.empty()) {
         char *end = nullptr;
         const long n = std::strtol(value.c_str(), &end, 10);
         if (*end || n < s->min || n > s->max)
-            return game + "'s " + name + " is a number from " + std::to_string(s->min) + " to " + std::to_string(s->max);
+            return {Refused::invalid, game + "'s " + name + " is a number from " + std::to_string(s->min) + " to " + std::to_string(s->max)};
     }
-    return "";
+    return {};
 }
 std::string trimmed(std::string v) {
     while (!v.empty() && std::isspace((unsigned char)v.back())) v.pop_back();
@@ -1118,37 +1174,38 @@ Accounts::Refusal Accounts::set_setting(const Who &who, long arcade, const std::
     Refusal why;
     if (!writable(why)) return why;
     Arcade a;
-    if (arcade ? !(why = may_edit_arcade(who, arcade, a)).empty() : !who.admin() && !(why = "the server's settings are an admin's").empty()) return why;
-    if (arcade && game == "server") return "an arcade has its games' settings only";
+    if (arcade ? !(why = may_edit_arcade(who, arcade, a)).empty() : !who.admin() && !(why = Refusal{Refused::not_allowed, "the server's settings are an admin's"}).empty())
+        return why;
+    if (arcade && game == "server") return {Refused::invalid, "an arcade has its games' settings only"};
     const ea::Game *g = game == "server" ? nullptr : ea::game_by_id(game);
     const ea::Setting *s = g || game == "server" ? ea::find_setting(g, name.c_str()) : nullptr;
     if (!(why = setting_wrong(game, g, s, name, value)).empty()) return why;
     const ea::Table &t = arcade ? ea::tables::arcade : *s->table;
     const ea::Key key = arcade ? ea::arcade_setting_key(*g, *s, std::to_string(arcade)) : ea::setting_key(g, *s);
-    if (g && key.empty() && (arcade || s->table == &ea::tables::setting)) return game + " has no settings of its own";
+    if (g && key.empty() && (arcade || s->table == &ea::tables::setting)) return {Refused::invalid, game + " has no settings of its own"};
     {
         const auto held = store_.hold();
         if (value.empty() ? !store_.get(t, key).empty() && !store_.put(t, key, "") : !store_.put(t, key, value + "\n"))
-            return store_.label(t, key) + " not written";
+            return {Refused::failed, store_.label(t, key) + " not written"};
     }
     Tx tx(db_);
     log(who, "setting.set", (arcade ? "arcade " + std::to_string(arcade) : std::string("server")) + " " + game + " " + name + " = " +
                                 (value.empty() ? "(none)" : value));
     tx.commit();
-    return "";
+    return {};
 }
 
 Accounts::Refusal Accounts::settings(const Who &who, long arcade, const std::string &game, std::vector<SettingLine> &out) {
     out.clear();
-    if (!db_) return "the database isn't open";
+    if (!db_) return {Refused::failed, "the database isn't open"};
     Arcade a;
     if (arcade) {
         if (const Refusal why = may_edit_arcade(who, arcade, a); !why.empty()) return why;
     } else if (!who.op()) {
-        return NOT_ALLOWED;
+        return not_allowed();
     }
     const ea::Game *only = game.empty() ? nullptr : ea::game_by_id(game);
-    if (!game.empty() && !only) return "no game " + game;
+    if (!game.empty() && !only) return {Refused::not_found, "no game " + game};
     for (const ea::Game &g : ea::games()) {
         if (!*g.model || std::strchr(g.model, '?') || (only && &g != only)) continue;
         for (const ea::Setting &s : g.settings) {
@@ -1158,26 +1215,26 @@ Accounts::Refusal Accounts::settings(const Who &who, long arcade, const std::str
             out.push_back(l);
         }
     }
-    return "";
+    return {};
 }
 
 Accounts::Refusal Accounts::server_settings(const Who &who, std::vector<SettingLine> &out) {
     out.clear();
-    if (!db_) return "the database isn't open";
-    if (!who.admin()) return "the server's settings are an admin's";
+    if (!db_) return {Refused::failed, "the database isn't open"};
+    if (!who.admin()) return {Refused::not_allowed, "the server's settings are an admin's"};
     for (const ea::Setting &s : ea::server_settings())
         out.push_back({"server", s.name, "", trimmed(store_.get(*s.table, ea::setting_key(nullptr, s))), s.by_default});
-    return "";
+    return {};
 }
 
 Accounts::Refusal Accounts::audit(const Who &who, size_t last, std::vector<AuditLine> &out) {
     out.clear();
-    if (!db_) return "the database isn't open";
-    if (!who.admin()) return NOT_ALLOWED;
+    if (!db_) return {Refused::failed, "the database isn't open"};
+    if (!who.admin()) return not_allowed();
     St q(db_, "SELECT id, at, user, action, detail FROM (SELECT * FROM audit ORDER BY id DESC LIMIT ?1) ORDER BY id");
     q.bind(1, (int64_t)(last ? last : 1000000000));
     while (q.row()) out.push_back({(long)q.num(0), q.num(1), q.text(2), q.text(3), q.text(4)});
-    return "";
+    return {};
 }
 
 // --- serving
@@ -1235,11 +1292,13 @@ ea::Cabinet Accounts::cabinet(const std::string &srcid) {
 }
 
 std::string Accounts::machine_name(const std::string &pcbid) {
-    if (!db_) return "";
+    if (!db_) return {};
     St q(db_, "SELECT name FROM machines WHERE pcbid=?1");
     q.bind(1, pcbid);
     return q.row() ? q.text(0) : "";
 }
+
+int Accounts::synchronous() const { return ea::synchronous_of(db_); }
 
 bool Accounts::alive() {
     if (!db_) return false;

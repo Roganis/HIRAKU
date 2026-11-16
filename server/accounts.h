@@ -108,6 +108,56 @@ struct TopScore {
     int clear = -1;
 };
 
+// A card as an admin sees it (Accounts::card): whether the server knows it (a game has a player on
+// it), its account, its lock for linking, and the games it has a player in. Never its PIN
+struct CardGame {
+    std::string game, title, player;   // the game's id and title, the game's own player name
+};
+struct CardInfo {
+    std::string card;   // as the store writes it (as asked, when unknown)
+    bool known = false;
+    std::string user;   // the account it is linked to; "": none
+    int64_t linked = 0;
+    bool locked = false;
+    int tries = 0;      // wrong PINs so far (since the last link or unlock)
+    std::vector<CardGame> games;
+};
+
+// What kind of refusal an operation's is: the API answers each with its own HTTP status and error
+// (server/api.cpp), the command line says the sentence
+enum class Refused {
+    ok,              // done: no refusal
+    invalid,         // a value that isn't one (a name's, a password's, a PIN's shape, a setting's)
+    not_found,       // no such user, card, arcade, machine, game or token
+    not_allowed,     // not this account's to do
+    not_signed_in,   // a session or token that isn't one (or ended)
+    wrong_password,  // a log-in's name or password
+    old_password,    // a password change's old one
+    disabled,        // the user is disabled
+    stats_hidden,    // the user keeps their stats to themselves
+    sign_up,         // sign-up closed, by invitation, or not an invitation's code
+    bad_code,        // not a reset code
+    locked,          // a card locked for linking (or, to unlock, one that isn't)
+    wrong_pin,       // a link's PIN (tries_left: how many more before the lock)
+    conflict,        // taken already, another's, the last admin
+    too_many,        // a limit on how many reached (tokens)
+    read_only,       // a newer HIRAKU's tables: nothing is changed
+    failed,          // the database, the system's random numbers, a file not written
+    incomplete,      // done in part (a card's PIN reset in some places only)
+};
+const char *refused_name(Refused);   // "not_found", ... ("ok" for none)
+
+// An operation's answer: done (empty()), or why not, as a kind and a sentence for a person
+struct Refusal {
+    Refused code = Refused::ok;
+    std::string text;
+    int tries_left = -1;   // a refused link: wrong PINs left before the card is locked (-1: not said)
+    Refusal() = default;
+    Refusal(Refused c, std::string t, int left = -1) : code(c), text(std::move(t)), tries_left(left) {}
+    bool empty() const { return code == Refused::ok; }
+    const char *c_str() const { return text.c_str(); }
+};
+
 class Accounts {
 public:
     static constexpr long VERSION = 1;          // the tables' (the meta table's row "accounts")
@@ -126,7 +176,7 @@ public:
     // The first admin's password when this opening made it, else "": to be shown once, nowhere kept
     const std::string &first_password() const { return first_password_; }
 
-    using Refusal = std::string;   // "": done; else why not, for a person
+    using Refusal = srv::Refusal;
 
     // --as: a user that is there and not disabled
     Refusal as(const std::string &name, Who &);
@@ -179,6 +229,7 @@ public:
     Refusal unlink_card(const Who &, const std::string &card);   // its account's, or an admin
     Refusal unlock_card(const Who &, const std::string &card);   // an admin
     Refusal reset_card_pin(const Who &, const std::string &card, const std::string &pin, ea::PinReset &);   // an admin
+    Refusal card(const Who &, const std::string &card, CardInfo &);   // an admin; an unknown card: known false
     Refusal cards(const Who &, const std::string &user, std::vector<LinkedCard> &);   // user "": who's own
     Refusal stats(const Who &, const std::string &user, std::vector<Stat> &);   // the games listed (listed())
     // A game's best scores among the players whose stats show (a card linked to no user: by the game's
@@ -225,6 +276,8 @@ public:
     std::string machine_name(const std::string &pcbid);
     // Whether the database answers a query that reads its file (the API's /health)
     bool alive();
+    // Its connection's PRAGMA synchronous (store_sqlite.h's synchronous_of): 2 FULL, 1 NORMAL
+    int synchronous() const;
 
 private:
     struct Tx;
@@ -238,6 +291,7 @@ private:
     std::string config(const char *name) const;
     bool admins_left_without(long id) const;
     bool writable(Refusal &) const;
+    Refusal commit(Tx &) const;   // the change committed, or the database's refusal
 
     std::string file_;
     ea::Store &store_;

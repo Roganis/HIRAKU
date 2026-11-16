@@ -4,7 +4,7 @@
 credits as fast as the server answers, against a `serve --no-keys` on 127.0.0.1 of its own.
 
     tools/eamuse/load.py HIRAKU-SERVER [--cabinets N] [--seconds S] [--dir DIR] [--workers W]
-                         [--no-backup] [--keep] [--quiet]
+                         [--sync full|normal] [--no-backup] [--keep] [--quiet]
 
 The cabinets are registered as machines of one made-up arcade (`machine add`) and call by their
 PCBID (--no-keys: the keyed transport has no Python client). Each plays one game, in turn among
@@ -17,9 +17,10 @@ No wait between calls: what is measured is how much the server takes, not how a 
 While it runs, a process of its own asks GET /api/v1/health twice a second, and at half time one
 `backup --dir` runs (--no-backup: none). At the end it prints the calls a second, the calls'
 latency (p50, p95, p99, max), errors (an HTTP status other than 200, an answer without the status
-the call should have, a connection reset or refused: serve takes 64 connections at once, and closes
-any more at once), the health checks, the backup's time, and the database's size (with its WAL). A
-cabinet whose call failed waits a second, as a game would, and starts its credit again.
+the call should have, a connection reset or refused: serve takes 256 connections at once by default,
+and the others wait their turn), the health checks, the backup's time, and the database's size
+(with its WAL). A cabinet whose call failed waits a second, as a game would, and starts its credit
+again. --sync is serve's (full: each change on the disk before its answer).
 
 The machines are registered in a temporary folder (the system's, often in memory: one `machine
 add` each) and the database then moved to DIR, where serve keeps it.
@@ -213,6 +214,7 @@ def main():
     ap.add_argument('--seconds', type=float, default=30)
     ap.add_argument('--dir')
     ap.add_argument('--workers', type=int, default=0, help='client processes (default: the CPUs, at most the cabinets)')
+    ap.add_argument('--sync', choices=('full', 'normal'), default='full', help="serve's --sync")
     ap.add_argument('--no-backup', action='store_true')
     ap.add_argument('--keep', action='store_true')
     ap.add_argument('--quiet', action='store_true', help='only the result line')
@@ -241,7 +243,7 @@ def main():
         port, api_port = free_port(), free_port()
         log = open(os.path.join(folder, 'serve.log'), 'w')
         proc = subprocess.Popen([server, 'serve', '--db', db, '--port', str(port), '--bind', '127.0.0.1', '--api', f'127.0.0.1:{api_port}',
-                                 '--no-keys', '--no-relay', '--no-web', '--quiet'], stdout=log, stderr=subprocess.STDOUT)
+                                 '--no-keys', '--no-relay', '--no-web', '--quiet', '--sync', a.sync], stdout=log, stderr=subprocess.STDOUT)
         for _ in range(300):
             try:
                 socket.create_connection(('127.0.0.1', port)).close()

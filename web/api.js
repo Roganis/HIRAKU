@@ -10,11 +10,12 @@ export function setCsrf(v) { csrf = v || ''; }
 export function onSignedOut(fn) { signedOut = fn; }
 
 export class ApiError extends Error {
-  constructor(status, code, message, retry) {
+  constructor(status, code, message, retry, triesLeft) {
     super(message);
     this.status = status;
     this.code = code;
     this.retry = retry;
+    this.triesLeft = triesLeft;   // a refused card link: wrong PINs left before the card is locked (else undefined)
   }
 }
 
@@ -36,7 +37,8 @@ export async function api(method, path, body) {
   let j = null;
   try { j = await r.json(); } catch { j = null; }
   if (r.ok) return j || {};
-  const err = new ApiError(r.status, (j && j.error) || 'error', (j && j.message) || `the server answered ${r.status}`, r.headers.get('Retry-After'));
+  const err = new ApiError(r.status, (j && j.error) || 'error', (j && j.message) || `the server answered ${r.status}`, r.headers.get('Retry-After'),
+    j && Number.isInteger(j.tries_left) ? j.tries_left : undefined);
   if (r.status === 401 && !PUBLIC.has(path.split('?')[0]) && signedOut) signedOut(err);
   throw err;
 }

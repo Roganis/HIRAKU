@@ -276,6 +276,11 @@ if(SQLite3_FOUND AND Python3_FOUND AND NOT CMAKE_CROSSCOMPILING)   # (hiraku-ser
   add_test(NAME eamuse_service COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/eamuse/test_service.py
            $<TARGET_FILE:hiraku-server> $<TARGET_FILE:key_client>)
   set_tests_properties(eamuse_service PROPERTIES TIMEOUT 180)
+  # ... its limits and choices: connections at once and from one address, --sync, refusals as kinds,
+  # a card as the admin sees it and the tries left before its lock
+  add_test(NAME eamuse_server_limits COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/eamuse/test_server_limits.py
+           $<TARGET_FILE:hiraku-server> ${CMAKE_SOURCE_DIR})
+  set_tests_properties(eamuse_server_limits PROPERTIES TIMEOUT 180)
   # ... and under load for 3 seconds (tools/eamuse/load.py: made-up cabinets playing credits, health
   # polled, a backup in the middle; its long runs are docs/SERVER.md's numbers)
   add_test(NAME eamuse_load_smoke COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/tools/eamuse/load.py

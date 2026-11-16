@@ -2,8 +2,10 @@
 // The e-AMUSEMENT server on a network (listener.h): hiraku-eamuse's and hiraku-server's listener.
 #include "eamuse/listener.h"
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <condition_variable>
 #include <csignal>
 #include <cstdio>
 #include <cstdlib>
@@ -210,7 +212,9 @@ int Listener::open() {
     if (inet_pton(AF_INET, bind.c_str(), &sa.sin_addr) != 1) { fprintf(stderr, "--bind: an IPv4 address\n"); return 2; }
     const int ls = net::socket(AF_INET, SOCK_STREAM, 0);
     net::set_int(ls, SOL_SOCKET, SO_REUSEADDR, 1);
-    if (::bind(ls, (sockaddr *)&sa, sizeof sa) != 0 || listen(ls, 16) != 0) {
+    // (waiting at the limit: the listen queue holds twice as many as are served at once, 512 at least;
+    // the system may hold it lower: net.core.somaxconn)
+    if (::bind(ls, (sockaddr *)&sa, sizeof sa) != 0 || listen(ls, wait_at_limit ? std::max(512, 2 * max_connections) : 16) != 0) {
         fprintf(stderr, "%s: the games' port %s:%d: %s (--port, --bind)\n", program, bind.c_str(), port, net::error().c_str());
         net::close(ls);
         return 1;
@@ -311,6 +315,10 @@ int Listener::serve(Server &server, const std::string &kept) {
                cabinets.file().c_str());
         for (const std::string &line : cabinets.not_read()) printf("%s: %s, line %s: not a PCBID (20 hex digits)\n", me, cabinets.file().c_str(), line.c_str());
     }
+    if (wait_at_limit)
+        printf("%s: %d connections at once, any more wait their turn; %s\n", me, max_connections,
+               per_address > 0 ? ("at most " + std::to_string(per_address) + " at once from one address (this computer's: no limit)").c_str()
+                               : "any number from one address");
     if (key.set())
         printf("%s: calls and relay taken only behind the key in %s; nothing goes over the network in clear\n", me, key_file.c_str());
     else if (bind != "127.0.0.1" && allowed.empty() && !cabinets.in_force())
@@ -339,11 +347,21 @@ int Listener::serve(Server &server, const std::string &kept) {
     // The game makes one request per connection (HTTP/1.0). Each connection is read and answered on a
     // thread of its own, so one that is slow (or says nothing) holds up no other cabinet; the calls
     // themselves are answered one at a time (the servers' files and counters are one cabinet's at a
-    // time), which takes no longer than it did. At most kConnections at once, each kSeconds in all.
-    constexpr int kConnections = 64, kSeconds = 15;
+    // time), which takes no longer than it did. At most max_connections at once, each kSeconds in all.
+    constexpr int kSeconds = 15;
+    const int most = max_connections;
     std::mutex answering;
     std::atomic<int> connections{0};
+    std::mutex slots;                    // (connections' ends, and from_address)
+    std::condition_variable freed;
+    std::map<uint32_t, int> from_address;   // the connections open from each address (per_address)
     for (;;) {
+        // at the limit: none taken until one ends (the stop still looked at every 200 ms)
+        if (wait_at_limit && connections >= most && !(stop && *stop)) {
+            std::unique_lock<std::mutex> l(slots);
+            freed.wait_for(l, std::chrono::milliseconds(200), [&] { return connections < most || (stop && *stop); });
+            continue;
+        }
         if (stop) {   // (a signal ends no wait: the stop is looked at every 200 ms)
             pollfd w = net::watch(ls, POLLIN);
             if (!*stop && net::poll(&w, 1, 200) <= 0 && !*stop) continue;
@@ -367,12 +385,32 @@ int Listener::serve(Server &server, const std::string &kept) {
             continue;
         }
         const uint32_t ip = ntohl(peer.sin_addr.s_addr);
-        if (connections >= kConnections || !from_allowed(ip, "e-AMUSE3")) {
+        if (connections >= most || !from_allowed(ip, "e-AMUSE3")) {
             net::close(fd);
             continue;
         }
+        // one address's share: this computer's own (a loopback address, or the one it was reached at) has no limit
+        bool counted = false;
+        if (per_address > 0) {
+            sockaddr_in here{};
+            socklen_t n = sizeof here;
+            const bool own = own_exempt && (ip >> 24 == 127 || (getsockname(fd, (sockaddr *)&here, &n) == 0 && here.sin_addr.s_addr == peer.sin_addr.s_addr));
+            if (!own) {
+                std::unique_lock<std::mutex> l(slots);
+                int &open_now = from_address[ip];
+                if (open_now >= per_address) {
+                    l.unlock();
+                    note("many " + dotted(ip), "refused: a connection from " + dotted(ip) + " (e-AMUSE3): " + std::to_string(per_address) +
+                                                   " at once from one address already (--connections-per-address)");
+                    net::close(fd);
+                    continue;
+                }
+                open_now++;
+                counted = true;
+            }
+        }
         connections++;
-        auto serve_one = [&, fd, ip] {
+        auto serve_one = [&, fd, ip, counted] {
             const auto until = std::chrono::steady_clock::now() + std::chrono::seconds(kSeconds);
             net::set_timeouts(fd, 3000);
             // The connection's first four bytes say which it is: a cabinet with a key ("HKK1",
@@ -457,7 +495,12 @@ int Listener::serve(Server &server, const std::string &kept) {
                 turned_away(ip, "e-AMUSE3", machine ? ("with another key than machine " + machine_id + "'s").c_str() : "with another key");
             }
             net::close(fd);
-            connections--;
+            {
+                std::lock_guard<std::mutex> l(slots);
+                if (counted && --from_address[ip] <= 0) from_address.erase(ip);
+                connections--;
+            }
+            freed.notify_one();
         };
         try {
             std::thread(serve_one).detach();

@@ -42,6 +42,7 @@ const Licence kLicences[] = {
     {"Wayland presentation-time: MIT", "third_party/wayland/presentation-time.xml", 26},
     {"Wayland fifo-v1: MIT", "third_party/wayland/fifo-v1.xml", 24},
     {"DXVK: zlib (Linux packages)", "third_party/dxvk/LICENSE", 0},
+    {"Material Design Icons: Apache-2.0", "third_party/mdi/LICENSE", 0},
 };
 
 QString readLicence(const Licence &l) {
@@ -127,6 +128,8 @@ QString softwareHtml() {
     h += "<li><b>" + link("https://www.fluidsynth.org", "FluidSynth") +
          "</b> (LGPL-2.1-or-later): Keyboardmania's SoundFont stand-in for the XT446, when found at build time.</li>";
     h += "<li><b>" + link("https://wayland.freedesktop.org", "libwayland-client") + "</b> (MIT).</li>";
+    h += "<li><b>" + link("https://pictogrammers.com/library/mdi", "Material Design Icons") +
+         "</b> (Apache-2.0, Pictogrammers): the launcher's icons.</li>";
     h += "<li><b>" + link("https://github.com/doitsujin/dxvk", "DXVK") +
          "</b> (zlib, Philip Rebohle and contributors): Direct3D 9 on Vulkan for the 64-bit PC games "
          "under Wine, in the Linux packages.</li>";

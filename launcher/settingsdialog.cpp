@@ -3,6 +3,7 @@
 
 #include <algorithm>
 
+#include <QButtonGroup>
 #include <QCheckBox>
 #include <QComboBox>
 #include <QDialogButtonBox>
@@ -16,9 +17,12 @@
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QLineEdit>
+#include <QListWidget>
 #include <QMenu>
 #include <QMessageBox>
+#include <QPainter>
 #include <QPushButton>
+#include <QRadioButton>
 #include <QRandomGenerator>
 #include <QRegularExpression>
 #include <QRegularExpressionValidator>
@@ -27,7 +31,8 @@
 #include <QScrollArea>
 #include <QScrollBar>
 #include <QStyle>
-#include <QTabWidget>
+#include <QStackedWidget>
+#include <QStyledItemDelegate>
 #include <QToolButton>
 #include <QVBoxLayout>
 
@@ -42,7 +47,9 @@
 #include "config.h"
 #include "powerplan.h"
 #include "inputs.h"
+#include "theme.h"
 #include "updater.h"
+#include "../third_party/mdi/icons.h"
 
 #include <QFile>
 #include <QMap>
@@ -187,39 +194,160 @@ static QStringList serialPorts() {
     return ports;
 }
 
+// The sections down the side: each its colour (Pop: its icon's square, the page's underline and
+// switches) and its icon (third_party/mdi)
+namespace {
+
+struct Section {
+    const char *name, *icon;
+    int colour;   // theme::rainbow
+};
+const Section kSections[] = {{"Display", mdi::monitor, 0}, {"Audio", mdi::volume_high, 1},
+                             {"e-AMUSEMENT", mdi::web, 2},  {"Cabinet I/O", mdi::connection, 3},
+                             {"General", mdi::tune_variant, 4}, {"Look", mdi::palette, 5}};
+
+// a section's colour: its own in Pop, the system's highlight otherwise
+QColor sectionColour(const Section &sec, const QPalette &pal) {
+    return theme::pop() ? theme::rainbow(sec.colour) : pal.color(QPalette::Highlight);
+}
+
+// the list's rows: its icon (Pop: white on a square of its colour) and name, the open one on a
+// soft band of its colour
+class SectionPainter : public QStyledItemDelegate {
+public:
+    SectionPainter(QColor ground, QObject *parent) : QStyledItemDelegate(parent), m_ground(ground) {}
+    bool compact = false;   // the icons alone (a narrow dialog: a small screen)
+    QSize sizeHint(const QStyleOptionViewItem &o, const QModelIndex &) const override {
+        return QSize(compact ? 58 : o.fontMetrics.horizontalAdvance("e-AMUSEMENT") + 70, std::max(38, o.fontMetrics.height() + 18));
+    }
+    void paint(QPainter *p, const QStyleOptionViewItem &o, const QModelIndex &i) const override {
+        const Section &sec = kSections[i.row()];
+        const QPalette &pal = o.palette;
+        const QColor ground = m_ground;   // (the list's own is see-through)
+        const QColor ink = pal.color(QPalette::WindowText), c = sectionColour(sec, pal);
+        const bool on = o.state & QStyle::State_Selected, hover = o.state & QStyle::State_MouseOver;
+        p->save();
+        p->setRenderHint(QPainter::Antialiasing);
+        const QRectF row = QRectF(o.rect).adjusted(8, 3, -8, -3);
+        if (on || hover) {
+            p->setPen(Qt::NoPen);
+            p->setBrush(theme::mix(c, ground, on ? (theme::pop() ? 0.78 : 0.55) : 0.9));
+            p->drawRoundedRect(row, 12, 12);
+        }
+        const qreal mid = row.center().y();
+        if (theme::pop()) {
+            const QRectF sq(row.left() + 8, mid - 13, 26, 26);
+            p->setPen(Qt::NoPen);
+            p->setBrush(c);
+            p->drawRoundedRect(sq, 8, 8);
+            theme::drawIcon(p, sec.icon, sq.adjusted(4, 4, -4, -4), sec.colour == 2 ? theme::onYellow() : QColor(Qt::white));
+        } else {
+            theme::drawIcon(p, sec.icon, QRectF(row.left() + 9, mid - 12, 24, 24), ink);
+        }
+        if (compact) {
+            p->restore();
+            return;
+        }
+        QFont f = o.font;
+        f.setWeight(on ? QFont::Bold : QFont::Medium);
+        p->setFont(f);
+        p->setPen(on ? ink : theme::mix(ink, ground, 0.25));
+        p->drawText(row.adjusted(44, 0, -4, 0), Qt::AlignVCenter | Qt::AlignLeft, sec.name);
+        p->restore();
+    }
+private:
+    QColor m_ground;   // the side's colour, under the list
+};
+
+}  // namespace
+
 SettingsDialog::SettingsDialog(QWidget *parent) : QDialog(parent) {
     setWindowTitle("Settings");
     auto &s = cfg::settings();
-    // a tab for each kind of setting; a tab's groups scroll (a small screen: 640x480 too,
-    // launcher/fit.h), OK and Cancel stay below
-    auto *tabs = new QTabWidget;
+    const bool pop = theme::pop();
+    const QPalette pal = palette();
+    // the sections down the side, the open one's page beside them: its name, underlined in its
+    // colour, over its groups, which scroll (a small screen: 640x480 too, launcher/fit.h); OK and
+    // Cancel stay below
+    auto *nav = new QWidget;
+    nav->setObjectName("hkSettingsNav");
+    nav->setAutoFillBackground(true);
+    QPalette np = nav->palette();
+    np.setColor(QPalette::Window, pop ? pal.color(QPalette::Base) : theme::mix(pal.color(QPalette::Window), pal.color(QPalette::WindowText), 0.04));
+    nav->setPalette(np);
+    auto *nl = new QVBoxLayout(nav);
+    nl->setContentsMargins(4, 16, 4, 12);
+    auto *title = new QLabel("Settings");
+    QFont tf = title->font();
+    tf.setPointSizeF(tf.pointSizeF() * 1.6);
+    tf.setWeight(QFont::Black);
+    title->setFont(tf);
+    title->setContentsMargins(14, 0, 0, 8);
+    nl->addWidget(title);
+    m_navTitle = title;
+    auto *list = new QListWidget;
+    m_sections = list;
+    list->setObjectName("hkSections");
+    m_painter = new SectionPainter(np.color(QPalette::Window), list);
+    list->setItemDelegate(m_painter);
+    list->setFrameShape(QFrame::NoFrame);
+    list->setMouseTracking(true);
+    list->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    list->viewport()->setAutoFillBackground(false);
+    list->setStyleSheet("QListWidget#hkSections, QListWidget#hkSections::item { background: transparent; border: none; }");
+    for (const Section &sec : kSections) list->addItem(sec.name);
+    nl->addWidget(list, 1);
+    list->setFixedWidth(list->sizeHintForColumn(0) + 8);
+
+    auto *heading = new QLabel;
+    QFont hf = heading->font();
+    hf.setPointSizeF(hf.pointSizeF() * 2);
+    hf.setWeight(QFont::Black);
+    heading->setFont(hf);
+    auto *underline = new QFrame;
+    underline->setFixedSize(44, 5);
+    auto *pages = new QStackedWidget;
     QList<QWidget *> bodies;
-    auto page = [&](const QString &name, const QString &about = QString()) {
+    auto page = [&](const Section &sec, const QString &about = QString()) {
         auto *body = new QWidget;
         auto *l = new QVBoxLayout(body);
+        l->setContentsMargins(0, 4, 8, 4);
+        l->setSpacing(12);
         if (!about.isEmpty()) {
             auto *note = new QLabel(about);
             note->setWordWrap(true);
             l->addWidget(note);
         }
+        // its check boxes as switches in its colour
+        body->setStyleSheet(theme::switches(sectionColour(sec, pal),
+                                            pop ? (theme::current() == theme::Night ? pal.color(QPalette::Mid) : QColor("#d6cce6"))
+                                                : theme::mix(pal.color(QPalette::Base), pal.color(QPalette::Text), 0.4)));
         auto *scroll = new QScrollArea;
         scroll->setWidget(body);
         scroll->setWidgetResizable(true);
         scroll->setFrameShape(QFrame::NoFrame);
-        tabs->addTab(scroll, name);
+        pages->addWidget(scroll);
         bodies << body;
         return l;
     };
-
-    displayPage(page("Display"));
-    audioPage(page("Audio"));
+    displayPage(page(kSections[0]));
+    audioPage(page(kSections[1]));
     // as spicecfg's Network page, with its option names, so a spice2x setup carries over
-    eamusePage(page("e-AMUSEMENT", "For the Konami Python games (pop'n music 9-14, DrumMania V and V2), the PC games "
-                                "(pop'n music 15-18, beatmania IIDX) and GuitarFreaks 11th and DrumMania 10th with "
-                                "their network unit (Game menu), with spice2x's option names. The game's e-AMUSEMENT "
-                                "must be ON in its test mode."));
-    cabinetPage(page("Cabinet I/O"));
-    generalPage(page("General"));
+    eamusePage(page(kSections[2], "For the Konami Python games (pop'n music 9-14, DrumMania V and V2), the PC games "
+                                  "(pop'n music 15-18, beatmania IIDX) and GuitarFreaks 11th and DrumMania 10th with "
+                                  "their network unit (Game menu), with spice2x's option names. The game's e-AMUSEMENT "
+                                  "must be ON in its test mode."));
+    cabinetPage(page(kSections[3]));
+    generalPage(page(kSections[4]));
+    lookPage(page(kSections[5]));
+
+    // in Pop, each group a card on the page's paper, its name inside it
+    if (pop)
+        setStyleSheet(QString("QGroupBox { background: %1; border: 1px solid %2; border-radius: 14px; margin-top: 0; "
+                              "padding: 30px 8px 6px 8px; font-weight: 700; }\n"
+                              "QGroupBox::title { subcontrol-origin: padding; subcontrol-position: top left; left: 16px; "
+                              "top: 11px; padding: 0; color: %3; }\n")
+                          .arg(pal.color(QPalette::Base).name(), pal.color(QPalette::Mid).name(), pal.color(QPalette::WindowText).name()));
 
     auto *bb = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
     connect(bb, &QDialogButtonBox::accepted, this, &SettingsDialog::accept);
@@ -228,7 +356,7 @@ SettingsDialog::SettingsDialog(QWidget *parent) : QDialog(parent) {
     for (QSpinBox *b : {m_scale, m_volume, m_audioMs}) b->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
     QSize most;
     for (QWidget *body : bodies) {
-        static_cast<QVBoxLayout *>(body->layout())->addStretch(1);   // the groups at the top of their tab
+        static_cast<QVBoxLayout *>(body->layout())->addStretch(1);   // the groups at the top of their page
         // long lists (sound devices, readers) shrink to the dialog instead of widening it
         for (QComboBox *c : body->findChildren<QComboBox *>()) {
             c->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
@@ -236,16 +364,74 @@ SettingsDialog::SettingsDialog(QWidget *parent) : QDialog(parent) {
         }
         most = most.expandedTo(body->sizeHint());
     }
-    tabs->setCurrentIndex(std::clamp(s.value("ui/settingsTab", 0).toInt(), 0, tabs->count() - 1));
-    connect(tabs, &QTabWidget::currentChanged, this, [](int k) { cfg::settings().setValue("ui/settingsTab", k); });
-    auto *outer = new QVBoxLayout(this);
-    outer->addWidget(tabs);
-    outer->addWidget(bb);
-    // as the largest tab, as the screen allows (fit.h shrinks it)
-    resize(most.width() + tabs->style()->pixelMetric(QStyle::PM_ScrollBarExtent) + 40, most.height() + 110);
+    auto open = [=](int k) {
+        pages->setCurrentIndex(k);
+        heading->setText(kSections[k].name);
+        underline->setStyleSheet(QString("background: %1; border-radius: 2px;").arg(sectionColour(kSections[k], pal).name()));
+    };
+    connect(list, &QListWidget::currentRowChanged, this, [open](int k) {
+        if (k < 0) return;
+        open(k);
+        cfg::settings().setValue("ui/settingsTab", k);
+    });
+    list->setCurrentRow(std::clamp(s.value("ui/settingsTab", 0).toInt(), 0, list->count() - 1));
+    open(list->currentRow());
+
+    auto *right = new QVBoxLayout;
+    right->setContentsMargins(24, 14, 18, 14);
+    right->setSpacing(0);
+    right->addWidget(heading);
+    right->addSpacing(2);
+    right->addWidget(underline);
+    right->addSpacing(14);
+    right->addWidget(pages, 1);
+    right->addSpacing(10);
+    right->addWidget(bb);
+    auto *outer = new QHBoxLayout(this);
+    outer->setContentsMargins(0, 0, 0, 0);
+    outer->setSpacing(0);
+    outer->addWidget(nav);
+    outer->addLayout(right, 1);
+    // as the largest page, as the screen allows (fit.h shrinks it)
+    resize(nav->sizeHint().width() + most.width() + style()->pixelMetric(QStyle::PM_ScrollBarExtent) + 60,
+           most.height() + heading->sizeHint().height() + 110);
 }
 
-// The Display tab: the window, frames and picture, the shader controls
+// The Look page: the system's own style, or Pop or Pop night (as View > Look)
+void SettingsDialog::lookPage(QVBoxLayout *v) {
+    auto *box = new QGroupBox("The launcher's look");
+    auto *l = new QVBoxLayout(box);
+    m_look = new QButtonGroup(this);
+    for (auto [look, text] : {std::pair{theme::System, "The system's: your desktop's own style and colours, its night mode too"},
+                              {theme::Pop, "Pop: HIRAKU's six colours on warm paper"},
+                              {theme::Night, "Pop night: the six colours on night blue"}}) {
+        auto *r = new QRadioButton(text);
+        r->setChecked(theme::current() == look);
+        m_look->addButton(r, look);
+        l->addWidget(r);
+    }
+    auto *note = new QLabel("Also in View > Look. It changes when you press OK.");
+    note->setProperty("hkMuted", true);
+    l->addWidget(note);
+    v->addWidget(box);
+}
+
+theme::Look SettingsDialog::look() const { return theme::Look(m_look->checkedId()); }
+
+// A narrow dialog (a small screen: 640x480) keeps its pages' width: the sections as icons alone
+void SettingsDialog::resizeEvent(QResizeEvent *e) {
+    QDialog::resizeEvent(e);
+    auto *painter = static_cast<SectionPainter *>(m_painter);
+    const bool compact = width() < 860;
+    if (compact == painter->compact) return;
+    painter->compact = compact;
+    m_navTitle->setVisible(!compact);
+    for (int k = 0; k < m_sections->count(); k++) m_sections->item(k)->setToolTip(compact ? kSections[k].name : QString());
+    m_sections->setFixedWidth(m_sections->sizeHintForColumn(0) + 8);
+    m_sections->doItemsLayout();
+}
+
+// The Display page: the window, frames and picture, the shader controls
 void SettingsDialog::displayPage(QVBoxLayout *v) {
     auto &s = cfg::settings();
     auto *video = new QGroupBox("Window");
@@ -424,7 +610,7 @@ void SettingsDialog::displayPage(QVBoxLayout *v) {
     v->addWidget(sk);
 }
 
-// The Audio tab: the output, its timing, Keyboardmania's SoundFont
+// The Audio page: the output, its timing, Keyboardmania's SoundFont
 void SettingsDialog::audioPage(QVBoxLayout *v) {
     auto &s = cfg::settings();
     auto *audio = new QGroupBox("Output");
@@ -583,7 +769,7 @@ void SettingsDialog::audioPage(QVBoxLayout *v) {
     v->addWidget(music);
 }
 
-// The e-AMUSEMENT tab: the server, the PCBID and cards, the card readers
+// The e-AMUSEMENT page: the server, the PCBID and cards, the card readers
 void SettingsDialog::eamusePage(QVBoxLayout *v) {
     auto &s = cfg::settings();
     auto *ea = new QGroupBox("Server");
@@ -677,7 +863,7 @@ void SettingsDialog::eamusePage(QVBoxLayout *v) {
     v->addWidget(rd);
 }
 
-// The Cabinet I/O tab: the I/O boards, the lights
+// The Cabinet I/O page: the I/O boards, the lights
 void SettingsDialog::cabinetPage(QVBoxLayout *v) {
     auto &s = cfg::settings();
     auto *lights = new QGroupBox("Lights");
@@ -740,7 +926,7 @@ void SettingsDialog::cabinetPage(QVBoxLayout *v) {
     v->addWidget(lights);
 }
 
-// The General tab: folders, the launcher, every game's arguments
+// The General page: folders, the launcher, every game's arguments
 void SettingsDialog::generalPage(QVBoxLayout *v) {
     auto &s = cfg::settings();
     auto *paths = new QGroupBox("Folders");

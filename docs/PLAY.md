@@ -58,7 +58,7 @@ In the launcher, pick the game and press **Play**.
 
 - **View > Show games not added yet** lists every game HIRAKU runs, and what each one needs.
 - **Controls** and **Lights** map your keyboard, controllers and controller LEDs. **Settings** has
-  a tab each for Display, Audio, e-AMUSEMENT, Cabinet I/O and General.
+  a section each, down its side, for Display, Audio, e-AMUSEMENT, Cabinet I/O, General and Look.
 - On a first boot, the game's test-mode steps are shown under the list.
 - The **Game** menu (or right-click) has the game's own: Mods, Unlocks, Picture, its save folder,
   **Arguments…** (command-line options for that game) and more.

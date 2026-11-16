@@ -203,6 +203,7 @@ MainWindow::MainWindow() {
         if (d.exec() == QDialog::Accepted) {
             refresh();
             m_music->settingsChanged();
+            if (d.look() != theme::current() && d.look() < m_looks.size()) m_looks[d.look()]->trigger();   // (its Look page)
         }
     });
     connect(refreshAct, &QAction::triggered, this, &MainWindow::refresh);
@@ -517,6 +518,7 @@ MainWindow::MainWindow() {
         a->setCheckable(true);
         a->setChecked(theme::current() == look);
         lookGroup->addAction(a);
+        m_looks << a;
         connect(a, &QAction::triggered, this, [this, look] {
             cfg::settings().setValue("ui/theme", theme::key(look));
             theme::apply(look);

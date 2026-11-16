@@ -4,6 +4,12 @@
 #include <QDialog>
 #include <QMap>
 
+#include "theme.h"
+
+class QButtonGroup;
+class QLabel;
+class QListWidget;
+class QStyledItemDelegate;
 class QVBoxLayout;
 
 class QCheckBox;
@@ -17,13 +23,21 @@ class SettingsDialog : public QDialog {
 public:
     explicit SettingsDialog(QWidget *parent = nullptr);
     void accept() override;
+    theme::Look look() const;   // the look chosen on the Look page (the caller applies it)
+protected:
+    void resizeEvent(QResizeEvent *e) override;
 private:
-    // its tabs, each made into the layout it gets
+    QListWidget *m_sections;     // the sections down the side
+    QLabel *m_navTitle;
+    QStyledItemDelegate *m_painter;
+    // its pages, each made into the layout it gets
     void displayPage(QVBoxLayout *v);
     void audioPage(QVBoxLayout *v);
     void eamusePage(QVBoxLayout *v);
     void cabinetPage(QVBoxLayout *v);
     void generalPage(QVBoxLayout *v);
+    void lookPage(QVBoxLayout *v);
+    QButtonGroup *m_look;
     QSpinBox *m_scale, *m_audioMs, *m_volume;
     QCheckBox *m_menuOn, *m_menuAtStart, *m_menuPictures;
     QCheckBox *m_powerPlan = nullptr;      // Windows' power plan while a game runs (Windows only)   // the game menu (General)

@@ -78,6 +78,7 @@ private:
     GameHead *m_head;              // ... and the chosen one large, over its details
     Card cardOf(const Game &g) const;
     QAction *m_asCards, *m_asList;
+    QList<QAction *> m_looks;      // View > Look's, in theme::Look's order
     QWidget *m_detailsPane;        // the details beside the list (in m_detailsDock; hidden with that page)
     QStringList m_collapsed;     // the series and systems the player closed (ui/collapsed)
     bool m_arranging = false;    // the list being filled or filtered: not the player opening a series

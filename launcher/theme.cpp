@@ -382,4 +382,70 @@ QPixmap wordmark(int height, qreal dpr) {
     return pm;
 }
 
+void drawIcon(QPainter *p, const char *path, const QRectF &box, QColor colour) {
+    QPainterPath shape;
+    shape.setFillRule(Qt::WindingFill);   // (SVG's nonzero)
+    const QStringList t = QString::fromLatin1(path).split(' ', Qt::SkipEmptyParts);
+    auto at = [&](int k) { return QPointF(t[k].toDouble(), t[k + 1].toDouble()); };
+    for (int k = 0; k < t.size();) {
+        const QString c = t[k++];
+        if (c == "M" && k + 1 < t.size()) shape.moveTo(at(k)), k += 2;
+        else if (c == "L" && k + 1 < t.size()) shape.lineTo(at(k)), k += 2;
+        else if (c == "C" && k + 5 < t.size()) shape.cubicTo(at(k), at(k + 2), at(k + 4)), k += 6;
+        else if (c == "Z") shape.closeSubpath();
+        else break;   // (not one of ours)
+    }
+    p->save();
+    p->setRenderHint(QPainter::Antialiasing);
+    p->translate(box.topLeft());
+    p->scale(box.width() / 24, box.height() / 24);
+    p->fillPath(shape, colour);
+    p->restore();
+}
+
+QString switches(QColor on, QColor off) {
+    static QTemporaryDir dir;
+    // a switch's picture, made once a colour: at 1x and 2x (a style sheet's url takes the @2x one
+    // on a high-density screen)
+    auto picture = [](QColor ground, bool knobRight, const QString &path) {
+        for (int scale : {1, 2}) {
+            const QString file = scale == 1 ? path + ".png" : path + "@2x.png";
+            if (QFile::exists(file)) continue;
+            QPixmap pm(36 * scale, 20 * scale);
+            pm.fill(Qt::transparent);
+            QPainter p(&pm);
+            p.setRenderHint(QPainter::Antialiasing);
+            p.scale(scale, scale);
+            p.setPen(Qt::NoPen);
+            p.setBrush(ground);
+            p.drawRoundedRect(QRectF(0, 0, 36, 20), 10, 10);
+            p.setBrush(Qt::white);
+            p.drawEllipse(QRectF(knobRight ? 18.5 : 2.5, 2.5, 15, 15));
+            p.end();
+            pm.save(file);
+        }
+        return path + ".png";
+    };
+    if (!dir.isValid()) return QString();
+    auto name = [&](const char *what, QColor c) { return dir.filePath(QString("switch-%1-%2").arg(what, c.name(QColor::HexArgb).mid(1))); };
+    QColor offDim = off, onDim = on;
+    offDim.setAlphaF(0.45);
+    onDim.setAlphaF(0.45);
+    const QString sOn = picture(on, true, name("on", on)), sOff = picture(off, false, name("off", off)),
+                  sOnDim = picture(onDim, true, name("on", onDim)), sOffDim = picture(offDim, false, name("off", offDim));
+    return QString("QCheckBox { spacing: 10px; }\n"
+                   "QCheckBox::indicator { width: 36px; height: 20px; border: none; background: transparent; image: url(%1); }\n"
+                   "QCheckBox::indicator:checked { image: url(%2); }\n"
+                   "QCheckBox::indicator:disabled { image: url(%3); }\n"
+                   "QCheckBox::indicator:checked:disabled { image: url(%4); }\n")
+        .arg(sOff, sOn, sOffDim, sOnDim);
+}
+
+QColor mix(QColor a, QColor b, double amount) {
+    auto m = [amount](double x, double y) { return x + (y - x) * amount; };
+    return QColor::fromRgbF(m(a.redF(), b.redF()), m(a.greenF(), b.greenF()), m(a.blueF(), b.blueF()), m(a.alphaF(), b.alphaF()));
+}
+
+QColor onYellow() { return g_look == Night ? colours().paper : g_look == Pop ? colours().ink : QColor("#232629"); }
+
 }  // namespace theme

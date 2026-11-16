@@ -10,7 +10,10 @@
 #include <QColor>
 #include <QIcon>
 #include <QPixmap>
+#include <QRectF>
 #include <QString>
+
+class QPainter;
 
 namespace theme {
 
@@ -33,5 +36,16 @@ QIcon glyph(const QString &what, QColor colour);
 
 // HIRAKU in big letters, each its own colour, on a slanted bar: the toolbar's logo in Pop
 QPixmap wordmark(int height, qreal dpr);
+
+// an icon's 24x24 path (third_party/mdi/icons.h: absolute M, L, C, Z) filled into box
+void drawIcon(QPainter *p, const char *path, const QRectF &box, QColor colour);
+
+// a style sheet for the check boxes under the widget it's given to: each a switch, on in this
+// colour (the settings' pages, launcher/settingsdialog.cpp)
+QString switches(QColor on, QColor off);
+
+// a colour, `amount` of the way to another (0: the first, 1: the other)
+QColor mix(QColor a, QColor b, double amount);
+QColor onYellow();            // what is drawn on the yellow in Pop (a light glyph there is lost)
 
 }  // namespace theme

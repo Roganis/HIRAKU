@@ -1,6 +1,6 @@
 // Material Design Icons (https://pictogrammers.com/library/mdi), from @mdi/js 7.4.47: Apache-2.0,
 // Pictogrammers (LICENSE here). Each icon's 24x24 SVG path, unchanged in shape but written with
-// absolute M, L, C and Z only (its arcs as cubic curves), for theme::icon (launcher/theme.cpp).
+// absolute M, L, C and Z only (its arcs as cubic curves), for theme::drawIcon (launcher/theme.cpp).
 #pragma once
 
 namespace mdi {
@@ -59,5 +59,76 @@ inline constexpr const char *palette =
     "12 3 C 7.029 3 3 7.029 3 12 C 3 16.971 7.029 21 12 21 C 12.828 21 13.5 20.328 13.5 19.5 C 13.5 "
     "19.11 13.35 18.76 13.11 18.5 C 12.88 18.23 12.73 17.88 12.73 17.5 C 12.73 16.672 13.402 16 "
     "14.23 16 L 16 16 C 18.761 16 21 13.761 21 11 C 21 6.58 16.97 3 12 3 Z";
+
+// the boxes over a game's picture (runtime/host/uibox.h), in its Icon order
+// information
+inline constexpr const char *information =
+    "M 13 9 L 11 9 L 11 7 L 13 7 Z M 13 17 L 11 17 L 11 11 L 13 11 Z M 12 2 C 6.477 2 2 6.477 2 12 C "
+    "2 17.523 6.477 22 12 22 C 17.523 22 22 17.523 22 12 C 22 6.477 17.523 2 12 2 Z";
+
+// alert-circle
+inline constexpr const char *alert_circle =
+    "M 13 13 L 11 13 L 11 7 L 13 7 Z M 13 17 L 11 17 L 11 15 L 13 15 Z M 12 2 C 6.477 2 2 6.477 2 12 "
+    "C 2 17.523 6.477 22 12 22 C 17.523 22 22 17.523 22 12 C 22 6.477 17.523 2 12 2 Z";
+
+// download
+inline constexpr const char *download =
+    "M 5 20 L 19 20 L 19 18 L 5 18 Z M 19 9 L 15 9 L 15 3 L 9 3 L 9 9 L 5 9 L 12 16 L 19 9 Z";
+
+// camera
+inline constexpr const char *camera =
+    "M 4 4 L 7 4 L 9 2 L 15 2 L 17 4 L 20 4 C 21.105 4 22 4.895 22 6 L 22 18 C 22 19.105 21.105 20 "
+    "20 20 L 4 20 C 2.895 20 2 19.105 2 18 L 2 6 C 2 4.895 2.895 4 4 4 Z M 12 7 C 9.239 7 7 9.239 7 "
+    "12 C 7 14.761 9.239 17 12 17 C 14.761 17 17 14.761 17 12 C 17 9.239 14.761 7 12 7 Z M 12 9 C "
+    "13.657 9 15 10.343 15 12 C 15 13.657 13.657 15 12 15 C 10.343 15 9 13.657 9 12 C 9 10.343 "
+    "10.343 9 12 9 Z";
+
+// volume-off
+inline constexpr const char *volume_off =
+    "M 12 4 L 9.91 6.09 L 12 8.18 Z M 4.27 3 L 3 4.27 L 7.73 9 L 3 9 L 3 15 L 7 15 L 12 20 L 12 "
+    "13.27 L 16.25 17.53 C 15.58 18.04 14.83 18.46 14 18.7 L 14 20.77 C 15.38 20.45 16.63 19.82 "
+    "17.68 18.96 L 19.73 21 L 21 19.73 L 12 10.73 Z M 19 12 C 19 12.94 18.8 13.82 18.46 14.64 L "
+    "19.97 16.15 C 20.62 14.91 21 13.5 21 12 C 21 7.72 18 4.14 14 3.23 L 14 5.29 C 16.89 6.15 19 "
+    "8.83 19 12 Z M 16.5 12 C 16.5 10.23 15.5 8.71 14 7.97 L 14 10.18 L 16.45 12.63 C 16.5 12.43 "
+    "16.5 12.21 16.5 12 Z";
+
+// card-account-details
+inline constexpr const char *card_account_details =
+    "M 2 3 L 22 3 C 23.05 3 24 3.95 24 5 L 24 19 C 24 20.05 23.05 21 22 21 L 2 21 C 0.95 21 0 20.05 "
+    "0 19 L 0 5 C 0 3.95 0.95 3 2 3 Z M 14 6 L 14 7 L 22 7 L 22 6 L 14 6 Z M 14 8 L 14 9 L 21.5 9 L "
+    "22 9 L 22 8 L 14 8 Z M 14 10 L 14 11 L 21 11 L 21 10 L 14 10 Z M 8 13.91 C 6 13.91 2 15 2 17 L "
+    "2 18 L 14 18 L 14 17 C 14 15 10 13.91 8 13.91 Z M 8 6 C 6.343 6 5 7.343 5 9 C 5 10.657 6.343 12 "
+    "8 12 C 9.657 12 11 10.657 11 9 C 11 7.343 9.657 6 8 6 Z";
+
+// floppy
+inline constexpr const char *floppy =
+    "M 5 3 C 3.895 3 3 3.895 3 5 L 3 19 C 3 20.105 3.895 21 5 21 L 19 21 C 20.105 21 21 20.105 21 19 "
+    "L 21 5.5 L 18.5 3 L 17 3 L 17 9 C 17 9.552 16.552 10 16 10 L 8 10 C 7.448 10 7 9.552 7 9 L 7 3 "
+    "L 5 3 Z M 12 4 L 12 9 L 15 9 L 15 4 L 12 4 Z M 7 12 L 17 12 C 17.552 12 18 12.448 18 13 L 18 19 "
+    "L 6 19 L 6 13 C 6 12.448 6.448 12 7 12 Z";
+
+// dialpad
+inline constexpr const char *dialpad =
+    "M 12 19 C 10.895 19 10 19.895 10 21 C 10 22.105 10.895 23 12 23 C 13.105 23 14 22.105 14 21 C "
+    "14 19.895 13.105 19 12 19 Z M 6 1 C 4.895 1 4 1.895 4 3 C 4 4.105 4.895 5 6 5 C 7.105 5 8 4.105 "
+    "8 3 C 8 1.895 7.105 1 6 1 Z M 6 7 C 4.895 7 4 7.895 4 9 C 4 10.105 4.895 11 6 11 C 7.105 11 8 "
+    "10.105 8 9 C 8 7.895 7.105 7 6 7 Z M 6 13 C 4.895 13 4 13.895 4 15 C 4 16.105 4.895 17 6 17 C "
+    "7.105 17 8 16.105 8 15 C 8 13.895 7.105 13 6 13 Z M 18 5 C 19.105 5 20 4.105 20 3 C 20 1.895 "
+    "19.105 1 18 1 C 16.895 1 16 1.895 16 3 C 16 4.105 16.895 5 18 5 Z M 12 13 C 10.895 13 10 13.895 "
+    "10 15 C 10 16.105 10.895 17 12 17 C 13.105 17 14 16.105 14 15 C 14 13.895 13.105 13 12 13 Z M "
+    "18 13 C 16.895 13 16 13.895 16 15 C 16 16.105 16.895 17 18 17 C 19.105 17 20 16.105 20 15 C 20 "
+    "13.895 19.105 13 18 13 Z M 18 7 C 16.895 7 16 7.895 16 9 C 16 10.105 16.895 11 18 11 C 19.105 "
+    "11 20 10.105 20 9 C 20 7.895 19.105 7 18 7 Z M 12 7 C 10.895 7 10 7.895 10 9 C 10 10.105 10.895 "
+    "11 12 11 C 13.105 11 14 10.105 14 9 C 14 7.895 13.105 7 12 7 Z M 12 1 C 10.895 1 10 1.895 10 3 "
+    "C 10 4.105 10.895 5 12 5 C 13.105 5 14 4.105 14 3 C 14 1.895 13.105 1 12 1 Z";
+
+// fast-forward
+inline constexpr const char *fast_forward =
+    "M 13 6 L 13 18 L 21.5 12 Z M 4 18 L 12.5 12 L 4 6 L 4 18 Z";
+
+// view-list
+inline constexpr const char *view_list =
+    "M 9 5 L 9 9 L 21 9 L 21 5 Z M 9 19 L 21 19 L 21 15 L 9 15 Z M 9 14 L 21 14 L 21 10 L 9 10 Z M 4 "
+    "9 L 8 9 L 8 5 L 4 5 Z M 4 19 L 8 19 L 8 15 L 4 15 Z M 4 14 L 8 14 L 8 10 L 4 10 L 4 14 Z";
 
 }  // namespace mdi

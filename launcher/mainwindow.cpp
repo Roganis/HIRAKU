@@ -5,6 +5,7 @@
 #include "gamemenu.h"
 #include "powerplan.h"
 #include "menufont.h"
+#include "../third_party/mdi/icons.h"
 #include "nvidia.h"
 
 #include <QAction>
@@ -24,6 +25,7 @@
 #include <QFileDialog>
 #include <QMimeData>
 #include <QRegularExpression>
+#include <QPainter>
 #include <QSaveFile>
 #include <QScreen>
 #include <QDesktopServices>
@@ -694,6 +696,31 @@ MainWindow::MainWindow() {
 // handler whose window's members are already gone (a crash on quitting)
 MainWindow::~MainWindow() {
     for (QProcess *p : {&m_files, &m_ingest, &m_proc, &m_menu}) p->disconnect(this);
+    if (!m_boxFont.isEmpty()) QFile::remove(m_boxFont), QFile::remove(m_boxLogo);
+}
+
+void MainWindow::boxLook(QProcessEnvironment &env) {
+    if (!m_boxScale) {
+        // as large as the screen this window is on, in 360ths of its height (a game's boxes are):
+        // 1.333 for a 480-line one (a CRT's), 3 for 1080
+        const QScreen *scr = screen();
+        m_boxScale = std::clamp(scr ? std::round(scr->size().height() * scr->devicePixelRatio() / 360.0 * 1000) / 1000 : 2.0, 1.0, 8.0);
+        const QString base = QDir::tempPath() + QString("/hiraku-boxes-%1").arg(QCoreApplication::applicationPid());
+        // the icons, in runtime/host/uibox.h's order from U+F0000
+        static const char *const icons[] = {mdi::information, mdi::alert_circle, mdi::download,  mdi::camera,       mdi::volume_off,
+                                            mdi::card_account_details, mdi::floppy, mdi::dialpad, mdi::fast_forward, mdi::view_list};
+        QList<char32_t> drawn;
+        for (char32_t k = 0; k < std::size(icons); k++) drawn << 0xF0000 + k;
+        const QByteArray bytes = menufont::build(font(), QString::fromUtf8("·…–—’“”éèêàçüöäßñ"), menufont::times(menufont::kBoxes, m_boxScale), drawn,
+                                                 [](QPainter &p, const QRectF &box, char32_t c) { theme::drawIcon(&p, icons[c - 0xF0000], box, Qt::white); });
+        if (QSaveFile f(base + ".font"); f.open(QIODevice::WriteOnly) && f.write(bytes) > 0 && f.commit()) m_boxFont = base + ".font";
+        if (menufont::logo(QImage(":/logo.png"), (int)std::lround(18 * m_boxScale)).save(base + ".logo.bmp", "BMP")) m_boxLogo = base + ".logo.bmp";
+    }
+    if (m_boxFont.isEmpty()) return;   // (the boxes as they were: SDL's 8x8 font)
+    env.insert("HK_UI_LOOK", theme::menuLook());
+    env.insert("HK_UI_FONT", m_boxFont);
+    env.insert("HK_UI_LOGO", m_boxLogo);
+    env.insert("HK_UI_SCALE", QString::number(m_boxScale, 'f', 3));
 }
 
 bool MainWindow::eventFilter(QObject *o, QEvent *e) {
@@ -1480,6 +1507,7 @@ void MainWindow::play(const QString &id) {
         if (const QString key = st.value("eamuse/key").toString();
             !key.isEmpty() && !st.value("eamuse/url", st.value("eamuse/server")).toString().trimmed().isEmpty())
             env.insert("HK_EA_KEY", key);
+        boxLook(env);
         m_proc.setProcessEnvironment(env);
     }
     m_proc.start(g->exe, args);

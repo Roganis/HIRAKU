@@ -36,12 +36,14 @@ struct Item {
     std::vector<std::string> lines;
     double seconds;
     uint32_t edge;
+    ui::Icon icon = ui::Icon::info;
 };
 std::vector<Item> g_queue;
 std::vector<Item> g_hints;   // hint()'s, under g_mu, for banner() to queue
 bool g_showing = false;
 std::vector<uint32_t> g_pixels;
 int g_w = 0, g_h = 0;
+double g_scale = 1;
 unsigned g_id = 0;
 
 std::string read_all(const std::string &path) {
@@ -104,9 +106,18 @@ bool take(const std::string &json, const std::string &current, long max_age) {
     return true;
 }
 
-// a banner's picture: its lines in SDL's debug font on a dark box with a coloured edge, drawn by
-// SDL's software renderer
+// a banner's picture: in the launcher's look (host/uibox.h), or its lines in SDL's debug font on a
+// dark box with a coloured edge, drawn by SDL's software renderer
 void draw_picture(const Item &it) {
+    if (ui::styled()) {
+        ui::Image im;
+        ui::notice_box(im, it.icon, it.lines);
+        g_pixels = std::move(im.px);
+        g_w = im.w, g_h = im.h, g_scale = im.scale;
+        g_id++;
+        return;
+    }
+    g_scale = 1;
     size_t cols = 0;
     for (const std::string &l : it.lines) cols = std::max(cols, l.size());
     const int pad = 6, w = (int)cols * 8 + 2 * pad, h = (int)it.lines.size() * 12 - 4 + 2 * pad;
@@ -140,6 +151,7 @@ void draw_picture(const Item &it) {
 }  // namespace
 
 void start(const std::string &root) {
+    ui::styled();   // (the launcher's look and fonts read now, while their files are sure to be there)
     if (getenv("HK_LAUNCHER") || (getenv("HK_UPDATE_NOTICE") && !strcmp(getenv("HK_UPDATE_NOTICE"), "0"))) return;
     g_current = trim(read_all(root + "/VERSION"));
     const std::string script = root + "/tools/update.py";
@@ -164,13 +176,13 @@ void warn(const std::vector<std::string> &lines, double seconds) {
     if (lines.empty()) return;
     for (const std::string &l : lines) fprintf(stderr, "%s\n", l.c_str());
     // before the update's banner, unless one is on screen already
-    g_queue.insert(g_queue.begin() + (g_showing ? 1 : 0), Item{lines, seconds, 0xd03030});
+    g_queue.insert(g_queue.begin() + (g_showing ? 1 : 0), Item{lines, seconds, 0xd03030, ui::Icon::alert});
 }
 
-void hint(const std::vector<std::string> &lines, double seconds) {
+void hint(const std::vector<std::string> &lines, double seconds, ui::Icon icon) {
     if (lines.empty()) return;
     std::lock_guard<std::mutex> lk(g_mu);
-    g_hints.push_back(Item{lines, seconds, 0xe8a018});
+    g_hints.push_back(Item{lines, seconds, 0xe8a018, icon});
 }
 
 bool banner(Banner &b) {
@@ -193,7 +205,7 @@ bool banner(Banner &b) {
             fprintf(stderr, "HIRAKU %s is out (this is %s): update it from the launcher\n", g_latest.c_str(), g_current.c_str());
             g_queue.push_back(Item{{"HIRAKU " + g_latest + " is out (this is " + g_current + ").",
                                     "Update it from the launcher: Help > Check for updates."},
-                                   kShow, 0xe86c18});
+                                   kShow, 0xe86c18, ui::Icon::update});
         }
     }
     while (!g_queue.empty()) {
@@ -208,7 +220,7 @@ bool banner(Banner &b) {
         }
         const double t = secs(g_shown), len = g_queue.front().seconds;
         if (t < len) {
-            b = {&g_pixels, g_w, g_h, (float)std::min(1.0, (len - t) / kFade), g_id};
+            b = {&g_pixels, g_w, g_h, (float)std::min(1.0, (len - t) / kFade), g_id, g_scale};
             return true;
         }
         g_queue.erase(g_queue.begin());

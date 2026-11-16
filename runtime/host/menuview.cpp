@@ -7,6 +7,7 @@
 #include <cstring>
 
 #include "menukey.h"
+#include "uibox.h"
 
 namespace hk::host::menuview {
 
@@ -14,13 +15,22 @@ namespace {
 
 std::vector<uint32_t> g_pixels;
 int g_w = 0, g_h = 0, g_step = -1;
+double g_scale = 1;
 unsigned g_id = 0;
 constexpr int kSteps = 64;   // the bar's steps: a redraw each
 
-// the box: its lines in SDL's debug font and the bar, on a dark box with an amber edge (as
-// host/warp.h's is drawn)
+// the box: in the launcher's look (host/uibox.h: HIRAKU's name, the bar in the six colours); or
+// its lines in SDL's debug font and the bar, on a dark box with an amber edge (as host/warp.h's)
 void draw(int step) {
     const char *lines[] = {"GAME MENU", "Keep holding to leave this game"};
+    if (ui::styled()) {
+        ui::Image im;
+        ui::bar_box(im, true, ui::Icon::menu, lines[0], ui::Icon::dialpad, lines[1], (double)step / kSteps, "");
+        g_pixels = std::move(im.px);
+        g_w = im.w, g_h = im.h, g_scale = im.scale, g_step = step;
+        g_id++;
+        return;
+    }
     const int pad = 8, cols = 34, w = cols * 8 + 2 * pad;
     const int bar_y = pad + 2 * 12 + 4, bar_h = 10, h = bar_y + bar_h + pad;
     SDL_Surface *s = SDL_CreateSurface(w, h, SDL_PIXELFORMAT_ARGB8888);
@@ -65,7 +75,7 @@ bool panel(Panel &p) {
     const int step = std::clamp((int)(done * kSteps), 0, kSteps);
     if (step != g_step || g_pixels.empty()) draw(step);
     if (g_pixels.empty()) return false;
-    p = {&g_pixels, g_w, g_h, g_id};
+    p = {&g_pixels, g_w, g_h, g_id, g_scale};
     return true;
 }
 

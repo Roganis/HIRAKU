@@ -273,7 +273,8 @@ target_link_libraries(hiraku_cabinet PUBLIC hiraku_sys)
 # --- the shell: what every machine core shares (runtime/shell/core.h) --------------
 # Input scripts; the host front end below. Cores provide hk::core().
 add_library(hiraku_shell STATIC runtime/host/script.cpp runtime/host/macro.cpp runtime/host/mods.cpp runtime/host/pythondisk.cpp runtime/host/png.cpp
-            runtime/host/acio.cpp runtime/host/readers.cpp runtime/host/bio2.cpp runtime/host/popnio.cpp runtime/host/menukey.cpp runtime/host/menupic.cpp)
+            runtime/host/acio.cpp runtime/host/readers.cpp runtime/host/bio2.cpp runtime/host/popnio.cpp runtime/host/menukey.cpp runtime/host/menupic.cpp
+            runtime/shell/uilook.cpp runtime/menu/font.cpp)   # (the launcher's look and fonts: the game menu's and a game's boxes)
 target_include_directories(hiraku_shell PUBLIC runtime)
 find_package(Threads REQUIRED)
 find_package(ZLIB REQUIRED)   # mods' PNG pictures (runtime/host/png.h)
@@ -579,7 +580,7 @@ if(SDL3_FOUND)
   # HID outputs (controller LEDs), shared with the launcher
   add_library(hiraku_hidout STATIC runtime/host/hidout.cpp)
   target_link_libraries(hiraku_hidout PUBLIC SDL3::SDL3 hiraku_cabinet)
-  add_library(hiraku_host STATIC runtime/host/window.cpp runtime/host/alsa.cpp runtime/host/effector.cpp runtime/host/notice.cpp runtime/host/warp.cpp runtime/host/lampview.cpp runtime/host/menuview.cpp runtime/host/shaderview.cpp runtime/host/statsview.cpp runtime/host/sysload.cpp runtime/host/picture.cpp runtime/host/input.cpp runtime/host/lights.cpp
+  add_library(hiraku_host STATIC runtime/host/window.cpp runtime/host/alsa.cpp runtime/host/effector.cpp runtime/host/notice.cpp runtime/host/warp.cpp runtime/host/lampview.cpp runtime/host/menuview.cpp runtime/host/uibox.cpp runtime/host/shaderview.cpp runtime/host/statsview.cpp runtime/host/sysload.cpp runtime/host/picture.cpp runtime/host/input.cpp runtime/host/lights.cpp
               runtime/host/pacing.cpp)
   target_include_directories(hiraku_host PUBLIC runtime)
   target_link_libraries(hiraku_host PUBLIC SDL3::SDL3 hiraku_shell hiraku_hidout)
@@ -628,10 +629,10 @@ if(SDL3_FOUND)
     COMMAND ${CMAKE_COMMAND} -DIN=${CMAKE_SOURCE_DIR}/runtime/menu/logo.anim -DOUT=${HK_LOGO_ANIM_CPP} -DNAME=hk_logo_anim
             -P ${CMAKE_SOURCE_DIR}/cmake/embed.cmake
     DEPENDS ${CMAKE_SOURCE_DIR}/runtime/menu/logo.anim ${CMAKE_SOURCE_DIR}/cmake/embed.cmake VERBATIM)
-  add_library(hiraku_menu STATIC runtime/menu/menu.cpp runtime/menu/nav.cpp runtime/menu/draw.cpp runtime/menu/pads.cpp runtime/menu/font.cpp
+  add_library(hiraku_menu STATIC runtime/menu/menu.cpp runtime/menu/nav.cpp runtime/menu/draw.cpp runtime/menu/pads.cpp
               runtime/menu/logo.cpp ${HK_LOGO_ANIM_CPP})
   target_include_directories(hiraku_menu PUBLIC runtime)
-  target_link_libraries(hiraku_menu PUBLIC SDL3::SDL3 ZLIB::ZLIB)
+  target_link_libraries(hiraku_menu PUBLIC SDL3::SDL3 ZLIB::ZLIB hiraku_shell)   # (its fonts and look: hiraku_shell)
   add_executable(hiraku-menu runtime/menu/core.cpp)
   target_link_libraries(hiraku-menu PRIVATE hiraku_main hiraku_built_none hiraku_menu hiraku_host hiraku_shell)
   # hiraku-midi: the launcher's MIDI player, through Keyboardmania's synth card (dev/xt446), a

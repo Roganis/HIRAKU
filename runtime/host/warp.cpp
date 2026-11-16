@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+#include "uibox.h"
 #include "warp.h"
 
 #include <SDL3/SDL.h>
@@ -26,6 +27,7 @@ std::string g_report;
 
 std::vector<uint32_t> g_pixels;
 int g_w = 0, g_h = 0;
+double g_scale = 1;
 unsigned g_id = 0;
 
 double secs(Clock::time_point a, Clock::time_point b) { return std::chrono::duration<double>(b - a).count(); }
@@ -38,6 +40,15 @@ void draw(double done, bool ended) {
     else if (g_speed > 0) snprintf(speed, sizeof speed, "Speeding through the start-up: %.1fx", g_speed);
     else snprintf(speed, sizeof speed, "Speeding through the start-up");
     const char *lines[] = {"FAST START-UP", speed, "Press a game button for normal speed"};
+    if (ui::styled()) {   // in the launcher's look (host/uibox.h)
+        ui::Image im;
+        ui::bar_box(im, false, ui::Icon::fast, lines[0], ui::Icon::none, speed, done, ended ? "" : lines[2]);
+        g_pixels = std::move(im.px);
+        g_w = im.w, g_h = im.h, g_scale = im.scale;
+        g_id++;
+        return;
+    }
+    g_scale = 1;
     const int pad = 8, cols = 42, w = cols * 8 + 2 * pad;
     const int bar_y = pad + 2 * 12 + 4, bar_h = 10, h = bar_y + bar_h + 8 + 8 + pad;
     SDL_Surface *s = SDL_CreateSurface(w, h, SDL_PIXELFORMAT_ARGB8888);
@@ -141,7 +152,7 @@ bool panel(Panel &p) {
         }
         alpha = (float)(1 - t / kFade);
     }
-    p = {&g_pixels, g_w, g_h, alpha, g_id};
+    p = {&g_pixels, g_w, g_h, alpha, g_id, g_scale};
     return true;
 }
 

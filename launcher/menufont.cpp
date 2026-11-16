@@ -7,6 +7,7 @@
 #include <QSet>
 
 #include <algorithm>
+#include <cmath>
 
 namespace menufont {
 
@@ -22,20 +23,28 @@ void u16(QByteArray &out, int v) {
 
 }  // namespace
 
-QByteArray build(const QFont &base, const QString &text) {
+Sizes times(const Sizes &s, double scale) {
+    Sizes out = s;
+    for (int k = 0; k < 3; k++) out.pixels[k] = std::max(1, (int)std::lround(s.pixels[k] * std::max(1.0, scale)));
+    return out;
+}
+
+QByteArray build(const QFont &base, const QString &text, const Sizes &sizes, const QList<char32_t> &drawn, const Painter &paint) {
     // the characters: ASCII, then the text's others, each once
     QList<char32_t> chars;
     QSet<char32_t> seen;
     for (char32_t c = 32; c < 127; c++) chars << c, seen << c;
     for (const char32_t c : text.toUcs4())
         if (c >= 160 && !seen.contains(c)) chars << c, seen << c;
+    for (const char32_t c : drawn)
+        if (paint && !seen.contains(c)) chars << c, seen << c;
 
     QByteArray out("HKMF1\0\0\0", 8), ink;
     u32(out, 3);
     for (int size = 0; size < 3; size++) {
         QFont font(base);
-        font.setPixelSize(kPixels[size]);
-        font.setWeight(size == 0 ? QFont::Normal : size == 1 ? QFont::DemiBold : QFont::Bold);
+        font.setPixelSize(sizes.pixels[size]);
+        font.setWeight(sizes.weight[size]);
         font.setStyleStrategy(QFont::StyleStrategy(QFont::PreferAntialias | QFont::NoSubpixelAntialias));
         const QFontMetrics fm(font);
         const int line = std::clamp(fm.height(), 1, 256), pad = line;   // (room for what hangs over a character's box)
@@ -43,7 +52,8 @@ QByteArray build(const QFont &base, const QString &text) {
         u32(out, (quint32)chars.size());
         for (const char32_t c : chars) {
             const QString one = QString::fromUcs4(&c, 1);
-            const int advance = std::clamp(fm.horizontalAdvance(one), 0, 512);
+            const bool own = drawn.contains(c) && paint;   // (an icon: a square as high as the line)
+            const int advance = own ? line : std::clamp(fm.horizontalAdvance(one), 0, 512);
             // drawn white on nothing, its line's top `pad` down: what is inked, and where
             QImage img(advance + 2 * pad, line + 2 * pad, QImage::Format_ARGB32_Premultiplied);
             img.fill(Qt::transparent);
@@ -52,7 +62,11 @@ QByteArray build(const QFont &base, const QString &text) {
                 p.setRenderHint(QPainter::TextAntialiasing);
                 p.setFont(font);
                 p.setPen(Qt::white);
-                p.drawText(pad, pad + fm.ascent(), one);
+                if (own) {
+                    p.setRenderHint(QPainter::Antialiasing);
+                    const double inset = line * 0.06;
+                    paint(p, QRectF(pad + inset, pad + inset, line - 2 * inset, line - 2 * inset), c);
+                } else p.drawText(pad, pad + fm.ascent(), one);
             }
             int x0 = img.width(), y0 = img.height(), x1 = -1, y1 = -1;
             for (int y = 0; y < img.height(); y++) {
@@ -78,7 +92,7 @@ QByteArray build(const QFont &base, const QString &text) {
     return out + ink;
 }
 
-QImage logo(const QImage &picture) {
+QImage logo(const QImage &picture, int height) {
     const QImage grey = picture.convertToFormat(QImage::Format_Grayscale8);
     int x0 = grey.width(), y0 = grey.height(), x1 = -1, y1 = -1;
     for (int y = 0; y < grey.height(); y++) {
@@ -87,7 +101,7 @@ QImage logo(const QImage &picture) {
             if (row[x] > 48) x0 = std::min(x0, x), x1 = std::max(x1, x), y0 = std::min(y0, y), y1 = std::max(y1, y);
     }
     if (x1 < 0) return {};
-    return picture.copy(x0, y0, x1 - x0 + 1, y1 - y0 + 1).scaledToHeight(kLogo, Qt::SmoothTransformation).convertToFormat(QImage::Format_RGB888);
+    return picture.copy(x0, y0, x1 - x0 + 1, y1 - y0 + 1).scaledToHeight(std::max(1, height), Qt::SmoothTransformation).convertToFormat(QImage::Format_RGB888);
 }
 
 }  // namespace menufont

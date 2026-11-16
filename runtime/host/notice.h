@@ -12,6 +12,8 @@
 #include <string>
 #include <vector>
 
+#include "uibox.h"
+
 namespace hk::host::notice {
 
 void start(const std::string &root);   // once the window is open
@@ -19,18 +21,20 @@ void start(const std::string &root);   // once the window is open
 // A setup problem (Core::setup_warning), shown first, for `seconds`, edged in red
 void warn(const std::vector<std::string> &lines, double seconds = 15);
 
-// The banner over this frame: false when there is none. pixels: ARGB, w x h (SDL's 8x8 font),
-// the same while one banner shows; alpha: 1, fading to 0 at its end.
+// The banner over this frame: false when there is none. pixels: ARGB, w x h, the same while one
+// banner shows, drawn at `scale` times a 360-line screen's size (host/uibox.h: the launcher's look;
+// else SDL's 8x8 font, 1); alpha: 1, fading to 0 at its end.
 struct Banner {
     const std::vector<uint32_t> *pixels;
     int w, h;
     float alpha;
     unsigned id;   // changes with the picture
+    double scale = 1;
 };
 bool banner(Banner &b);
 
 // A hint from the game's core (any thread), shown after what is on screen, for `seconds`, edged
-// in amber
-void hint(const std::vector<std::string> &lines, double seconds = 12);
+// in amber (in the launcher's look: its icon, in the icon's colour; its first line the title)
+void hint(const std::vector<std::string> &lines, double seconds = 12, ui::Icon icon = ui::Icon::info);
 
 }  // namespace hk::host::notice

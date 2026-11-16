@@ -32,6 +32,7 @@ struct Panel {
     int w, h;
     float alpha;
     unsigned id;   // changes with the picture
+    double scale = 1;   // drawn at this many times a 360-line screen's size (host/uibox.h)
 };
 bool panel(Panel &p);
 // The log's line, once it has ended ("" before)

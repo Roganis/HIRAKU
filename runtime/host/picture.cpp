@@ -1401,6 +1401,8 @@ void overlay(const uint32_t *argb, int w, int h, int x, int y, int dw, int dh, f
         gl.glGenTextures(1, &g_over_tex);
         gl.glBindTexture(GL_TEXTURE_2D, g_over_tex);
         gl.glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0);
+        // (a box drawn at the screen's size, host/uibox.h, may be shown smaller: smoothly)
+        gl.glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     }
     gl.glActiveTexture(GL_TEXTURE0);
     gl.glBindTexture(GL_TEXTURE_2D, g_over_tex);

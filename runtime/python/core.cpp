@@ -1379,7 +1379,7 @@ private:
         printf("\n");
         fflush(stdout);
 #ifdef HK_WITH_SDL
-        hk::host::notice::hint(lines);
+        hk::host::notice::hint(lines, 12, hk::host::ui::Icon::card);
 #endif
     }
     bool card_hinted_ = false;

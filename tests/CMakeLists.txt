@@ -159,6 +159,10 @@ if(TARGET hiraku_host)
   add_executable(test_statsview host/test_statsview.cpp)
   target_link_libraries(test_statsview PRIVATE hiraku_host)
   add_test(NAME host_statsview COMMAND test_statsview ${CMAKE_CURRENT_BINARY_DIR}/statsview)
+  # the boxes over a game's picture in the launcher's look (runtime/host/uibox.h)
+  add_executable(test_uibox host/test_uibox.cpp)
+  target_link_libraries(test_uibox PRIVATE hiraku_host)
+  add_test(NAME host_uibox COMMAND test_uibox ${CMAKE_CURRENT_BINARY_DIR})
   # The game menu and the way out to it (runtime/menu/menu.h, runtime/host/menukey.h): the hold, the
   # launcher's list, and that every cabinet family the games name can drive the menu
   add_executable(test_menu menu/test_menu.cpp)

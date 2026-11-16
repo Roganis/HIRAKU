@@ -653,9 +653,11 @@ int main(int argc, char **argv) {
         if (host::window_picture_asked()) {
             const bool kept = !menu_picture_own.empty() && host::menupic::save(menu_picture_own, rgb, w, h, machine.display_aspect(), true);
             if (kept) printf("game menu: this screen kept as the game's picture (F12), %.1f s in\n", machine.seconds());
-            host::notice::hint({kept ? "Picture kept: this screen, the game's in the game menu" :
-                                menu_picture_own.empty() ? "No picture kept: the game wasn't started from the launcher" :
-                                                           "No picture kept: it couldn't be written"}, 4);
+            host::notice::hint({kept ? "Picture kept" : "No picture kept",
+                                kept                       ? "This screen is the game's picture in the game menu"
+                                : menu_picture_own.empty() ? "The game wasn't started from the launcher"
+                                                           : "It couldn't be written"},
+                               4, host::ui::Icon::picture);
         }
 #endif
         if (menu_picture.empty() || machine.seconds() < menu_picture_at) return;

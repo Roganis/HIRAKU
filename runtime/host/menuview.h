@@ -13,6 +13,7 @@ struct Panel {
     const std::vector<uint32_t> *pixels;
     int w, h;
     unsigned id;   // changes with the picture
+    double scale = 1;   // drawn at this many times a 360-line screen's size (host/uibox.h)
 };
 bool panel(Panel &p);
 

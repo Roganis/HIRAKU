@@ -743,9 +743,9 @@ static void watch_audio() {
     g_last_push_end = 0;   // (the time this took isn't a late chunk)
     fprintf(stderr, "audio: %s%s\n", g_audio ? "the sound now plays on " : "no sound device now: the game goes on without sound, by the clock",
             g_audio ? g_audio_output.c_str() : "");
-    if (!g_audio) notice::hint({"The sound device stopped.", "No other: the game goes on without sound."});
-    else if (g_audio_output == was) notice::hint({"The sound device stopped,", "and was started again."}, 6);
-    else notice::hint({"The sound device stopped.", "The sound now plays on another:", g_audio_output.substr(0, 44)});
+    if (!g_audio) notice::hint({"The sound device stopped.", "No other: the game goes on without sound."}, 12, ui::Icon::sound);
+    else if (g_audio_output == was) notice::hint({"The sound device stopped,", "and was started again."}, 6, ui::Icon::sound);
+    else notice::hint({"The sound device stopped.", "The sound now plays on another:", g_audio_output.substr(0, 44)}, 12, ui::Icon::sound);
 }
 
 static bool open_window(const char *title, int scale, const std::string &bindings, int target_ms, bool fullscreen, int rate) {
@@ -904,13 +904,26 @@ static double display_aspect(int w, int h) {
 
 bool g_sync = false;   // display pacing for the frame last presented
 
-// host/notice.h's banner: whole times its size (as large as a 360-line screen's), centred near
-// the window's bottom
+// A box's size in the window: whole times its size, as large as a 360-line screen's, or, drawn
+// at `scale` times that already (host/uibox.h), as many 360ths of the window's height (smaller
+// rather than wider than the window)
+static void box_size(int w, int h, double scale, int win_w, int win_h, int &dw, int &dh, int &k) {
+    k = std::max(1, win_h / 360);
+    if (scale <= 1) {
+        while (k > 1 && w * k > win_w - 16) k--;
+        dw = w * k, dh = h * k;
+        return;
+    }
+    double f = (double)std::max(360, win_h) / 360 / scale;
+    if (w * f > win_w - 16) f = (double)(win_w - 16) / w;
+    dw = std::max(1, (int)std::lround(w * f)), dh = std::max(1, (int)std::lround(h * f));
+}
+
+// host/notice.h's banner: as large as a 360-line screen's (box_size), centred near the window's
+// bottom
 static void place_banner(const notice::Banner &b, int win_w, int win_h, int &x, int &y, int &dw, int &dh) {
-    int k = std::max(1, win_h / 360);
-    while (k > 1 && b.w * k > win_w - 16) k--;
-    dw = b.w * k;
-    dh = b.h * k;
+    int k;
+    box_size(b.w, b.h, b.scale, win_w, win_h, dw, dh, k);
     x = (win_w - dw) / 2;
     y = win_h - dh - 8 * k;
 }
@@ -923,18 +936,16 @@ static void place_lights(const lampview::Panel &p, int win_w, int win_h, int &x,
     x = y = 8 * k;
 }
 
-// A box whole times its size (as the banner's), in the middle of the window
-static void place_middle(int w, int h, int win_w, int win_h, int &x, int &y, int &dw, int &dh) {
-    int k = std::max(1, win_h / 360);
-    while (k > 1 && w * k > win_w - 16) k--;
-    dw = w * k;
-    dh = h * k;
+// A box as large as the banner's (box_size), in the middle of the window
+static void place_middle(int w, int h, double scale, int win_w, int win_h, int &x, int &y, int &dw, int &dh) {
+    int k;
+    box_size(w, h, scale, win_w, win_h, dw, dh, k);
     x = (win_w - dw) / 2;
     y = (win_h - dh) / 2;
 }
 // host/warp.h's box
 static void place_warp(const warp::Panel &p, int win_w, int win_h, int &x, int &y, int &dw, int &dh) {
-    place_middle(p.w, p.h, win_w, win_h, x, y, dw, dh);
+    place_middle(p.w, p.h, p.scale, win_w, win_h, x, y, dw, dh);
 }
 
 // The overlays over a picture in the GL window: the banner (host/notice.h) and the lights
@@ -951,7 +962,7 @@ static void draw_overlays(int ww, int wh) {
     }
     if (menuview::Panel p; menuview::panel(p)) {   // the way out to the game menu, held (host/menukey.h): in the middle
         int px, py, pw, ph;
-        place_middle(p.w, p.h, ww, wh, px, py, pw, ph);
+        place_middle(p.w, p.h, p.scale, ww, wh, px, py, pw, ph);
         picture::overlay(p.pixels->data(), p.w, p.h, px, py, pw, ph, 1.0f, ww, wh);
     }
     if (lampview::Panel p; lampview::panel(p)) {
@@ -1379,7 +1390,7 @@ static void show_frame(const uint32_t *rgb, int w, int h, double frame_aspect, b
                 bt_id = b.id;
                 SDL_UpdateTexture(bt, nullptr, b.pixels->data(), b.w * 4);
                 SDL_SetTextureBlendMode(bt, SDL_BLENDMODE_BLEND);
-                SDL_SetTextureScaleMode(bt, SDL_SCALEMODE_NEAREST);
+                SDL_SetTextureScaleMode(bt, b.scale > 1 ? SDL_SCALEMODE_LINEAR : SDL_SCALEMODE_NEAREST);
             }
             int lw, lh, ow, oh;
             SDL_RendererLogicalPresentation lm;
@@ -1425,7 +1436,7 @@ static void show_frame(const uint32_t *rgb, int w, int h, double frame_aspect, b
                 wt_id = p.id;
                 SDL_UpdateTexture(wt, nullptr, p.pixels->data(), p.w * 4);
                 SDL_SetTextureBlendMode(wt, SDL_BLENDMODE_BLEND);
-                SDL_SetTextureScaleMode(wt, SDL_SCALEMODE_NEAREST);
+                SDL_SetTextureScaleMode(wt, p.scale > 1 ? SDL_SCALEMODE_LINEAR : SDL_SCALEMODE_NEAREST);
             }
             int lw, lh, ow, oh;
             SDL_RendererLogicalPresentation lm;
@@ -1448,7 +1459,7 @@ static void show_frame(const uint32_t *rgb, int w, int h, double frame_aspect, b
                 mt_id = p.id;
                 SDL_UpdateTexture(mt, nullptr, p.pixels->data(), p.w * 4);
                 SDL_SetTextureBlendMode(mt, SDL_BLENDMODE_BLEND);
-                SDL_SetTextureScaleMode(mt, SDL_SCALEMODE_NEAREST);
+                SDL_SetTextureScaleMode(mt, p.scale > 1 ? SDL_SCALEMODE_LINEAR : SDL_SCALEMODE_NEAREST);
             }
             int lw, lh, ow, oh;
             SDL_RendererLogicalPresentation lm;
@@ -1456,7 +1467,7 @@ static void show_frame(const uint32_t *rgb, int w, int h, double frame_aspect, b
                 SDL_SetRenderLogicalPresentation(g_ren, 0, 0, SDL_LOGICAL_PRESENTATION_DISABLED);
                 SDL_GetCurrentRenderOutputSize(g_ren, &ow, &oh);
                 int px, py, pw, ph;
-                place_middle(p.w, p.h, ow, oh, px, py, pw, ph);
+                place_middle(p.w, p.h, p.scale, ow, oh, px, py, pw, ph);
                 const SDL_FRect r{(float)px, (float)py, (float)pw, (float)ph};
                 SDL_RenderTexture(g_ren, mt, nullptr, &r);
                 SDL_SetRenderLogicalPresentation(g_ren, lw, lh, lm);

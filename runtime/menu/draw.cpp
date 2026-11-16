@@ -214,12 +214,7 @@ void own_look() {
 
 namespace {
 
-// a colour, `t` 256ths of the way to another
-uint32_t mix(uint32_t a, uint32_t b, int t) {
-    uint32_t out = 0;
-    for (int sh = 0; sh < 24; sh += 8) out |= (uint32_t)(((int)(a >> sh & 255) * (256 - t) + (int)(b >> sh & 255) * t) >> 8) << sh;
-    return out;
-}
+using ui::mix;
 
 // the colour a control is called by (pop'n's "Blue buttons"), from the look's six; else the
 // i'th of them (or the bar's)

@@ -35,6 +35,8 @@ add_library(hk_python_shell STATIC
 	${HK}/runtime/shell/crypt.cpp
 	${HK}/runtime/shell/keyed.cpp
 	${HK}/runtime/shell/overlay.cpp
+	${HK}/runtime/shell/uilook.cpp
+	${HK}/runtime/menu/font.cpp
 	${HK}/runtime/host/hiddesc.cpp
 	${HK}/runtime/host/script.cpp
 	${HK}/runtime/host/macro.cpp
@@ -54,6 +56,7 @@ add_library(hk_python_shell STATIC
 	${HK}/runtime/host/warp.cpp
 	${HK}/runtime/host/lampview.cpp
 	${HK}/runtime/host/menuview.cpp
+	${HK}/runtime/host/uibox.cpp
 	${HK}/runtime/host/shaderview.cpp
 	${HK}/runtime/host/statsview.cpp
 	${HK}/runtime/host/sysload.cpp

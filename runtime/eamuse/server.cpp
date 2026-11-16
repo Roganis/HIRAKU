@@ -6,19 +6,14 @@
 #include "eamuse/lobby.h"
 #include "shell/sys.h"
 
-#include <sys/stat.h>
-
 #include <algorithm>
 #include <cctype>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <exception>
-#include <filesystem>
-#include <iterator>
 #include <set>
 #include <ctime>
-#include <fstream>
 
 #ifdef _MSC_VER
 #define strncasecmp _strnicmp   // MSVC's name for it
@@ -117,61 +112,8 @@ void Server::rc4(const std::vector<uint8_t> &k, std::string &d) { ea::rc4(k, d);
 std::string Server::clear(const std::string &m) { return ea::clear(m); }
 bool Server::parse(const std::string &x, Call &c) { return ea::parse(x, c); }
 
-std::string Server::read_file(const std::string &name) const {
-    if (dir_.empty() || !ea::safe_file(name)) return "";
-    std::ifstream f(dir_ + "/" + name, std::ios::binary);
-    return std::string(std::istreambuf_iterator<char>(f), std::istreambuf_iterator<char>());
-}
-
-void Server::write_file(const std::string &name, const std::string &data) const {
-    if (dir_.empty()) return;
-    if (!ea::safe_file(name)) {   // (a call's field never names a file outside the folder)
-        fprintf(stderr, "e-AMUSEMENT: not written: a call's field made no file name (%zu bytes)\n", name.size());
-        return;
-    }
-    sys::make_dir(dir_);
-    // whole or not at all: a full or failing disk keeps the player's file from before
-    const std::string path = dir_ + "/" + name;
-    if (!sys::exists(path) && !room_for_file()) return;
-    if (!sys::write_file(path, data)) fprintf(stderr, "e-AMUSEMENT: cannot write %s: the one from before is kept\n", path.c_str());
-}
-
-long Server::limit(const char *what, long by_default) const {
-    const std::string set = read_file(std::string("limit-") + what);
-    char *end = nullptr;
-    const long n = std::strtol(set.c_str(), &end, 10);
-    return end != set.c_str() && n >= 0 ? n : by_default;
-}
-
-bool Server::room_for_file() const {
-    if (files_ < 0) {
-        files_ = 0;
-        std::error_code ec;
-        for (const auto &e : std::filesystem::directory_iterator(dir_, ec)) (void)e, files_++;
-    }
-    const long most = limit("files", 200000);
-    if (files_ >= most) {
-        if (!files_full_said_) fprintf(stderr, "e-AMUSEMENT: %s holds %ld files, as many as it may (the file limit-files there sets another number): nothing new is kept\n", dir_.c_str(), files_);
-        files_full_said_ = true;
-        return false;
-    }
-    files_++;
-    return true;
-}
-
-void Server::say_kept(const std::string &name) const {
-    fprintf(stderr, "e-AMUSEMENT: a new player was asked for where there is one (%s): the player is kept\n", name.c_str());
-}
-
-void Server::keep_aside(const std::string &name, const std::string &had) const {
-    if (had.empty() || dir_.empty()) return;
-    char date[32];
-    const time_t t = time(nullptr);
-    strftime(date, sizeof date, "%Y%m%d-%H%M%S", localtime(&t));
-    const std::string aside = name + ".unread-" + date;
-    write_file(aside, had);
-    fprintf(stderr, "e-AMUSEMENT: %s isn't a player's file as this HIRAKU keeps them (%zu bytes): kept as %s, a new one made\n",
-            name.c_str(), had.size(), aside.c_str());
+void Server::say_kept(const Table &t, const Key &k) const {
+    fprintf(stderr, "e-AMUSEMENT: a new player was asked for where there is one (%s): the player is kept\n", store_->label(t, k).c_str());
 }
 
 std::string Server::answer(const Call &c, const Request &r, const std::string &host) {
@@ -189,14 +131,14 @@ std::string Server::answer_popn9(const Game &, const Call &, const Request &r, c
     const std::string &m = r.module, &f = r.method;
     if (m == "userdata" && f == "read") {   // 109: not registered (0x184ca0)
         const std::string card = attr(r.attrs, "card");
-        const std::string data = safe_name(card) ? read_file("userdata-" + card) : "";
+        const std::string data = safe_name(card) ? store_->get(tables::userdata_c00, {card}) : "";
         if (data.empty()) return "<userdata status=\"109\"/>";
         return with_shared_marks("C00", card, data);   // kept as the answer element itself, the card's marks put in
     }
     if (m == "userdata" && f == "write") {
         const std::string card = attr(r.attrs, "card");
         if (!safe_name(card) || r.inner.size() > USERDATA_MAX) return "<userdata status=\"1\"/>";   // (a card's record is a few KiB)
-        write_file("userdata-" + card, "<userdata status=\"0\" time=\"" + esc(attr(r.attrs, "time")) + "\">" + r.inner + "</userdata>");
+        store_->put(tables::userdata_c00, {card}, "<userdata status=\"0\" time=\"" + esc(attr(r.attrs, "time")) + "\">" + r.inner + "</userdata>");
         return "<userdata status=\"0\"/>";
     }
     if (m == "rank") {
@@ -207,10 +149,10 @@ std::string Server::answer_popn9(const Game &, const Call &, const Request &r, c
         if (f == "get_h") return "<rank status=\"0\">" + rank_get(BOARD_H, r) + "</rank>";
         if (f == "get_gz") return "<rank status=\"0\">" + rank_get(BOARD_GZ, r) + "</rank>";
     }
-    if (m == "eemall" && f == "i_get") {   // the card's ee'MALL items: eemall-<card>, one number a line
+    if (m == "eemall" && f == "i_get") {   // the card's ee'MALL items (tables::eemall), one number a line
         const std::string card = attr(r.attrs, "card_id");
         std::string items;
-        const std::string list = safe_name(card) ? read_file("eemall-" + card) : "";
+        const std::string list = safe_name(card) ? store_->get(tables::eemall, {card}) : "";
         size_t at = 0, count = 0;
         while (at < list.size() && count < 99) {
             size_t e = list.find('\n', at);
@@ -252,7 +194,7 @@ std::string Server::answer_shared(const Game &, const Call &, const Request &r, 
     if (m == "numbering" && f == "assign")   // a new card's number (0x197530): 16 digits
         return "<numbering status=\"0\" number=\"" + next_number() + "\"/>";
     if (m == "userid") {   // KONAMI ID: a user and password, with cards (0x1863e8, 0x186620, 0x186818)
-        std::vector<Record> users = from_lines(read_file("users"));
+        std::vector<Record> users = from_lines(store_->get(tables::users, {}));
         const std::string card = attr(r.attrs, "card"), user = attr(r.attrs, "user"), pass = attr(r.attrs, "pass");
         auto owner = [&](const std::string &cd) -> Record * {
             for (Record &u : users) {
@@ -269,7 +211,7 @@ std::string Server::answer_shared(const Game &, const Call &, const Request &r, 
         auto save = [&] {
             std::string t;
             for (const Record &u : users) t += to_line(u);
-            write_file("users", t);
+            store_->put(tables::users, {}, t);
         };
         if (f == "ctou") {   // card to user: 112 = none
             const Record *u = owner(card);
@@ -306,8 +248,8 @@ std::string Server::services(const std::string &host, const std::vector<const ch
 
 std::string Server::next_number() {
     uint64_t next = 1;
-    if (std::string n = read_file("numbering"); !n.empty()) next = std::strtoull(n.c_str(), nullptr, 10);
-    write_file("numbering", std::to_string(next + 1) + "\n");
+    if (std::string n = store_->get(tables::numbering, {}); !n.empty()) next = std::strtoull(n.c_str(), nullptr, 10);
+    store_->put(tables::numbering, {}, std::to_string(next + 1) + "\n");
     char digits[17];
     snprintf(digits, sizeof digits, "200301%09llu", (unsigned long long)next);   // 15 digits
     int sum = 0;   // a Luhn check digit ("card16m10")
@@ -321,10 +263,10 @@ std::string Server::next_number() {
     return digits;
 }
 
-// The owner's message for the cabinets' title screens (the file "message"), at most 255 bytes,
+// The owner's message for the cabinets' title screens (tables::message), at most 255 bytes,
 // one line; Shift-JIS or ASCII as the owner writes it.
 std::string Server::message() const {
-    std::string t = read_file("message");
+    std::string t = store_->get(tables::message, {});
     if (const size_t nl = t.find_first_of("\r\n"); nl != std::string::npos) t.erase(nl);
     if (t.size() > 255) t.resize(255);
     return t;
@@ -360,11 +302,10 @@ std::string Server::handle(const std::string &req) try {
         // a cabinet the server wasn't told to take: no answer to read anything from
         if (admit && !admit(c.srcid)) return "HTTP/1.0 403 Forbidden\r\nContent-Length: 0\r\n\r\n";
         xml = "<response>";
-        // The data folder is this call's from here to its answer: servers that share a folder (each
+        // The store is this call's from here to its answer: servers that share a data folder (each
         // cabinet's own on one PC, hiraku-eamuse's threads) read, change and write back the same
         // files, and one's write would undo another's
-        if (!dir_.empty()) sys::make_dir(dir_);
-        const sys::FileLock folder(dir_.empty() ? "" : dir_ + "/" + ea::FOLDER_LOCK);
+        const std::unique_ptr<Store::Hold> held = store_->hold();
         for (const Request &r : c.requests) {
             if (on_call) on_call(r.module + "." + (r.method.empty() ? attr(r.attrs, "type") : r.method));
             // module elements written out as <x ...></x> (the game's parser also takes <x .../>),

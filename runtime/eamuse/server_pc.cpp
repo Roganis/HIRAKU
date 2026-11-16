@@ -53,7 +53,7 @@ std::string Server::answer_g15(const Game &, const Call &, const Request &r, con
         return out;
     };
     auto setting = [&](const char *name, long fallback) {   // the owner's choice, a file in the data folder
-        const std::string v = read_file(std::string(name) + "-G15");
+        const std::string v = store_->get(tables::setting, {name, "G15"});
         return v.empty() ? fallback : std::strtol(v.c_str(), nullptr, 10);
     };
 
@@ -86,7 +86,7 @@ std::string Server::answer_g15(const Game &, const Call &, const Request &r, con
             {"cpu_level", "100,100,100,100,100,100,100,100,100,100"}, {"downlimit_win", "0"}, {"downlimit_class", "10"},
             {"job_sp_rate", "30,150,30,50,30,150,30,100,0,0,30,0,30,100,100,0,30,0,30,0,30,0,30,0,30,0"}, {"job_exp_rate", "100"}};
         for (const auto &n : netvs) {
-            std::string v = read_file(std::string(n.name) + "-G15");
+            std::string v = store_->get(tables::setting, {n.name, "G15"});
             while (!v.empty() && std::isspace((unsigned char)v.back())) v.pop_back();
             a += std::string(" ") + n.name + "=\"" + esc(v.empty() ? n.value : v) + "\"";
         }
@@ -95,7 +95,7 @@ std::string Server::answer_g15(const Game &, const Call &, const Request &r, con
     // the expert courses' board; its entries keep their four stages' scores for the records
     std::vector<const char *> keep = EXP_KEEP;
     keep.push_back("stage_score");
-    const Board board{"G15-rank-exp", "ref_id", keep, "score", "cool", 10};
+    const Board board{&tables::rank_exp, {"G15"}, "ref_id", keep, "score", "cool", 10};
     if (f == "rank_exp-entry") {   // an expert course played: course_num, stage_score (4), cool... (0x49fec0)
         const Board &b = board;
         const Entered e = enter(b, r);
@@ -108,8 +108,8 @@ std::string Server::answer_g15(const Game &, const Call &, const Request &r, con
 
     const std::string ref = attr(r.attrs, "ref_id");
     if (!safe_name(ref)) return "<G15 status=\"1\"/>";
-    const std::string file = "pdata-G15-" + ref, scores_file = "pscore-G15-" + ref, plays_file = "pplays-G15-" + ref;
-    std::string rec = read_file(file);
+    const Key who{"G15", ref};   // its record (tables::pdata), scores (pscore), songs played (pplays)
+    std::string rec = store_->get(tables::pdata, who);
     auto put16 = [&](size_t at, long v) { if (at + 2 <= rec.size()) { rec[at] = (char)(v & 255); rec[at + 1] = (char)(v >> 8 & 255); } };
     auto put32 = [&](size_t at, long v) { put16(at, v & 0xffff); put16(at + 2, v >> 16 & 0xffff); };
     auto set_name = [&](const std::string &name) {
@@ -128,43 +128,43 @@ std::string Server::answer_g15(const Game &, const Call &, const Request &r, con
     // (the game asks new, or conv, only after get's 109: a card that has its player keeps it)
     auto kept = [&] {
         if (rec.size() != RECORD) return false;
-        say_kept(file);
+        say_kept(tables::pdata, who);
         return true;
     };
     auto blank = [&] {   // a new player's record; what was there and wasn't a record kept aside
-        keep_aside(file, rec);
+        store_->aside(tables::pdata, who, rec);
         fresh();
     };
     auto pin = [&](const std::string &pass) {   // the card's PIN, if it has none yet (cardmng authpass checks it)
-        std::vector<Record> cards = from_lines(read_file("cards"));
+        std::vector<Record> cards = from_lines(store_->get(tables::cards, {}));
         bool changed = false;
         for (Record &c : cards)
             if (attr(c, "refid") == ref && attr(c, "pass").empty() && !pass.empty()) { c["pass"] = pass; changed = true; }
         if (!changed) return;
         std::string out;
         for (const Record &c : cards) out += to_line(c);
-        write_file("cards", out);
+        store_->put(tables::cards, {}, out);
     };
 
     if (f == "playerdata_get") {   // 109: none (the game goes on to make one, 0x4866e3)
         // model="F14": pop'n 14's player of this card, as 14 keeps it (0xdb8, the game shows it and
         // asks to carry it over: playerdata_conv)
         if (attr(r.attrs, "model") == "F14") {
-            const std::string old = read_file("pdata-F14-" + ref);
+            const std::string old = store_->get(tables::pdata, {"F14", ref});
             if (old.size() != 0xdb8) return "<G15 status=\"109\"/>";
             return open + " f_compress=\"1\"><b>" + base64(lzss(old)) + "</b></G15>";
         }
         if (rec.size() != RECORD) return "<G15 status=\"109\"/>";
         // the card's clear marks from the other pop'n games (one card for all)
-        for (const Record &c : from_lines(read_file("cards")))
+        for (const Record &c : from_lines(store_->get(tables::cards, {})))
             if (attr(c, "refid") == ref && safe_name(attr(c, "cardid"))) rec = with_shared_marks("G15", attr(c, "cardid"), rec);
         // the most played songs, most first
-        std::vector<Record> plays = from_lines(read_file(plays_file));
+        std::vector<Record> plays = from_lines(store_->get(tables::pplays, who));
         std::stable_sort(plays.begin(), plays.end(), [&](const Record &x, const Record &y) { return num(x, "count") > num(y, "count"); });
         for (size_t i = 0; i < 20; i++) put16(0x30 + 2 * i, i < plays.size() ? num(plays[i], "num") : 0xffff);
         // the 20 expert courses' stage scores: 0x790 the course's best player's, the scores to beat
         // while the INTERNET RANKING runs (0x4266ce), and 0x650 the player's own best
-        const std::vector<Record> entries = from_lines(read_file("G15-rank-exp"));
+        const std::vector<Record> entries = from_lines(store_->get(tables::rank_exp, {"G15"}));
         for (size_t c = 0; c < 20; c++) {
             const Record *top = nullptr, *own = nullptr;
             for (const Record &e : entries) {
@@ -186,21 +186,21 @@ std::string Server::answer_g15(const Game &, const Call &, const Request &r, con
         blank();
         set_name(attr(r.attrs, "name"));
         pin(attr(r.attrs, "ea_passwd"));
-        write_file(file, rec);
+        store_->put(tables::pdata, who, rec);
         return answer();
     }
     // conv (name): the pop'n 14 player the game was given (get model="F14") carried over. The
     // songs keep their numbers (0x482d70 reads both records' words by the same index): pop'n 14's
     // 32-bit word's low half, its marks and played flags, as pop'n 15's word.
     if (f == "playerdata_conv") {
-        const std::string old = read_file("pdata-F14-" + ref);
+        const std::string old = store_->get(tables::pdata, {"F14", ref});
         if (old.size() != 0xdb8) return "<G15 status=\"109\"/>";
         if (kept()) return answer();
         blank();
         set_name(attr(r.attrs, "name"));
         for (size_t n = 0; n < SONGS && 0x24 + 4 * n + 2 <= old.size(); n++)
             put16(0x58 + 2 * n, ((uint8_t)old[0x24 + 4 * n] | (uint8_t)old[0x25 + 4 * n] << 8) & 0x7fff);
-        write_file(file, rec);
+        store_->put(tables::pdata, who, rec);
         return answer();
     }
     if (f == "playerdata_score") {   // music_num sheet_num s_challenge: score (0x49ece0)
@@ -228,7 +228,7 @@ std::string Server::answer_g15(const Game &, const Call &, const Request &r, con
         if (c >= 0 && c < 20) put16(0x8d0 + 2 * (size_t)c, num(a, "expert_data"));
     }
     // the songs played: their word into the record; the score kept if better; a play counted
-    std::vector<Record> scores = from_lines(read_file(scores_file)), plays = from_lines(read_file(plays_file));
+    std::vector<Record> scores = from_lines(store_->get(tables::pscore, who)), plays = from_lines(store_->get(tables::pplays, who));
     for (size_t at = r.inner.find("<music"); at != std::string::npos; at = r.inner.find("<music", at + 1)) {
         std::map<std::string, std::string> m;
         bool sc = false;
@@ -251,10 +251,10 @@ std::string Server::answer_g15(const Game &, const Call &, const Request &r, con
     }
     std::string t;
     for (const Record &e : scores) t += to_line(e);
-    if (!scores.empty()) write_file(scores_file, t);
+    if (!scores.empty()) store_->put(tables::pscore, who, t);
     t.clear();
     for (const Record &e : plays) t += to_line(e);
-    if (!plays.empty()) write_file(plays_file, t);
+    if (!plays.empty()) store_->put(tables::pplays, who, t);
     // the ADVENTURE map (<private>), each attribute where the loader 0x476940 reads it
     if (const size_t pv = r.inner.find("<private"); pv != std::string::npos) {
         std::map<std::string, std::string> m;
@@ -307,7 +307,7 @@ std::string Server::answer_g15(const Game &, const Call &, const Request &r, con
             }
         }
     }
-    write_file(file, rec);
+    store_->put(tables::pdata, who, rec);
     return open + "/>";
 }
 
@@ -351,9 +351,9 @@ std::string Server::answer_j39(const Game &, const Call &call, const Request &r,
                 {"job_exp_rate", "100"}, {"cpu_higher_release", "0"},
                 {"job_sp_rate", "30,150,30,50,30,150,30,100,0,0,30,0,30,100,100,0,30,0,30,0,30,0,30,0,30,0"}};
             std::string a;
-            if (const std::string ph = read_file("phase-H16"); !ph.empty()) a += " phase=\"" + std::to_string(std::strtol(ph.c_str(), nullptr, 10)) + "\"";
+            if (const std::string ph = store_->get(tables::setting, {"phase", "H16"}); !ph.empty()) a += " phase=\"" + std::to_string(std::strtol(ph.c_str(), nullptr, 10)) + "\"";
             for (const auto &fd : fields16) {
-                std::string v = read_file(std::string(fd.name) + "-H16");
+                std::string v = store_->get(tables::setting, {fd.name, "H16"});
                 while (!v.empty() && std::isspace((unsigned char)v.back())) v.pop_back();
                 a += std::string(" ") + fd.name + "=\"" + esc(v.empty() ? fd.value : v) + "\"";
             }
@@ -371,7 +371,7 @@ std::string Server::answer_j39(const Game &, const Call &call, const Request &r,
         std::string a;
         for (const Field &fd : p17 ? std::vector<Field>(std::begin(fields17), std::end(fields17))
                                    : std::vector<Field>(std::begin(fields18), std::end(fields18))) {
-            const std::string v = read_file(std::string(fd.name) + "-" + game);
+            const std::string v = store_->get(tables::setting, {fd.name, game});
             a += std::string(" ") + fd.name + "=\"" + std::to_string(v.empty() ? fd.value : std::strtol(v.c_str(), nullptr, 10)) + "\"";
         }
         return "<game status=\"0\"" + a + "/>";
@@ -396,8 +396,7 @@ std::string Server::answer_j39(const Game &, const Call &call, const Request &r,
         std::vector<const char *> keep = EXP_KEEP;
         keep.push_back("stage_score");
         if (game == "J39") keep.insert(keep.end(), {"sheet_num", "chara_num", "norma_1", "norma_2"});
-        const std::string file = game + (game == "J39" ? "-rank-ir" : "-rank-exp");
-        const Board b{file.c_str(), "ref_id", keep, "score", "cool", 10};
+        const Board b{game == "J39" ? &tables::rank_ir : &tables::rank_exp, {game}, "ref_id", keep, "score", "cool", 10};
         const Entered en = enter(b, e);
         return "<ranking status=\"0\" update=\"" + std::string(en.update ? "1" : "0") + "\" entry=\"" + std::to_string(en.entries) +
                "\" rank=\"" + std::to_string(en.place) + "\" hi_score=\"" + esc(attr(en.kept, "score")) + "\" hi_cool=\"" +
@@ -423,16 +422,15 @@ std::string Server::answer_j39(const Game &, const Call &call, const Request &r,
     const Layout L = p16 ? Layout{0x1c, 0x28, 0x50, 839, 0x8dc, 846}
                      : p17 ? Layout{0x20, 0x2c, 0x54, 907, 0xcd4, 950}
                            : Layout{0x34, 0x40, 0x68, 976, 0, 0};
-    const std::string file = "pdata-" + game + "-" + ref, plays_file = "pplays-" + game + "-" + ref,
-                      scores_file = "pscore-" + game + "-" + ref;
-    std::string rec = read_file(file);
+    const Key who{game, ref};   // its record (tables::pdata), songs played (pplays), scores (pscore)
+    std::string rec = store_->get(tables::pdata, who);
     auto put16 = [&](size_t at, long v) { if (at + 2 <= rec.size()) { rec[at] = (char)(v & 255); rec[at + 1] = (char)(v >> 8 & 255); } };
     auto put32 = [&](size_t at, long v) { put16(at, v & 0xffff); put16(at + 2, v >> 16 & 0xffff); };
     auto get32 = [&](size_t at) -> long {
         if (at + 4 > rec.size()) return 0;
         return (long)((uint32_t)(uint8_t)rec[at] | (uint32_t)(uint8_t)rec[at + 1] << 8 | (uint32_t)(uint8_t)rec[at + 2] << 16 | (uint32_t)(uint8_t)rec[at + 3] << 24);
     };
-    std::string hiscore = read_file(scores_file);   // 18's, as the game's <hiscore>
+    std::string hiscore = store_->get(tables::pscore, who);   // 18's, as the game's <hiscore>
     hiscore.resize((SCORES * SCORE_BITS + 7) / 8, '\0');
     auto hiscore_get = [&](size_t i) {
         long v = 0;
@@ -457,7 +455,7 @@ std::string Server::answer_j39(const Game &, const Call &call, const Request &r,
     };
     auto answer = [&] {
         // the most played songs, most first
-        std::vector<Record> plays = from_lines(read_file(plays_file));
+        std::vector<Record> plays = from_lines(store_->get(tables::pplays, who));
         std::stable_sort(plays.begin(), plays.end(), [&](const Record &x, const Record &y) { return num(x, "count") > num(y, "count"); });
         for (size_t i = 0; i < 20; i++) put16(L.songs + 2 * i, i < plays.size() ? num(plays[i], "num") : 0xffff);
         if (packed) return "<playerdata status=\"0\" f_compress=\"1\"><b __type=\"bin\">" + hex(lzss(rec)) + "</b></playerdata>";
@@ -467,11 +465,11 @@ std::string Server::answer_j39(const Game &, const Call &call, const Request &r,
     // (the game asks new, or conversion, only after get's 109: a card that has its player keeps it)
     auto kept = [&] {
         if (rec.size() != RECORD) return false;
-        say_kept(file);
+        say_kept(tables::pdata, who);
         return true;
     };
     auto blank = [&] {   // a new player's record; what was there and wasn't a record kept aside
-        keep_aside(file, rec);
+        store_->aside(tables::pdata, who, rec);
         fresh();
     };
     if (f == "new") {   // the name (Shift-JIS, 12 bytes) first, as pop'n 12-15's records
@@ -479,7 +477,7 @@ std::string Server::answer_j39(const Game &, const Call &call, const Request &r,
         blank();
         const std::string name = attr(r.attrs, "name");
         for (size_t i = 0; i < name.size() && i < 12; i++) rec[i] = name[i];
-        write_file(file, rec);
+        store_->put(tables::pdata, who, rec);
         return answer();
     }
     // The game before (16: pop'n 15, 17: 16, 18: 17), whose player the game offers to carry over:
@@ -489,7 +487,7 @@ std::string Server::answer_j39(const Game &, const Call &call, const Request &r,
     const size_t BEFORE = p16 ? 0xb38 : p17 ? 0x6784 : 0x74bc;
     if (f == "get") {
         if (!attr(r.attrs, "model").empty()) {
-            const std::string old = attr(r.attrs, "model").substr(0, 3) == before ? read_file(std::string("pdata-") + before + "-" + ref) : "";
+            const std::string old = attr(r.attrs, "model").substr(0, 3) == before ? store_->get(tables::pdata, {before, ref}) : "";
             if (old.size() != BEFORE) return packed ? "<playerdata status=\"109\" f_compress=\"1\"/>" : "<playerdata status=\"109\"/>";
             if (packed) return "<playerdata status=\"0\" f_compress=\"1\"><b __type=\"bin\">" + hex(lzss(old)) + "</b></playerdata>";
             return "<playerdata status=\"0\"><b __type=\"bin\">" + hex(old.substr(0, 0x72c)) + "</b></playerdata>";
@@ -497,7 +495,7 @@ std::string Server::answer_j39(const Game &, const Call &call, const Request &r,
         if (rec.size() != RECORD) return packed ? "<playerdata status=\"109\" f_compress=\"1\"/>" : "<playerdata status=\"109\"/>";
         // one card for all: the card's clear marks and best scores from its other pop'n games,
         // put in this answer only (set merges the credit into the record as it is kept)
-        for (const Record &c : from_lines(read_file("cards")))
+        for (const Record &c : from_lines(store_->get(tables::cards, {})))
             if (attr(c, "refid") == ref && safe_name(attr(c, "cardid"))) rec = with_shared_marks(game, attr(c, "cardid"), rec);
         for (const auto &[chart, score] : shared_scores(game, ref)) {
             const size_t n = (size_t)chart.first, sheet = (size_t)chart.second;
@@ -513,7 +511,7 @@ std::string Server::answer_j39(const Game &, const Call &call, const Request &r,
     // conversion (ref_id card_id name): this game's player made from the one before. The songs keep
     // their numbers: each one's word (clear marks, played flags) and best scores come along
     if (f == "conversion") {
-        const std::string old = read_file(std::string("pdata-") + before + "-" + ref);
+        const std::string old = store_->get(tables::pdata, {before, ref});
         if (old.size() != BEFORE) return packed ? "<playerdata status=\"109\" f_compress=\"1\"/>" : "<playerdata status=\"109\"/>";
         if (kept()) return answer();
         blank();
@@ -530,15 +528,15 @@ std::string Server::answer_j39(const Game &, const Call &call, const Request &r,
             } else if (n * 7 + sheet < SCORES) hiscore_put(n * 7 + sheet, std::min(score, (1L << SCORE_BITS) - 1));
         };
         if (p16) {   // pop'n 15's scores are the server's (pscore-G15)
-            for (const Record &e : from_lines(read_file("pscore-G15-" + ref)))
+            for (const Record &e : from_lines(store_->get(tables::pscore, {"G15", ref})))
                 keep((size_t)num(e, "num"), (size_t)num(e, "sheet"), num(e, "score"));
         } else {     // 16's and 17's are in their records, chart-major
             const size_t at = p17 ? 0x8dc : 0xcd4, per = p17 ? 846 : 950;
             for (size_t sheet = 0; sheet < 7; sheet++)
                 for (size_t n = 0; n < per; n++) keep(n, sheet, old32(at + 4 * (sheet * per + n)));
         }
-        write_file(file, rec);
-        if (!L.scores) write_file(scores_file, hiscore);
+        store_->put(tables::pdata, who, rec);
+        if (!L.scores) store_->put(tables::pscore, who, hiscore);
         return answer();
     }
     if (f == "score") {   // 16 (17's is a stub): music_num sheet_num s_challenge -> the card's best (0x435d70)
@@ -658,7 +656,7 @@ std::string Server::answer_j39(const Game &, const Call &call, const Request &r,
             if (const std::string d = "data" + std::to_string(k + 1); m.count(d)) put32(place + 4 + 4 * k, num(m, d.c_str()));
     }
     // the songs played: their word, the score kept if better, a play counted
-    std::vector<Record> plays = from_lines(read_file(plays_file));
+    std::vector<Record> plays = from_lines(store_->get(tables::pplays, who));
     bool scored = false;
     for (size_t at = r.inner.find("<music"); at != std::string::npos; at = r.inner.find("<music", at + 1)) {
         std::map<std::string, std::string> m;
@@ -844,9 +842,9 @@ std::string Server::answer_j39(const Game &, const Call &call, const Request &r,
     }
     std::string t;
     for (const Record &e : plays) t += to_line(e);
-    if (!plays.empty()) write_file(plays_file, t);
-    if (scored) write_file(scores_file, hiscore);
-    write_file(file, rec);
+    if (!plays.empty()) store_->put(tables::pplays, who, t);
+    if (scored) store_->put(tables::pscore, who, hiscore);
+    store_->put(tables::pdata, who, rec);
     return "<playerdata status=\"0\"/>";
 }
 

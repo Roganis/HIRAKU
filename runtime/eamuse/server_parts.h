@@ -13,12 +13,14 @@
 
 #include "eamuse/protocol.h"
 #include "eamuse/server.h"
+#include "eamuse/tables.h"
 
 namespace hk::ea {
 
 // The three rankings (docs/EAMUSE3.md, "rank"): what is kept and how entries compare
 struct Server::Board {
-    const char *file;
+    const Table *table;                // where it is kept (tables.h; none: a board only compared by)
+    Key key;
     const char *who;                   // the request's field naming the entrant
     std::vector<const char *> keep;    // fields from the request kept with the entry
     const char *first, *second;        // ranked by these, larger first

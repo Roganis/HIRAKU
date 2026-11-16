@@ -257,6 +257,10 @@ add_executable(test_merge eamuse/test_merge.cpp)
 target_include_directories(test_merge PRIVATE ${CMAKE_SOURCE_DIR}/runtime)
 target_link_libraries(test_merge PRIVATE hiraku_sys)
 add_test(NAME eamuse_folder_merge COMMAND test_merge)
+# What the server keeps (runtime/eamuse/store.h, tables.h): every table's file name, keys refused, the file limit
+add_executable(test_store eamuse/test_store.cpp)
+target_link_libraries(test_store PRIVATE hiraku_eamuse)
+add_test(NAME eamuse_store COMMAND test_store)
 # NET TAISEN's lobby (runtime/eamuse/lobby.h): what it holds is bounded
 add_executable(test_lobby eamuse/test_lobby.cpp ${CMAKE_SOURCE_DIR}/runtime/eamuse/lobby.cpp)
 target_include_directories(test_lobby PRIVATE ${CMAKE_SOURCE_DIR}/runtime)

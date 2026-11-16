@@ -4,6 +4,7 @@
 // 9's e-AMUSE3; the games add their own modules (gamedata, shoprank, landdata, binary, session). The
 // cabinet's side (its network unit's LAN, a server online) is runtime/sys573/eagfdm.h.
 #include "eamuse/server.h"
+#include "eamuse/tables.h"
 #include "shell/sys.h"
 
 #include <algorithm>
@@ -18,19 +19,19 @@ namespace hk::ea {
 namespace {
 
 // A player's results in one game (GuitarFreaks D39, DrumMania D40, ...: the model's first three
-// characters), kept per card (its gdid) in "gfdm-<game>-<gdid>": a record per song (its netid)
+// characters), kept per card (its gdid; tables::gfdm): a record per song (its netid)
 // and sequence (seqmode, the difficulty): the best percentage, skill, score and combo.
 struct Player {
-    const Server::Files store;
-    std::string file;
+    Store &store;
+    const Key key;
     std::vector<ea::Record> rows;
 
-    Player(const Server::Files &st, const std::string &game, const std::string &gdid)
-        : store(st), file("gfdm-" + game + "-" + gdid), rows(ea::from_lines(st.read(file))) {}
+    Player(Store &st, const std::string &game, const std::string &gdid)
+        : store(st), key{game, gdid}, rows(ea::from_lines(st.get(tables::gfdm, key))) {}
     void save() const {
         std::string t;
         for (const ea::Record &r : rows) t += ea::to_line(r);
-        store.write(file, t);
+        store.put(tables::gfdm, key, t);
     }
     ea::Record &row(long netid, long seqmode) {
         for (ea::Record &r : rows)
@@ -60,7 +61,7 @@ struct Player {
 };
 
 // Every player's skill in a game, for the ranking (skill_order of skill_all)
-std::vector<long> all_skills(const Server::Files &st, const std::string &game, const std::vector<ea::Record> &cards) {
+std::vector<long> all_skills(Store &st, const std::string &game, const std::vector<ea::Record> &cards) {
     std::vector<long> v;
     for (const ea::Record &c : cards) {
         Player p(st, game, ea::attr(c, "gdid"));
@@ -73,7 +74,7 @@ std::vector<long> all_skills(const Server::Files &st, const std::string &game, c
 
 // What GuitarFreaks and DrumMania ask beyond the common modules
 std::string Server::answer_gfdm(const Game &, const Call &call, const Request &r, const std::string &host) {
-    const Files files{*this};
+    Store &files = *store_;
     const std::string &m = r.module, &f = r.method;
     if (m == "services" && f == "get") {
         // the game looks up "posevent", "pcbtracker", "numbering", "userid" and "local" (the rest);
@@ -94,7 +95,7 @@ std::string Server::answer_gfdm(const Game &, const Call &call, const Request &r
             return nullptr;
         };
         // registered cards: one record each (id, pass, name, irid, type, gdid, skill, color, ...)
-        std::vector<ea::Record> cards = ea::from_lines(files.read("gfdm-cards"));
+        std::vector<ea::Record> cards = ea::from_lines(files.get(tables::gfdm_cards, {}));
         auto find = [&](const std::string &id) -> ea::Record * {
             for (ea::Record &c : cards)
                 if (ea::attr(c, "id") == id) return &c;
@@ -127,7 +128,7 @@ std::string Server::answer_gfdm(const Game &, const Call &call, const Request &r
                 if (k != "id") (*rec)[k] = v;
             std::string text;
             for (const ea::Record &x : cards) text += ea::to_line(x);
-            files.write("gfdm-cards", text);
+            files.put(tables::gfdm_cards, {}, text);
             return ok + "<card status=\"0\" gdid=\"" + ea::esc(ea::attr(*rec, "gdid")) + "\"/></gamedata>";
         }
         if (f == "gametop") {

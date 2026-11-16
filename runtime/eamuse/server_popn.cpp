@@ -111,22 +111,22 @@ std::string Server::answer_later(const Game &g, const Call &call, const Request 
     }
     if (m == "cardmng") {   // pop'n 13: a card has an id (written on it) and its player a ref id, in "cards"
         const std::string cardtype = attr(r.attrs, "cardtype");
-        std::vector<Record> cards = from_lines(read_file("cards"));
+        std::vector<Record> cards = from_lines(store_->get(tables::cards, {}));
         auto add = [&](const std::string &id) {   // a new card and its player ("": the server keeps no more cards)
-            if ((long)cards.size() >= limit("cards", 65536)) {
+            if ((long)cards.size() >= store_->limit("cards", 65536)) {
                 if (!cards_full_said_) fprintf(stderr, "e-AMUSEMENT: %zu cards are kept, as many as may be (the file limit-cards in the data folder sets another number): no new card is taken\n", cards.size());
                 cards_full_said_ = true;
                 return std::string();
             }
             uint64_t n = 1;
-            if (std::string c = read_file("refid"); !c.empty()) n = std::strtoull(c.c_str(), nullptr, 10);
-            write_file("refid", std::to_string(n + 1) + "\n");
+            if (std::string c = store_->get(tables::refid, {}); !c.empty()) n = std::strtoull(c.c_str(), nullptr, 10);
+            store_->put(tables::refid, {}, std::to_string(n + 1) + "\n");
             char ref[17];
             snprintf(ref, sizeof ref, "48524B%010llX", (unsigned long long)n);   // "HRK" and a count
             cards.push_back({{"cardid", id}, {"refid", ref}, {"cardtype", cardtype}});
             std::string out;
             for (const Record &c : cards) out += to_line(c);
-            write_file("cards", out);
+            store_->put(tables::cards, {}, out);
             return std::string(ref);
         };
         auto refid_of = [&](const std::string &id) {
@@ -152,7 +152,7 @@ std::string Server::answer_later(const Game &g, const Call &call, const Request 
             if (g.family == Family::iidx10_13 || iidx_gold_on) {
                 if (fresh) return "<cardmng status=\"112\"/>";
                 bool binded = false;
-                for (const Record &pl : from_lines(read_file("iidx-" + game + "-players"))) binded = binded || attr(pl, "rid") == ref;
+                for (const Record &pl : from_lines(store_->get(tables::iidx_players, {game}))) binded = binded || attr(pl, "rid") == ref;
                 return "<cardmng status=\"0\" refid=\"" + ref + "\" binded=\"" + (binded ? "1" : "0") + "\" expired=\"0\" newflag=\"0\"/>";
             }
             if (fresh) ref = add(id);
@@ -170,14 +170,14 @@ std::string Server::answer_later(const Game &g, const Call &call, const Request 
                 // and with model="<the game before>", that game's (the player carried over)
                 const std::string model = attr(r.attrs, "model").substr(0, 3), of = model.empty() ? game : model;
                 const size_t size = of == "J39" ? 0x1700u : of == "I17" ? 0x74bcu : of == "H16" ? 0x6784u : of == "G15" ? 0xb38u : 0;
-                const bool binded = size && read_file("pdata-" + of + "-" + ref).size() == size;
+                const bool binded = size && store_->get(tables::pdata, {of, ref}).size() == size;
                 return "<cardmng status=\"0\" refid=\"" + ref + "\" binded=\"" + (binded ? "1" : "0") +
                        "\" expired=\"0\" newflag=\"" + (fresh ? "1" : "0") + "\"/>";
             }
             if (game == "G15") {
                 const std::string model = attr(r.attrs, "model").substr(0, 3);
-                const bool binded = model.empty() ? read_file("pdata-G15-" + ref).size() == 0xb38
-                                    : model == "F14" && read_file("pdata-F14-" + ref).size() == 0xdb8;
+                const bool binded = model.empty() ? store_->get(tables::pdata, {"G15", ref}).size() == 0xb38
+                                    : model == "F14" && store_->get(tables::pdata, {"F14", ref}).size() == 0xdb8;
                 return "<cardmng status=\"0\" refid=\"" + ref + "\" binded=\"" + (binded ? "1" : "0") +
                        "\" expired=\"0\" newflag=\"" + (fresh ? "1" : "0") + "\"/>";
             }
@@ -190,7 +190,7 @@ std::string Server::answer_later(const Game &g, const Call &call, const Request 
         auto save = [&] {
             std::string out;
             for (const Record &c : cards) out += to_line(c);
-            write_file("cards", out);
+            store_->put(tables::cards, {}, out);
         };
         auto card_of_ref = [&](const std::string &ref) -> Record * {
             for (Record &c : cards)
@@ -230,20 +230,21 @@ std::string Server::answer_later(const Game &g, const Call &call, const Request 
             const std::string from = card.substr(colon + 1, 3);
             card.resize(colon);
             if (!safe_name(card) || !safe_name(from)) return "<userdata status=\"1\"/>";
-            const std::string data = read_file(from == "C00" ? "userdata-" + card : "userdata-" + from + "-" + card);
+            const tables::Kept u = tables::userdata_of(from, card);
+            const std::string data = store_->get(u.table, u.key);
             return data.empty() ? "<userdata status=\"109\"/>" : data;
         }
         if (!safe_name(card)) return "<userdata status=\"1\"/>";
         if (f == "read") {
-            std::string data = read_file("userdata-" + game + "-" + card);
+            std::string data = store_->get(tables::userdata, {game, card});
             if (!data.empty()) return with_shared_marks(game, card, data);   // the card's marks from the other games put in
             // a card carried over from pop'n 9: what pop'n 9 saved (the game converts it)
-            if (data.empty()) data = read_file("userdata-" + card);
+            if (data.empty()) data = store_->get(tables::userdata_c00, {card});
             return data.empty() ? "<userdata status=\"109\"/>" : data;
         }
         if (f == "write") {
             if (r.inner.size() > USERDATA_MAX) return "<userdata status=\"1\"/>";
-            write_file("userdata-" + game + "-" + card, "<userdata status=\"0\" time=\"" + esc(attr(r.attrs, "time")) + "\">" + r.inner + "</userdata>");
+            store_->put(tables::userdata, {game, card}, "<userdata status=\"0\" time=\"" + esc(attr(r.attrs, "time")) + "\">" + r.inner + "</userdata>");
             return "<userdata status=\"0\"/>";
         }
     }
@@ -257,11 +258,8 @@ std::string Server::answer_later(const Game &g, const Call &call, const Request 
     }
     if (m == "rank") {
         if (f == "exp") {   // a course played: <rank update entry rank hi_score hi_cool/> (0x19dda8)
-            const Board b{nullptr, "card_id", EXP_KEEP, "score", "cool", 10};
-            const std::string file = game + "-rank-exp";
-            Board named = b;
-            named.file = file.c_str();
-            const Entered e = enter(named, r);
+            const Board b{&tables::rank_exp, {game}, "card_id", EXP_KEEP, "score", "cool", 10};
+            const Entered e = enter(b, r);
             return "<rank status=\"0\" update=\"" + std::string(e.update ? "1" : "0") + "\" entry=\"" + std::to_string(e.entries) +
                    "\" rank=\"" + std::to_string(e.place) + "\" hi_score=\"" + esc(attr(e.kept, "score")) + "\" hi_cool=\"" +
                    esc(attr(e.kept, "cool")) + "\"/>";
@@ -277,14 +275,14 @@ std::string Server::answer_later(const Game &g, const Call &call, const Request 
     }
     if (m == "message" && f == "get") {   // (0x19f4e0) phase: the event phase, set online when >= 0
         // (0x18dee0); -1 leaves the cabinet's own. text: the owner's message.
-        const std::string ph = read_file("phase-" + game);
+        const std::string ph = store_->get(tables::setting, {"phase", game});
         const long phase = ph.empty() ? -1 : std::strtol(ph.c_str(), nullptr, 10);
         return "<message status=\"0\" phase=\"" + std::to_string(phase) + "\" text=\"" + esc(message()) + "\"/>";
     }
     if (m == "eemall" && f == "get") {   // (0x19eda8) points, then <item num/> and <kisekae path pri/>
         const std::string card = attr(r.attrs, "card_id");
         std::string items;
-        const std::string list = safe_name(card) ? read_file("eemall-" + card) : "";
+        const std::string list = safe_name(card) ? store_->get(tables::eemall, {card}) : "";
         size_t at = 0, count = 0;
         while (at < list.size() && count < 99) {
             size_t e = list.find('\n', at);
@@ -328,25 +326,24 @@ std::string Server::answer_game(const std::string &game, const Request &r) {
     // pop'n 13: a shop's phase (game active, at a credit's start and end), so its rank shop goes
     // on that area's board (phase 1 POP'N LAND, 2 POP'N WORLD)
     if (game == "E13" && type == "game" && f == "active" && r.attrs.count("phase")) {
-        std::vector<Record> shops = from_lines(read_file(game + "-shop-phase"));
+        std::vector<Record> shops = from_lines(store_->get(tables::shop_phase, {game}));
         bool found = false;
         for (Record &e : shops)
             if (attr(e, "shop_name") == attr(r.attrs, "shop_name")) { e["phase"] = attr(r.attrs, "phase"); found = true; }
         if (!found) shops.push_back({{"shop_name", attr(r.attrs, "shop_name")}, {"phase", attr(r.attrs, "phase")}});
         std::string out;
         for (const Record &e : shops) out += to_line(e);
-        write_file(game + "-shop-phase", out);
+        store_->put(tables::shop_phase, {game}, out);
         return open + "/>";
     }
     if (type == "rank" && f == "exp") {   // as pop'n 10's rank.exp, on the game's element
-        const std::string file = game + "-rank-exp";
-        Board b{file.c_str(), "card_id", EXP_KEEP, "score", "cool", 10};
+        const Board b{&tables::rank_exp, {game}, "card_id", EXP_KEEP, "score", "cool", 10};
         const Entered e = enter(b, r);
         return open + " update=\"" + std::string(e.update ? "1" : "0") + "\" entry=\"" + std::to_string(e.entries) + "\" rank=\"" +
                std::to_string(e.place) + "\" hi_score=\"" + esc(attr(e.kept, "score")) + "\" hi_cool=\"" + esc(attr(e.kept, "cool")) + "\"/>";
     }
     if (type == "game" && f == "get") {   // phase: as pop'n 10's message.get (-1: the cabinet's own)
-        const std::string ph = read_file("phase-" + game);
+        const std::string ph = store_->get(tables::setting, {"phase", game});
         const long phase = ph.empty() ? -1 : std::strtol(ph.c_str(), nullptr, 10);
         // pop'n 13 and 14 also read net_event (14's 0x17e9308), the network event running: 1 the
         // INTERNET RANKING (14's 0x17fdc78: the attract mode's course boards, the courses' results
@@ -361,7 +358,7 @@ std::string Server::answer_game(const std::string &game, const Request &r) {
         // the game's own (pop'n 12: an ojama 1000 ms at least, 0x126f38)
         if (game == "E12") flags += " play_enable=\"1\"";
         if (game == "E13" || game == "F14") {
-            const std::string ne = read_file("net_event-" + game);
+            const std::string ne = store_->get(tables::setting, {"net_event", game});
             flags += " net_event=\"" + std::to_string(ne.empty() ? 2 : std::strtol(ne.c_str(), nullptr, 10)) + "\"";
         }
         if (game == "E12" || game == "E13" || game == "F14") flags += " local_matching_enable=\"1\" matching_sec=\"30\"";
@@ -371,13 +368,13 @@ std::string Server::answer_game(const std::string &game, const Request &r) {
     if (type == "player") {   // mileage and 9 tickets per card (player_set sends them); course: 4 numbers
         const std::string card = attr(r.attrs, "card_id");
         if (!safe_name(card)) return "<" + game + " status=\"1\"/>";
-        const std::string file = "player-" + game + "-" + card;
+        const Key who{game, card};
         if (f == "set") {
-            write_file(file, to_line({{"mileage", attr(r.attrs, "mileage")}, {"ticket", attr(r.attrs, "ticket")}}));
+            store_->put(tables::player, who, to_line({{"mileage", attr(r.attrs, "mileage")}, {"ticket", attr(r.attrs, "ticket")}}));
             return open + "/>";
         }
         if (f == "get") {
-            const std::vector<Record> p = from_lines(read_file(file));
+            const std::vector<Record> p = from_lines(store_->get(tables::player, who));
             std::string ticket = p.empty() ? "" : attr(p[0], "ticket");
             while (!ticket.empty() && ticket.back() == ',') ticket.pop_back();
             if (ticket.empty()) ticket = "0,0,0,0,0,0,0,0,0";
@@ -409,8 +406,8 @@ std::string Server::answer_playerdata(const std::string &game, const Request &r)
     if (card.empty()) card = attr(r.attrs, "card_id");
     if (card.empty()) card = attr(r.attrs, "new_card_id");
     if (!safe_name(card)) return "<" + game + " status=\"1\"/>";
-    const std::string file = "pdata-" + game + "-" + card, scores_file = "pscore-" + game + "-" + card;
-    std::string rec = read_file(file);
+    const Key who{game, card};   // its record (tables::pdata) and scores (tables::pscore)
+    std::string rec = store_->get(tables::pdata, who);
     auto put16 = [&](size_t at, long v) { if (at + 2 <= rec.size()) { rec[at] = (char)(v & 255); rec[at + 1] = (char)(v >> 8 & 255); } };
     auto put32 = [&](size_t at, long v) { put16(at, v & 0xffff); put16(at + 2, v >> 16 & 0xffff); };
     auto set_name = [&](const std::string &name) {
@@ -429,11 +426,11 @@ std::string Server::answer_playerdata(const std::string &game, const Request &r)
     // (a game asks new, or conv, only after get's 109: a card that has its player keeps it)
     auto kept = [&] {
         if (rec.size() != RECORD) return false;
-        say_kept(file);
+        say_kept(tables::pdata, who);
         return true;
     };
     auto blank = [&] {   // a record with nothing in it; what was there and wasn't a record kept aside
-        keep_aside(file, rec);
+        store_->aside(tables::pdata, who, rec);
         rec.assign(RECORD, 0);
     };
     if (f == "new") {   // a new card: its record (name, password; the rest zero)
@@ -441,7 +438,7 @@ std::string Server::answer_playerdata(const std::string &game, const Request &r)
         blank();
         set_name(attr(r.attrs, "name"));
         set_password(attr(r.attrs, "password"));
-        write_file(file, rec);
+        store_->put(tables::pdata, who, rec);
         return with_record();
     }
     if (f == "get") {   // 109: no player on this card (0x164be8)
@@ -456,20 +453,21 @@ std::string Server::answer_playerdata(const std::string &game, const Request &r)
             // compressed as get's, which the game converts): that ref id's, or (one card for all)
             // the player of the card the core put in card_id
             if (from == "E13") {
-                std::string old = safe_name(card) ? read_file("pdata-E13-" + card) : "";
+                std::string old = safe_name(card) ? store_->get(tables::pdata, {"E13", card}) : "";
                 if (old.size() != 0xd6c)
-                    for (const Record &c : from_lines(read_file("cards")))
-                        if (attr(c, "cardid") == attr(r.attrs, "card_id") && safe_name(attr(c, "refid"))) old = read_file("pdata-E13-" + attr(c, "refid"));
+                    for (const Record &c : from_lines(store_->get(tables::cards, {})))
+                        if (attr(c, "cardid") == attr(r.attrs, "card_id") && safe_name(attr(c, "refid"))) old = store_->get(tables::pdata, {"E13", attr(c, "refid")});
                 if (old.size() != 0xd6c) return "<" + game + " status=\"109\"/>";
                 return open + " f_compress=\"1\"><b>" + base64(lzss(old)) + "</b></" + game + ">";
             }
             if (from == "E12") {
                 const std::string id = attr(r.attrs, "card_id");
-                const std::string old = safe_name(id) ? read_file("pdata-E12-" + id) : "";
+                const std::string old = safe_name(id) ? store_->get(tables::pdata, {"E12", id}) : "";
                 if (old.size() != 0x708) return "<" + game + " status=\"109\"/>";
                 return open + " f_compress=\"0\"><b>" + base64(old) + "</b></" + game + ">";
             }
-            const std::string data = read_file(from == "C00" ? "userdata-" + card : "userdata-" + from + "-" + card);
+            const tables::Kept u = tables::userdata_of(from, card);
+            const std::string data = store_->get(u.table, u.key);
             const size_t b = data.find("<b>"), e = data.rfind("</b>");
             if (b == std::string::npos || e == std::string::npos) return "<" + game + " status=\"109\"/>";
             return open + ">" + data.substr(b, e + 4 - b) + "</" + game + ">";
@@ -479,7 +477,7 @@ std::string Server::answer_playerdata(const std::string &game, const Request &r)
         // ref id; the card is card_id, or the ref id's in the cards)
         std::string number = attr(r.attrs, "card_id");
         if (!safe_name(number) || number == "-")
-            for (const Record &c : from_lines(read_file("cards")))
+            for (const Record &c : from_lines(store_->get(tables::cards, {})))
                 if (attr(c, "refid") == card) number = attr(c, "cardid");
         if (safe_name(number)) rec = with_shared_marks(game, number, rec);
         return with_record();
@@ -502,7 +500,7 @@ std::string Server::answer_playerdata(const std::string &game, const Request &r)
             }
         }
         // the songs played: their clear word into the record, the score kept if better
-        std::vector<Record> scores = from_lines(read_file(scores_file));
+        std::vector<Record> scores = from_lines(store_->get(tables::pscore, who));
         for (size_t at = r.inner.find("<music"); at != std::string::npos; at = r.inner.find("<music", at + 1)) {
             std::map<std::string, std::string> m;
             bool sc = false;
@@ -525,7 +523,7 @@ std::string Server::answer_playerdata(const std::string &game, const Request &r)
         }
         std::string t;
         for (const Record &e : scores) t += to_line(e);
-        if (!scores.empty()) write_file(scores_file, t);
+        if (!scores.empty()) store_->put(tables::pscore, who, t);
         // NET TAISEN: the credit's <netvs .../> goes back into the record, each attribute where the
         // game's loader reads it from (it copies the record and takes each field from its place: pop'n
         // 12 0x19ef40, 13 0x17f28d0, 14 0x17e29e8; the set builders,
@@ -580,7 +578,7 @@ std::string Server::answer_playerdata(const std::string &game, const Request &r)
                 }
             }
         }
-        write_file(file, rec);
+        store_->put(tables::pdata, who, rec);
         return open + "/>";
     }
     if (f == "score")   // one chart's best: <E12 score/> (0x192a00), the card's in pop'n 12-14
@@ -595,7 +593,7 @@ std::string Server::answer_playerdata(const std::string &game, const Request &r)
     if (f == "conv" && game == "E12") {
         const std::string old = attr(r.attrs, "old_card_id");
         if (!safe_name(old)) return "<" + game + " status=\"1\"/>";
-        const std::string from = unbase64_b(read_file("userdata-D11-" + old));
+        const std::string from = unbase64_b(store_->get(tables::userdata, {"D11", old}));
         if (kept()) return open + "/>";
         blank();
         set_name(attr(r.attrs, "name"));
@@ -607,7 +605,7 @@ std::string Server::answer_playerdata(const std::string &game, const Request &r)
             const unsigned w = (uint8_t)from[0x410 + 2 * n] | (uint8_t)from[0x410 + 2 * n + 1] << 8;
             put16(L.songs + 2 * n, (w & 0xf) | (w & 0x30) << 2 | (w & 0xc0) >> 2);   // the high byte dropped, as there
         }
-        write_file(file, rec);
+        store_->put(tables::pdata, who, rec);
         return open + "/>";
     }
     // pop'n 13 from pop'n 12's record (pdata-E12-<old card>): pop'n 13 asks only conv with the
@@ -619,7 +617,7 @@ std::string Server::answer_playerdata(const std::string &game, const Request &r)
     if (f == "conv" && game == "E13") {
         const std::string old = attr(r.attrs, "old_card_id");
         if (!safe_name(old)) return "<" + game + " status=\"1\"/>";
-        const std::string from = read_file("pdata-E12-" + old);
+        const std::string from = store_->get(tables::pdata, {"E12", old});
         if (kept()) return open + "/>";
         blank();
         set_name(attr(r.attrs, "name"));
@@ -628,7 +626,7 @@ std::string Server::answer_playerdata(const std::string &game, const Request &r)
             for (size_t n = 0; 0x3c + 2 * n + 2 <= 0x5f0 && L.songs + 4 * n + 4 <= L.songs_end; n++)
                 put32(L.songs + 4 * n, (uint8_t)from[0x3c + 2 * n]);
         }
-        write_file(file, rec);
+        store_->put(tables::pdata, who, rec);
         return open + "/>";
     }
     // pop'n 14: conv (name ref_id card_id popn_id ea_passwd) after the player chose "カーニバルから
@@ -641,7 +639,7 @@ std::string Server::answer_playerdata(const std::string &game, const Request &r)
     // keeps it as pop'n 14's record (the credit's set sends only the songs played). Transfer numbers
     // aren't issued here; with one card for all, the card's ref id is pop'n 13's too.
     if (f == "conv" && p14) {
-        const std::string old = read_file("pdata-E13-" + card);
+        const std::string old = store_->get(tables::pdata, {"E13", card});
         if (old.size() != 0xd6c) return "<" + game + " status=\"109\"/>";
         if (kept()) return with_record();
         blank();
@@ -650,7 +648,7 @@ std::string Server::answer_playerdata(const std::string &game, const Request &r)
         put16(L.chara, (uint8_t)old[0x22] | (uint8_t)old[0x23] << 8);
         for (size_t n = 0; 0x28 + 4 * n + 4 <= old.size() && L.songs + 4 * n + 4 <= L.songs_end; n++)
             for (size_t b = 0; b < 4; b++) rec[L.songs + 4 * n + b] = old[0x28 + 4 * n + b];
-        write_file(file, rec);
+        store_->put(tables::pdata, who, rec);
         return open + " f_compress=\"1\"><b>" + base64(lzss(rec)) + "</b></" + game + ">";
     }
     // tmp, renew: not yet

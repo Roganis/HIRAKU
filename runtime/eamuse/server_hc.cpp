@@ -141,22 +141,22 @@ std::string items(const Record &p, bool every_song) {
 std::string Server::answer_hc(const Game &, const Call &, const Request &r, const std::string &) {
     if (r.module != "player" && r.module != "info") return "";
     const std::string &f = r.method;
-    if (r.module == "info") return f == "common" ? "<info status=\"0\">" + common(read_file("phases-phc")) + "</info>" : "<info status=\"0\"/>";
+    if (r.module == "info") return f == "common" ? "<info status=\"0\">" + common(store_->get(tables::phases_phc, {})) + "</info>" : "<info status=\"0\"/>";
     std::string ref = child(r.inner, "ref_id");
     if (ref.empty()) ref = attr(r.attrs, "ref_id");   // start, logout: an attribute
     if (f == "start") {   // play_id (the game's own count goes on from it), and the common info; a guest too
         const bool known = safe_name(ref);
-        std::vector<Record> players = known ? from_lines(read_file("phc-" + ref)) : std::vector<Record>{};
+        std::vector<Record> players = known ? from_lines(store_->get(tables::phc, {ref})) : std::vector<Record>{};
         const bool player = !players.empty() && !players[0].empty();   // (not a file no field of which reads)
         Record p = player ? players[0] : Record{};
         p["play_id"] = std::to_string(num(p, "play_id") + 1);
-        if (player) write_file("phc-" + ref, to_line(p));
-        return "<player status=\"0\"><play_id __type=\"s32\">" + esc(attr(p, "play_id")) + "</play_id>" + common(read_file("phases-phc")) +
+        if (player) store_->put(tables::phc, {ref}, to_line(p));
+        return "<player status=\"0\"><play_id __type=\"s32\">" + esc(attr(p, "play_id")) + "</play_id>" + common(store_->get(tables::phases_phc, {})) +
                "</player>";
     }
     if (!safe_name(ref)) return "<player status=\"0\"/>";
-    const std::string file = "phc-" + ref, scores = "phcs-" + ref;
-    const std::string had = read_file(file);
+    const Key who{ref};   // the player (tables::phc) and its scores (tables::phcs)
+    const std::string had = store_->get(tables::phc, who);
     std::vector<Record> players = from_lines(had);
     if (!players.empty() && players[0].empty()) players.clear();   // (a file no field of which reads isn't a player)
     auto record = [&](const Record &p) {
@@ -168,7 +168,7 @@ std::string Server::answer_hc(const Game &, const Call &, const Request &r, cons
         account["name"] = attr(p, "name");
         return "<player status=\"0\"><result __type=\"s8\">0</result>" + part("account", ACCOUNT, account) + part("info", INFO, {}) +
                part("config", CONFIG, kept(p, "config", CONFIG)) + part("option", OPTION, kept(p, "option", OPTION)) +
-               items(p, read_file("unlock-phc").rfind("0", 0) != 0) + part("customize", CUSTOMIZE, kept(p, "customize", CUSTOMIZE)) +
+               items(p, store_->get(tables::unlock_phc, {}).rfind("0", 0) != 0) + part("customize", CUSTOMIZE, kept(p, "customize", CUSTOMIZE)) +
                part("netvs", NETVS, {}) + "</player>";
     };
     if (f == "read") {
@@ -177,19 +177,19 @@ std::string Server::answer_hc(const Game &, const Call &, const Request &r, cons
     }
     if (f == "new") {   // (asked only after read's "none": a card that has its player keeps it)
         if (!players.empty()) {
-            say_kept(file);
+            say_kept(tables::phc, who);
             return record(players[0]);
         }
-        keep_aside(file, had);   // (a file no line of which reads)
+        store_->aside(tables::phc, who, had);   // (a file no line of which reads)
         const Record p = {{"name", child(r.inner, "name")}};
-        write_file(file, to_line(p));
+        store_->put(tables::phc, who, to_line(p));
         return record(p);
     }
     if (players.empty()) return "<player status=\"0\"/>";
     Record &p = players[0];
     if (f == "read_score") {   // every chart's best, in one answer (con_flg: more to ask for)
         std::string x = "<player status=\"0\"><con_flg __type=\"bool\">0</con_flg>";
-        for (const Record &s : from_lines(read_file(scores)))
+        for (const Record &s : from_lines(store_->get(tables::phcs, who)))
             x += "<music><music_num __type=\"s16\">" + esc(attr(s, "music")) + "</music_num><sheet_num __type=\"u8\">" +
                  esc(attr(s, "sheet")) + "</sheet_num><score __type=\"s32\">" + esc(attr(s, "score")) + "</score><clear_type __type=\"u8\">" +
                  esc(attr(s, "clear_type")) + "</clear_type><clear_rank __type=\"u8\">" + esc(attr(s, "clear_rank")) +
@@ -201,7 +201,7 @@ std::string Server::answer_hc(const Game &, const Call &, const Request &r, cons
         return "<player status=\"0\">" + part("option", OPTION, kept(p, "option", OPTION)) + "</player>";
     if (f == "write_music") {   // a song played: the chart's best kept, and the options when it asks
         const std::string music = child(r.inner, "music_num"), sheet = child(r.inner, "sheet_num");
-        std::vector<Record> all = from_lines(read_file(scores));
+        std::vector<Record> all = from_lines(store_->get(tables::phcs, who));
         Record *s = nullptr;
         for (Record &e : all)
             if (attr(e, "music") == music && attr(e, "sheet") == sheet) s = &e;
@@ -216,10 +216,10 @@ std::string Server::answer_hc(const Game &, const Call &, const Request &r, cons
         (*s)["cnt"] = std::to_string(num(*s, "cnt") + 1);
         std::string t;
         for (const Record &e : all) t += to_line(e);
-        write_file(scores, t);
+        store_->put(tables::phcs, who, t);
         if (child(r.inner, "is_option_save") == "1") keep(p, "option", OPTION, r.inner);
         p["account.total_play_cnt"] = std::to_string(num(p, "account.total_play_cnt") + 1);
-        write_file(file, to_line(p));
+        store_->put(tables::phc, who, to_line(p));
         return "<player status=\"0\"/>";
     }
     if (f == "write") {   // the credit's end: the parts it sends kept as they are
@@ -245,7 +245,7 @@ std::string Server::answer_hc(const Game &, const Call &, const Request &r, cons
         std::string list;
         for (const auto &[k, v] : got) list += (list.empty() ? "" : " ") + v;
         if (!list.empty()) p["items"] = list;
-        write_file(file, to_line(p));
+        store_->put(tables::phc, who, to_line(p));
         return "<player status=\"0\"/>";
     }
     return "<player status=\"0\"/>";   // end, logout, ...

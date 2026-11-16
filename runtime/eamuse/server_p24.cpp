@@ -184,21 +184,21 @@ std::string common_info(long netvs) {
 std::string Server::answer_p24(const Game &, const Call &, const Request &r, const std::string &) {
     const std::string &m = r.module, &f = r.method;
     if (m != "player24" && m != "info24" && m != "lobby24") return "";
-    std::string setting = read_file("netvs-M39");
+    std::string setting = store_->get(tables::netvs_m39, {});
     const long netvs = setting.empty() ? 1 : std::strtol(setting.c_str(), nullptr, 10);
     if (m == "info24") return f == "common" ? "<info24 status=\"0\">" + common_info(netvs) + "</info24>" : "<info24 status=\"0\"/>";
     if (m == "lobby24") return answer_lobby24(r);
     std::string ref = child(r.inner, "ref_id");
     if (ref.empty()) ref = attr(r.attrs, "ref_id");
     if (f == "start") {   // a credit's start (with or without a player): its play id, and the common info
-        Record count = from_lines(read_file("p24-plays")).empty() ? Record{} : from_lines(read_file("p24-plays"))[0];
+        Record count = from_lines(store_->get(tables::p24_plays, {})).empty() ? Record{} : from_lines(store_->get(tables::p24_plays, {}))[0];
         count["n"] = std::to_string(num(count, "n") + 1);
-        write_file("p24-plays", to_line(count));
+        store_->put(tables::p24_plays, {}, to_line(count));
         return "<player24 status=\"0\"><play_id __type=\"s32\">" + attr(count, "n") + "</play_id>" + common_info(netvs) + "</player24>";
     }
     if (!safe_name(ref)) return "<player24 status=\"0\"/>";
-    const std::string file = "p24-" + ref;
-    const std::string had = read_file(file);
+    const Key who{ref};   // the player (tables::p24) and its scores (tables::p24s)
+    const std::string had = store_->get(tables::p24, who);
     std::vector<Record> players = from_lines(had);
     if (!players.empty() && players[0].empty()) players.clear();   // (a file no field of which reads isn't a player)
     auto record = [&](const Record &p) {
@@ -213,7 +213,7 @@ std::string Server::answer_p24(const Game &, const Call &, const Request &r, con
         // what the game leaves to the server: the latest songs played, the most played (by the scores' counts)
         account["latest_music"] = first_n(attr(p, "latest"), 10);
         std::vector<std::pair<long, std::string>> plays;
-        for (const Record &e : from_lines(read_file("p24s-" + ref))) {
+        for (const Record &e : from_lines(store_->get(tables::p24s, who))) {
             bool merged = false;
             for (auto &[n, music] : plays)
                 if (music == attr(e, "music")) n += num(e, "cnt"), merged = true;
@@ -248,22 +248,21 @@ std::string Server::answer_p24(const Game &, const Call &, const Request &r, con
     }
     if (f == "new") {   // (asked only after read's "none": a card that has its player keeps it)
         if (!players.empty()) {
-            say_kept(file);
+            say_kept(tables::p24, who);
             return record(players[0]);
         }
-        keep_aside(file, had);   // (a file no line of which reads)
+        store_->aside(tables::p24, who, had);   // (a file no line of which reads)
         const Record p = {{"name", child(r.inner, "name")}};
-        write_file(file, to_line(p));
+        store_->put(tables::p24, who, to_line(p));
         return record(p);
     }
     if (players.empty()) return "<player24 status=\"0\"/>";
     Record &p = players[0];
-    const std::string scores = "p24s-" + ref;
     if (f == "read_option")   // a song's options: the kept ones
         return "<player24 status=\"0\">" + part("option", OPTION, kept(p, "option", OPTION)) + "</player24>";
     if (f == "read_score") {   // every chart's best (bemaniutils' answer)
         std::string x = "<player24 status=\"0\">";
-        for (const Record &e : from_lines(read_file(scores)))
+        for (const Record &e : from_lines(store_->get(tables::p24s, who)))
             x += "<music><music_num __type=\"s16\">" + esc(attr(e, "music")) + "</music_num><sheet_num __type=\"u8\">" +
                  esc(attr(e, "sheet")) + "</sheet_num><score __type=\"s32\">" + esc(attr(e, "score")) + "</score><clear_type __type=\"u8\">" +
                  esc(attr(e, "clear_type")) + "</clear_type><clear_rank __type=\"u8\">" + esc(attr(e, "clear_rank")) +
@@ -272,7 +271,7 @@ std::string Server::answer_p24(const Game &, const Call &, const Request &r, con
     }
     if (f == "write_music") {   // a song played: the chart's best kept, and the options when it asks
         const std::string music = child(r.inner, "music_num"), sheet = child(r.inner, "sheet_num");
-        std::vector<Record> all = from_lines(read_file(scores));
+        std::vector<Record> all = from_lines(store_->get(tables::p24s, who));
         Record *e = nullptr;
         for (Record &x : all)
             if (attr(x, "music") == music && attr(x, "sheet") == sheet) e = &x;
@@ -287,10 +286,10 @@ std::string Server::answer_p24(const Game &, const Call &, const Request &r, con
         (*e)["cnt"] = std::to_string(num(*e, "cnt") + 1);
         std::string t;
         for (const Record &x : all) t += to_line(x);
-        write_file(scores, t);
+        store_->put(tables::p24s, who, t);
         if (child(r.inner, "is_option_save") == "1") keep(p, "option", OPTION, r.inner);
         if (std::strtol(child(r.inner, "netvs_type").c_str(), nullptr, 10) > 0) p["netvs_credit"] = "1";   // a NET TAISEN stage
-        write_file(file, to_line(p));
+        store_->put(tables::p24, who, to_line(p));
         return "<player24 status=\"0\"/>";
     }
     if (f == "write") {   // the credit's end: the parts it sends kept as they are, and the play counted
@@ -332,7 +331,7 @@ std::string Server::answer_p24(const Game &, const Call &, const Request &r, con
             charas = kept_list + (kept_list.empty() ? "" : " ") + id + ":" + friendship;
         }
         p["charas"] = charas;
-        write_file(file, to_line(p));
+        store_->put(tables::p24, who, to_line(p));
         return "<player24 status=\"0\"/>";
     }
     return "<player24 status=\"0\"/>";   // logout, buy, friend, update_ranking, ...
@@ -349,7 +348,7 @@ std::string Server::answer_lobby24(const Request &r) {
     const std::string &f = r.method;
     const int64_t t = now ? now() : (int64_t)time(nullptr);
     if (self_.empty()) self_ = std::to_string(std::random_device{}());
-    std::vector<Record> rooms = from_lines(read_file("lobby24-M39"));
+    std::vector<Record> rooms = from_lines(store_->get(tables::lobby24, {}));
     const size_t had = rooms.size();
     rooms.erase(std::remove_if(rooms.begin(), rooms.end(), [&](const Record &room) { return t > std::atoll(attr(room, "until").c_str()); }),
                 rooms.end());
@@ -393,7 +392,7 @@ std::string Server::answer_lobby24(const Request &r) {
     if (changed) {
         std::string text;
         for (const Record &room : rooms) text += to_line(room) + "\n";
-        write_file("lobby24-M39", text);
+        store_->put(tables::lobby24, {}, text);
     }
     return out;
 }

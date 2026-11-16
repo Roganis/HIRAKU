@@ -13,10 +13,10 @@
 
 namespace hk::ea {
 
-const Board BOARD_SCORE = {"rank-score", "card_id", {"name", "score", "cool", "great", "good", "bad", "combo", "option", "konami_id", "shop_name", "area_num", "gpcb_id"}, "score", "cool", 10};
-const Board BOARD_H = {"rank-hitasura", "card_id", {"name", "music", "combo", "konami_id", "shop_name", "area_num", "gpcb_id"}, "music", "combo", 10};
-const Board BOARD_GZ = {"rank-gamblerz", "gpcb_id", {"prog", "parts", "shop_name", "area_num"}, "prog", "parts", 16};
-// pop'n 10 on: rank.exp sends what pop'n 9's rank.register did; one board per game (the file's prefix)
+const Board BOARD_SCORE = {&tables::rank_score, {}, "card_id", {"name", "score", "cool", "great", "good", "bad", "combo", "option", "konami_id", "shop_name", "area_num", "gpcb_id"}, "score", "cool", 10};
+const Board BOARD_H = {&tables::rank_hitasura, {}, "card_id", {"name", "music", "combo", "konami_id", "shop_name", "area_num", "gpcb_id"}, "music", "combo", 10};
+const Board BOARD_GZ = {&tables::rank_gamblerz, {}, "gpcb_id", {"prog", "parts", "shop_name", "area_num"}, "prog", "parts", 16};
+// pop'n 10 on: rank.exp sends what pop'n 9's rank.register did; one board per game (tables::rank_exp, by game)
 const std::vector<const char *> EXP_KEEP = {"name", "score", "cool", "great", "good", "bad", "combo", "option", "shop_name", "area_num"};
 
 bool better(const Board &b, const Record &x, const Record &y) {   // x ranks above y
@@ -34,15 +34,15 @@ std::string Server::rank_register(const Board &b, const Request &r) {
 Server::Entered Server::enter(const Board &b, const Request &r) {
     // pop'n 12 on name the course course_num
     const char *course_key = attr(r.attrs, "course").empty() && !attr(r.attrs, "course_num").empty() ? "course_num" : "course";
-    const std::string course = b.file == BOARD_GZ.file ? "0" : std::to_string(num(r.attrs, course_key));
+    const std::string course = b.table == BOARD_GZ.table ? "0" : std::to_string(num(r.attrs, course_key));
     std::string who = attr(r.attrs, b.who);
     if (who.empty()) who = attr(r.attrs, "ref_id");   // pop'n 13 on: the player's ref id
-    std::vector<Record> all = from_lines(read_file(b.file));
+    std::vector<Record> all = from_lines(store_->get(*b.table, b.key));
     Record mine{{"course", course}, {"who", who}};
     for (const char *k : b.keep) mine[k] = attr(r.attrs, k);
     if (mine.count("area_num") && mine["area_num"].empty()) mine["area_num"] = attr(r.attrs, "pref");   // pop'n 12 on
     // pop'n 14 sends neither a score nor a name: the stages' scores added up, and the player's
-    // name from the record the server keeps (pdata-F14-REF, the name at 0x00, hex as the others)
+    // name from the record the server keeps (tables::pdata, the name at 0x00, hex as the others)
     if (mine.count("score") && mine["score"].empty() && r.attrs.count("stage_score")) {
         long total = 0;
         const std::string ss = attr(r.attrs, "stage_score");
@@ -55,7 +55,7 @@ Server::Entered Server::enter(const Board &b, const Request &r) {
         mine["score"] = std::to_string(total);
     }
     if (mine.count("name") && mine["name"].empty() && safe_name(who)) {
-        const std::string rec = read_file("pdata-" + std::string(b.file).substr(0, 3) + "-" + who);
+        const std::string rec = b.key.empty() ? "" : store_->get(tables::pdata, {b.key[0], who});
         std::string hex;
         for (size_t i = 0; i < 12 && i < rec.size() && rec[i]; i++) {
             char h[3];
@@ -75,7 +75,7 @@ Server::Entered Server::enter(const Board &b, const Request &r) {
     if (!found) all.push_back(mine);
     std::string text;
     for (const Record &e : all) text += to_line(e);
-    if (update) write_file(b.file, text);
+    if (update) store_->put(*b.table, b.key, text);
     // the entrant's place in the course
     std::vector<Record> board;
     for (const Record &e : all)
@@ -88,8 +88,8 @@ Server::Entered Server::enter(const Board &b, const Request &r) {
 }
 
 std::string Server::rank_get(const Board &b, const Request &r) {
-    const std::vector<Record> all = from_lines(read_file(b.file));
-    const bool courses = b.file != BOARD_GZ.file;
+    const std::vector<Record> all = from_lines(store_->get(*b.table, b.key));
+    const bool courses = b.table != BOARD_GZ.table;
     const long c0 = courses ? num(r.attrs, "course_offset") : 0, cn = courses ? std::max(1L, num(r.attrs, "course_num")) : 1;
     const long r0 = std::max(1L, num(r.attrs, "rank_offset")), rn = std::min(100L, std::max(0L, num(r.attrs, "rank_num")));
     std::string out;
@@ -108,9 +108,9 @@ std::string Server::rank_get(const Board &b, const Request &r) {
 // An entry as the game reads it: <item rank=.. (the board's fields) area=.. id=..
 std::string Server::item(const Board &b, const Record &e, size_t place) {
     std::string o = "<item rank=\"" + std::to_string(place) + "\" ";
-    if (b.file == BOARD_SCORE.file)
+    if (b.table == BOARD_SCORE.table)
         o += "name=\"" + esc(attr(e, "name")) + "\" score=\"" + esc(attr(e, "score")) + "\" cool=\"" + esc(attr(e, "cool")) + "\" ";
-    else if (b.file == BOARD_H.file)
+    else if (b.table == BOARD_H.table)
         o += "name=\"" + esc(attr(e, "name")) + "\" music=\"" + esc(attr(e, "music")) + "\" combo=\"" + esc(attr(e, "combo")) + "\" ";
     else
         o += "prog=\"" + esc(attr(e, "prog")) + "\" parts=\"" + esc(attr(e, "parts")) + "\" shop_name=\"" + esc(attr(e, "shop_name")) + "\" ";
@@ -151,8 +151,8 @@ std::string Server::rank_table(const std::string &game) {
         const std::string b = bytes(v);
         for (size_t i = 0; i + 1 < room && i < b.size(); i++) t[at + i] = b[i];
     };
-    const Board b{nullptr, "card_id", EXP_KEEP, "score", "cool", 10};
-    const std::vector<Record> all = from_lines(read_file(game + "-rank-exp"));
+    const Board b{nullptr, {}, "card_id", EXP_KEEP, "score", "cool", 10};
+    const std::vector<Record> all = from_lines(store_->get(tables::rank_exp, {game}));
     for (int course = 0; course < (p14 ? 13 : p15 ? 22 : p1617 ? 11 : 15); course++) {
         std::vector<Record> board;
         for (const Record &e : all)
@@ -173,7 +173,7 @@ std::string Server::rank_table(const std::string &game) {
         while (p14 && !t.empty() && t.back() == '\0') t.pop_back();
         return t;
     }
-    std::vector<Record> shops = from_lines(read_file(game + "-rank-shop"));
+    std::vector<Record> shops = from_lines(store_->get(tables::rank_shop, {game}));
     // the shops' event words, as sent: signed decimal ("%d"); pop'n 10's first records named them
     // praystar_lo/hi
     auto word = [](const Record &e, const char *k) {
@@ -249,7 +249,7 @@ std::string Server::rank_b(const std::string &game) {
 // pop'n 13 item_lo/item_hi and stage), kept per shop (and board) with when its finds last grew
 // (the server's clock: MMDDhhmm, for pop'n 11's board)
 void Server::rank_shop(const std::string &game, const Request &r, const char *mask, const char *mask_hi) {
-    std::vector<Record> shops = from_lines(read_file(game + "-rank-shop"));
+    std::vector<Record> shops = from_lines(store_->get(tables::rank_shop, {game}));
     const std::string name = attr(r.attrs, "shop_name");
     const time_t now_t = now ? (time_t)now() : 0;
     const struct tm tm = sys::utc(now_t);
@@ -261,7 +261,7 @@ void Server::rank_shop(const std::string &game, const Request &r, const char *ma
     if (r.attrs.count("stage")) mine["stage"] = attr(r.attrs, "stage");
     if (game == "E13") {   // the board of the shop's area (answer_game: game active); a shop has one per board
         mine["board"] = "0";
-        for (const Record &e : from_lines(read_file(game + "-shop-phase")))
+        for (const Record &e : from_lines(store_->get(tables::shop_phase, {game})))
             if (attr(e, "shop_name") == name && num(e, "phase") == 2) mine["board"] = "1";
     }
     auto bits = [&](const Record &e) {
@@ -278,7 +278,7 @@ void Server::rank_shop(const std::string &game, const Request &r, const char *ma
     if (!found) shops.push_back(mine);
     std::string out;
     for (const Record &e : shops) out += to_line(e);
-    write_file(game + "-rank-shop", out);
+    store_->put(tables::rank_shop, {game}, out);
 }
 
 }  // namespace hk::ea

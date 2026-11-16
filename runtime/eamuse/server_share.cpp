@@ -129,20 +129,20 @@ std::vector<uint8_t> Server::shared_marks(const std::string &card) const {
     std::vector<uint8_t> marks(SONG_MAX, 0);
     if (!safe_name(card)) return marks;
     std::string ref;   // pop'n 13 and 14 keep their players by ref id
-    for (const Record &c : from_lines(read_file("cards")))
+    for (const Record &c : from_lines(store_->get(tables::cards, {})))
         if (attr(c, "cardid") == card) ref = attr(c, "refid");
     struct Source { const char *game; std::string data; };
     const Source sources[] = {
-        {"C00", unbase64_b(read_file("userdata-" + card))},
-        {"C20", unbase64_b(read_file("userdata-C20-" + card))},
-        {"D11", unbase64_b(read_file("userdata-D11-" + card))},
-        {"E12", read_file("pdata-E12-" + card)},
-        {"E13", safe_name(ref) ? read_file("pdata-E13-" + ref) : ""},
-        {"F14", safe_name(ref) ? read_file("pdata-F14-" + ref) : ""},
-        {"G15", safe_name(ref) ? read_file("pdata-G15-" + ref) : ""},
-        {"H16", safe_name(ref) ? read_file("pdata-H16-" + ref) : ""},
-        {"I17", safe_name(ref) ? read_file("pdata-I17-" + ref) : ""},
-        {"J39", safe_name(ref) ? read_file("pdata-J39-" + ref) : ""},
+        {"C00", unbase64_b(store_->get(tables::userdata_c00, {card}))},
+        {"C20", unbase64_b(store_->get(tables::userdata, {"C20", card}))},
+        {"D11", unbase64_b(store_->get(tables::userdata, {"D11", card}))},
+        {"E12", store_->get(tables::pdata, {"E12", card})},
+        {"E13", safe_name(ref) ? store_->get(tables::pdata, {"E13", ref}) : ""},
+        {"F14", safe_name(ref) ? store_->get(tables::pdata, {"F14", ref}) : ""},
+        {"G15", safe_name(ref) ? store_->get(tables::pdata, {"G15", ref}) : ""},
+        {"H16", safe_name(ref) ? store_->get(tables::pdata, {"H16", ref}) : ""},
+        {"I17", safe_name(ref) ? store_->get(tables::pdata, {"I17", ref}) : ""},
+        {"J39", safe_name(ref) ? store_->get(tables::pdata, {"J39", ref}) : ""},
     };
     for (const Source &s : sources)
         for (size_t n = 0; n < SONG_MAX && !s.data.empty(); n++)
@@ -215,7 +215,7 @@ std::map<std::pair<long, long>, long> Server::scores_of(const std::string &game,
     std::map<std::pair<long, long>, long> out;
     if (!safe_name(who)) return out;
     if (game == "H16" || game == "I17") {
-        const std::string rec = read_file("pdata-" + game + "-" + who);
+        const std::string rec = store_->get(tables::pdata, {game, who});
         const size_t at = game == "H16" ? 0x8dc : 0xcd4, per = game == "H16" ? 846 : 950;
         for (size_t sheet = 0; sheet < 7; sheet++)
             for (size_t n = 0; n < per; n++) {
@@ -228,12 +228,12 @@ std::map<std::pair<long, long>, long> Server::scores_of(const std::string &game,
         return out;
     }
     if (game == "J39") {
-        const std::string h = read_file("pscore-J39-" + who);
+        const std::string h = store_->get(tables::pscore, {"J39", who});
         for (size_t i = 0; i < HISCORES && (i + 1) * HISCORE_BITS <= h.size() * 8; i++)
             if (const long v = hiscore_at(h, i); v > 0) out[{(long)(i / 7), (long)(i % 7)}] = v;
         return out;
     }
-    for (const Record &e : from_lines(read_file("pscore-" + game + "-" + who))) {
+    for (const Record &e : from_lines(store_->get(tables::pscore, {game, who}))) {
         long &v = out[{num(e, "num"), num(e, "sheet")}];
         v = std::max(v, num(e, "score"));
     }
@@ -252,7 +252,7 @@ static void card_and_ref(const std::vector<Record> &cards, const std::string &ga
 
 long Server::shared_score(const std::string &game, const std::string &key, const std::string &song, const std::string &sheet) const {
     std::string card, ref;
-    card_and_ref(from_lines(read_file("cards")), game, key, card, ref);
+    card_and_ref(from_lines(store_->get(tables::cards, {})), game, key, card, ref);
     const long n = std::strtol(song.c_str(), nullptr, 10), s = std::strtol(sheet.c_str(), nullptr, 10);
     long best = 0;
     for (const char *g : SCORED) {
@@ -265,7 +265,7 @@ long Server::shared_score(const std::string &game, const std::string &key, const
 
 std::map<std::pair<long, long>, long> Server::shared_scores(const std::string &game, const std::string &key) const {
     std::string card, ref;
-    card_and_ref(from_lines(read_file("cards")), game, key, card, ref);
+    card_and_ref(from_lines(store_->get(tables::cards, {})), game, key, card, ref);
     std::map<std::pair<long, long>, long> best;
     for (const char *g : SCORED) {
         if (game == g) continue;

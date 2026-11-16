@@ -32,7 +32,7 @@ namespace hk::ea {
 // gdids are 10 digits from gfdmv-gdid.
 std::string Server::answer_gfdmv(const Game &, const Call &, const Request &r, const std::string &) {
     const std::string &m = r.module, &f = r.method;
-    std::vector<Record> cards = from_lines(read_file("gfdmv-cards"));
+    std::vector<Record> cards = from_lines(store_->get(tables::gfdmv_cards, {}));
     auto find = [&](const std::string &id) -> Record * {
         for (Record &c : cards)
             if (attr(c, "cardid") == id) return &c;
@@ -41,7 +41,7 @@ std::string Server::answer_gfdmv(const Game &, const Call &, const Request &r, c
     auto save = [&] {
         std::string t;
         for (const Record &e : cards) t += to_line(e);
-        write_file("gfdmv-cards", t);
+        store_->put(tables::gfdmv_cards, {}, t);
     };
     auto children = [&](const char *name) {
         std::vector<std::map<std::string, std::string>> out;
@@ -62,8 +62,8 @@ std::string Server::answer_gfdmv(const Game &, const Call &, const Request &r, c
             Record *p = find(id);
             if (!p && safe_name(id)) {   // a new card: its player's gdid now (regist sends it back)
                 uint64_t next = 1;
-                if (std::string n = read_file("gfdmv-gdid"); !n.empty()) next = std::strtoull(n.c_str(), nullptr, 10);
-                write_file("gfdmv-gdid", std::to_string(next + 1) + "\n");
+                if (std::string n = store_->get(tables::gfdmv_gdid, {}); !n.empty()) next = std::strtoull(n.c_str(), nullptr, 10);
+                store_->put(tables::gfdmv_gdid, {}, std::to_string(next + 1) + "\n");
                 char gdid[16];
                 snprintf(gdid, sizeof gdid, "%010llu", (unsigned long long)next);
                 cards.push_back({{"cardid", id}, {"gdid", gdid}});
@@ -101,7 +101,7 @@ std::string Server::answer_gfdmv(const Game &, const Call &, const Request &r, c
             read_attrs(r.inner, pd + 11, pl, &sc);
             const std::string gdid = attr(pl, "gdid");
             if (!safe_name(gdid)) continue;
-            std::vector<Record> recs = from_lines(read_file("gfdmv-" + gdid));
+            std::vector<Record> recs = from_lines(store_->get(tables::gfdmv, {gdid}));
             Record *total = nullptr;
             for (Record &e : recs)
                 if (attr(e, "total") == "1") total = &e;
@@ -126,7 +126,7 @@ std::string Server::answer_gfdmv(const Game &, const Call &, const Request &r, c
             }
             std::string t;
             for (const Record &e : recs) t += to_line(e);
-            write_file("gfdmv-" + gdid, t);
+            store_->put(tables::gfdmv, {gdid}, t);
         }
         return "<gameend status=\"0\"/>";
     }
@@ -136,7 +136,7 @@ std::string Server::answer_gfdmv(const Game &, const Call &, const Request &r, c
             const std::string gdid = attr(pl, "gdid");
             std::string styles = "0";
             if (safe_name(gdid))
-                for (const Record &e : from_lines(read_file("gfdmv-" + gdid)))
+                for (const Record &e : from_lines(store_->get(tables::gfdmv, {gdid})))
                     if (attr(e, "total") == "1" && !attr(e, "styles").empty()) styles = attr(e, "styles");
             out += "<player gdid=\"" + esc(gdid) + "\" styles=\"" + esc(styles) + "\" pticket=\"0\" ticket=\"0\"/>";
         }

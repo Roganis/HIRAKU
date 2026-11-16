@@ -22,18 +22,22 @@
 #include <cstdint>
 #include <functional>
 #include <map>
+#include <memory>
 #include <string>
 #include <vector>
 
 #include "eamuse/games.h"
 #include "eamuse/protocol.h"
+#include "eamuse/store.h"
 
 namespace hk::ea {
 
 class Server {
 public:
     // dir: where the server keeps what it must remember (cards, player data), or "" for nothing
-    explicit Server(std::string dir) : dir_(std::move(dir)) {}
+    explicit Server(std::string dir) : store_(std::make_unique<FolderStore>(std::move(dir))) {}
+    // ... or what it is given keeps it (store.h)
+    explicit Server(std::unique_ptr<Store> store) : store_(std::move(store)) {}
 
     // One HTTP request (head and body, as sent) to the whole HTTP response.
     std::string handle(const std::string &request);
@@ -71,12 +75,6 @@ public:
 
 public:
     struct Board;   // a ranking (server_rank.cpp)
-    // The data folder, for a game's own helpers outside the class (server_gfdm.cpp's Player)
-    struct Files {
-        const Server &s;
-        std::string read(const std::string &name) const { return s.read_file(name); }
-        void write(const std::string &name, const std::string &data) const { s.write_file(name, data); }
-    };
 
 private:
     friend const std::vector<Game> &games();   // (the table names the answers below)
@@ -150,29 +148,23 @@ private:
     std::map<std::pair<long, long>, long> scores_of(const std::string &game, const std::string &who) const;
     std::string rank_get(const Board &b, const Request &r);
     static std::string item(const Board &b, const std::map<std::string, std::string> &entry, size_t place);
-    std::string read_file(const std::string &name) const;
-    void write_file(const std::string &name, const std::string &data) const;
     // A game asks for a new player (new, or one carried over from the game before) only after it
     // was told the card has none. Asked for a card that has its player, the player is kept and
     // answered as it is, and this says so: nothing a call says makes a new player of an old one.
-    void say_kept(const std::string &name) const;
-    // A player's file that isn't a player (not the size of the game's record, or no line of it
-    // reads: cut short by an older HIRAKU, damaged, another layout's) reads as "no player", and the
-    // next new or set would take its name: it is first kept beside it as NAME.unread-DATE, and said.
-    void keep_aside(const std::string &name, const std::string &had) const;
+    // (A player's record that isn't one, cut short or damaged, reads as "no player"; the new one made
+    // in its place first keeps it aside: Store::aside.)
+    void say_kept(const Table &t, const Key &k) const;
 
-    std::string dir_;
+    // What the server keeps (tables.h), and where (store.h)
+    std::unique_ptr<Store> store_;
     uint32_t serial_ = 0;   // for the answers' X-Eamuse-Info: deterministic
     std::string src_;       // the asking cabinet (the call's srcid)
     std::string self_;      // this server, among those sharing its data folder (a random number)
     // What a server others can reach keeps is bounded (a call registers a card, writes a card's file):
-    // the data folder's files (limit-files, default 200000) and cards (limit-cards, 65536), each a
-    // number in a file of the folder for an owner who wants another; a card's userdata, 128 KiB
-    long limit(const char *what, long by_default) const;
-    bool room_for_file() const;         // a new file may be made (counted from the folder, once)
+    // the store's things (FolderStore: limit-files) and cards (the store's limit "cards", 65536); a
+    // card's userdata, 128 KiB
     static constexpr size_t USERDATA_MAX = 0x20000;
-    mutable long files_ = -1;           // the folder's files, as counted and made since
-    mutable bool files_full_said_ = false, cards_full_said_ = false;
+    mutable bool cards_full_said_ = false;
 };
 
 }  // namespace hk::ea

@@ -86,10 +86,10 @@ std::string Server::answer_c02(const Game &, const Call &, const Request &r, con
         strftime(date, sizeof date, "%Y%m%d", &tmv);
     }
 
-    std::vector<Record> scores = from_lines(read_file("iidx9-scores"));
+    std::vector<Record> scores = from_lines(store_->get(tables::iidx9_scores, {}));
     // the week's song: the operator's, else one of the songs played here, a different one a week
     auto weekly_song = [&]() -> long {
-        if (const std::string s = read_file("iidx9-weekly-song"); !s.empty()) return std::strtol(s.c_str(), nullptr, 10);
+        if (const std::string s = store_->get(tables::iidx9_weekly_song, {}); !s.empty()) return std::strtol(s.c_str(), nullptr, 10);
         std::set<long> songs;
         for (const Record &s : scores) songs.insert(field(s, "mid"));
         if (songs.empty()) return 0;
@@ -123,7 +123,7 @@ std::string Server::answer_c02(const Game &, const Call &, const Request &r, con
             }
             std::string text;
             for (const Record &s : scores) text += to_line(s);
-            write_file("iidx9-scores", text);
+            store_->put(tables::iidx9_scores, {}, text);
             return ok(method, cmd, a("mid", mid) + a("clid", cl) + a("bestScore", best ? 1L : 0L));
         }
         if (cmd == "getrank") {   // getrank CARD n: by chart, the songs' DJ level and clear
@@ -161,7 +161,7 @@ std::string Server::answer_c02(const Game &, const Call &, const Request &r, con
     }
 
     if (method == "weekly") {
-        std::vector<Record> entries = from_lines(read_file("iidx9-weekly"));
+        std::vector<Record> entries = from_lines(store_->get(tables::iidx9_weekly, {}));
         const long song = weekly_song();
         if (cmd == "getmid") return ok(method, cmd, a("mid", song) + a("wid", wid));
         if (cmd == "getinfo")
@@ -183,7 +183,7 @@ std::string Server::answer_c02(const Game &, const Call &, const Request &r, con
             if (!found && safe_name(card)) entries.push_back(e);
             std::string text;
             for (const Record &x : entries) text += to_line(x);
-            write_file("iidx9-weekly", text);
+            store_->put(tables::iidx9_weekly, {}, text);
             return ok(method, cmd, a("bstscr", best));
         }
         if (cmd == "getranker" || cmd == "getme") {
@@ -207,10 +207,10 @@ std::string Server::answer_c02(const Game &, const Call &, const Request &r, con
 
     if (method == "ranking") {
         // the ranking and its six courses: the operator's, else one ranking of courses 0-5
-        std::vector<std::string> info = words(read_file("iidx9-courses"));
+        std::vector<std::string> info = words(store_->get(tables::iidx9_courses, {}));
         if (info.size() < 7) info = {"1", "0", "1", "2", "3", "4", "5"};
         const std::string rid = info[0];
-        std::vector<Record> entries = from_lines(read_file("iidx9-ranking"));
+        std::vector<Record> entries = from_lines(store_->get(tables::iidx9_ranking, {}));
         if (cmd == "getinfo") {
             std::string at = a("rid", std::strtol(rid.c_str(), nullptr, 10));
             static const char *C[] = {"c0", "c1", "c2", "c3", "c4", "c5"};
@@ -232,7 +232,7 @@ std::string Server::answer_c02(const Game &, const Call &, const Request &r, con
             entries.push_back(e);
             std::string text;
             for (const Record &x : entries) text += to_line(x);
-            write_file("iidx9-ranking", text);
+            store_->put(tables::iidx9_ranking, {}, text);
             long count = 0, best = 0, top = 0;
             for (const Record &x : entries)
                 if (same(x, e["clid"], e["coid"])) {
@@ -311,8 +311,7 @@ std::string Server::answer_iidx_red(const Game &, const Call &call, const Reques
     // ID (8 digits, shown at once). pc get CARD n, as a card is read: <pc> with the record (id, idstr,
     // name, pass the PIN, pid the prefecture, ...; RED JAD 0x47a120 reads it), then the player's
     // grades, EX, skins, rivals and courses (not kept yet).
-    const std::string players_file = "iidx-" + game + "-players";
-    std::vector<Record> players = from_lines(read_file(players_file));
+    std::vector<Record> players = from_lines(store_->get(tables::iidx_players, {game}));
     auto player = [&](const std::string &card) -> Record * {
         for (Record &p : players)
             if (get(p, "card") == card) return &p;
@@ -321,7 +320,7 @@ std::string Server::answer_iidx_red(const Game &, const Call &call, const Reques
     auto save_players = [&] {
         std::string text;
         for (const Record &p : players) text += to_line(p);
-        write_file(players_file, text);
+        store_->put(tables::iidx_players, {game}, text);
     };
     if (method == "pc" && cmd == "reg") {
         const std::string card = arg(1);
@@ -373,8 +372,7 @@ std::string Server::answer_iidx_red(const Game &, const Call &call, const Reques
     // the DJ level (16-18), the clear (13-15: 0 NO PLAY, 2 EASY CLEAR, 5 FULL COMBO as music select
     // shows them), the EX score (0-12); RED JAD 0x479720, 1200 at most. 10th style (JAE 0x46ac50) the
     // same, but its clear is 2 bits (14-15) and its EX score 14 (0-13)
-    const std::string scores_file = "iidx-" + game + "-scores";
-    std::vector<Record> scores = from_lines(read_file(scores_file));
+    std::vector<Record> scores = from_lines(store_->get(tables::iidx_scores, {game}));
     if (method == "music" && cmd == "reg") {
         const std::string id = arg(1);
         const long cl = std::strtol(arg(2).c_str(), nullptr, 10), mid = std::strtol(arg(3).c_str(), nullptr, 10);
@@ -395,7 +393,7 @@ std::string Server::answer_iidx_red(const Game &, const Call &call, const Reques
                               {"gr", std::to_string(gr)}, {"lv", std::to_string(lv)}, {"clear", std::to_string(clear)}, {"plays", "1"}});
         std::string text;
         for (const Record &x : scores) text += to_line(x);
-        write_file(scores_file, text);
+        store_->put(tables::iidx_scores, {game}, text);
         return ok(a("mid", mid) + a("clid", cl));
     }
     if (method == "music" && cmd == "getrank") {
@@ -456,7 +454,7 @@ std::string Server::answer_iidx_fdd(const Game &, const Call &call, const Reques
         return children.empty() ? head + "/>" : head + ">" + children + "</" + el + ">";
     };
     auto failed = [&](const std::string &m) { return "<" + el + " status=\"1\" method=\"" + esc(mod + m) + "\"/>"; };
-    std::vector<Record> players = from_lines(read_file("iidx-" + game + "-players"));
+    std::vector<Record> players = from_lines(store_->get(tables::iidx_players, {game}));
     auto player = [&](const std::string &k, const std::string &v) -> Record * {
         for (Record &p : players)
             if (get(p, k.c_str()) == v) return &p;
@@ -465,7 +463,7 @@ std::string Server::answer_iidx_fdd(const Game &, const Call &call, const Reques
     auto save_players = [&] {
         std::string text;
         for (const Record &p : players) text += to_line(p);
-        write_file("iidx-" + game + "-players", text);
+        store_->put(tables::iidx_players, {game}, text);
     };
     auto idstr = [](const std::string &id) { return id.size() == 8 ? id.substr(0, 4) + "-" + id.substr(4) : id; };
     if (mod == "pc" && method == "reg") {   // the IIDX ID, and as written on the screen
@@ -514,7 +512,7 @@ std::string Server::answer_iidx_fdd(const Game &, const Call &call, const Reques
                                  "<rlist></rlist>";   // (EMPRESS: skin, if given, 12 u16)
         if (fdd) {
             std::string pass;
-            for (const Record &c : from_lines(read_file("cards")))
+            for (const Record &c : from_lines(store_->get(tables::cards, {})))
                 if (attr(c, "refid") == attr(r.attrs, "rid")) pass = attr(c, "pass");
             return ok(a("name", get(*p, "name")) + a("pass", pass) + a("pid", field(*p, "pid")), "<pc" + attrs + "/>" + rest);
         }
@@ -568,7 +566,7 @@ std::string Server::answer_iidx_fdd(const Game &, const Call &call, const Reques
     // 0x4ccf70, GOLD 0x4938a2, DJ TROOPERS 0x49e6e0, EMPRESS 0x4b0903), and entry the place
     if (mod == "ranking" && (method == "entry" || method == "getranker")) {
         const std::string coid = attr(r.attrs, "coid"), clid = attr(r.attrs, "clid");
-        std::vector<Record> courses = from_lines(read_file("iidx-" + game + "-courses"));
+        std::vector<Record> courses = from_lines(store_->get(tables::iidx_courses, {game}));
         if (method == "entry" && safe_name(coid) && safe_name(clid) && safe_name(attr(r.attrs, "iidxid"))) {
             const std::string id = attr(r.attrs, "iidxid");
             const long pg = std::atol(attr(r.attrs, "pgnum").c_str()), gr = std::atol(attr(r.attrs, "gnum").c_str());
@@ -587,7 +585,7 @@ std::string Server::answer_iidx_fdd(const Game &, const Call &call, const Reques
             }
             std::string text;
             for (const Record &x : courses) text += to_line(x);
-            write_file("iidx-" + game + "-courses", text);
+            store_->put(tables::iidx_courses, {game}, text);
         }
         std::vector<const Record *> list;
         for (const Record &x : courses)
@@ -619,7 +617,7 @@ std::string Server::answer_iidx_fdd(const Game &, const Call &call, const Reques
     if (mod == "music" && method == "reg") {
         const std::string iidxid = attr(r.attrs, "iidxid"), mid = attr(r.attrs, "mid"), clid = attr(r.attrs, "clid");
         if (safe_name(iidxid) && safe_name(mid) && safe_name(clid)) {
-            std::vector<Record> scores = from_lines(read_file("iidx-" + game + "-scores"));
+            std::vector<Record> scores = from_lines(store_->get(tables::iidx_scores, {game}));
             const long ex = 2 * std::atol(attr(r.attrs, "pgnum").c_str()) + std::atol(attr(r.attrs, "gnum").c_str());
             const long rid = std::atol(attr(r.attrs, "rid").c_str()), cflg = std::atol(attr(r.attrs, "cflg").c_str());
             Record *best = nullptr;
@@ -635,7 +633,7 @@ std::string Server::answer_iidx_fdd(const Game &, const Call &call, const Reques
             (*best)["plays"] = std::to_string(field(*best, "plays") + 1);
             std::string text;
             for (const Record &x : scores) text += to_line(x);
-            write_file("iidx-" + game + "-scores", text);
+            store_->put(tables::iidx_scores, {game}, text);
         }
         return ok(a("mid", mid) + a("clid", clid) + a("crate", "0") + a("frate", "0"));
     }
@@ -645,7 +643,7 @@ std::string Server::answer_iidx_fdd(const Game &, const Call &call, const Reques
     if (game == "I00" && mod == "music" && method == "getrank") {
         const long side = std::atol(attr(r.attrs, "cltype").c_str()) == 1 ? 1 : 0;
         std::map<long, std::array<long, 6>> songs;   // mid: clears, EX scores
-        for (const Record &x : from_lines(read_file("iidx-" + game + "-scores"))) {
+        for (const Record &x : from_lines(store_->get(tables::iidx_scores, {game}))) {
             const long cl = field(x, "cl") - 3 * side;
             if (get(x, "id") != attr(r.attrs, "iidxid") || cl < 0 || cl > 2) continue;
             auto &e = songs.try_emplace(field(x, "mid"), std::array<long, 6>{}).first->second;
@@ -662,7 +660,7 @@ std::string Server::answer_iidx_fdd(const Game &, const Call &call, const Reques
     if (mod == "music" && method == "getrank") {
         static const char letters[] = "0123456789:;abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
         std::map<long, std::string> by_version;
-        for (const Record &x : from_lines(read_file("iidx-" + game + "-scores"))) {
+        for (const Record &x : from_lines(store_->get(tables::iidx_scores, {game}))) {
             if (get(x, "id") != attr(r.attrs, "iidxid")) continue;
             const long mid = field(x, "mid");
             const uint32_t v = (uint32_t)(mid % 100 & 0x7f) << 23 | (uint32_t)(field(x, "cl") & 15) << 19 |
@@ -695,12 +693,12 @@ std::string Server::answer_iidx_userdata(const Game &, const Call &call, const R
     const std::string game = call.model.substr(0, 3), &m = r.module, &f = r.method;
     const std::string card = attr(r.attrs, "card");
     if (m == "userdata" && f == "read") {
-        const std::string data = safe_name(card) ? read_file("userdata-" + game + "-" + card) : "";
+        const std::string data = safe_name(card) ? store_->get(tables::userdata, {game, card}) : "";
         return data.empty() ? "<userdata status=\"109\"/>" : data;   // 109: none
     }
     if (m == "userdata" && f == "write") {
         if (!safe_name(card) || r.inner.size() > USERDATA_MAX) return "<userdata status=\"1\"/>";
-        write_file("userdata-" + game + "-" + card, "<userdata status=\"0\" time=\"" + esc(attr(r.attrs, "time")) + "\">" + r.inner + "</userdata>");
+        store_->put(tables::userdata, {game, card}, "<userdata status=\"0\" time=\"" + esc(attr(r.attrs, "time")) + "\">" + r.inner + "</userdata>");
         return "<userdata status=\"0\"/>";
     }
     return "";

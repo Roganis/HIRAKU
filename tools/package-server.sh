@@ -4,7 +4,11 @@
 # Linux machine that serves many cabinets, apart from the desktop package (tools/package.sh, which
 # leaves hiraku-server out).
 #
-#   tools/package-server.sh BUILD_DIR [OUT_DIR]     OUT_DIR/hiraku-server-linux-x86_64.tar.xz (OUT_DIR: .)
+#   tools/package-server.sh BUILD_DIR [OUT_DIR]     OUT_DIR/hiraku-server[-VERSION]-linux-x86_64-experimental.tar.xz
+#                                                   (OUT_DIR: .; VERSION: HK_VERSION's, the release's tag less its v)
+#
+# "experimental" in the name while hiraku-server is a first version (docs/SERVER.md, "Experimental"),
+# so that nobody takes it for a finished program or for one of the desktop packages.
 #
 # BUILD_DIR: a build that has made hiraku-server (CMake builds it when the system has SQLite 3; only
 # that target is needed: `ninja -C BUILD_DIR hiraku-server`). The archive holds one folder,
@@ -23,7 +27,11 @@ root=$(cd "$(dirname "$0")/.." && pwd)
 prog=$build/hiraku-server
 [ -x "$prog" ] || { echo "package-server: no $prog (ninja -C $build hiraku-server; it needs SQLite 3's headers)" >&2; exit 1; }
 mkdir -p "$outdir"
-out=$(realpath "$outdir")/hiraku-server-linux-x86_64.tar.xz
+release=${HK_VERSION:-}
+release=${release#v}
+case $release in *[!A-Za-z0-9._-]*) echo "package-server: HK_VERSION $HK_VERSION isn't a release's number" >&2; exit 1 ;; esac
+name=hiraku-server${release:+-$release}-linux-x86_64-experimental.tar.xz
+out=$(realpath "$outdir")/$name
 stage=$(mktemp -d)
 trap 'rm -rf "$stage"' EXIT
 d=$stage/hiraku-server
@@ -57,9 +65,14 @@ stdcxx_line="libstdc++ is linked into the program."
 [ -n "$glibcxx" ] && stdcxx_line="And the system's C++ library (Debian/Ubuntu: libstdc++6) with GLIBCXX_$glibcxx or later."
 version=$("$d/bin/hiraku-server" --version 2>/dev/null || echo "hiraku-server")
 cat > "$d/README.txt" <<EOF
-$version for Linux (x86-64): HIRAKU's hosted e-AMUSEMENT server, for many cabinets on a network.
-Cards, players and scores for every game HIRAKU serves, kept in one SQLite database, with
-accounts, arcades and their machines (each with its own key), a JSON API and web pages.
+$version${release:+ (HIRAKU $release)} for Linux (x86-64): HIRAKU's hosted e-AMUSEMENT server, for many
+cabinets on a network. Cards, players and scores for every game HIRAKU serves, kept in one SQLite
+database, with accounts, arcades and their machines (each with its own key), a JSON API and web pages.
+
+EXPERIMENTAL: this is its first version. What it doesn't do yet, and what wasn't tried, is listed at
+the top of share/doc/hiraku-server/SERVER.md ("Experimental"): read it before you run it for others.
+Card PINs are kept in clear in the database and its backups; the games' port needs machine keys
+before it faces the internet. Problems: https://github.com/Roganis/HIRAKU/issues
 
 Needs glibc $glibc or later and the system's SQLite 3 library: Debian/Ubuntu: libsqlite3-0, Fedora:
 sqlite-libs, Arch: sqlite.
@@ -68,7 +81,7 @@ The libraries it loads: $needed.
 
 A server running, by hand (the folder anywhere; the first admin's password is printed once):
     sudo apt install libsqlite3-0
-    tar -xJf hiraku-server-linux-x86_64.tar.xz && cd hiraku-server
+    tar -xJf $name && cd hiraku-server
     mkdir -p data
     bin/hiraku-server serve --db data/server.db
     xdg-open http://127.0.0.1:8081/     (the web pages; the games' port is 8080)

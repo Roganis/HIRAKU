@@ -3,14 +3,15 @@
 # hiraku-server's package (tools/package-server.sh) tried as it will be downloaded: unpacked into a
 # temporary folder, its program run from there with its own web pages, no build or checkout files.
 #
-#   tools/smoke-server.sh PACKAGE        PACKAGE: hiraku-server-linux-x86_64.tar.xz
+#   tools/smoke-server.sh PACKAGE        PACKAGE: hiraku-server[-VERSION]-linux-x86_64-experimental.tar.xz
 #
-# Checked: the package's files; --version; serve --config on a new database with the package's
+# Checked: the package's files; that it says it is experimental (its name, README.txt, serve's
+# start, --help); --version; serve --config on a new database with the package's
 # web folder; health; the home page and /api/v1/server answer; the ten transcripts
 # (tests/eamuse/test_transcripts.py) against the packaged program; backup --dir; SIGTERM: exit 0
 # and the clean stop's line. Needs python3 (the transcripts and the HTTP checks).
 set -u
-archive=$(realpath "${1:?the package, hiraku-server-linux-x86_64.tar.xz}")
+archive=$(realpath "${1:?the package, hiraku-server-...-linux-x86_64-experimental.tar.xz}")
 root=$(cd "$(dirname "$0")/.." && pwd)
 work=$(mktemp -d)
 pid=""
@@ -36,6 +37,12 @@ extra=$(cd "$p" && find . -type f \( -name '*.chd' -o -name '*.bin' -o -name '*.
 [ -z "$extra" ] && ok "the package's files (no library, game data or desktop program in it)" || bad "the package holds $extra"
 names=$(cd "$p" && find . \( -name names -o -name '*.json' \) | head -3)
 [ -z "$names" ] && ok "no song names in the package (no names folder, no .json pack)" || bad "the package holds $names"
+
+# a first version, and said so wherever someone meets it (docs/SERVER.md, "Experimental")
+[[ $(basename "$archive") == hiraku-server-*experimental.tar.xz ]] && ok "the package's name says experimental" || bad "the package's name: $(basename "$archive")"
+grep -q EXPERIMENTAL "$p/README.txt" && ok "README.txt says experimental" || bad "README.txt doesn't say experimental"
+grep -q '^## Experimental' "$p/share/doc/hiraku-server/SERVER.md" && ok "SERVER.md has its Experimental part" || bad "SERVER.md has no Experimental part"
+"$srv" --help 2>&1 | grep -qi experimental && ok "--help says experimental" || bad "--help doesn't say experimental"
 
 out=$("$srv" --version 2>&1); st=$?
 [ $st = 0 ] && [[ $out == hiraku-server* ]] && ok "--version: $out" || bad "--version: ended with $st: $out"
@@ -89,6 +96,8 @@ st=0; wait "$pid" || st=$?
 pid=""
 grep -q "stopped (SIGTERM)" "$work/serve.log" && [ $st = 0 ] && ok "SIGTERM: exit 0, $(grep -o 'stopped (SIGTERM).*' "$work/serve.log")" \
   || bad "SIGTERM: ended with $st: $(tail -2 "$work/serve.log" | tr '\n' ' ')"
+# (read once serve has stopped: its start-up lines reach the file together, after the API answers)
+grep -q "EXPERIMENTAL" "$work/serve.log" && ok "serve said at its start that it is experimental" || bad "serve's start didn't say experimental"
 [ ! -e "$work/state/server.db-wal" ] && ok "no WAL left after the stop" || bad "the WAL is left after the stop"
 if grep -qE 'password [A-Za-z0-9]{12,}' "$work/serve.log"; then ok "the first admin's password was printed at the first start"
 else bad "no first admin's password in serve's log"; fi

@@ -2,8 +2,12 @@
 # hiraku-server, the hosted e-AMUSEMENT server (docs/SERVER.md), on its own: built with only what it
 # needs on Debian 12, its tests, its package (tools/package-server.sh) made and tried
 # (tools/smoke-server.sh) and kept as the run's artifact; and its container image (deploy/Dockerfile)
-# built and run until its health check passes. Nothing is published: no release, no registry.
+# built and run until its health check passes. Nothing is published here: no release, no registry.
 # (The desktop packages are release.yml's; they leave hiraku-server out.)
+#
+# release.yml calls this workflow too (workflow_call, release: true) for the package that goes into
+# a release's draft beside the desktop ones, so the release's server package is built and tried by
+# these very steps; the container image is left out there.
 name: server
 
 on:
@@ -26,10 +30,22 @@ on:
       - "tools/package-server.sh"
       - "tools/smoke-server.sh"
       - ".github/workflows/server.yml"
+  workflow_call:
+    inputs:
+      release:
+        description: called by release.yml (no container image; the artifact kept as long as the release's)
+        type: boolean
+        default: false
+      version:
+        description: the release's tag (v1.2.3), for the package's name; "" for none
+        type: string
+        default: ""
 
+# (a name of its own when release.yml calls it: a called workflow's github.workflow is the caller's,
+# and the same group in both would make each wait for the other; a tag's run is never cut short)
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  group: server-${{ inputs.release && 'in-release' || 'alone' }}-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
 
 permissions:
   contents: read
@@ -57,17 +73,22 @@ jobs:
             test_store test_access_lists test_merge test_lobby
       - name: Unit tests
         run: ctest --test-dir build/server -R "eamuse|kbin|keyed|crypt" --output-on-failure
+      # hiraku-server[-VERSION]-linux-x86_64-experimental.tar.xz, the only file in dist/
       - name: Package
         run: tools/package-server.sh build/server dist
+        env:
+          HK_VERSION: ${{ inputs.version }}
       - name: The package, tried
-        run: tools/smoke-server.sh dist/hiraku-server-linux-x86_64.tar.xz
+        run: tools/smoke-server.sh dist/hiraku-server-*-experimental.tar.xz
       - uses: actions/upload-artifact@v7
         with:
           name: hiraku-server-linux
-          path: dist/hiraku-server-linux-x86_64.tar.xz
-          retention-days: 14
+          path: dist/hiraku-server-*-experimental.tar.xz
+          if-no-files-found: error
+          retention-days: ${{ inputs.release && startsWith(github.ref, 'refs/tags/v') && 90 || 14 }}
 
   image:
+    if: ${{ !inputs.release }}
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:

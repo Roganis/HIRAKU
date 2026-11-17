@@ -5,7 +5,8 @@
 # no build/ or dumps/ anyway).
 #
 # - a push of a tag v*: both packages, published as a GitHub release (a draft, to look over first),
-#   with the LGPL libraries' sources beside them;
+#   with the LGPL libraries' sources beside them, and hiraku-server's own Linux package, EXPERIMENTAL
+#   (hiraku-server-VERSION-linux-x86_64-experimental.tar.xz: the server job, below);
 # - a push to main or to a branch named ci/... (or a pull request): both packages as the run's
 #   artifacts, kept 14 days, and the unit tests (ctest; the Windows programs' under Wine; on
 #   Linux again under ASan and UBSan): what fails on one system only shows before a release is
@@ -219,6 +220,11 @@ jobs:
         env:   # the release's number in the package (VERSION), for the updater; none for a run by hand
           HK_VERSION: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || '' }}
           HK_TESTS: ${{ startsWith(github.ref, 'refs/tags/v') && 'OFF' || 'ON' }}
+      # hiraku-server.exe is built with the rest (SQLite's own source, third_party/sqlite/) so that it
+      # can't rot, but it has no package, smoke test or antivirus check yet: package-win.sh leaves it
+      # out of the zip (and smoke.sh checks that). Here only that it was built.
+      - name: hiraku-server.exe built (in no package yet)
+        run: test -f build/release-windows/hiraku-server.exe
       # The Windows programs' own tests, run under Wine: what only the Windows build does (its waits,
       # its paths, the swap chain's thread against a pretend Direct3D, the pop'n board's go-between)
       # is otherwise never run before a release. No display: the one test that draws is skipped.
@@ -257,9 +263,19 @@ jobs:
           name: hiraku-windows
           path: dist/*
 
+  # hiraku-server, the hosted e-AMUSEMENT server (docs/SERVER.md), EXPERIMENTAL: its own Linux package
+  # built on Debian 12 and tried (tools/smoke-server.sh) by server.yml's own steps, called from here,
+  # so the release's is made exactly as that workflow makes it on every server change. Not in either
+  # desktop package. The Windows build has no package yet: the windows job only checks it compiles.
+  server:
+    uses: ./.github/workflows/server.yml
+    with:
+      release: true
+      version: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || '' }}
+
   publish:
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [linux, windows]
+    needs: [linux, windows, server]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -272,6 +288,11 @@ jobs:
       - uses: actions/download-artifact@v8
         with:
           name: hiraku-windows
+          path: dist
+      # and hiraku-server's, its name saying "experimental" (the server job)
+      - uses: actions/download-artifact@v8
+        with:
+          name: hiraku-server-linux
           path: dist
       - name: Draft release
         env:

@@ -229,6 +229,16 @@ public:
     }
 protected:
     void resizeEvent(QResizeEvent *) override { fit(); }
+    // the picture comes and goes with the window's height (place()), which a height alone changes
+    // without resizing this: the window's own resizes watched too, or the height stays the other's
+    void showEvent(QShowEvent *) override {
+        if (window() != this) window()->installEventFilter(this);   // (once: Qt keeps one of each)
+        fit();
+    }
+    bool eventFilter(QObject *o, QEvent *e) override {
+        if (o == window() && e->type() == QEvent::Resize && isVisible()) fit();
+        return false;
+    }
     void paintEvent(QPaintEvent *) override {
         QPainter p(this);
         p.setRenderHint(QPainter::Antialiasing);
@@ -534,7 +544,9 @@ bool GameCards::eventFilter(QObject *o, QEvent *e) {
 void GameCards::resizeEvent(QResizeEvent *e) {
     QWidget::resizeEvent(e);
     const bool narrow = window()->width() < 900;
-    if (narrow == m_pick->isVisible()) return;
+    // (by the drop-down's own state: a page hidden, the list's view up, is given its new size as it
+    // is shown again, before it counts as visible, and isVisible() said "narrow" was already done)
+    if (narrow == !m_pick->isHidden()) return;
     m_shelves->setVisible(!narrow);
     m_head->setVisible(!narrow);
     m_pick->setVisible(narrow);

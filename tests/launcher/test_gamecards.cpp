@@ -6,8 +6,13 @@
 //
 //   test_gamecards DIR    (DIR: where its settings are kept, on Windows Qt's test folder)
 #include <QApplication>
+#include <QComboBox>
+#include <QLabel>
 #include <QListWidget>
+#include <QScrollArea>
+#include <QStackedWidget>
 #include <QStandardPaths>
+#include <QVBoxLayout>
 
 #include <cstdio>
 
@@ -102,6 +107,75 @@ int main(int argc, char **argv) {
     // no games at all
     w.setCards({});
     CHECK(shelves->count() == 1 && grid->count() == 0);
+
+
+    // a narrow window: the shelves as a drop-down; widened while the list's page showed, the cards
+    // page back with its shelves (Qt gives a hidden page its new size as it is shown, before it is
+    // visible: compared with isVisible(), the change was taken for done)
+    {
+        QWidget top;
+        auto *stack = new QStackedWidget;
+        auto *cards = new GameCards;
+        stack->addWidget(cards);
+        stack->addWidget(new QWidget);   // (the list's page)
+        (new QVBoxLayout(&top))->addWidget(stack);
+        cards->setCards(all);
+        QListWidget *sh = cards->findChildren<QListWidget *>().value(0);
+        QComboBox *pick = cards->findChild<QComboBox *>();
+        CHECK(sh && pick);
+        if (!sh || !pick) return 1;
+        top.resize(800, 600);
+        top.show();
+        app.processEvents();
+        CHECK(sh->isHidden() && !pick->isHidden());
+        stack->setCurrentIndex(1);
+        app.processEvents();
+        top.resize(1000, 600);
+        app.processEvents();
+        stack->setCurrentIndex(0);
+        app.processEvents();
+        CHECK(!sh->isHidden() && pick->isHidden());
+        CHECK(sh->isVisible());
+        // ... and narrowed again while hidden
+        stack->setCurrentIndex(1);
+        app.processEvents();
+        top.resize(800, 600);
+        app.processEvents();
+        stack->setCurrentIndex(0);
+        app.processEvents();
+        CHECK(sh->isHidden() && !pick->isHidden());
+    }
+
+    // the chosen game's panel: its picture gone in a window under 600 lines high and back over it,
+    // the window's width the same (the panel's own size changes only with its height then)
+    {
+        QWidget top;
+        auto *head = new GameHead;
+        auto *scroll = new QScrollArea;   // (as the launcher's details; its bar always there: the same width)
+        scroll->setWidgetResizable(true);
+        scroll->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOn);
+        scroll->setWidget(head);
+        (new QVBoxLayout(&top))->addWidget(scroll);
+        Head h;
+        h.card = all[2];
+        h.line = "pop'n music";
+        head->set(h);
+        top.resize(700, 800);
+        top.show();
+        app.processEvents();
+        QList<QWidget *> kids = head->findChildren<QWidget *>(Qt::FindDirectChildrenOnly);
+        QWidget *art = kids.value(0);
+        CHECK(art);
+        if (!art) return 1;
+        const int tall = art->height();
+        top.resize(700, 500);
+        app.processEvents();
+        const int low = art->height();
+        CHECK(low < tall - 200);   // (the picture: 3/4 of the panel's width)
+        top.resize(700, 800);
+        app.processEvents();
+        CHECK(art->height() == tall);
+    }
 
     if (g_failed) fprintf(stderr, "%d failed\n", g_failed);
     return g_failed ? 1 : 0;

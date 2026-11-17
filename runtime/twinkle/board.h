@@ -80,6 +80,7 @@ double seconds();
 uint64_t frame_count();
 const std::string &family();
 bool set_input(const std::string &name, int value);
+int input_position(const std::string &name);   // an effector slider's (Core::input_position); -1 else
 const std::vector<uint8_t> &lamp_state();
 std::string display_text();                // the 16-segment display's 9 characters
 void turntable_add(int player, int delta);  // host turntable counts (1024 a turn)

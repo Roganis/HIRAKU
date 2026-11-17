@@ -985,6 +985,13 @@ bool set_input(const std::string &name, int value) {
     return false;
 }
 
+int input_position(const std::string &name) {
+    if (!g.state) return -1;
+    for (int k = 0; k < 5; k++)
+        if (name == "Volume " + std::to_string(k + 1)) return g.state->m_volume[k] & 0x0f;
+    return -1;
+}
+
 const std::vector<uint8_t> &lamp_state() { return g.state->m_lamps; }
 std::string display_text() { return g.state ? std::string(g.state->m_display) : std::string(); }
 

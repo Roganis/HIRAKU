@@ -2,7 +2,8 @@
 // Host controls (runtime/host/input.h) with a controller SDL makes up: an input bound to a key and
 // to a hat direction or an axis's, held by one, isn't let go by the other; a controller unplugged
 // and plugged back in is the same joy<N>, and what it held is let go; a controller left out of the
-// bindings (the game menu's plain gamepad) presses nothing.
+// bindings (the game menu's plain gamepad) presses nothing. IIDX's effector sliders stepped by
+// keys: a press a step from where the slider is, held more after a moment, kept within 0-15.
 //
 //   test_bindings      exit 0 when all hold (0 with a note where SDL has no joysticks to make up)
 #include <cstdio>
@@ -35,6 +36,11 @@ public:
     const uint8_t *mem(uint32_t, uint32_t) const override { return nullptr; }
     uint64_t frame_count() const override { return 0; }
     bool set_input(const std::string &name, int value) override { inputs[name] = value; return true; }
+    int input_position(const std::string &name) const override {
+        if (name.rfind("Volume ", 0) != 0) return -1;
+        auto it = inputs.find(name);
+        return it == inputs.end() ? 8 : it->second;   // (as Twinkle's: in the middle at the start)
+    }
     void turntable_add(int, int) override {}
     const std::vector<uint8_t> &lamp_state() const override { static const std::vector<uint8_t> none; return none; }
     uint64_t lamp_changes() const override { return 0; }
@@ -95,7 +101,9 @@ int main() {
     std::ofstream(file) << "P1 Button 1 = key:Z, joy0:hat0:left\n"
                            "P1 Button 2 = key:X, joy0:axis1+\n"
                            "P1 Button 3 = joy0:button2\n"
-                           "P1 Button 4 = joy0:axis-1+, joy0:button-3\n";   // (refused: no such axis or button)
+                           "P1 Button 4 = joy0:axis-1+, joy0:button-3\n"   // (refused: no such axis or button)
+                           "Volume 2 Up = key:U\n"
+                           "Volume 2 Down = key:J\n";
     SDL_JoystickID pad = plug();
     if (!pad) {
         printf("SDL can't make a controller up here (%s): not run\n", SDL_GetError());
@@ -166,6 +174,37 @@ int main() {
     button(pad, 2, true);
     check(in["P1 Button 3"] == 1, "taken back: its button pressed again");
     button(pad, 2, false);
+
+    // an effector slider on two keys: a step a press, from where it is
+    key(SDLK_U, true);
+    hk::host::input_update(1);
+    check(in["Volume 2"] == 9 && !in.count("Volume 2 Up"), "the slider's up key: a step up from the middle");
+    hk::host::input_update(250);
+    check(in["Volume 2"] == 9, "held a quarter of a second: no more yet");
+    hk::host::input_update(60);
+    check(in["Volume 2"] == 10, "held past 0.3 s: another step");
+    hk::host::input_update(160);
+    check(in["Volume 2"] == 12, "... and one each 0.08 s after");
+    key(SDLK_U, false);
+    hk::host::input_update(500);
+    check(in["Volume 2"] == 12, "let go: it stays");
+    key(SDLK_J, true);
+    hk::host::input_update(1);
+    check(in["Volume 2"] == 11, "the down key: a step down");
+    key(SDLK_J, false);
+    hk::host::input_update(1);
+    in["Volume 2"] = 15;   // (moved by something else: an axis, a cabinet board)
+    key(SDLK_U, true);
+    hk::host::input_update(1);
+    check(in["Volume 2"] == 15, "at the top: stays there");
+    key(SDLK_U, false);
+    hk::host::input_update(1);
+    key(SDLK_J, true);
+    hk::host::input_update(1);
+    hk::host::input_update(5000);
+    check(in["Volume 2"] == 0, "held down long: at the bottom, no further");
+    key(SDLK_J, false);
+    hk::host::input_update(1);
 
     std::remove(file.c_str());
     SDL_Quit();

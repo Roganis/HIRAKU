@@ -1129,6 +1129,12 @@ public:
 #endif
     }
 
+    int input_position(const std::string &name) const override {
+        int k;
+        if (link_ && name.rfind("Volume ", 0) == 0 && (k = std::atoi(name.c_str() + 7)) >= 1 && k <= 5) return link_->slider[k - 1];
+        return -1;
+    }
+
     bool set_input(const std::string &name, int value) override {
         if (!link_) return false;
         auto bit = [&](volatile uint32_t &w, uint32_t b) {

@@ -135,6 +135,7 @@ public:
     const uint8_t *mem(uint32_t addr, uint32_t len) const override { return twinkle::mem(addr, len); }
     uint64_t frame_count() const override { return twinkle::frame_count(); }
     bool set_input(const std::string &name, int value) override { return twinkle::set_input(name, value); }
+    int input_position(const std::string &name) const override { return twinkle::input_position(name); }
     int script_button_delay() const override { return 1; }   // MAME latches digital inputs a frame late
     void turntable_add(int player, int delta) override { twinkle::turntable_add(player, delta); }
     std::string display_text() const override { return twinkle::display_text(); }

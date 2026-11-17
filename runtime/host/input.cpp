@@ -130,6 +130,7 @@ void press(const std::string &name, bool down, double speed = 1.0) {
     if (n > 0) warp::pressed();   // a player's: the fast start-up ends (host/warp.h)
     if (name.find("Turntable") != std::string::npos) return;   // handled in input_update
     if (name.find(" Wheel Up") != std::string::npos || name.find(" Wheel Down") != std::string::npos) return;   // likewise
+    if (name.rfind("Volume ", 0) == 0 && (name.find(" Up") != std::string::npos || name.find(" Down") != std::string::npos)) return;
     menukey::input(name, n > 0 ? 1 : 0);   // (the way out to the game menu watches what the game is given)
     core().set_input(name, n > 0 ? 1 : 0);
 }
@@ -470,6 +471,25 @@ void input_update(double ms) {
         else pos = std::min(pos + ms * 0.6, 128.0);
         if (!dir && pos == 128.0) g_wheel_by_keys.erase(n);
         if ((int)std::lround(pos) != before) core().set_input(n, (int)std::lround(pos));
+    }
+    // IIDX's effector sliders on keys or buttons (a digital "+" and "-"): a press moves one step of
+    // the 16, from where the slider is; held, another after 0.3 s and then each 0.08 s
+    for (int k = 0; k < 5; k++) {
+        static int was[5];
+        static double t[5];
+        const std::string n = "Volume " + std::to_string(k + 1);
+        const int dir = (g_held[n + " Up"] > 0 ? 1 : 0) - (g_held[n + " Down"] > 0 ? 1 : 0);
+        int steps = 0;
+        if (dir && dir != was[k]) steps = 1, t[k] = -220;
+        else if (dir)
+            for (t[k] += ms; t[k] >= 80; t[k] -= 80) steps++;
+        was[k] = dir;
+        if (!steps) continue;
+        int now = core().input_position(n);
+        if (now < 0) now = g_analog.count(n) ? (int)std::lround(g_analog[n]) : 8;
+        const int to = std::clamp(now + dir * steps, 0, 15);
+        if (to != now) core().set_input(n, to);
+        g_analog[n] = to;
     }
     for (int p = 0; p < 2; p++) {
         std::string base = p == 0 ? "P1 Turntable" : "P2 Turntable";

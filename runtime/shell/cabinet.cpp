@@ -353,8 +353,13 @@ std::vector<Control> make_iidx() {
     }
     c.push_back({"Effect", "Effect", "Cabinet", false, "key:E, joy0:button9"});
     c.push_back({"VEFX", "VEFX", "Cabinet", false, "key:W, joy0:button10"});
-    for (int k = 1; k <= 5; k++)
-        c.push_back({"Volume " + std::to_string(k), "Effector slider " + std::to_string(k) + " (analog axis)", "Effector", true, ""});
+    // each slider on an axis, or stepped by two keys or buttons (runtime/host/input.cpp)
+    for (int k = 1; k <= 5; k++) {
+        const std::string n = "Volume " + std::to_string(k), l = "Effector slider " + std::to_string(k);
+        c.push_back({n, l + " (analog axis)", "Effector", true, ""});
+        c.push_back({n + " Up", l + " up (as a button)", "Effector", false, ""});
+        c.push_back({n + " Down", l + " down (as a button)", "Effector", false, ""});
+    }
     c.push_back({"Coin 1", "Coin", "Cabinet", false, "key:5"});
     c.push_back({"Test", "Test", "Cabinet", false, "key:F2"});
     c.push_back({"Service", "Service", "Cabinet", false, "key:9"});

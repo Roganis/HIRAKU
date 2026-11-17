@@ -109,6 +109,9 @@ public:
     // Inputs by MAME name ("P1 Button 3", "Coin 1", "TURNTABLE_P1/Turntable"):
     // 1/0 for buttons, the position for analog inputs. false for an unknown name.
     virtual bool set_input(const std::string &name, int value) = 0;
+    // Where an analog input is now (an IIDX effector slider's 0-15), as the game reads it; -1 if
+    // the core doesn't say. Keys that step a slider start from there (runtime/host/input.cpp).
+    virtual int input_position(const std::string &name) const { (void)name; return -1; }
     // Frames by which an input script's button changes (press, hold, release) lag
     // behind their frame number, to match the MAME oracle: MAME latches digital
     // inputs in its frame update, which runs just before the Lua script's frame

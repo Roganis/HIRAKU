@@ -1467,6 +1467,32 @@ queue at its target). The emulated machine is unchanged.
   queue moved). Then the grid catches up a refresh and the commit goes a 32nd plus 1.5 ms earlier;
   later misses add 0.75 ms. Learning a fixed "pipeline" offset, or reacting to single irregular
   frames, failed (both chase the compositor's own jank).
+- **Catching up without the machine waiting (2026-11-16):** pop'n music 14 with its 240 Hz mod, a
+  5 ms fixed sound queue on the card alone: 157 catch-ups, 153 irregular frames and 153 sound
+  breaks in 6 minutes, the lead at 117 ms. A frame committed late (182 "not ready", the game's
+  own stalls) left every later picture a refresh behind it in fifo's queue; that was judged a
+  miss, and the catch-up was the machine waiting a refresh: a refresh of sound out of a 5 ms queue,
+  and 0.75 ms more lead for good. Now (fifo only) the commit after a late one, and after a miss,
+  doesn't wait for the barrier: it's taken with the queued one (an empty hold commit, or the next
+  frame's picture in its place), the machine keeps its time, and the pictures after a late commit
+  aren't judged. Also, the best commit-to-screen time is found again when the refreshes per frame
+  change (the [[rate]] mod's 4 ↔ 1): kept from the 1-refresh frames, the 60 Hz parts after a song
+  judged a miss in nearly every window. `HK_PACING_DRAIN=0` is the old way; `HK_PACING_STALL=N,MS`
+  makes every Nth frame's burst MS ms longer, for testing. Virtual KWin (60 Hz), pop'n 14, a 20 ms
+  stall every 120 frames: 321 breaks, 44 catch-ups, lead 40 ms before; 64 breaks (the stalls' own),
+  1 catch-up, lead 7.2 ms, 30 pictures replaced after. Not yet checked on the owner's 240 Hz display.
+  Not at the game's own speed (smooth motion): there a frame starts at its own moment, so the catch-up
+  (the grid a refresh on) never held the machine, and it is what puts an in-between picture on the
+  refresh it was drawn for; dropped there, all of pop'n music 3's at 240 Hz came a refresh late
+  (14,422 of 14,422). There, a miss judged after a late commit moves the grid but not the lead
+  (virtual KWin, pop'n 3, a 20 ms stall every 150 frames: lead 2.0 ms, 1 move; 17.2 ms, 15 moves
+  without). pop'n 3's notes move 2 pixels a frame (384 lines): an in-between picture has one place
+  for them, a pixel on, so 240 Hz shows them as 120 Hz does.
+- **Which refresh each picture reached (2026-11-16):** the exit report's "refreshes after the one
+  meant" line counts, for the frames' own pictures and their other refreshes' (smooth motion), how many
+  refreshes after the one meant each was shown. One number for all is a steady picture; a mix is
+  judder. (The older "a refresh or more late" count couldn't tell the two apart: in a virtual KWin every
+  picture comes one refresh after its label, steadily.)
 - **Without Wayland** (X11): the grid runs on the display mode's rate with an unknown phase.
 - Tested with the window on DP-1 (240 Hz) and DP-2 (144 Hz, with `HK_DISPLAY_SYNC_SKEW` to force a
   fit); 60 Hz still to test on a real 60 Hz display (the N100 cabinet).

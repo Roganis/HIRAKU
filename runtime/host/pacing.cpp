@@ -59,10 +59,35 @@ std::vector<int64_t> g_samples;   // recent burst + draw times
 size_t g_sample_at = 0;
 int64_t g_burst_start = 0;
 bool g_overrun = false;        // this frame wasn't ready at its commit time
+// Wayland fifo-v1: a picture committed after the compositor's deadline is shown a refresh late, and
+// every picture after it, each held behind the one before by its barrier, comes a refresh late too,
+// for good. It was caught up by the machine waiting a refresh (presented(): a "miss"), which took a
+// refresh of sound out of the queue: with a 5 ms queue at 240 Hz, a break each time (pop'n music 14
+// with its high frame rate, 2026-11-16: 157 catch-ups, 153 breaks in 6 minutes), and each also raised
+// the lead for good (to 117 ms), though the deadline had not moved. Now the commit after a late one
+// doesn't wait for the barrier: it is taken with the late one at the same refresh (an empty hold
+// commit, nothing lost; or the next frame's picture, the late one never shown), and the game keeps
+// its time. HK_PACING_DRAIN=0: the old way, to compare.
+const bool g_drain = !getenv("HK_PACING_DRAIN") || strcmp(getenv("HK_PACING_DRAIN"), "0") != 0;
+[[maybe_unused]] bool g_drop = false;   // the next commit doesn't wait for the fifo barrier
+bool g_overrun_seen = false;   // a late commit since the last window was judged (its miss: the game's, not the deadline's)
+// testing: HK_PACING_STALL=N,MS: every Nth frame's burst runs MS ms long (a stall, as the game's)
+int g_stall_every = 0;
+double g_stall_ms = 0;
 
 uint64_t n_frames = 0, n_presented = 0, n_on_time = 0, n_late = 0, n_overrun = 0, n_resync = 0, n_discarded = 0,
          n_moved = 0;
 uint64_t n_extra = 0, n_extra_shown = 0, n_extra_late = 0, n_extra_discarded = 0;   // the frames' other refreshes' commits (commit_extra)
+// how many refreshes after the one meant each frame's own picture, and each of its other refreshes'
+// pictures, reached the screen (-1 to 3 and more: the report). The same number for all is a steady
+// picture a little later; a mix of them is pictures out of step: judder (2026-11-16, pop'n music 3 at
+// 240 Hz: half of the in-between pictures a refresh late, the report saying no more)
+uint64_t n_frame_off[5] = {}, n_extra_off[5] = {};
+void count_off(uint64_t *hist, int64_t late) {
+    if (g_T <= 0) return;
+    const long o = std::lround((double)late / (double)g_T);
+    hist[std::clamp(o, -1L, 3L) + 1]++;
+}
 uint64_t n_shown = 0, n_zero_copy = 0;   // every frame's presentation feedback, either mode: shown, and
                                          // of them scanned out straight from our buffer (not composited)
 std::string g_state;           // the last announced state, to print changes once
@@ -144,11 +169,18 @@ std::vector<int64_t> g_window; // commit-to-screen times for the next median
 std::vector<int64_t> g_late;   // (DXGI) how late each picture reached the screen after its refresh
 constexpr int64_t MARGIN = 3 * MS / 2;
 bool g_dxgi = false;           // presented through the DXGI swap chain (Windows: dxgi_feedback())
+bool g_fifo_on = false;        // presented through Wayland's fifo-v1 (each commit held behind the one before)
+// (not at the game's own speed, smooth motion's: there each frame starts at its own moment
+// (wait_next), so a catch-up moving the grid a refresh never held the machine; it is what puts each
+// in-between picture's moment on the refresh it shows on. Dropped there instead, all of pop'n music
+// 3's in-between pictures at 240 Hz came a refresh after the moment each was drawn for)
+bool draining() { return g_fifo_on && g_drain && !(g_active && g_exact); }
 [[maybe_unused]] void presented(int64_t t, int64_t committed, int64_t target, bool overrun, int64_t refresh, int k) {
     n_presented++;
     if (refresh > 0) g_T = refresh, g_T_exact = true;
     if (!g_active || g_T <= 0) return;
     int64_t e = t - target;
+    count_off(n_frame_off, e);
     g_target += (e - std::llround((double)e / (double)g_T) * g_T) / 8;   // keep the grid on the real vblanks
     const int64_t prev = g_prev_t, d = t - committed;
     g_prev_t = t;
@@ -166,7 +198,10 @@ bool g_dxgi = false;           // presented through the DXGI swap chain (Windows
         // (DXGI: and the pictures after it may still be queued behind it, shown late with their
         // own commits on time: not a deadline missed either; counted as such, each of a game's
         // stalls raised the lead for good, past a refresh, and the swap chain's queue backed up)
-        if (g_dxgi) g_skip = std::max(g_skip, 4), g_window.clear(), g_late.clear();
+        // (Wayland fifo: the pictures after it no longer queue behind it, the next commit taken with
+        // it, but any of them judged with it would still be the game's lateness)
+        if (g_dxgi || g_fifo_on) g_skip = std::max(g_skip, 4), g_window.clear(), g_late.clear();
+        g_overrun_seen = true;
         return;
     }
     // A miss: on Wayland, the commit to the screen took half a refresh longer than its best (the
@@ -191,8 +226,18 @@ bool g_dxgi = false;           // presented through the DXGI swap chain (Windows
         } else {
             missed = median > g_best + g_T / 2;
         }
-        if (missed && !g_sweep) {   // a miss: catch up, then commit earlier
-            g_target += g_T;
+        // Wayland fifo: a miss after a late commit is the pictures still a refresh behind it (smooth
+        // motion's, which go on queueing); caught up, but the deadline hasn't moved: the lead stays
+        const bool games = g_fifo_on && g_overrun_seen;
+        g_overrun_seen = false;
+        if (missed && !g_sweep && games) {
+            if (draining()) g_drop = true;
+            else g_target += g_T;
+            g_skip = 6;
+        } else if (missed && !g_sweep) {   // a miss: catch up, then commit earlier
+            // Wayland fifo: the next commit taken with the late one; the machine keeps its time
+            if (draining()) g_drop = true;
+            else g_target += g_T;
             g_lead += g_settled ? MARGIN / 2 : g_T / 32 + MARGIN;
             // DXGI: under a refresh. Earlier, each picture would wait in the swap chain's queue
             // behind the last, two deep, and a present that found it full waited a refresh
@@ -256,6 +301,7 @@ const wp_presentation_feedback_listener feedback_listener = {
         if (p->k < 0) {   // an in-between commit: shown at its refresh, or later
             n_extra_shown++;
             if (clock_to_steady(t) - p->target > g_T / 2) n_extra_late++;
+            count_off(n_extra_off, clock_to_steady(t) - p->target);
             delete p;
             g_live.erase(fb);
             wp_presentation_feedback_destroy(fb);
@@ -312,6 +358,7 @@ void wayland_init() {
     wl_display_roundtrip_queue(g_wd, g_q);   // the globals
     wl_display_roundtrip_queue(g_wd, g_q);   // the presentation clock
     if (g_enabled && g_fifo_mgr && g_pres) g_fifo = wp_fifo_manager_v1_get_fifo(g_fifo_mgr, g_surface);
+    g_fifo_on = g_fifo != nullptr;
     if (g_ct_mgr) {   // applies from the next commit (the first frame)
         g_ct = wp_content_type_manager_v1_get_surface_content_type(g_ct_mgr, g_surface);
         wp_content_type_v1_set_content_type(g_ct, WP_CONTENT_TYPE_V1_TYPE_GAME);
@@ -328,6 +375,7 @@ void wayland_shutdown() {
     if (g_ct) wp_content_type_v1_destroy(g_ct);
     if (g_ct_mgr) wp_content_type_manager_v1_destroy(g_ct_mgr);
     if (g_fifo) wp_fifo_v1_destroy(g_fifo);
+    g_fifo_on = false;
     if (g_fifo_mgr) wp_fifo_manager_v1_destroy(g_fifo_mgr);
     if (g_pres) wp_presentation_destroy(g_pres);
     if (g_reg) wl_registry_destroy(g_reg);
@@ -376,6 +424,7 @@ void dxgi_shown(const dxgi::Shown &s) {
         } else {
             n_extra_shown++;
             if (t - p.target > g_T / 2) n_extra_late++;
+            count_off(n_extra_off, t - p.target);
         }
     }
     g_sent.erase(g_sent.begin(), g_sent.begin() + (long)used);
@@ -430,6 +479,10 @@ void init(SDL_Window *win, bool enabled) {
     g_enabled = enabled;
     g_samples.assign(512, 0);
     if (const char *s = getenv("HK_DISPLAY_SYNC_SKEW")) g_max_skew = atof(s);
+    if (const char *s = getenv("HK_PACING_STALL")) {
+        g_stall_every = atoi(s);
+        if (const char *c = strchr(s, ',')) g_stall_ms = atof(c + 1);
+    }
     refresh_from_mode();
 #ifdef HK_WITH_WAYLAND
     wayland_init();   // with display sync off too: the content type, and whether frames go out directly
@@ -461,7 +514,7 @@ void display_changed() {
     g_fresh = true;
     g_lead_set = false;   // find this display's deadline again
     g_settled = false;
-    g_skip = 5, g_prev_t = 0, g_best = 0;
+    g_skip = 5, g_prev_t = 0, g_best = 0, g_overrun_seen = false;
     g_window.clear();
     g_late.clear();
 }
@@ -580,6 +633,12 @@ bool frame(double period) {
         announce("off " + std::to_string(std::lround(hz * 10)), b);
         return false;
     }
+    // A new number of refreshes a frame (a mod's [[rate]]: 4 at 59.94 Hz on a 240 Hz display, 1 at
+    // 240): the compositor's time to the screen found again. Kept from the other, it judged a "miss"
+    // in nearly every window of ten frames: pop'n music 14 back at 60 Hz after a song at 240, a frame
+    // shown late every 0.3 s, against one in 5 s before the song (its best from the 1-refresh frames,
+    // each frame of 4 committed with 3 empty ones after it)
+    if (g_active && k != g_k) g_best = 0, g_window.clear(), g_skip = std::max(g_skip, 5);
     g_active = true;
     g_k = k;
     g_speed = 1e9 / (g_game_hz * (double)k * (double)g_T);   // smoothed: the sound's rate shouldn't flutter
@@ -630,6 +689,7 @@ static void burst_done(int64_t now) {
 }
 
 void wait_commit() {
+    if (g_stall_every > 0 && n_frames % (uint64_t)g_stall_every == 0) SDL_DelayPrecise((Uint64)(g_stall_ms * 1e6));
     const int64_t now = (int64_t)prof::now_ns();
     burst_done(now);
     const int64_t at = g_target - g_lead;
@@ -670,6 +730,19 @@ bool commit_queued(int64_t *at_ns) {
 #endif
 }
 
+#ifdef HK_WITH_WAYLAND
+// The commit about to be made shown no sooner than the previous one's refresh, and for one at least
+// (fifo-v1); or, after a late commit or a miss (g_drop), taken with the one before as soon as that is
+int64_t g_commit_ns = 0;   // (HK_PACING_DEBUG: the frame's commit, for the swap's time)
+bool g_commit_held = false;
+static void fifo_barrier(bool late) {
+    wp_fifo_v1_set_barrier(g_fifo);
+    g_commit_held = !g_drop;
+    if (!g_drop) wp_fifo_v1_wait_barrier(g_fifo);
+    g_drop = late && draining();
+}
+#endif
+
 void commit() {
 #ifdef _WIN32
     if (g_dxgi) dxgi_sent(g_target, g_k);
@@ -680,19 +753,18 @@ void commit() {
         wp_presentation_feedback_add_listener(fb, &feedback_listener, new Pending{g_target, g_overrun, g_k, (int64_t)prof::now_ns()});
         g_live.insert(fb);
     }
-    if (g_fifo) {   // shown no sooner than the previous frame's last refresh, and for one at least
-        wp_fifo_v1_set_barrier(g_fifo);
-        wp_fifo_v1_wait_barrier(g_fifo);
-    }
+    g_commit_ns = (int64_t)prof::now_ns();
+    if (g_fifo) fifo_barrier(g_overrun);   // shown no sooner than the previous frame's last refresh
 #endif
 }
 
 void committed(bool hold) {
 #ifdef HK_WITH_WAYLAND
     if (!g_fifo) return;
+    if (g_debug) fprintf(stderr, "pacing: swapped %.3f ms after the commit, %s\n", ((int64_t)prof::now_ns() - g_commit_ns) / 1e6,
+                         g_commit_held ? "held behind the one before" : "not held");
     for (int i = 1; hold && i < g_k; i++) {   // the frame's other refreshes: empty updates, one refresh each
-        wp_fifo_v1_set_barrier(g_fifo);
-        wp_fifo_v1_wait_barrier(g_fifo);
+        fifo_barrier(false);
         wl_surface_commit(g_surface);
     }
     wl_display_flush(g_wd);
@@ -737,8 +809,7 @@ bool commit_extra(int i) {
         g_live.insert(fb);
     }
     if (g_fifo) {
-        wp_fifo_v1_set_barrier(g_fifo);
-        wp_fifo_v1_wait_barrier(g_fifo);
+        fifo_barrier(false);
         return false;
     }
 #endif
@@ -842,6 +913,15 @@ std::string describe() {
         snprintf(b, sizeof b, "\nvideo: the frames' other refreshes: %llu pictures committed, %llu shown (%llu of them a refresh or more late), %llu replaced",
                  (unsigned long long)n_extra, (unsigned long long)n_extra_shown, (unsigned long long)n_extra_late,
                  (unsigned long long)n_extra_discarded);
+        out += b;
+    }
+    if (n_frame_off[0] + n_frame_off[1] + n_frame_off[2] + n_frame_off[3] + n_frame_off[4]) {
+        const uint64_t *f = n_frame_off, *x = n_extra_off;
+        snprintf(b, sizeof b, "\nvideo: refreshes after the one meant (-1, 0, 1, 2, 3+): the frames' pictures %llu/%llu/%llu/%llu/%llu; "
+                 "their other refreshes' %llu/%llu/%llu/%llu/%llu (one number for all: steady; a mix: pictures out of step)",
+                 (unsigned long long)f[0], (unsigned long long)f[1], (unsigned long long)f[2], (unsigned long long)f[3],
+                 (unsigned long long)f[4], (unsigned long long)x[0], (unsigned long long)x[1], (unsigned long long)x[2],
+                 (unsigned long long)x[3], (unsigned long long)x[4]);
         out += b;
     }
 #ifdef _WIN32

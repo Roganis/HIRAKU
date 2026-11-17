@@ -1,5 +1,31 @@
 # GuitarFreaks and DrumMania V (E02, F02, E03, F03; Konami Python 2): cards, a credit's results, the
 # start of the next credit. Made-up cards and results.
+# nothing set: the boot calls (pcbtracker, message, the three posevents in one call) and the
+# event phase's two calls, -1 for each V model (the cabinet's own; 0 would set it)
+model E02:J:A:A:2005022200
+> <pcbtracker method="alive"/>
+< 200 <response><pcbtracker status="0"></pcbtracker></response>
+> <message method="get"/>
+< 200 <response><message status="0" phase="-1" text=""></message></response>
+> <E02 type="game" method="get"/>
+< 200 <response><E02 status="0" phase="-1" message=""></E02></response>
+> <posevent method="income" slot1="00000000" sync="1"/><posevent method="sales" play="00000000" coin="00000000" service="00000000" article="0" sync="1"/><posevent method="sale" article1="00000000" article2="00000000" article3="00000000" article4="00000000" payment1="00000000" payment2="00000000" payment3="00000000" sync="1"/>
+< 200 <response><posevent status="0"></posevent><posevent status="0" approve="1" margin="0"></posevent><posevent status="0" approve="1" margin="0"></posevent></response>
+model F02:J:A:A:2005112200
+> <message method="get"/>
+< 200 <response><message status="0" phase="-1" text=""></message></response>
+> <F02 type="game" method="get"/>
+< 200 <response><F02 status="0" phase="-1" message=""></F02></response>
+model E03:J:A:A:2005022200
+> <message method="get"/>
+< 200 <response><message status="0" phase="-1" text=""></message></response>
+> <E03 type="game" method="get"/>
+< 200 <response><E03 status="0" phase="-1" message=""></E03></response>
+model F03:J:A:A:2005092800
+> <message method="get"/>
+< 200 <response><message status="0" phase="-1" text=""></message></response>
+> <F03 type="game" method="get"/>
+< 200 <response><F03 status="0" phase="-1" message=""></F03></response>
 model F03:J:A:A:2005092800
 >e <services method="get"/>
 < 200 info=1-484b0001-0001 <response><services expire="600" status="0"><item name="posevent" url="http://cabinet.test:8080/"/><item name="pcbtracker" url="http://cabinet.test:8080/"/><item name="numbering" url="http://cabinet.test:8080/"/><item name="package" url="http://cabinet.test:8080/"/><item name="userdata" url="http://cabinet.test:8080/"/><item name="userid" url="http://cabinet.test:8080/"/><item name="local" url="http://cabinet.test:8080/"/><item name="eemall" url="http://cabinet.test:8080/"/><item name="shopinf" url="http://cabinet.test:8080/"/><item name="message" url="http://cabinet.test:8080/"/><item name="cardmng" url="http://cabinet.test:8080/"/><item name="cardreis" url="http://cabinet.test:8080/"/><item name="facility" url="http://cabinet.test:8080/"/><item name="ntp" url="ntp://10.50.0.1/"/><item name="keepalive" url="http://10.50.0.1/keepalive?pa=10.50.0.1&amp;ia=10.50.0.1&amp;ga=10.50.0.1&amp;ma=10.50.0.1&amp;t1=2&amp;t2=10"/></services></response>

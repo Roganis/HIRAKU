@@ -4,6 +4,27 @@
 # 2003-06-01 12:00:00 UTC, 1054468800: its udate is compared but for the seconds since)
 mask udate="10544688(\d\d)"
 volatile ^iidx-.*-courses$
+# nothing set: message.get and game get, as the later pop'n games' answers give them
+model FDD:J:A:G
+> <message method="get"/>
+< 200 <response><message status="0" phase="-1" text=""></message></response>
+> <FDD type="game" method="get"/>
+< 200 <response><FDD status="SOK" method="get"></FDD></response>
+model GLD:J:A:A:2007072301
+> <message method="get"/>
+< 200 <response><message status="0" phase="-1" text=""></message></response>
+> <GLD type="game" method="get"/>
+< 200 <response><GLD status="0" phase="-1" message=""></GLD></response>
+model HDD:J:A:A:2008031100
+> <message method="get"/>
+< 200 <response><message status="0" phase="-1" text=""></message></response>
+> <HDD type="game" method="get"/>
+< 200 <response><HDD status="0" phase="-1" message=""></HDD></response>
+model I00:J:A:A:2009072200
+> <message method="get"/>
+< 200 <response><message status="0" phase="-1" text=""></message></response>
+> <I00 type="game" method="get"/>
+< 200 <response><I00 status="0" phase="-1" message=""></I00></response>
 model I00:J:A:A:2009072200
 >e <services method="get"/>
 < 200 info=1-484b0001-0001 <response><services expire="600" status="0"><item name="posevent" url="http://cabinet.test:8080/"/><item name="pcbtracker" url="http://cabinet.test:8080/"/><item name="numbering" url="http://cabinet.test:8080/"/><item name="package" url="http://cabinet.test:8080/"/><item name="userdata" url="http://cabinet.test:8080/"/><item name="userid" url="http://cabinet.test:8080/"/><item name="local" url="http://cabinet.test:8080/"/><item name="eemall" url="http://cabinet.test:8080/"/><item name="shopinf" url="http://cabinet.test:8080/"/><item name="message" url="http://cabinet.test:8080/"/><item name="cardmng" url="http://cabinet.test:8080/"/><item name="cardreis" url="http://cabinet.test:8080/"/><item name="facility" url="http://cabinet.test:8080/"/><item name="pc" url="http://cabinet.test:8080/"/><item name="music" url="http://cabinet.test:8080/"/><item name="grade" url="http://cabinet.test:8080/"/><item name="ranking" url="http://cabinet.test:8080/"/><item name="shop" url="http://cabinet.test:8080/"/><item name="pcbevent" url="http://cabinet.test:8080/"/><item name="keepalive" url="http://127.0.0.1/keepalive?pa=127.0.0.1&amp;ia=127.0.0.1&amp;ga=192.168.0.1&amp;ma=127.0.0.1&amp;t1=2&amp;t2=10"/></services></response>

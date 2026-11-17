@@ -1,6 +1,22 @@
 # pop'n music 12 (E12), 13 (E13) and 14 (F14): the player's record (new, get, set, score), a
 # player carried over from the game before (conv), cards and PINs (cardmng), NET TAISEN's settings
 # and results, the rankings, one card for all. Made-up cards and data.
+# nothing set: the event phase's two calls (-1: the cabinet's own)
+model E12:J:A:A:2004111700
+> <message method="get"/>
+< 200 <response><message status="0" phase="-1" text=""></message></response>
+> <E12 type="game" method="get"/>
+< 200 <response><E12 status="0" phase="-1" play_enable="1" local_matching_enable="1" matching_sec="30" room_num="0,0,0,0,0,0,0,0,0,0" message=""></E12></response>
+model E13:J:A:A:2005090500
+> <message method="get"/>
+< 200 <response><message status="0" phase="-1" text=""></message></response>
+> <E13 type="game" method="get"/>
+< 200 <response><E13 status="0" phase="-1" net_event="2" local_matching_enable="1" matching_sec="30" room_num="0,0,0,0,0,0,0,0,0,0" message=""></E13></response>
+model F14:J:A:A:2006071000
+> <message method="get"/>
+< 200 <response><message status="0" phase="-1" text=""></message></response>
+> <F14 type="game" method="get"/>
+< 200 <response><F14 status="0" phase="-1" net_event="2" local_matching_enable="1" matching_sec="30" message=""></F14></response>
 model D11:J:A:A
 # pop'n 11's data of an older card, to carry over: its PIN 1 2 3 4 at 0x9f3, two songs' words
 > <userdata method="write" card="2003010000000010" time="2004-03-24 10:00:00+9" model="D11:J:A:A" label=""><b>{b64 0x300 0x10=54455354}</b><b>{b64 0x300 0x110=0100 0x12c=c000}</b><b>{b64 0x300}</b><b>{b64 0x128 0xf3=01020304}</b></userdata>

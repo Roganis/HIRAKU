@@ -1,6 +1,12 @@
 # Models no game row names (runtime/eamuse/games.h): a model the server doesn't know is answered
 # as a later pop'n (pop'n 10 on's answers, then pop'n 9's); K39 as a System 573 GuitarFreaks (the
 # ?39 pattern); a call with no model as pop'n 9. Made-up cards and data.
+# nothing set: the event phase's two calls for a model the table doesn't name (-1)
+model Z99:J:A:A
+> <message method="get"/>
+< 200 <response><message status="0" phase="-1" text=""></message></response>
+> <Z99 type="game" method="get"/>
+< 200 <response><Z99 status="0" phase="-1" message=""></Z99></response>
 model Z99:J:A:A
 >e <services method="get"/>
 < 200 info=1-484b0001-0001 <response><services expire="600" status="0"><item name="posevent" url="http://cabinet.test:8080/"/><item name="pcbtracker" url="http://cabinet.test:8080/"/><item name="numbering" url="http://cabinet.test:8080/"/><item name="package" url="http://cabinet.test:8080/"/><item name="userdata" url="http://cabinet.test:8080/"/><item name="userid" url="http://cabinet.test:8080/"/><item name="local" url="http://cabinet.test:8080/"/><item name="eemall" url="http://cabinet.test:8080/"/><item name="shopinf" url="http://cabinet.test:8080/"/><item name="message" url="http://cabinet.test:8080/"/><item name="cardmng" url="http://cabinet.test:8080/"/><item name="cardreis" url="http://cabinet.test:8080/"/><item name="facility" url="http://cabinet.test:8080/"/></services></response>

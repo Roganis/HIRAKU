@@ -19,6 +19,10 @@ namespace hk::ea {
 // pop'n music 10 on (docs/EAMUSE3.md, "Later games"), and what the later games share with them: game
 // is the model's first three characters, g its row (games.h). "" leaves the call to pop'n 9's
 // answers (services, numbering, userid, posevent, ...).
+// The event phase message.get and game get give: the game's phase setting, -1 (the cabinet's own)
+// when it has none or it is empty (strtol would read "" as 0, a phase the game then sets)
+static long event_phase(const std::string &v) { return v.empty() ? -1 : std::strtol(v.c_str(), nullptr, 10); }
+
 std::string Server::answer_later(const Game &g, const Call &call, const Request &r, const std::string &host) {
     const std::string game = call.model.substr(0, 3), &m = r.module, &f = r.method;
     const bool popn15_18 = g.family == Family::popn_pc, iidx_gold_on = g.family == Family::iidx14_16;
@@ -276,8 +280,9 @@ std::string Server::answer_later(const Game &g, const Call &call, const Request 
         }
     }
     if (m == "message" && f == "get") {   // (0x19f4e0) phase: the event phase, set online when >= 0
-        // (0x18dee0); -1 leaves the cabinet's own. text: the owner's message.
-        const long phase = std::strtol(setting_of(g, "phase", game).c_str(), nullptr, 10);
+        // (0x18dee0); -1 leaves the cabinet's own. text: the owner's message. A game with no phase
+        // setting of its own (GuitarFreaks and DrumMania V, IIDX) is answered -1, as it always was
+        const long phase = event_phase(setting_of(g, "phase", game));
         return "<message status=\"0\" phase=\"" + std::to_string(phase) + "\" text=\"" + esc(message()) + "\"/>";
     }
     if (m == "eemall" && f == "get") {   // (0x19eda8) points, then <item num/> and <kisekae path pri/>
@@ -345,7 +350,7 @@ std::string Server::answer_game(const std::string &game, const Request &r) {
     }
     if (type == "game" && f == "get") {   // phase: as pop'n 10's message.get (-1: the cabinet's own)
         const Game &g = game_of(game);
-        const long phase = std::strtol(setting_of(g, "phase", game).c_str(), nullptr, 10);
+        const long phase = event_phase(setting_of(g, "phase", game));
         // pop'n 13 and 14 also read net_event (14's 0x17e9308), the network event running: 1 the
         // INTERNET RANKING (14's 0x17fdc78: the attract mode's course boards, the courses' results
         // and high scores online; every use asks for exactly 1), 2 NET TAISEN, one or the other.

@@ -3,6 +3,12 @@
 # (the lobby numbers a room by the clock's seconds unless a higher number is there: a clock that
 # starts where those seconds are 0, and another cabinet's room 500 there beforehand, make it 501)
 clock 2003-05-31 16:53:20
+# nothing set: message.get and the older games' game get
+model M39:K:D:A:2026041500
+> <message method="get"/>
+< 200 <response><message status="0" phase="-1" text=""></message></response>
+> <M39 type="game" method="get"/>
+< 200 <response><M39 status="0" phase="-1" message=""></M39></response>
 model M39:K:D:A:2026041500
 volatile ^lobby24-M39$
 >e <services method="get"/>

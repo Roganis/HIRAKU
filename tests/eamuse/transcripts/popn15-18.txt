@@ -1,6 +1,27 @@
 # pop'n music 15 (G15), 16 (H16), 17 (I17) and 18 (J39), the PC games: the game's settings, cards,
 # the player's record (new, get, set, score), a player carried over from the game before, the
 # rankings, NET TAISEN's results, one card for all. Made-up cards and data.
+# nothing set: message.get and the older games' game get
+model G15:J:A:A:2007091800
+> <message method="get"/>
+< 200 <response><message status="0" phase="-1" text=""></message></response>
+> <G15 type="game" method="get"/>
+< 200 <response><G15 status="0"></G15></response>
+model H16:J:A:A:2008052700
+> <message method="get"/>
+< 200 <response><message status="0" phase="-1" text=""></message></response>
+> <H16 type="game" method="get"/>
+< 200 <response><H16 status="0" phase="-1" message=""></H16></response>
+model I17:J:A:A:2009022500
+> <message method="get"/>
+< 200 <response><message status="0" phase="-1" text=""></message></response>
+> <I17 type="game" method="get"/>
+< 200 <response><I17 status="0" phase="-1" message=""></I17></response>
+model J39:J:A:A:2010040500
+> <message method="get"/>
+< 200 <response><message status="0" phase="-1" text=""></message></response>
+> <J39 type="game" method="get"/>
+< 200 <response><J39 status="0" phase="-1" message=""></J39></response>
 # A pop'n 14 player to carry over: song 5's Hyper cleared, its score
 file cards cardid=E004010000000A01\tcardtype=1\tpass=1234\trefid=48524B0000000001
 zeros pdata-F14-48524B0000000001 0xdb8 0x00=424f42 0x1c=0200 0x1e=0700 0x38=04000000

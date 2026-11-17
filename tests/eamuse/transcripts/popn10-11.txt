@@ -1,5 +1,16 @@
 # pop'n music 10 (C20) and 11 (D11): a card's data kept per game, a pop'n 9 card carried over, the
 # course ranking, the shops' boards, the event phase, ee'MALL, pop'n 11's own module. Made-up data.
+# nothing set: the event phase's two calls (-1: the cabinet's own)
+model C20:J:A:A
+> <message method="get"/>
+< 200 <response><message status="0" phase="-1" text=""></message></response>
+> <C20 type="game" method="get"/>
+< 200 <response><C20 status="0" phase="-1" message=""></C20></response>
+model D11:J:A:A
+> <message method="get"/>
+< 200 <response><message status="0" phase="-1" text=""></message></response>
+> <D11 type="game" method="get"/>
+< 200 <response><D11 status="0" phase="-1" message=""></D11></response>
 model C00:J:A:A
 # pop'n 9's data of the card, to carry over: songs 5 and 10 cleared
 > <userdata method="write" card="2003010000000010" time="2003-06-02 06:42:41+9" model="C00:J:A:A" label=""><b>{b64 0x300 0x10=54455354}</b><b>{b64 0x260 0x11b=03 0x120=0f}</b></userdata>

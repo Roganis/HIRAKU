@@ -18,6 +18,7 @@
 #   share/doc/hiraku-server/      docs/SERVER.md, the licence, the bundled headers' licences
 #   deploy/                       the systemd units, the config and Caddy examples, the Dockerfile
 #   README.txt
+#   VERSION                       the release's number (as the desktop packages'; none without HK_VERSION)
 # No game data and nothing of the desktop package.
 set -euo pipefail
 build=${1:?build dir}
@@ -96,6 +97,7 @@ HIRAKU is free software under the GNU GPL version 3 or later (share/doc/hiraku-s
 uses cpp-httplib (MIT) and JSON for Modern C++ (MIT): their licences are in
 share/doc/hiraku-server/third_party/.
 EOF
+[ -n "$release" ] && printf '%s\n' "$release" > "$d/VERSION"
 check_build_paths "$root" "$d/bin"
 (cd "$d" && find . -type f | sed 's|^\./||' | LC_ALL=C sort > MANIFEST.txt)
 tar -C "$stage" --owner=0 --group=0 -cf - hiraku-server | xz -9 -T1 > "$out"

@@ -35,6 +35,13 @@ for f in bin/hiraku-server share/hiraku-server/web/index.html share/doc/hiraku-s
 done
 extra=$(cd "$p" && find . -type f \( -name '*.chd' -o -name '*.bin' -o -name '*.so*' -o -name 'hiraku' -o -name 'hiraku-eamuse' \) | head -3)
 [ -z "$extra" ] && ok "the package's files (no library, game data or desktop program in it)" || bad "the package holds $extra"
+# a release's package says which release it is, as its name does (VERSION, as the desktop packages')
+rel=$(basename "$archive"); rel=${rel#hiraku-server}; rel=${rel%-linux-x86_64-experimental.tar.xz}; rel=${rel#-}
+if [ -n "$rel" ]; then
+  [ "$(cat "$p/VERSION" 2>/dev/null)" = "$rel" ] && ok "VERSION says $rel, as the package's name" || bad "VERSION: $(cat "$p/VERSION" 2>&1 | head -1), the package's name says $rel"
+else
+  [ ! -e "$p/VERSION" ] && ok "no VERSION in a package without a release's number" || bad "VERSION in a package whose name has no number: $(head -1 "$p/VERSION")"
+fi
 names=$(cd "$p" && find . \( -name names -o -name '*.json' \) | head -3)
 [ -z "$names" ] && ok "no song names in the package (no names folder, no .json pack)" || bad "the package holds $names"
 

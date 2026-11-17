@@ -352,7 +352,7 @@ hiraku-server has a package of its own, `hiraku-server-VERSION-linux-x86_64-expe
 among a release's downloads (made by `tools/package-server.sh BUILD_DIR`, without `VERSION` unless
 `HK_VERSION` is set; tried by `tools/smoke-server.sh`): `bin/hiraku-server`, its web
 pages in `share/hiraku-server/web`, these docs and the licences in `share/doc/hiraku-server`, and
-`deploy/` (the files below). It is not in HIRAKU's desktop packages. It needs glibc and libstdc++ as
+`deploy/` (the files below), and a release's number in `VERSION`. It is not in HIRAKU's desktop packages. It needs glibc and libstdc++ as
 new as its README says, and the system's SQLite 3: on Debian or Ubuntu, `apt install libsqlite3-0`.
 
 ### From the package, as a service

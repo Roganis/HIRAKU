@@ -182,6 +182,7 @@ public:
         if (frame == m_frame) return;
         const bool next = frame == m_frame + 1;
         m_frame = frame;
+        m_jumped = false;
         std::vector<Track> tracks(from.size() == moves.size() ? moves.size() : 0);
         for (size_t k = 0; k < tracks.size(); k++) {
             if (from[k] < 0) continue;
@@ -257,6 +258,18 @@ public:
                 std::sort(mv.begin(), mv.end());
                 double a = mv[mv.size() / 2];
                 if (mv.size() % 2 == 0) a = (a + mv[mv.size() / 2 - 1]) / 2;
+                // a jump, not the line going on: it starts again, and the jump isn't carried on (it
+                // may well not happen again). beatmania III's song list wobbles a pixel a frame and
+                // then snaps 29 at once: the line taken through it put the rows 15 pixels off where
+                // the game drew them, on the frame's own picture too, and carried them on (issue 15)
+                static const bool jumps = !std::getenv("HK_SCROLL_JUMP") || std::string(std::getenv("HK_SCROLL_JUMP")) != "0";
+                if (jumps && std::fabs(a - v * g) > std::max(4.0, 2 * std::fabs(v) * g)) {
+                    m_jumped = true, m_jx = axis ? 0 : a, m_jy = axis ? a : 0;
+                    m_pos.clear();
+                    m_cx = m_cy = 0;
+                    m_member.assign(moves.size(), 0), m_lag.assign(moves.size(), 0.0), m_off.assign(moves.size(), 0.0);
+                    return;
+                }
                 if (std::fabs(a) < std::fabs(v) * g / 2 || a * v <= 0) {   // most stood still: held
                     m_held = true, a = 0;
                     m_cx = axis ? 0 : v, m_cy = axis ? v : 0;
@@ -399,6 +412,11 @@ private:
         return f;
     }
     void offset_guess(int dx, int dy, double t, double &ox, double &oy, int obj) const {
+        // (the line jumped this frame: what jumped with it stays where the game drew it)
+        if (m_jumped && std::fabs(dx - m_jx) <= 1.5 && std::fabs(dy - m_jy) <= 1.5) {
+            ox = oy = 0;
+            return;
+        }
         // (following the line: one of its objects goes on it, at its steady place)
         int axis;
         if (follow && on_line(obj, t, ox, oy, axis)) return;
@@ -495,6 +513,8 @@ private:
     std::vector<char> m_member;       // this frame's objects: which go with the line
     std::vector<double> m_lag;        // ... and how far each is behind it, along it
     std::vector<double> m_off;        // ... and its steady place there (its lag, smoothed)
+    bool m_jumped = false;            // this frame, the line's objects jumped (m_jx, m_jy) instead
+    double m_jx = 0, m_jy = 0;
     // the line's speed a frame: from its first kept position to its last
     // the line's speed: least squares through the kept positions (HK_SCROLL_ENDS=1: from the first
     // and last alone, as before). pop'n music 8's notes step 2, 3, 2 pixels: the ends alone made

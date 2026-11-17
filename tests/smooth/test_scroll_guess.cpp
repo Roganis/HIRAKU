@@ -228,6 +228,33 @@ int main() {
         printf("a key flash lit in the next lane: carried there %d times of 4, notes moving %d frames of 39\n", jumped, notes);
         if (jumped || notes != 39) fail++;
     }
+    // Following the line, a list of rows going a pixel a frame that then snaps 29 at once (beatmania
+    // III's song list): the jump isn't the line's. On that frame the rows stay where the game drew
+    // them (taken through the line, they were 15 pixels off on the frame's own picture) and aren't
+    // carried on; a few frames after, the line goes on again
+    {
+        hk::ScrollGuess g;
+        g.follow = true;
+        const int rows = 8;
+        std::vector<int> from(rows);
+        for (int i = 0; i < rows; i++) from[(size_t)i] = i;
+        double worst_jump = 0, after = 0;
+        for (int f = 1; f < 30; f++) {
+            const int step = f == 20 ? -29 : -1;
+            std::vector<std::pair<int, int>> moves(rows, {0, step});
+            g.frame((uint64_t)f, moves, from);
+            double ox, oy;
+            if (f == 20)
+                for (const double t : {0.0, 0.25, 0.5, 0.75}) {
+                    g.offset_exact(0, step, t, ox, oy, 0);
+                    worst_jump = std::max(worst_jump, std::fabs(oy) + std::fabs(ox));
+                }
+            if (f == 29) g.offset_exact(0, step, 0.5, ox, oy, 0), after = oy;
+        }
+        printf("a list snapping 29 pixels after going 1 a frame: %.2f pixels off on that frame's pictures, %.2f half a "
+               "frame on 9 frames after\n", worst_jump, after);
+        if (worst_jump > 0.01 || std::fabs(after + 0.5) > 0.3) fail++;
+    }
     if (fail) {
         fprintf(stderr, "%d failed\n", fail);
         return 1;

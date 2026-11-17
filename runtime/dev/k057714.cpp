@@ -740,6 +740,20 @@ bool K057714::draw_between(uint32_t *out, int width, int height, double t) {
                 if ((b[1] & 0x3ff) == (c[1] & 0x3ff)) dx = 0;
                 if (((b[1] >> 10) & 0x3fff) == ((c[1] >> 10) & 0x3fff)) dy = 0;
             }
+            // one edge and its picture's edge moved together, the other edge staying, the picture the
+            // same the other way (unscaled): the same pixels in the same places, a side cut off or shown
+            // more, not moved. beatmania III's life gauge: from x 240 and 192 wide to x 244 and 188,
+            // its picture from x 672 to 676; carried on by its middle, it shook a pixel or two each way
+            // (issue 15)
+            if (!here[k].copied && !there[kb].copied && (b[0] & 0x10000000) == (c[0] & 0x10000000)) {
+                const int cax = c[0] & 0x3ff, cay = (c[0] >> 10) & 0x3fff, bax = b[0] & 0x3ff, bay = (b[0] >> 10) & 0x3fff;
+                const int cx = c[1] & 0x3ff, cy = (c[1] >> 10) & 0x3fff, bx = b[1] & 0x3ff, by = (b[1] >> 10) & 0x3fff;
+                const int cw = (c[2] & 0x1ff) + 1, ch = (c[3] & 0x3ff) + 1, bw = (b[2] & 0x1ff) + 1, bh = (b[3] & 0x3ff) + 1;
+                const bool unscaled = ((c[2] >> 10) & 0xfff) == 64 && ((c[3] >> 10) & 0xfff) == 64 && ((b[2] >> 10) & 0xfff) == 64 &&
+                                      ((b[3] >> 10) & 0xfff) == 64;
+                if (unscaled && cay == bay && cx - cax == bx - bax && cx + cw == bx + bw) dx = 0;
+                if (unscaled && cax == bax && cy - cay == by - bay && cy + ch == by + bh) dy = 0;
+            }
             // a blended object only moves as the same picture: one only as tall as another isn't it
             // moved. beatmania III's lanes on SEPARATE fade in strips of their own pictures, 15 or 16
             // rows apart, the stack 8 rows on by turns; each paired with the frame before's next
@@ -762,6 +776,17 @@ bool K057714::draw_between(uint32_t *out, int width, int height, double t) {
     std::fill(m_clip_row.begin(), m_clip_row.end(), 0);
     auto mark = [&](int y0, int y1) {
         for (int y = std::max(y0, 0); y <= y1 && y - y0 < ROWS; y++) m_clip_row[(uint32_t)y & (ROWS - 1)] = 1;
+    };
+    // the row a relative command's place counts from: the frame buffer's origin as it drew (a frame
+    // may set it more than once: beatmania III's song select sets row 0 then 480, or 1984 then 2464; its
+    // list's copies went by the first: their strips' rows weren't drawn again with them, and a moved
+    // row showed the next one's title, issue 15)
+    auto origin_y = [&](size_t j) {
+        const Cmd &b = shown.cmds[j];
+        if (!(b[0] & 0x10000000)) return 0;
+        if (j < shown.cmd_rows.size() && shown.cmd_rows[j].first <= shown.cmd_rows[j].second)
+            return shown.cmd_rows[j].first - int((b[1] >> 10) & 0x3fff);
+        return shown_y;
     };
     // object k of the frame, (ox, oy) on on the screen, into `c`: whether it moved (and the rows it
     // was drawn on and the rows it goes to marked: the only ones drawn again, their objects' other
@@ -786,7 +811,8 @@ bool K057714::draw_between(uint32_t *out, int width, int height, double t) {
         if (here[k].copied) {   // drawn through a copy: where it shows, before and after (the copy's
             // place relative to the frame buffer's origin, as most are: matched without it, as both
             // buffers' frames are, but drawn there)
-            const int h = int((c0[3] & 0x3ff) + 1) * 64 / here[k].ys, at = here[k].y - h / 2 + (here[k].rel ? shown_y : 0);
+            const int h = int((c0[3] & 0x3ff) + 1) * 64 / here[k].ys;
+            const int at = here[k].y - h / 2 + (here[k].rel ? origin_y((size_t)here[k].via) : 0);
             mark(at - 2, at + h + 2);
             mark(at + oy - 2, at + oy + h + 2);
         }
@@ -801,14 +827,29 @@ bool K057714::draw_between(uint32_t *out, int width, int height, double t) {
     struct Place { int ox = 0, oy = 0, axis = -1, q = 0; };   // q: the fraction on along `axis`, in 16ths
     std::vector<Place> places(cmds.size());
     bool frac = false;
+    // (an object of the scroll's line goes along it, a frame where the game missed its update for
+    // it, standing still, too: ScrollGuess::on_line)
+    std::vector<double> ex(cmds.size(), 0.0), ey(cmds.size(), 0.0);
+    std::vector<int> axes(cmds.size(), 1);
     for (size_t k = 0; k < cmds.size(); k++) {
         if (((cmds[k][0] >> 29) & 7) != 5) continue;
-        // (an object of the scroll's line goes along it, a frame where the game missed its update
-        // for it, standing still, too: ScrollGuess::on_line)
-        double rx, ry;
-        m_scroll.offset_exact(moves[k].first, moves[k].second, t, rx, ry, (int)k);
-        int axis = std::abs(moves[k].second) >= std::abs(moves[k].first) ? 1 : 0;
-        if (double lx, ly; m_scroll.follow) m_scroll.on_line((int)k, t, lx, ly, axis);
+        m_scroll.offset_exact(moves[k].first, moves[k].second, t, ex[k], ey[k], (int)k);
+        axes[k] = std::abs(moves[k].second) >= std::abs(moves[k].first) ? 1 : 0;
+        if (double lx, ly; m_scroll.follow) m_scroll.on_line((int)k, t, lx, ly, axes[k]);
+    }
+    for (size_t k = 0; k < cmds.size(); k++) {
+        if (((cmds[k][0] >> 29) & 7) != 5) continue;
+        double rx = ex[k], ry = ey[k];
+        int axis = axes[k];
+        // drawn through a copy that moves too: its move on the screen has the copy's in it, and the
+        // copy carries it that far already; in the strip, only the rest. beatmania III's song list:
+        // each title drawn into a strip that stays put, the strip's copy scrolling: moved in the strip
+        // too, the titles went twice as far as their rows (issue 15)
+        if (const int j = here[k].via; here[k].copied && j >= 0 && paired[k] >= 0 && paired[(size_t)j] >= 0) {
+            rx -= ex[(size_t)j], ry -= ey[(size_t)j];
+            if (std::abs(rx) < 1.0 / 32) rx = 0;
+            if (std::abs(ry) < 1.0 / 32) ry = 0;
+        }
         Place &pl = places[k];
         pl.ox = (int)std::lround(rx), pl.oy = (int)std::lround(ry);
         if (subpixel) {
@@ -845,7 +886,7 @@ bool K057714::draw_between(uint32_t *out, int width, int height, double t) {
                 if (!is_copy[j]) continue;
                 const Cmd &b = shown.cmds[j];
                 const int ay = (b[0] >> 10) & 0x3fff, h = (b[3] & 0x3ff) + 1, ys = (b[3] >> 10) & 0x7ff;
-                const int by = int((b[1] >> 10) & 0x3fff) + ((b[0] & 0x10000000) ? shown_y : 0);
+                const int by = int((b[1] >> 10) & 0x3fff) + origin_y(j);
                 const int dh = h * 64 / ys;
                 for (int r = 0; r < dh; r++) {
                     const int dst = by + r, src = ay + r * ys / 64;

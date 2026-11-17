@@ -350,6 +350,36 @@ same, bit for bit). At 240 Hz at the game's own speed the window asks for four a
 pictures of pop'n music 8 the same, bit for bit, before the line's speed changed). Blended objects
 leave a pixel's drawer as it is (what shows through is what moves).
 
+#### beatmania III's gauge and song list (issue 15, 2026-11-17)
+
+A reporter's comparison of the window's raw pictures (III THE FINAL, 120 Hz) found two causes; a
+third came up checking them. All three in `tests/gcu/test_gcu_between.cpp` and
+`tests/smooth/test_scroll_guess.cpp`:
+- cut off, not moved: the life gauge's left edge and its picture's left edge go on together while
+  its right edge stays (x 240, 192 wide, its picture from x 672; then x 244, 188 wide, from 676).
+  Carried on by its middle, it shook a pixel or two each way as it filled and emptied. An object
+  whose edge and picture edge moved together, the far edge staying and the picture the same the
+  other way, isn't moved on that axis (the same-edge rule above is its case of no change at all).
+  pop'n music 8's How to Play has one arrow shown more from its right this way, now kept still too;
+- a copy that moves carries what's in it: the titles are drawn into strips off the screen (rows
+  13392-13791) that stay put, and each strip's copy scrolls. A title's move on the screen has its
+  copy's in it, and it was moved in the strip by all of it too: the titles went twice as far as
+  their rows (in whole pixels, a 1 pixel step's halfway picture matched the frame best 2 pixels on,
+  21 % of the list still off; now 1 pixel on, what's off the panels that stay). An object drawn
+  through a copy is now moved in the strip by its own move less the copy's;
+- the copies' origin: the song select sets the frame buffer's origin twice a frame (row 0 then 480,
+  or 1984 then 2464), and the copies' rows on the screen were taken from the first, so their strips
+  weren't drawn again with them, and a moved row showed the next one's title. A copy's rows are now
+  where it drew them (each command's own rows);
+- a jump isn't the scroll's line: the list wobbles a pixel a frame and then snaps 29 at once. The
+  line taken through that put the rows 15 pixels from where the game drew them, the frame's own
+  picture too, and they shook. When the line's objects move far off it (more than 4 pixels, and
+  more than twice its move), the line starts again, and what jumped stays where the frame has it
+  for that frame (`HK_SCROLL_JUMP=0`: as before). pop'n music 8's attract has such a jump every 60 frames (the
+  bobbing sea of its map screen), now drawn a little differently for about 40 frames after, by up
+  to a pixel; its demo play's notes, pop'n music 3 and beatmania III's attract are the
+  same, bit for bit.
+
 Not covered:
 - Keyboardmania (two GCUs, one a monitor): no in-between pictures.
 - A game drawing a frame over two vsyncs (30 frames a second) moves its objects per two vsyncs,

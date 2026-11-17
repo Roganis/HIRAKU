@@ -80,7 +80,7 @@ bool isPadNumber(const QString &pad) {
 }  // namespace
 
 // An analog control's axis turning as the game will see it (its speed and direction applied):
-// 1024 runtime counts, 16384 axis units at speed 1, make a turn (runtime/host/input.cpp)
+// 1024 runtime counts, 65536 axis units (a wrap) at speed 1, make a turn (runtime/host/input.cpp)
 class TurntableMeter : public QWidget {
 public:
     explicit TurntableMeter(std::function<QString()> binding, QWidget *parent = nullptr)
@@ -117,7 +117,7 @@ private:
             int d = v - m_last[here];
             if (d > 32768) d -= 65536;
             if (d < -32768) d += 65536;
-            m_angle = std::fmod(m_angle + d / 16384.0 * 360.0 * axisScale(b), 360.0);
+            m_angle = std::fmod(m_angle + d / 65536.0 * 360.0 * axisScale(b), 360.0);
         }
         m_last[here] = v;
         m_lit = true;
@@ -643,7 +643,7 @@ void ControlsDialog::bindingMenu(int k, QMenu *menu) {
     rev->setCheckable(true);
     rev->setChecked(scale < 0);
     auto *speed = menu->addMenu("Speed");
-    for (double x : {0.5, 0.75, 1.0, 1.25, 1.5, 2.0, 3.0}) {
+    for (double x : {0.5, 0.75, 1.0, 1.25, 1.5, 2.0, 3.0, 4.0}) {
         auto *a = speed->addAction(x == 1.0 ? QString("×1 (as the controller sends it)") : QString("×%1").arg(x), this,
                                    [setScale, scale, x] { setScale(scale < 0 ? -x : x); });
         a->setCheckable(true);

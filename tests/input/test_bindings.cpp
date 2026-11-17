@@ -3,7 +3,9 @@
 // to a hat direction or an axis's, held by one, isn't let go by the other; a controller unplugged
 // and plugged back in is the same joy<N>, and what it held is let go; a controller left out of the
 // bindings (the game menu's plain gamepad) presses nothing. IIDX's effector sliders stepped by
-// keys: a press a step from where the slider is, held more after a moment, kept within 0-15.
+// keys: a press a step from where the slider is, held more after a moment, kept within 0-15. A
+// turntable on an axis: a wrap of the axis is a turn (1024 counts), a step of an 8-bit controller's
+// one of the game's (4 counts), across the wrap too, and what's under a count isn't lost.
 //
 //   test_bindings      exit 0 when all hold (0 with a note where SDL has no joysticks to make up)
 #include <cstdio>
@@ -24,6 +26,7 @@ namespace {
 class Machine final : public hk::Core {
 public:
     std::map<std::string, int> inputs;
+    int turned[2] = {0, 0};
     bool init(const Options &) override { return true; }
     const std::string &family() const override { static const std::string f = "popn"; return f; }
     void set_frame_hook(FrameHook) override {}
@@ -41,7 +44,7 @@ public:
         auto it = inputs.find(name);
         return it == inputs.end() ? 8 : it->second;   // (as Twinkle's: in the middle at the start)
     }
-    void turntable_add(int, int) override {}
+    void turntable_add(int p, int d) override { turned[p] += d; }
     const std::vector<uint8_t> &lamp_state() const override { static const std::vector<uint8_t> none; return none; }
     uint64_t lamp_changes() const override { return 0; }
 };
@@ -102,6 +105,8 @@ int main() {
                            "P1 Button 2 = key:X, joy0:axis1+\n"
                            "P1 Button 3 = joy0:button2\n"
                            "P1 Button 4 = joy0:axis-1+, joy0:button-3\n"   // (refused: no such axis or button)
+                           "P1 Turntable = joy0:axis0\n"
+                           "P2 Turntable = joy0:axis1*0.3\n"
                            "Volume 2 Up = key:U\n"
                            "Volume 2 Down = key:J\n";
     SDL_JoystickID pad = plug();
@@ -205,6 +210,27 @@ int main() {
     check(in["Volume 2"] == 0, "held down long: at the bottom, no further");
     key(SDLK_J, false);
     hk::host::input_update(1);
+
+    // a turntable on an axis, as an IIDX controller's 8-bit position (SDL: 257 units a step)
+    {
+        SDL_Joystick *js = SDL_OpenJoystick(pad);
+        auto at = [&](int step) {
+            for (int a : {0, 1}) SDL_SetJoystickVirtualAxis(js, a, (Sint16)(-32768 + (step & 255) * 257));
+            SDL_UpdateJoysticks();
+            hk::host::input_update(1);
+        };
+        at(0);   // (from where the tests before left it: a whole number of counts away)
+        g_machine.turned[0] = g_machine.turned[1] = 0;
+        at(1);
+        check(g_machine.turned[0] == 4, "a step of the controller's: a step of the game's (4 counts)");
+        at(0);
+        check(g_machine.turned[0] == 0, "a step back: one back, not four");
+        g_machine.turned[1] = 0;
+        for (int k = 1; k <= 256; k++) at(k);
+        check(g_machine.turned[0] == 1024, "a whole wrap of the axis, past its end: one turn (1024 counts)");
+        check(g_machine.turned[1] >= 306 && g_machine.turned[1] <= 308, "at x0.3: 0.3 of a turn, nothing lost under a count");
+        SDL_CloseJoystick(js);
+    }
 
     std::remove(file.c_str());
     SDL_Quit();

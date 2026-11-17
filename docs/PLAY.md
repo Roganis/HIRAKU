@@ -153,7 +153,7 @@ the turntable.
   input bound twice.
 - *Bind all in turn* asks for each control in order. Layouts can be saved and used as player 1
   or 2.
-- **Turntables:** the binding's menu sets the speed (×0.5 to ×3) and the direction. On buttons
+- **Turntables:** the binding's menu sets the speed (×0.5 to ×4) and the direction. On buttons
   (a PS2 controller's), lower **Speed (buttons)** if a short turn goes past several songs.
 - **Analog controls** (Keyboardmania's wheels, GuitarFreaks' effect knobs, the IIDX effector
   sliders) take an axis.

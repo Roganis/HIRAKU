@@ -46,7 +46,12 @@ bool g_axis_seen[16][16];
 bool g_left[16];                                      // left out of the bindings (input_joystick_leave)
 std::set<std::string> g_file_devs;                    // the controllers the bindings file names, by name
 std::set<int> g_file_joys;                            // ... and by number
-double g_tt_scale = 1024.0 / 65536.0 * 4;             // turntable counts per axis unit (one wrap = 4 x 256)
+// Turntable counts per axis unit: one wrap of the axis is one turn of the game's 8-bit position
+// (1024 counts), as INFINITAS and spice2x read an IIDX controller's axis and as HIRAKU reads a
+// BIO2 board's position: a step of the controller's is a step of the game's. (Four times that
+// before: a step's wobble as the turntable stops read as a turn back, the game's 2-step scratch.)
+double g_tt_scale = 1024.0 / 65536.0;
+double g_tt_frac[2][16][16];                          // each player's: what was under a count at the last poll
 
 bool parse_binding(const std::string &b, Binding &out) {
     if (b.rfind("key:", 0) == 0) {
@@ -514,7 +519,11 @@ void input_update(double ms) {
                 int d = (int)a - g_axis_last[j][b.index];
                 if (d > 32768) d -= 65536;
                 if (d < -32768) d += 65536;
-                if (d) core().turntable_add(p, (int)std::lround(d * g_tt_scale * b.scale));
+                double &f = g_tt_frac[p][j][b.index];
+                f += d * g_tt_scale * b.scale;
+                const int whole = (int)std::trunc(f);
+                f -= whole;
+                if (whole) core().turntable_add(p, whole);
             }
             g_axis_last[j][b.index] = a;
             g_axis_seen[j][b.index] = true;

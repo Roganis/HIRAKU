@@ -156,6 +156,87 @@ are sprites too, and move half a step. The tilemaps (backgrounds) aren't carried
 be: through pop'n 1's and beatmania's play cases their scroll registers change 3 times in all (the
 registers the games keep changing are the RAM page and ROM bank selects).
 
+**Between two pixels (2026-11-16).** pop'n music 3's notes move 2 pixels a frame on its 384 lines.
+In whole pixels an in-between picture had one place for them, a pixel on, so at 240 Hz the four
+refreshes of a frame showed them 0, 0, 1, 1 pixels on: what 120 Hz shows (owner: "smooth frames
+doesn't work for 120/240 Hz on a 58 Hz game like pop'n 3"). Now each moving sprite's place is taken
+unrounded (`ScrollGuess::offset_exact`, `on_line`): along its move's main axis it goes at the whole
+pixel below (the other axis rounded), and the picture is drawn again with every sprite that is a
+fraction on a pixel further. Where the two pictures differ, each pixel is mixed by the fraction (in
+16ths) of the sprite that drew it there, in linear light (the sprite drawing notes which sprite drew
+each pixel: `g_owner`): a note 1.5 pixels on has its edge half lit, which a fast display shows as a
+note between the two pixels. Two pictures however many fractions (the first version drew one more
+picture per fraction and kept only the most shared, the others rounded).
+
+Why mixing, not a bigger picture: the CRT shaders work on the game's own lines (a picture of 4 times
+the lines would be 4 times the scanlines), and the sharp-pixels look on whole pixels. The picture stays
+the game's size; a moving note's edges are softer on the refreshes between its pixels, and sharp again
+on those that land on one.
+
+Checked: pop'n 3's demo play, `--snap-between 4`: each quarter frame now differs (before: the
+quarter and three-quarter pictures were the frame's and the half's), and a note's brightness centroid
+moves in steps of about a third of its whole-pixel step each quarter, instead of 0, 0, 1, 1.
+`HK_BETWEEN_BENCH=4` over 8000 frames: 0.47 ms a picture, worst 2.5 (whole pixels: 0.34, worst 1.19).
+`HK_BETWEEN_SUBPIXEL=0` gives whole pixels, bit for bit as before (the bench's hash; the 573's
+in-between pictures, which use the same scroll guess, are unchanged too). Not yet seen on a real
+120/240 Hz display.
+
+**Notes through the game's own hitches (2026-11-16).** The owner saw pop'n 3's notes judder "connected
+to the combo, the judgement or the light beams", the first notes of a song (nothing pressed yet)
+smooth. Logged sprite by sprite (`HK_DJ_BETWEEN_LOG`, `HK_DJ_SCROLL_LOG`, `HK_DJ_PLACE_LOG`: each
+sprite's guess, the scroll's line each frame, each sprite's drawn place), four things broke the line:
+
+- the game misses an update for its notes now and then, most while it judges: some or all stand still
+  a frame, then move twice as far (2, 2, 0, 3.3, 2). A frame with nothing moving threw the line away,
+  and its first frames back had the speed up to a pixel a frame off;
+- the judgement and combo sprites rising together (4 to 6) outvoted the 2 or 3 notes, and the key
+  effects moved the notes' way while every note stood still;
+- a note at the judgement line is held there while judged, and was carried on past it, then jumped back;
+- notes change tile now and then (an animation frame: 600, 584...), and pairing went by the same
+  tile: 967 times in the demo song a note was unpaired, off the line, standing still a frame.
+
+Now (`ScrollGuess::follow`, DJ Main only so far): the line's own objects carry it on, however few or
+outnumbered: its move is their moves near what it would move (those standing still or catching up
+left out), most of them standing still a missed update, the line going on through it. A sprite joins
+the line after two frames moving with it (pop'n 3's key effects move the notes' way for one), and
+leaves it when behind by more than one update (it has stopped). Each keeps how far it is behind the
+line (lag) and its usual lag (its steady place); how far it is off that now is split into the line's
+own error (the median over all of them, taken off all of them alike, a quarter a frame) and its own
+(rounding, smoothed into its steady place; a missed update left out). A note is drawn at its steady
+place on the line, so its own rounding and missed updates neither move it nor widen or narrow its
+distance to the next (the owner: "the notes seem to not all move at the same speed, their distances
+sometimes widen or lessen"). A sprite left without a look-alike after the pairing may take an
+unclaimed one of another tile at its x within 8 lines (an animation frame). Measured on the demo
+song's notes, each quarter frame's drawn place (`HK_DJ_PLACE_LOG`):
+
+| | steps off the note's speed by > 0.3 / 0.6 / 1 px | distance between two notes, sd (mean, worst tenth) |
+|---|---|---|
+| the game's own frames | | 0.45, 0.56 px |
+| the vote alone (before) | 5,398 / 2,919 / 609 | 0.49, 0.67 px |
+| now | 242 / 68 / 16 | 0.20, 0.31 px |
+
+The line's speed in that song now stays at 1.57-1.75 pixels a frame (p1-p99); before it restarted
+every few frames. An in-between picture: 0.50 ms (worst 2.3).
+
+**Half a sprite list (2026-11-16).** The owner: "sometimes the notes seem to all disappear for a
+frame". The game rewrites its sprite list in the vertical blank, and the window's picture is taken at
+the blank's end (the monitor's, `set_present_hook`); when busy the game was still writing then, and
+the picture had part of the list (pop'n 3's demo song: 4 of 13 notes at frame 6929, 1 of 3 at 6494).
+Now, while it wrote the list in the last 2 lines, the run goes on half a line at a time (40 lines at
+most) until it's done, and the picture keeps the blank's end as its time (`g_present_at`: taken at the
+machine's clock, the frames' lengths varied by up to 0.6 ms and their in-between pictures with them).
+The machine is the same (frame and sound digests identical; `HK_DJ_LIST_WAIT=0`: as before). No frame
+lost its notes after, and many of the "missed updates" above were these: steps off by more than 0.6
+px 68 -> 3, the distance between two notes 0.13 px sd (the game's own frames 0.40).
+`HK_SCROLL_HOLD=0`: the vote alone, as before. Firebeat, Twinkle, 573 and the PC games unchanged
+(their in-between pictures bit for bit the same).
+
+The same would do for the other cores, each drawing its picture twice where it moves objects:
+Firebeat's GCU does since 2026-11-16 (below, "Between two pixels"; the mixing shared,
+include/hiraku/subpixel_mix.h). The PlayStation GPU's (`hk_between`, the primitives' vertices) not
+yet: line-following there needs it to carry on what it didn't see move (a note that missed an
+update stands still), measured worse on IIDX 8th style's big steps as it is.
+
 ### Firebeat (runtime/dev/k057714.cpp, `draw_between`)
 
 The GCU draws with commands (fill a rectangle, copy an object from VRAM to a frame buffer with
@@ -224,6 +305,51 @@ frame drew on: on pop'n 4's demo 0.2 ms a picture, from 1.1 for the whole frame,
 identical (pop'n 4 and 8 compared). Where nothing has moved a whole pixel yet, there's no
 redraw at all: the frame itself is shown (a note moving 1 pixel a frame is 0 a quarter on).
 
+#### Between two pixels, and the scroll's line (2026-11-17)
+
+As DJ Main's (above): the objects of the scroll's line go along it (`ScrollGuess::follow`, on here
+too; `HK_SCROLL_FOLLOW=0` off), and each moving object is drawn at the whole pixel below its place
+along its move's main axis, the frame then replayed a second time with each such object a pixel
+further on, the two pictures mixed pixel by pixel, in linear light, by the fraction (16ths) of the
+object that drew the pixel (`HK_BETWEEN_SUBPIXEL=0`: whole pixels, one replay, as before). Who
+drew a pixel: in a replay the GCU notes, for each row drawn again, which command drew each of its
+pixels (`own_object`, before the command draws; fills and characters as "none"); an object that
+isn't moved a fraction passes on who drew its source's pixel, so pop'n music 8's notes, drawn into
+the strip and copied onto the lanes, keep their own fraction on the screen. The layers composed as
+`draw()` does give each pixel of the picture its drawer (`own_screen`).
+
+pop'n music 8's demo play (notes 2.33 pixels a frame, the game's own steps 2, 3, 2), every
+refresh's picture at 240 Hz (`HK_BETWEEN_SNAP`, the window's first refresh as the window draws it),
+each note's middle tracked down nine lanes, about 500 steps (a step should be 0.58 pixels):
+
+| | steps' sd | off by > 0.3 px | > 0.6 px |
+|---|---|---|---|
+| whole pixels (before) | 0.47 | 91 % | 1.0 % |
+| whole pixels, along the line | 0.48 | 91 % | 1.3 % |
+| between two pixels, along the line | 0.16 | 5 % | 0.8 % |
+
+Whole pixels the steps are 0 or 1 whatever the guess; the guess itself (`HK_SCROLL_LOG`) evens
+out along the line (its quarter steps off by > 0.3 px 15.8 -> 1.3 %, the distance between two
+notes 0.77 -> 0.25 px sd, the game's own frames 0.64). Two fixes came with it: a note a hair
+behind its place (-0.06 px) goes a pixel back and 15/16 of the way on, and the picture a pixel
+further had kept it a pixel back too (both pictures the same, the note a pixel behind in one
+refresh of two frames); and the line's speed is now a least-squares fit through its kept
+positions (`ScrollGuess::line_speed`; `HK_SCROLL_ENDS=1`: from the first and last, as before),
+which with steps of 2, 3, 2 took 2.2 or 2.4 by turns (steps off by > 0.3 px 10.9 -> 5.2 %). On
+steady steps (DJ Main's pop'n music 3, DDR Extreme's arrows) the two give the same pictures, bit
+for bit. beatmania III THE FINAL to its How to Play (notes 2.25 pixels a frame): the guess's
+quarter steps off by > 0.3 px 0.8 %, drawn in whole pixels 89.8 % (> 0.6 px: 41.1 %).
+
+Costs (`HK_BETWEEN_BENCH=4`): an in-between picture of pop'n music 8 0.24 ms whole, 1.2 ms
+between two pixels (two replays, who drew what noted in both); beatmania III (640x480) 0.44 and
+1.4 ms. The frame on show is composed once (`m_composed`, again only when the frame, the layers or
+the next frame's drawing change), and a picture composes only the screen rows that show a row
+drawn again (beatmania III: 0.63 -> 0.44 whole, 1.9 -> 1.4 between two pixels; the pictures the
+same, bit for bit). At 240 Hz at the game's own speed the window asks for four a frame: about
+5 and 5.7 ms of the frame's 16.7. With `HK_BETWEEN_SUBPIXEL=0` the replay is as it was (the line-following
+pictures of pop'n music 8 the same, bit for bit, before the line's speed changed). Blended objects
+leave a pixel's drawer as it is (what shows through is what moves).
+
 Not covered:
 - Keyboardmania (two GCUs, one a monitor): no in-between pictures.
 - A game drawing a frame over two vsyncs (30 frames a second) moves its objects per two vsyncs,
@@ -285,8 +411,9 @@ To check a game:
    and Twinkle's in-between pictures go with the picture at the end of vblank (after the game's
    flip), not the frame hook's, so they need a dump there. On Firebeat,
    `HK_BETWEEN_SNAP=FIRST-LAST,PREFIX` writes, for each of those frames, the picture at the end of
-   vblank and the in-between pictures a quarter, a half and three quarters on, each at its own
-   moment of the frame (as the window asks for them, the next frame being drawn meanwhile), as
+   vblank (as the window shows it at the game's own speed: what scrolls drawn on the scroll's
+   line) and the in-between pictures a quarter, a half and three quarters on, all made then (as
+   the window makes them: host/window.cpp `keep_shot`), as
    `PREFIX-<frame>-<0..3>.ppm`; on Twinkle, a screen `m_hk_vblank_end` calling
    `render_between(0.5, w, h)`;
 3. compare: only what moves should differ, by half its step.

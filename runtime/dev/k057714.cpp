@@ -7,6 +7,7 @@
 // composed into a 32-bit RGB buffer.
 #include "k057714.h"
 #include "k057714_rows.h"
+#include "hiraku/subpixel_mix.h"
 
 #include <algorithm>
 #include <cmath>
@@ -20,7 +21,10 @@
 
 namespace hk {
 
-K057714::K057714() : m_vram(new uint32_t[VRAM_SIZE / 4]) { reset(); }
+K057714::K057714() : m_vram(new uint32_t[VRAM_SIZE / 4]) {
+    m_scroll.follow = hk::ScrollGuess::follow_env(true);   // in-between pictures: notes along the scroll's line
+    reset();
+}
 
 // VRAM is an array of 32-bit words; 16-bit pixel n is the high half of word
 // n/2 when n is even (the chip is big-endian). Viewed as 16-bit values on a
@@ -152,7 +156,7 @@ void K057714::vblank(bool state) {
     if (state && (m_irqctrl & 1) && irq) irq(true);
 }
 
-void K057714::draw_frame(int frame, uint16_t *bitmap, int bw, int bh, bool inverse_trans) {
+void K057714::draw_frame(int frame, uint16_t *bitmap, int bw, int bh, bool inverse_trans, const uint8_t *rows) {
     const Frame &f = m_frame[frame];
     if (f.height == 0 || f.width == 0) return;
     int height = f.height + 1, width = f.width + 1;
@@ -176,7 +180,7 @@ void K057714::draw_frame(int frame, uint16_t *bitmap, int bw, int bh, bool inver
     const bool identity = alpha1 == 16;   // full brightness: colours pass unchanged
     for (int j = 0; j <= height; j++) {
         int y = j + f.y;
-        if (y < 0 || y >= bh) continue;
+        if (y < 0 || y >= bh || (rows && !rows[y])) continue;
         uint16_t *d = bitmap + y * bw + f.x;
         uint32_t base = f.base + (uint32_t)j * 1024;
         int iend = std::min(width, bw - 1 - f.x);
@@ -238,23 +242,32 @@ void K057714::draw_frame(int frame, uint16_t *bitmap, int bw, int bh, bool inver
     }
 }
 
-void K057714::draw(uint32_t *out, int w, int h) {
+void K057714::draw(uint32_t *out, int w, int h, const uint8_t *rows) {
     static thread_local std::unique_ptr<uint16_t[]> bmp;
     static thread_local int bmp_size = 0;
     if (bmp_size < w * h) { bmp.reset(new uint16_t[w * h]); bmp_size = w * h; }
-    std::fill(bmp.get(), bmp.get() + w * h, 0);
+    if (!rows) {
+        std::fill(bmp.get(), bmp.get() + w * h, 0);
+    } else {
+        for (int y = 0; y < h; y++)
+            if (rows[y]) std::fill(bmp.get() + (size_t)y * w, bmp.get() + (size_t)(y + 1) * w, 0);
+    }
     // most likely wrong, inverse transparency is only used by kbm;
     // beatmania III sets reg 6c to 0xfff but doesn't use inverse transparency
     bool inverse_trans = (m_reg_6c & 0xf) != 0 && m_reg_6c != 0xfff;
-    draw_frame((m_layer_select >> 8) & 3, bmp.get(), w, h, inverse_trans);
-    draw_frame((m_layer_select >> 10) & 3, bmp.get(), w, h, inverse_trans);
-    draw_frame((m_layer_select >> 12) & 3, bmp.get(), w, h, inverse_trans);
-    draw_frame((m_layer_select >> 14) & 3, bmp.get(), w, h, inverse_trans);
+    draw_frame((m_layer_select >> 8) & 3, bmp.get(), w, h, inverse_trans, rows);
+    draw_frame((m_layer_select >> 10) & 3, bmp.get(), w, h, inverse_trans, rows);
+    draw_frame((m_layer_select >> 12) & 3, bmp.get(), w, h, inverse_trans, rows);
+    draw_frame((m_layer_select >> 14) & 3, bmp.get(), w, h, inverse_trans, rows);
     // RGB555 -> xRGB8888, the same pal5bit expansion as MAME (as arithmetic, which vectorises)
-    const uint16_t *src = bmp.get();
-    for (int k = 0; k < w * h; k++) {
-        uint32_t p = src[k], r = (p >> 10) & 0x1f, g = (p >> 5) & 0x1f, b = p & 0x1f;
-        out[k] = 0xff000000u | ((r << 3 | r >> 2) << 16) | ((g << 3 | g >> 2) << 8) | (b << 3 | b >> 2);
+    for (int y = 0; y < h; y++) {
+        if (rows && !rows[y]) continue;
+        const uint16_t *src = bmp.get() + (size_t)y * w;
+        uint32_t *o = out + (size_t)y * w;
+        for (int k = 0; k < w; k++) {
+            uint32_t p = src[k], r = (p >> 10) & 0x1f, g = (p >> 5) & 0x1f, b = p & 0x1f;
+            o[k] = 0xff000000u | ((r << 3 | r >> 2) << 16) | ((g << 3 | g >> 2) << 8) | (b << 3 | b >> 2);
+        }
     }
 }
 
@@ -284,6 +297,8 @@ void K057714::draw_object(const uint32_t *cmd) {
     height = (((height * 65536) / yscale) * 64) / 65536;
     if (height <= 0 || width <= 0) return;
     touch(y, y + height, x, x + width);   // + 1 row: a row running past x 1023 goes on into the next
+    // (a blended object shows what's under it: whoever drew that keeps the pixel, its fraction with it)
+    if (m_owning && !blend_mode) own_object(address, x, y, width, height, orig_height, xscale, yscale, xflip, yflip, trans_enable, trans_value);
     if (xscale == 64 && yscale == 64 && !xflip && !yflip && !blend_mode) {
         // the common case, same result as the general loop below
         uint16_t *v = V16;
@@ -395,6 +410,15 @@ void K057714::fill_rect(const uint32_t *cmd) {
     touch(y, y + height, x, x + width);
     for (int j = y; j < y + height; j++) {
         if (row_out(j)) continue;   // in-between pictures: a row not redrawn
+        if (m_owning) {
+            const uint32_t a = (uint32_t)(j * 1024 + x) & 0xffffffu, b = (a + (uint32_t)width - 1) & 0xffffffu;
+            if ((a >> 10) == (b >> 10) && b >= a) {
+                if (int32_t *o = own_at(a)) std::fill(o, o + width, -2);
+            } else {
+                for (int i = x; i < x + width; i++)
+                    if (int32_t *o = own_at((uint32_t)(j * 1024 + i) & 0xffffffu)) *o = -2;
+            }
+        }
         const uint32_t d = (uint32_t)(j * 1024 + x);
         if (d + (uint32_t)width <= VRAM_SIZE_HALF) {
             fill_row(V16, d, width, color);   // rows start at even pixels: d & 3 == x & 3
@@ -422,7 +446,11 @@ void K057714::draw_character(const uint32_t *cmd) {
         address += 4;
         for (int i = 0; i < 8; i++) {
             int p = (line >> ((7 - i) * 2)) & 3;
-            if (!trans_enable || (color[p] & 0x8000)) set_pix(fbaddr + x + i, color[p]);
+            if (!trans_enable || (color[p] & 0x8000)) {
+                set_pix(fbaddr + x + i, color[p]);
+                if (m_owning)
+                    if (int32_t *o = own_at((fbaddr + x + i) & 0xffffffu)) *o = -2;
+            }
         }
     }
 }
@@ -507,6 +535,109 @@ void K057714::touch(int y0, int y1, int x0, int x1) {
             m_row_mark[r] = m_mark;
             m_drawing.rows.push_back(r);
             m_drawing.before.insert(m_drawing.before.end(), row, row + 512);
+        }
+    }
+}
+
+// Between two pixels: which command draws each pixel of the rows drawn again, before it draws them
+// (as the loops of draw_object() go: a copy reads its source's pixels, and passes on who drew them)
+void K057714::own_object(uint32_t address, int x, int y, int width, int height, int orig_height, int xscale, int yscale,
+                         bool xflip, bool yflip, bool trans_enable, uint16_t trans_value) {
+    const int32_t mine = m_own_cmd;
+    const bool frac = mine >= 0 && (size_t)mine < m_own_frac.size() && m_own_frac[(size_t)mine];
+    const int xinc = xflip ? -1 : 1;
+    const uint16_t *vram = V16;
+    int v = 0;
+    for (int j = 0; j < height; j++, v += yscale) {
+        if (row_out(j + y)) continue;
+        uint32_t fbaddr = (uint32_t)((j + y) * 1024 + x);
+        const int index = yflip ? (int)address + ((orig_height - 1 - (v >> 6)) * 1024) : (int)address + ((v >> 6) * 1024);
+        if (xflip) fbaddr += (uint32_t)(width - 1);
+        // the row's pixels: on one VRAM row each side, as a rule (else pixel by pixel)
+        const uint32_t d0 = fbaddr, d1 = fbaddr + (uint32_t)((width - 1) * xinc);
+        const int64_t s0 = index, s1 = (int64_t)index + (((int64_t)(width - 1) * xscale) >> 6);
+        if (xscale > 0 && d0 < VRAM_SIZE_HALF && d1 < VRAM_SIZE_HALF && (d0 >> 10) == (d1 >> 10) && s0 >= 0 &&
+            s1 <= 0xffffff && (s0 >> 10) == (s1 >> 10)) {
+            int32_t *drow = own_at(d0 & ~1023u);
+            if (!drow) continue;   // a row not drawn again: nobody asks who drew it
+            const int32_t *srow = frac ? nullptr : own_at((uint32_t)s0 & ~1023u);
+            const uint32_t sb = (uint32_t)s0 & ~1023u;
+            if (!srow && xscale == 64 && !xflip) {   // the common case: its own pixels, branch-free
+                int32_t *o = drow + (d0 & 1023u);
+                if (!trans_enable) {
+                    std::fill(o, o + width, mine);
+                    continue;
+                }
+                const uint32_t s = (uint32_t)s0;
+                for (int i = 0; i < width; i++) {
+                    const int32_t keep = -(int32_t)((vram[(s + (uint32_t)i) ^ 1u] & 0x8000) == trans_value);
+                    o[i] = (mine & keep) | (o[i] & ~keep);
+                }
+                continue;
+            }
+            int u = 0;
+            uint32_t d = d0 & 1023u;
+            for (int i = 0; i < width; i++, d += (uint32_t)xinc, u += xscale) {
+                const uint32_t src = (uint32_t)(index + (u >> 6));
+                if (trans_enable && (vram[src ^ 1u] & 0x8000) != trans_value) continue;
+                int32_t who = mine;
+                if (srow && srow[src - sb] >= 0) who = srow[src - sb];
+                drow[d] = who;
+            }
+            continue;
+        }
+        int u = 0;
+        for (int i = 0; i < width; i++, fbaddr += (uint32_t)xinc, u += xscale) {
+            if (fbaddr >= VRAM_SIZE_HALF) continue;
+            const uint32_t src = (uint32_t)(index + (u >> 6)) & 0xffffffu;
+            if (trans_enable && (pix(src) & 0x8000) != trans_value) continue;
+            int32_t *o = own_at(fbaddr);
+            if (!o) continue;
+            int32_t who = mine;
+            if (!frac)
+                if (const int32_t *so = own_at(src); so && *so >= 0) who = *so;
+            *o = who;
+        }
+    }
+}
+
+// Who drew each pixel of the picture draw() composes (the top layer's pixel shown wins). Only rows
+// drawn again: elsewhere both pictures are the same, and nobody asks
+void K057714::own_screen(std::vector<int32_t> &out, int w, int h) {
+    out.assign((size_t)w * h, -1);
+    const bool inverse_trans = (m_reg_6c & 0xf) != 0 && m_reg_6c != 0xfff;
+    const uint16_t trans_value = inverse_trans ? 0x8000 : 0x0000;
+    for (int sh = 8; sh <= 14; sh += 2) {
+        const Frame &f = m_frame[(m_layer_select >> sh) & 3];
+        if (f.height == 0 || f.width == 0) continue;
+        int height = f.height + 1, width = f.width + 1;
+        if (f.y + height > h - 1) height = h - 1 - f.y;
+        if (f.x + width > w - 1) width = w - 1 - f.x;
+        const int iend = std::min(width, w - 1 - f.x);
+        for (int j = 0; j <= height; j++) {
+            const int y = j + f.y;
+            if (y < 0 || y >= h || iend < 0) continue;
+            const uint32_t base = f.base + (uint32_t)j * 1024;
+            const uint32_t first = base & 0xffffffu, last = (base + (uint32_t)iend) & 0xffffffu;
+            if ((first >> 10) == (last >> 10) && last >= first && f.x >= 0) {   // one VRAM row: branch-free
+                const int32_t *o = own_at(first);
+                if (!o) continue;
+                const uint16_t *v = V16;
+                int32_t *d = &out[(size_t)y * w + f.x];
+                for (int i = 0; i <= iend; i++) {
+                    const int32_t shown = -(int32_t)((v[(first + (uint32_t)i) ^ 1u] & 0x8000) != trans_value);
+                    d[i] = (o[i] & shown) | (d[i] & ~shown);
+                }
+                continue;
+            }
+            for (int i = 0; i <= iend; i++) {
+                const int x = f.x + i;
+                if (x < 0 || x >= w) continue;
+                const uint32_t px = (base + (uint32_t)i) & 0xffffffu;
+                if ((pix(px) & 0x8000) == trans_value) continue;
+                const int32_t *o = own_at(px);
+                out[(size_t)y * w + x] = o ? *o : -1;
+            }
         }
     }
 }
@@ -632,20 +763,21 @@ bool K057714::draw_between(uint32_t *out, int width, int height, double t) {
     auto mark = [&](int y0, int y1) {
         for (int y = std::max(y0, 0); y <= y1 && y - y0 < ROWS; y++) m_clip_row[(uint32_t)y & (ROWS - 1)] = 1;
     };
-    for (size_t k = 0; k < cmds.size(); k++) {
-        Cmd &c = cmds[k];
-        if (((c[0] >> 29) & 7) != 5) continue;
-        const int x = c[1] & 0x3ff, y = (c[1] >> 10) & 0x3fff;
-        int ox, oy;   // on the screen; in VRAM through the copy's scale
-        m_scroll.offset(moves[k].first, moves[k].second, t, ox, oy, (int)k);
+    // object k of the frame, (ox, oy) on on the screen, into `c`: whether it moved (and the rows it
+    // was drawn on and the rows it goes to marked: the only ones drawn again, their objects' other
+    // rows staying as the frame has them)
+    auto put = [&](size_t k, Cmd &c, int ox, int oy) {
+        const Cmd &c0 = shown.cmds[k];
+        const int x = c0[1] & 0x3ff, y = (c0[1] >> 10) & 0x3fff;
+        // in VRAM through the copy's scale
         const int sx = here[k].xs == 64 ? ox : (int)std::lround(ox * here[k].xs / 64.0);
         const int sy = here[k].ys == 64 ? oy : (int)std::lround(oy * here[k].ys / 64.0);
         const int nx = x + sx, ny = y + sy;
-        if ((nx == x && ny == y) || nx < 0 || nx > 0x3ff || ny < 0 || ny > 0x3fff) continue;
-        c[1] = (c[1] & ~0xffffffu) | (c[1] & 0xff000000u) | (uint32_t)ny << 10 | (uint32_t)nx;
-        moved = true;
-        // the rows it was drawn on and the rows it goes to: the only ones drawn again (their objects'
-        // other rows stay as the frame has them)
+        if ((nx == x && ny == y) || nx < 0 || nx > 0x3ff || ny < 0 || ny > 0x3fff) {
+            c[1] = c0[1];   // where the frame has it (a pixel further on from a place a pixel back)
+            return false;
+        }
+        c[1] = (c0[1] & 0xff000000u) | (uint32_t)ny << 10 | (uint32_t)nx;
         if (k < shown.cmd_rows.size()) {
             const auto [y0, y1] = shown.cmd_rows[k];
             mark(y0, y1);
@@ -654,12 +786,47 @@ bool K057714::draw_between(uint32_t *out, int width, int height, double t) {
         if (here[k].copied) {   // drawn through a copy: where it shows, before and after (the copy's
             // place relative to the frame buffer's origin, as most are: matched without it, as both
             // buffers' frames are, but drawn there)
-            const int h = int((c[3] & 0x3ff) + 1) * 64 / here[k].ys, at = here[k].y - h / 2 + (here[k].rel ? shown_y : 0);
+            const int h = int((c0[3] & 0x3ff) + 1) * 64 / here[k].ys, at = here[k].y - h / 2 + (here[k].rel ? shown_y : 0);
             mark(at - 2, at + h + 2);
             mark(at + oy - 2, at + oy + h + 2);
         }
+        return true;
+    };
+    // Between two pixels (HK_BETWEEN_SUBPIXEL=0: whole pixels, as before), as DJ Main draws them
+    // (hiraku/subpixel_mix.h): each moving object at the whole pixel below its place along its move's
+    // main axis (the other rounded), the frame drawn again with each one a fraction on a pixel
+    // further, and the two mixed pixel by pixel by the fraction of the object that drew it (a copy
+    // passing on its source's: pop'n music 8's notes, drawn into a strip and copied onto the lanes)
+    static const bool subpixel = !std::getenv("HK_BETWEEN_SUBPIXEL") || std::strcmp(std::getenv("HK_BETWEEN_SUBPIXEL"), "0") != 0;
+    struct Place { int ox = 0, oy = 0, axis = -1, q = 0; };   // q: the fraction on along `axis`, in 16ths
+    std::vector<Place> places(cmds.size());
+    bool frac = false;
+    for (size_t k = 0; k < cmds.size(); k++) {
+        if (((cmds[k][0] >> 29) & 7) != 5) continue;
+        // (an object of the scroll's line goes along it, a frame where the game missed its update
+        // for it, standing still, too: ScrollGuess::on_line)
+        double rx, ry;
+        m_scroll.offset_exact(moves[k].first, moves[k].second, t, rx, ry, (int)k);
+        int axis = std::abs(moves[k].second) >= std::abs(moves[k].first) ? 1 : 0;
+        if (double lx, ly; m_scroll.follow) m_scroll.on_line((int)k, t, lx, ly, axis);
+        Place &pl = places[k];
+        pl.ox = (int)std::lround(rx), pl.oy = (int)std::lround(ry);
+        if (subpixel) {
+            const double r = axis ? ry : rx, lo = std::floor(r);
+            int q = (int)std::lround((r - lo) * 16), whole = (int)lo;
+            if (q == 16) whole++, q = 0;
+            (axis ? pl.oy : pl.ox) = whole;
+            if (q) pl.axis = axis, pl.q = q, frac = true;
+        }
+        if (put(k, cmds[k], pl.ox, pl.oy)) moved = true;
     }
-    if (!moved) return false;   // nothing on by a whole pixel yet: the frame as it is
+    std::vector<Cmd> further;   // each object a fraction on, a pixel further
+    if (frac) {
+        further = cmds;
+        for (size_t k = 0; k < cmds.size(); k++)
+            if (const Place &pl = places[k]; pl.axis >= 0) put(k, further[k], pl.ox + (pl.axis ? 0 : 1), pl.oy + (pl.axis ? 1 : 0));
+    }
+    if (!moved && !frac) return false;   // nothing on yet: the frame as it is
     // A copy's two sides drawn again together: a screen row it writes drawn again needs the strip
     // row it reads drawn again (else it copies the strip as the frame left it: the object at its
     // old place, a slice of it under the moved one), and a strip row drawn again needs the screen
@@ -690,22 +857,9 @@ bool K057714::draw_between(uint32_t *out, int width, int height, double t) {
     // The rows back as they were before the frame was drawn, the frame drawn again, composed, and
     // VRAM and the frame buffer origin put back: of each row, the columns the frame drew on and as
     // far each side as what moves is carried on (at most ScrollGuess::REACH a frame)
-    m_replaying = true;
-    m_replay_mark++;
-    m_restore_rows.clear();
-    m_restore.clear();
     m_span0 = std::max(0, shown.x0 - hk::ScrollGuess::REACH) / 2, m_span1 = std::min(1024, shown.x1 + hk::ScrollGuess::REACH + 2) / 2;
     if (m_span1 <= m_span0) m_span0 = 0, m_span1 = 512;
     const size_t n = (size_t)(m_span1 - m_span0);
-    m_clip = true;
-    for (size_t i = 0; i < shown.rows.size(); i++) {
-        const uint32_t r = shown.rows[i];
-        if (row_out((int)r)) continue;
-        touch((int)r, (int)r, 0, 0);
-        std::memcpy(&m_vram[(size_t)r * 512 + m_span0], &shown.before[i * 512 + m_span0], n * 4);
-    }
-    const int ox = m_fb_origin_x, oy = m_fb_origin_y;
-    m_fb_origin_x = shown.origin_x, m_fb_origin_y = shown.origin_y;
     // the commands that draw on a row drawn again (where they were, or where they go), or set the
     // frame buffer's origin
     std::vector<int> sum(ROWS + 1, 0);
@@ -716,21 +870,98 @@ bool K057714::draw_between(uint32_t *out, int width, int height, double t) {
         const int a = y0 & (ROWS - 1), b = y1 & (ROWS - 1);
         return a <= b ? sum[b + 1] - sum[a] > 0 : sum[ROWS] - sum[a] + sum[b + 1] > 0;
     };
-    for (size_t k = 0; k < cmds.size(); k++) {
-        const Cmd &c = cmds[k];
-        if (k < shown.cmd_rows.size() && ((c[0] >> 29) & 7) != 3) {
-            const auto [y0, y1] = shown.cmd_rows[k];
-            const int dy = (int)((c[1] >> 10) & 0x3fff) - (int)((shown.cmds[k][1] >> 10) & 0x3fff);
-            if (!any(y0, y1) && !any(y0 + dy, y1 + dy)) continue;
+    // the screen rows that show a row drawn again: the only ones an in-between picture composes,
+    // on the frame's own picture (composed once a frame, VRAM as the frame left it)
+    static std::vector<uint8_t> screen_rows;
+    screen_rows.assign((size_t)height, 0);
+    for (int sh = 8; sh <= 14; sh += 2) {
+        const Frame &f = m_frame[(m_layer_select >> sh) & 3];
+        if (f.height == 0 || f.width == 0) continue;
+        for (int y = std::max(0, (int)f.y); y < height && y - f.y <= f.height + 1; y++) {
+            const uint32_t a = f.base + (uint32_t)(y - f.y) * 1024, b = a + (uint32_t)f.width + 1;
+            if (m_clip_row[(a >> 10) & (ROWS - 1)] || m_clip_row[(b >> 10) & (ROWS - 1)]) screen_rows[(size_t)y] = 1;
         }
-        run(c.data());
     }
-    draw(out, width, height);
-    m_fb_origin_x = ox, m_fb_origin_y = oy;
-    m_clip = false;
-    for (size_t i = 0; i < m_restore_rows.size(); i++)
-        std::memcpy(&m_vram[(size_t)m_restore_rows[i] * 512 + m_span0], &m_restore[i * n], n * 4);
-    m_replaying = false;
+    {
+        Composed &c = m_composed;
+        const bool same = c.mark == m_mark && c.drawn == m_drawing.cmds.size() && c.layer_select == m_layer_select &&
+                          c.reg_6c == m_reg_6c && c.w == width && c.h == height &&
+                          std::memcmp(c.frame, m_frame, sizeof m_frame) == 0;
+        if (!same) {
+            c.px.resize((size_t)width * height);
+            draw(c.px.data(), width, height);
+            c.mark = m_mark, c.drawn = m_drawing.cmds.size(), c.layer_select = m_layer_select, c.reg_6c = m_reg_6c;
+            c.w = width, c.h = height;
+            std::memcpy(c.frame, m_frame, sizeof m_frame);
+        }
+    }
+    if (frac) {   // who draws what: a row of m_own for each row drawn again
+        m_own_slot.assign(ROWS, -1);
+        int slots = 0;
+        for (int r = 0; r < ROWS; r++)
+            if (m_clip_row[r]) m_own_slot[r] = slots++;
+        m_own.resize((size_t)slots * 1024);
+        m_own_frac.assign(cmds.size(), 0);
+        for (size_t k = 0; k < cmds.size(); k++) m_own_frac[k] = places[k].axis >= 0;
+    }
+    auto replay = [&](const std::vector<Cmd> &cs, uint32_t *dst, std::vector<int32_t> *own, const uint8_t *rows) {
+        m_replaying = true;
+        m_replay_mark++;
+        m_restore_rows.clear();
+        m_restore.clear();
+        m_clip = true;
+        for (size_t i = 0; i < shown.rows.size(); i++) {
+            const uint32_t r = shown.rows[i];
+            if (row_out((int)r)) continue;
+            touch((int)r, (int)r, 0, 0);
+            std::memcpy(&m_vram[(size_t)r * 512 + m_span0], &shown.before[i * 512 + m_span0], n * 4);
+        }
+        if (own) {
+            std::fill(m_own.begin(), m_own.end(), -1);
+            m_owning = true;
+        }
+        const int ox = m_fb_origin_x, oy = m_fb_origin_y;
+        m_fb_origin_x = shown.origin_x, m_fb_origin_y = shown.origin_y;
+        for (size_t k = 0; k < cs.size(); k++) {
+            const Cmd &c = cs[k];
+            if (k < shown.cmd_rows.size() && ((c[0] >> 29) & 7) != 3) {
+                const auto [y0, y1] = shown.cmd_rows[k];
+                const int dy = (int)((c[1] >> 10) & 0x3fff) - (int)((shown.cmds[k][1] >> 10) & 0x3fff);
+                if (!any(y0, y1) && !any(y0 + dy, y1 + dy)) continue;
+            }
+            m_own_cmd = (int)k;
+            run(c.data());
+        }
+        m_owning = false;
+        m_own_cmd = -1;
+        std::memcpy(dst, m_composed.px.data(), (size_t)width * height * 4);
+        draw(dst, width, height, rows);
+        if (own) own_screen(*own, width, height);
+        m_fb_origin_x = ox, m_fb_origin_y = oy;
+        m_clip = false;
+        for (size_t i = 0; i < m_restore_rows.size(); i++)
+            std::memcpy(&m_vram[(size_t)m_restore_rows[i] * 512 + m_span0], &m_restore[i * n], n * 4);
+        m_replaying = false;
+    };
+    if (!frac) {
+        replay(cmds, out, nullptr, screen_rows.data());
+        return true;
+    }
+    static std::vector<int32_t> own0, own1;
+    static std::vector<uint32_t> on;
+    on.resize((size_t)width * height);
+    replay(cmds, out, &own0, screen_rows.data());
+    replay(further, on.data(), &own1, screen_rows.data());
+    // the fraction of the object that drew the pixel a pixel further on, else of the one that left it
+    auto q_of = [&](int32_t o) { return o >= 0 && (size_t)o < places.size() && places[(size_t)o].axis >= 0 ? places[(size_t)o].q : 0; };
+    for (int y = 0; y < height; y++) {
+        if (!screen_rows[(size_t)y]) continue;
+        const size_t row = (size_t)y * width;
+        hk::subpixel_mix(out + row, on.data() + row, (size_t)width, [&](size_t k) {
+            const int q = q_of(own1[row + k]);
+            return q ? q : q_of(own0[row + k]);
+        });
+    }
     return true;
 }
 

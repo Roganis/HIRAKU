@@ -36,8 +36,10 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <cstdio>
 #include <cstdlib>
 #include <map>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -49,6 +51,17 @@ public:
     static constexpr int REACH = 64;   // the furthest an object is looked for, each way, in the frame before
     static constexpr int NEAR = 16;    // ... and taken: this near standing still or the scroll's move
     static constexpr double JUMP = 8;  // ... and this near the look-alike's own speed, if it has one
+
+    // The scroll's own objects carry its line on (frame(): the median of their moves, a frame where
+    // most stood still a missed update, each one's lag; on_line): DJ Main's and Firebeat's in-between
+    // pictures (follow_env(true)). The other cores still go by the vote alone: the 573/Twinkle GPU
+    // only carries on what it saw move, so a note that missed an update would stand still
+    // (HK_SCROLL_FOLLOW=1: on for every core, for trying it; 0: off for every core)
+    static bool follow_env(bool fallback) {
+        const char *e = std::getenv("HK_SCROLL_FOLLOW");
+        return e && *e ? std::string(e) != "0" : fallback;
+    }
+    bool follow = follow_env(false);
 
     // That object `obj` of this frame may be `from` of the frame before, moved (dx, dy); `cost`, how
     // different it looks (0: the same); `whole`, whether it moved as one piece (only those vote).
@@ -177,6 +190,14 @@ public:
         }
         m_was.swap(m_tracks);
         m_tracks.swap(tracks);
+        // HK_SCROLL_LOG=FILE (testing): each frame's objects (F frame guess k from dx dy) and the
+        // in-between offsets asked for (O frame guess t k ox oy, not rounded): what any core's
+        // smooth motion does, for measuring
+        if (FILE *lg = log_file()) {
+            for (size_t k = 0; k < moves.size(); k++)
+                if (k < from.size() && (from[k] >= 0 || moves[k].first || moves[k].second))
+                    std::fprintf(lg, "F %llu %p %zu %d %d %d\n", (unsigned long long)frame, (const void *)this, k, from[k], moves[k].first, moves[k].second);
+        }
         std::map<std::pair<int, int>, int> count;
         for (const auto &m : moves)
             if (m.first || m.second) count[m]++;
@@ -194,19 +215,160 @@ public:
                     in += k, ax += (double)o.first * k, ay += (double)o.second * k;
             if (in > best || (in == best && n > best_exact)) best = in, best_exact = n, sx = ax / in, sy = ay / in;
         }
+        // The line's own objects (the notes) carry it on, however few (one note) and outnumbered,
+        // by the median of their moves; most of them standing still is a frame where the game missed
+        // its update (held). pop'n music 3 (DJ Main, its notes 1.6 pixels a frame): the judgement
+        // and combo sprites rising together (4 to 6) outvoted its 2 or 3 notes, its key effects moved
+        // the notes' way while every note stood still, and the notes missed an update now and then,
+        // standing still and then moving twice as far (2, 2, 0, 3.3, 2), some or all of them: each
+        // time the line started again, its first frames' speed up to a pixel a frame off, and the
+        // notes juddered while anything was judged. Each object of the line keeps how far it is
+        // behind it (lag: what it missed, or its own rounding) and is drawn on it (on_line). Without
+        // the objects' pairing (`from`), the vote below as before
+        m_held = false;
+        m_ax = m_ay = 0;
+        const bool linked = from.size() == moves.size();
+        std::vector<char> members(moves.size(), 0);
+        std::vector<double> lags(moves.size(), 0.0), offs(moves.size(), 0.0);
+        // (HK_SCROLL_HOLD=0: the vote alone, as before)
+        static const bool hold = !std::getenv("HK_SCROLL_HOLD") || std::string(std::getenv("HK_SCROLL_HOLD")) != "0";
+        if (follow && hold && m_pos.size() >= 3 && linked && (double)frame - m_pos.back().f <= 3) {
+            double vx, vy;
+            line_speed(vx, vy);
+            const int axis = std::fabs(vy) >= std::fabs(vx) ? 1 : 0;
+            const double v = axis ? vy : vx, g = (double)frame - m_pos.back().f;
+            std::vector<double> mv;
+            auto along = [&](size_t k) { return (double)(axis ? moves[k].second : moves[k].first); };
+            auto side = [&](size_t k) { return std::abs(axis ? moves[k].first : moves[k].second); };
+            // (1: on the line; 2: moved with it the frame before, on it if it does again. pop'n 3's key
+            // effects move the notes' way for a frame: on the line at once, their standing still the
+            // next frame took its move from 1.6 to 1.0 pixels a frame)
+            auto was = [&](size_t k) { return from[k] >= 0 && (size_t)from[k] < m_member.size() && m_member[(size_t)from[k]] == 1; };
+            auto came = [&](size_t k) { return from[k] >= 0 && (size_t)from[k] < m_member.size() && m_member[(size_t)from[k]] == 2; };
+            for (size_t k = 0; k < moves.size(); k++)
+                if (was(k) && side(k) <= 1) mv.push_back(along(k));
+            if (static const bool dbg = std::getenv("HK_SCROLL_DEBUG") != nullptr; dbg) {
+                std::fprintf(stderr, "scroll %llu g %.0f v %.2f members' moves:", (unsigned long long)frame, g, v);
+                for (size_t k = 0; k < moves.size(); k++)
+                    if (was(k) && side(k) <= 1) std::fprintf(stderr, " %zu<%d:%.0f", k, from[k], along(k));
+                std::fprintf(stderr, "\n");
+            }
+            if (!mv.empty()) {
+                std::sort(mv.begin(), mv.end());
+                double a = mv[mv.size() / 2];
+                if (mv.size() % 2 == 0) a = (a + mv[mv.size() / 2 - 1]) / 2;
+                if (std::fabs(a) < std::fabs(v) * g / 2 || a * v <= 0) {   // most stood still: held
+                    m_held = true, a = 0;
+                    m_cx = axis ? 0 : v, m_cy = axis ? v : 0;
+                } else {
+                    // the line's move: the members' moves near what it would move, averaged (those that
+                    // stood still or catch up left out); near the median when none are (a new speed)
+                    const double want = std::fabs(v * g - a) <= std::max(1.0, std::fabs(v) * g / 4) ? v * g : a;
+                    const double tol = std::max(1.0, std::fabs(want) / 4);
+                    double sum = 0;
+                    int n = 0;
+                    for (const double m : mv)
+                        if (std::fabs(m - want) < tol) sum += m, n++;
+                    if (!n)
+                        for (const double m : mv)
+                            if (std::fabs(m - a) <= tol) sum += m, n++;
+                    a = sum / n;
+                    m_cx = axis ? 0 : a, m_cy = axis ? a : 0;
+                    m_ax = m_cx, m_ay = m_cy;
+                    m_pos.push_back({(double)frame, m_pos.back().x + m_cx, m_pos.back().y + m_cy});
+                    if ((int)m_pos.size() > N + 1) m_pos.erase(m_pos.begin());
+                }
+                const double tol = std::max(1.0, std::fabs(v) / 4);
+                for (size_t k = 0; k < moves.size(); k++) {
+                    if (side(k) > 1) continue;
+                    if (was(k)) {   // behind the line by what it missed, and its own rounding
+                        // (one missed update at most: behind by more, it has stopped. pop'n 3 holds a
+                        // note at the judgement line while it judges it, carried on past it, it jumped back)
+                        const double lag = m_lag[(size_t)from[k]] + a - along(k), off = m_off[(size_t)from[k]];
+                        if (std::fabs(lag - off) <= std::fabs(v) * g + tol) members[k] = 1, lags[k] = lag, offs[k] = off;
+                    } else if (!m_held && std::fabs(along(k) - a) <= tol && along(k) * a > 0) {   // joins it
+                        members[k] = came(k) ? 1 : 2;
+                    }
+                }
+                // Each one's steady place on the line (its usual lag, `offs`): how far it is off it now
+                // is partly the line's own error, the same for all of them (their median), and partly its
+                // own (its rounding, or an update it missed). Its own, smoothed over its frames, a missed
+                // update (more than half a move) left out; the line's, taken off all of their lags
+                // alike, a quarter a frame. So each object's rounding neither widens nor narrows its
+                // distance to the next (the owner: "the notes seem to not all move at the same speed",
+                // pop'n music 3: 0.9 pixels sd), and when the line itself was off (all of them behind it
+                // by 1.9 pixels at once) they don't come back to it one by one
+                std::vector<double> e;
+                for (size_t k = 0; k < moves.size(); k++)
+                    if (members[k] == 1) e.push_back(lags[k] - offs[k]);
+                if (!e.empty()) {
+                    std::nth_element(e.begin(), e.begin() + (long)e.size() / 2, e.end());
+                    const double c = e[e.size() / 2];
+                    for (size_t k = 0; k < moves.size(); k++) {
+                        if (members[k] != 1) continue;
+                        const double own = lags[k] - offs[k] - c;
+                        if (std::fabs(own) <= std::max(0.75, std::fabs(v) / 2)) offs[k] += own / 4;
+                        lags[k] -= c / 4;
+                    }
+                }
+                m_member.swap(members), m_lag.swap(lags), m_off.swap(offs);
+                return;
+            }
+        }
         m_cx = sx, m_cy = sy;
         if (best < 2) {   // nothing scrolls (one object moving is not a scroll): start again
             m_pos.clear();
+            m_member.assign(moves.size(), 0), m_lag.assign(moves.size(), 0.0), m_off.assign(moves.size(), 0.0);
             return;
         }
         if (m_pos.size() >= 2) {   // a new speed: the line starts again
-            const double vx = (m_pos.back().first - m_pos.front().first) / double(m_pos.size() - 1);
-            const double vy = (m_pos.back().second - m_pos.front().second) / double(m_pos.size() - 1);
-            if (std::fabs(sx - vx) > 1.5 || std::fabs(sy - vy) > 1.5) m_pos.clear();
+            double vx, vy;
+            line_speed(vx, vy);
+            const double g = std::max(1.0, (double)frame - m_pos.back().f);
+            if (std::fabs(sx / g - vx) > 1.5 || std::fabs(sy / g - vy) > 1.5) m_pos.clear();
         }
-        if (m_pos.empty()) m_pos.push_back({0, 0});   // the frame before
-        m_pos.push_back({m_pos.back().first + sx, m_pos.back().second + sy});
+        if (m_pos.empty()) m_pos.push_back({(double)frame - 1, 0, 0});   // the frame before
+        m_pos.push_back({(double)frame, m_pos.back().x + sx, m_pos.back().y + sy});
+        m_ax = sx, m_ay = sy;
         if ((int)m_pos.size() > N + 1) m_pos.erase(m_pos.begin());
+        for (size_t k = 0; k < moves.size(); k++)   // the line's objects: those that went with it
+            members[k] = (moves[k].first || moves[k].second) && std::fabs(moves[k].first - sx) <= 1.5 &&
+                         std::fabs(moves[k].second - sy) <= 1.5 && moves[k].first * sx + moves[k].second * sy > 0;
+        m_member.swap(members), m_lag.swap(lags), m_off.swap(offs);
+    }
+
+    // This frame is one where the game missed its update: what goes with the scroll stood still
+    bool held() const { return m_held; }
+    // How far the line's latest position moved on this frame (0 when held or started again): what an
+    // object going with it moved, unless it missed the update
+    void advance(double &ax, double &ay) const { ax = m_ax, ay = m_ay; }
+
+    // Whether object `obj` of this frame goes with the scroll's line (frame()'s pairing); if so, (ox,
+    // oy) from its place, `t` of a frame on: the line's, less what the object is behind it. `axis`:
+    // the line's main one (0 x, 1 y)
+    bool on_line(int obj, double t, double &ox, double &oy, int &axis) const {
+        if (obj < 0 || (size_t)obj >= m_member.size() || m_member[(size_t)obj] != 1 || !line_offset(t, ox, oy)) return false;
+        double vx, vy;
+        line_speed(vx, vy);
+        axis = std::fabs(vy) >= std::fabs(vx) ? 1 : 0;
+        // (its steady place on the line: where it is, plus how far it is behind the line now, less how
+        // far it is behind it as a rule)
+        (axis ? oy : ox) += m_lag[(size_t)obj] - m_off[(size_t)obj];
+        return true;
+    }
+
+    // Where the scroll's line puts what goes with it, `t` of a frame on, from where it stands now
+    // (for an object standing still in a held frame that went with the scroll the frame before)
+    bool line_offset(double t, double &ox, double &oy) const {
+        if (m_pos.size() < 3) return false;
+        double vx, vy;
+        line_speed(vx, vy);
+        const double now = (double)m_frame;
+        double lx = 0, ly = 0;   // where the line puts this frame: the mean of each position carried on to it
+        for (const Pos &p : m_pos) lx += p.x + (now - p.f) * vx, ly += p.y + (now - p.f) * vy;
+        lx /= (double)m_pos.size(), ly /= (double)m_pos.size();
+        ox = lx - m_pos.back().x + vx * t, oy = ly - m_pos.back().y + vy * t;
+        return true;
     }
 
     // Whether an object whose last move was (dx, dy) goes with the scroll (offset() then carries it
@@ -219,6 +381,27 @@ public:
     // for two vblanks: the fraction of its move): (ox, oy) from its place in the frame. `obj`: its
     // index in frame()'s moves, for its own track
     void offset(int dx, int dy, double t, int &ox, int &oy, int obj = -1) const {
+        double rx, ry;
+        offset_exact(dx, dy, t, rx, ry, obj);
+        ox = (int)std::lround(rx), oy = (int)std::lround(ry);
+    }
+
+    // The same, not rounded to whole pixels: for a core that draws an object between two pixels
+    // (DJ Main's sub-pixel in-between pictures, runtime/djmain/board.cpp)
+    void offset_exact(int dx, int dy, double t, double &ox, double &oy, int obj = -1) const {
+        offset_guess(dx, dy, t, ox, oy, obj);
+        if (FILE *lg = log_file()) std::fprintf(lg, "O %llu %p %.4f %d %.4f %.4f\n", (unsigned long long)m_frame, (const void *)this, t, obj, ox, oy);
+    }
+
+private:
+    static FILE *log_file() {
+        static FILE *f = std::getenv("HK_SCROLL_LOG") ? std::fopen(std::getenv("HK_SCROLL_LOG"), "w") : nullptr;
+        return f;
+    }
+    void offset_guess(int dx, int dy, double t, double &ox, double &oy, int obj) const {
+        // (following the line: one of its objects goes on it, at its steady place)
+        int axis;
+        if (follow && on_line(obj, t, ox, oy, axis)) return;
         const bool scrolls = (dx || dy) && m_pos.size() >= 3 && std::fabs(dx - m_cx) <= 1.5 && std::fabs(dy - m_cy) <= 1.5 &&
                              dx * m_cx + dy * m_cy > 0;
         if (!scrolls) {
@@ -228,21 +411,30 @@ public:
             if ((dx || dy) && obj >= 0 && (size_t)obj < m_tracks.size()) {
                 double lx, ly, vx, vy;
                 if (m_tracks[(size_t)obj].line(lx, ly, vx, vy) && vx * dx + vy * dy > 0) {
-                    ox = (int)std::lround(lx + vx * t), oy = (int)std::lround(ly + vy * t);
+                    ox = lx + vx * t, oy = ly + vy * t;
                     return;
                 }
             }
-            ox = (int)std::lround(dx * t), oy = (int)std::lround(dy * t);
+            ox = dx * t, oy = dy * t;
             return;
         }
         // the line through the kept positions: their average speed, through their mean
-        const int n = (int)m_pos.size();
-        const double vx = (m_pos.back().first - m_pos.front().first) / double(n - 1);
-        const double vy = (m_pos.back().second - m_pos.front().second) / double(n - 1);
-        double lx = 0, ly = 0;   // where the line puts this frame: the mean of each position carried on to it
-        for (int i = 0; i < n; i++) lx += m_pos[i].first + (n - 1 - i) * vx, ly += m_pos[i].second + (n - 1 - i) * vy;
-        lx /= n, ly /= n;
-        ox = (int)std::lround(lx - m_pos.back().first + vx * t), oy = (int)std::lround(ly - m_pos.back().second + vy * t);
+        line_offset(t, ox, oy);
+    }
+
+public:
+
+    // (debugging: whether object `obj` goes with the line, how far behind it it is, and its steady place)
+    bool member_state(int obj, double &lag, double &off) const {
+        if (obj < 0 || (size_t)obj >= m_member.size()) return false;
+        lag = m_lag[(size_t)obj], off = m_off[(size_t)obj];
+        return m_member[(size_t)obj] == 1;
+    }
+
+    // (debugging: the scroll's move this frame, its kept positions and the line's speed)
+    void scroll_state(double &cx, double &cy, int &kept, double &vx, double &vy) const {
+        cx = m_cx, cy = m_cy, kept = (int)m_pos.size(), vx = vy = 0;
+        if (m_pos.size() >= 2) line_speed(vx, vy);
     }
 
 private:
@@ -296,7 +488,30 @@ private:
     double m_hint_x = 0, m_hint_y = 0;              // the frame before's scroll, for pair()
     std::vector<int> m_votes, m_voter;               // pair()'s grid of moves
     double m_cx = 0, m_cy = 0;                     // the scroll's move this frame (its objects' average)
-    std::vector<std::pair<double, double>> m_pos;   // the scroll's position, frame by frame (the last: this frame)
+    struct Pos { double f, x, y; };   // a frame's number, and the scroll's position then
+    std::vector<Pos> m_pos;           // the scroll's positions, frame by frame (the last: its latest; a held frame has none)
+    bool m_held = false;              // this frame: nothing went on along the line (frame())
+    double m_ax = 0, m_ay = 0;        // this frame's move of the line's latest position
+    std::vector<char> m_member;       // this frame's objects: which go with the line
+    std::vector<double> m_lag;        // ... and how far each is behind it, along it
+    std::vector<double> m_off;        // ... and its steady place there (its lag, smoothed)
+    // the line's speed a frame: from its first kept position to its last
+    // the line's speed: least squares through the kept positions (HK_SCROLL_ENDS=1: from the first
+    // and last alone, as before). pop'n music 8's notes step 2, 3, 2 pixels: the ends alone made
+    // the speed 2.2 or 2.4 by turns, and the line's place at a frame's own moment wobbled with it
+    void line_speed(double &vx, double &vy) const {
+        static const bool ends = std::getenv("HK_SCROLL_ENDS") && std::string(std::getenv("HK_SCROLL_ENDS")) == "1";
+        const double span = std::max(1.0, m_pos.back().f - m_pos.front().f);
+        vx = (m_pos.back().x - m_pos.front().x) / span, vy = (m_pos.back().y - m_pos.front().y) / span;
+        if (ends || m_pos.size() < 3) return;
+        double fm = 0, xm = 0, ym = 0;
+        for (const Pos &p : m_pos) fm += p.f, xm += p.x, ym += p.y;
+        const double n = (double)m_pos.size();
+        fm /= n, xm /= n, ym /= n;
+        double ff = 0, fx = 0, fy = 0;
+        for (const Pos &p : m_pos) ff += (p.f - fm) * (p.f - fm), fx += (p.f - fm) * (p.x - xm), fy += (p.f - fm) * (p.y - ym);
+        if (ff > 0) vx = fx / ff, vy = fy / ff;
+    }
     std::vector<Track> m_tracks;   // each object's own line (frame()'s `from`)
     std::vector<Track> m_was;      // ... the frame before's
 };

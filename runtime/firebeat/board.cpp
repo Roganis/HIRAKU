@@ -697,7 +697,7 @@ std::vector<uint32_t> g_present_fb;
 
 // HK_BETWEEN_SNAP=FIRST-LAST,PREFIX: at the end of each vblank of frames FIRST to LAST, the picture
 // on show and its in-between pictures a quarter, a half and three quarters on (render_between, as
-// --smooth-motion draws them), as PREFIX-<frame>-<0..3>.ppm. Headless snapshots come before the
+// --smooth-motion draws them, all then), as PREFIX-<frame>-<0..3>.ppm. Headless snapshots come before the
 // game's flip and can't show them (docs/SMOOTH.md, "To check a game")
 void between_snap() {
     static const char *e = getenv("HK_BETWEEN_SNAP");
@@ -717,19 +717,21 @@ void between_snap() {
         }
         fclose(f);
     };
-    static int step = 0;
-    static Timer later("between snap", [] { between_snap(); });
     std::vector<uint32_t> fb;
     int w, h;
-    if (step == 0) {
+    // the frame's own picture as the window shows it with --smooth-motion at the game's own speed
+    // (its first refresh too drawn by render_between: what scrolls on the scroll's line), else the
+    // frame as it is; then the in-between pictures, made then too, as the window makes them
+    // (host/window.cpp keep_shot; made at their own moments of the frame, the game had drawn the
+    // next frame meanwhile, and from half a frame on they showed it: pop'n music 8)
+    if (const uint32_t *p = render_between(0.0, w, h)) {
+        write(p, w, h, 0);
+    } else {
         draw_picture(fb, w, h);
         write(fb.data(), w, h, 0);
     }
-    // each in-between picture at its own moment of the frame, as the window asks for them
-    step++;
-    if (const uint32_t *p = render_between(step / 4.0, w, h)) write(p, w, h, step);
-    if (step < 3) later.in(frame_ticks() / 4);
-    else step = 0;
+    for (int step = 1; step <= 3; step++)
+        if (const uint32_t *p = render_between(step / 4.0, w, h)) write(p, w, h, step);
 }
 
 void vblank_end_fire() {

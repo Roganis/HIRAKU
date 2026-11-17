@@ -11,10 +11,12 @@
 #include <cstdio>
 #include <cstring>
 #include <fstream>
+#include <map>
 #include <memory>
 
 #include "../core/prof.h"
 #include "hiraku/scroll_guess.h"
+#include "hiraku/subpixel_mix.h"
 #include "../dev/ata.h"
 #include "../shell/cabinet.h"
 #include "k054539.h"
@@ -73,6 +75,9 @@ std::vector<uint8_t> g_lamps;
 uint64_t g_lamp_changes = 0;
 std::vector<uint32_t> g_screen(SCREEN_W * SCREEN_H);
 std::vector<uint8_t> g_shown_objram, g_prev_objram;   // the sprite lists of the last two frames
+std::vector<uint8_t> g_list_at_start;   // (HK_DJ_LIST_LOG: the sprite list at vblank start)
+uint64_t g_obj_written = 0;              // when the game last wrote its sprite list (cycles)
+uint64_t g_present_at = 0;              // in the present hook: the blank's end (cycles(): the picture's time)
 std::vector<uint32_t> g_between(SCREEN_W * SCREEN_H);  // render_between()'s picture
 // the sprite list the picture just shown was drawn from, and the one before (render_between())
 void keep_shown_sprites() {
@@ -506,7 +511,10 @@ void bus_write32(uint32_t a, uint32_t data, uint32_t mask) {
         if (mask & 0x00ff0000u) g_turntable_select = (data >> 19) & 1;
         return;
     }
-    if (a >= 0x801000 && a < 0x801800) return put_be32(g_objram, a - 0x801000, data, mask);
+    if (a >= 0x801000 && a < 0x801800) {
+        g_obj_written = now();
+        return put_be32(g_objram, a - 0x801000, data, mask);
+    }
     if (a >= 0x802000 && a < 0x803000) return;   // unknown
     if (a >= 0x803000 && a < 0x8030a0) {
         uint32_t &r = g_obj_regs[(a - 0x803000) >> 2];
@@ -564,12 +572,19 @@ void update_pens() {
     }
 }
 
+// (in-between pictures: which sprite drew each pixel, by slot, -1 none; not kept when null)
+int16_t *g_owner = nullptr;
+int g_owner_now = -1;
+
 // MAME gfx_element::transpen / zoom_transpen (drawgfxzoom_core), pen 0 transparent
 void draw_sprite(int code, int color, int colorbase, bool flipx, bool flipy, int sx, int sy, uint32_t scalex, uint32_t scaley) {
     const uint8_t *src = &g_sprite_pens[(size_t)((uint32_t)code % g_sprite_count) * 256];
     const int base = colorbase + 16 * (color % (NPENS / 16));
     auto put = [&](uint32_t *d, uint8_t pen) {
-        if (pen && base + pen < NPENS) *d = g_pens[base + pen];
+        if (pen && base + pen < NPENS) {
+            *d = g_pens[base + pen];
+            if (g_owner) g_owner[d - g_screen.data()] = (int16_t)g_owner_now;
+        }
     };
     if (scalex == 0x10000 && scaley == 0x10000) {   // drawgfx_core
         for (int y = 0; y < 16; y++) {
@@ -641,6 +656,7 @@ void draw_sprites() {
         ox -= (size * xscale) >> 13;
         oy -= (size * yscale) >> 13;
         const int color = (int)(obj(offs + 3) >> 16) & 15;
+        g_owner_now = offs / 4;
         for (int x = 0; x < size; x++)
             for (int y = 0; y < size; y++) {
                 int c = code + (flipx ? xoffset[size - x - 1] : xoffset[x]) + (flipy ? yoffset[size - y - 1] : yoffset[y]);
@@ -667,6 +683,7 @@ void screen_update() {
         for (int j = i + 1; j < 3; j++)
             if (pri[order[i]] > pri[order[j]]) std::swap(order[i], order[j]);
     std::fill(g_screen.begin(), g_screen.end(), g_pens[0]);
+    if (g_owner) std::fill(g_owner, g_owner + g_screen.size(), (int16_t)-1);
     for (int i = 0; i < 3; i++) {
         const int layer = order[i];
         if (layer == 2) {
@@ -812,16 +829,45 @@ void run() {
         sound_flush();
         if (g_frame_hook) g_frame_hook(g_frame, picture ? g_screen.data() : nullptr, SCREEN_W, SCREEN_H);
         hk_dj_itrace_frame(g_frame);
+        if (getenv("HK_DJ_LIST_LOG")) g_list_at_start = g_objram;
         run_until(g_frame_start + VBLANK_CYCLES);
+        // The game rewrites its sprite list in the blank, and when busy it's still writing at the
+        // blank's end: the picture then had half a list (pop'n music 3: 4 of 13 notes, all of them gone
+        // for a frame now and then). So while it wrote in the last 2 lines, the run goes on half a
+        // line at a time, 40 lines at most, until it's done. The same stops with a window or without
+        // (HK_DJ_LIST_WAIT=0: at the blank's end, as before)
+        static const bool wait_list = !getenv("HK_DJ_LIST_WAIT") || strcmp(getenv("HK_DJ_LIST_WAIT"), "0") != 0;
+        for (uint64_t at = g_frame_start + VBLANK_CYCLES; wait_list && now() - g_obj_written < 2 * 660 && at < g_frame_start + VBLANK_CYCLES + 40 * 660;) {
+            at += 330;
+            run_until(at);
+        }
         if (g_present_hook) {
+            // HK_DJ_LIST_LOG=1: the sprites shown at vblank start and at its end, where they differ by a third
+            if (static const bool ll = getenv("HK_DJ_LIST_LOG") != nullptr; ll) {
+                auto count = [](const std::vector<uint8_t> &ram) {
+                    int n = 0;
+                    for (int i = 0; i < 128; i++)
+                        if (const uint32_t w0 = be32(ram, (uint32_t)i * 16); (w0 & 0x8000) && !(w0 & 0x80000000)) n++;
+                    return n;
+                };
+                static std::vector<uint8_t> at_start;
+                const int a = count(g_list_at_start), b = count(g_objram);
+                if (std::abs(a - b) * 3 > std::max(a, b)) fprintf(stderr, "sprites: frame %llu: %d at vblank start, %d at its end\n", (unsigned long long)g_frame, a, b);
+            }
             screen_update();
             keep_shown_sprites();
+            g_present_at = g_frame_start + VBLANK_CYCLES;
             g_present_hook(g_screen.data(), SCREEN_W, SCREEN_H);
+            g_present_at = 0;
         }
     }
 }
 
-uint64_t cycles() { return now(); }
+// (in the present hook: the blank's end, where the picture is the monitor's, though it may be taken a
+// few lines later, the game still writing its sprite list then: the window paces its frames by this
+// time, and a picture's time a few lines late each now and then was a frame 0.3-0.6 ms long, the next
+// as short, its in-between pictures out of step)
+uint64_t cycles() { return g_present_at ? g_present_at : now(); }
 uint64_t frame_count() { return g_frame; }
 
 // In-between pictures (a display faster than the board): the last frame, each sprite that moved
@@ -833,7 +879,11 @@ uint64_t frame_count() { return g_frame; }
 // sprite that stops or turns overshoots for less than a frame. What scrolls with the frame's other
 // moving sprites goes along the scroll's steady line (hiraku/scroll_guess.h): notes step whole
 // pixels, and carried on by their last step they judder.
-hk::ScrollGuess g_scroll;
+hk::ScrollGuess g_scroll = [] {
+    hk::ScrollGuess g;
+    g.follow = hk::ScrollGuess::follow_env(true);
+    return g;
+}();
 const uint32_t *render_between(double t) {
     if (g_shown_objram.size() != g_objram.size() || g_prev_objram.size() != g_objram.size()) return nullptr;
     struct Spr { int code, x, y; };
@@ -846,7 +896,6 @@ const uint32_t *render_between(double t) {
         return v;
     };
     const std::vector<Spr> cur = list(g_shown_objram), prev = list(g_prev_objram);
-    std::vector<uint8_t> moved = g_shown_objram;
     std::vector<std::pair<int, int>> moves(128, {0, 0});
     std::vector<hk::ScrollGuess::Candidate> cands;
     for (int i = 0; i < 128; i++) {
@@ -854,29 +903,148 @@ const uint32_t *render_between(double t) {
         if (c.code < 0) continue;
         for (int j = 0; j < 128; j++) {
             const Spr &p = prev[j];
-            if (p.code != c.code || std::abs(c.x - p.x) > hk::ScrollGuess::REACH || std::abs(c.y - p.y) > hk::ScrollGuess::REACH) continue;
-            cands.push_back({i, j, c.x - p.x, c.y - p.y, 0, true});
+            if (std::abs(c.x - p.x) > hk::ScrollGuess::REACH || std::abs(c.y - p.y) > hk::ScrollGuess::REACH) continue;
+            if (p.code == c.code) cands.push_back({i, j, c.x - p.x, c.y - p.y, 0, true});
         }
     }
     const std::vector<int> paired = g_scroll.pair(g_frame, 128, cands, true);
     std::vector<int> from(128, -1);   // each sprite's own track: its slot in the frame before
     for (int i = 0; i < 128; i++)
         if (paired[i] >= 0) moves[i] = {cands[(size_t)paired[i]].dx, cands[(size_t)paired[i]].dy}, from[i] = cands[(size_t)paired[i]].from;
-    g_scroll.frame(g_frame, moves, from);
-    for (int i = 0; i < 128; i++) {
-        if (!moves[i].first && !moves[i].second) continue;
-        int ox, oy;
-        g_scroll.offset(moves[i].first, moves[i].second, t, ox, oy, i);
-        if (!ox && !oy) continue;
-        const int x = cur[i].x + ox, y = cur[i].y + oy;
-        put_be32(moved, (uint32_t)i * 16 + 4, (uint32_t)(uint16_t)x | (uint32_t)(uint16_t)y << 16, 0xffffffffu);
+    // A sprite left without a look-alike may be one of the frame before of another tile, unclaimed, at
+    // its x and within 8 lines: the same sprite a frame of its animation on (pop'n music 3's notes
+    // change tile now and then: unpaired, a note left the scroll's line and stood still, 967 times in
+    // its demo song). After the pairing, so it never takes a look-alike's own (it took the notes'
+    // and paired sprites 8 pixels sideways)
+    {
+        std::vector<char> claimed(128, 0);
+        for (int i = 0; i < 128; i++)
+            if (from[i] >= 0) claimed[(size_t)from[i]] = 1;
+        for (int i = 0; i < 128; i++) {
+            if (cur[i].code < 0 || from[i] >= 0) continue;
+            int best = -1;
+            for (int j = 0; j < 128; j++) {
+                const Spr &p = prev[j];
+                if (p.code < 0 || claimed[(size_t)j] || p.code == cur[i].code || p.x != cur[i].x || std::abs(cur[i].y - p.y) > 8) continue;
+                if (best < 0 || std::abs(cur[i].y - p.y) < std::abs(cur[i].y - prev[(size_t)best].y)) best = j;
+            }
+            if (best >= 0) claimed[(size_t)best] = 1, from[i] = best, moves[i] = {0, cur[i].y - prev[(size_t)best].y};
+        }
     }
-    // drawn as screen_update() draws, into g_between, the machine's own state untouched
-    g_objram.swap(moved);
-    g_screen.swap(g_between);
-    screen_update();
-    g_screen.swap(g_between);
-    g_objram.swap(moved);
+    g_scroll.frame(g_frame, moves, from);
+    if (static FILE *slog = getenv("HK_DJ_SCROLL_LOG") ? fopen(getenv("HK_DJ_SCROLL_LOG"), "w") : nullptr; slog) {
+        static uint64_t said = 0;
+        if (said != g_frame) {
+            said = g_frame;
+            double cx, cy, vx, vy;
+            int kept;
+            g_scroll.scroll_state(cx, cy, kept, vx, vy);
+            std::map<std::pair<int, int>, int> n;
+            for (const auto &m : moves)
+                if (m.first || m.second) n[m]++;
+            fprintf(slog, "%llu move %.2f,%.2f kept %d line %.2f,%.2f |", (unsigned long long)g_frame, cx, cy, kept, vx, vy);
+            for (const auto &[m, k] : n) fprintf(slog, " %d,%d x%d", m.first, m.second, k);
+            fprintf(slog, " ||");
+            for (int i = 0; i < 128; i++) {   // the sprites: slot, tile, y, move, from; on the line: lag/steady place
+                if (cur[i].code < 0 || (!moves[i].first && !moves[i].second && from[i] < 0)) continue;
+                double lag, off;
+                const bool on = g_scroll.member_state(i, lag, off);
+                fprintf(slog, " s%d:%d@%d(%d)<%d%s", i, cur[i].code, cur[i].y, moves[i].second, from[i], on ? "" : "!");
+                if (on) fprintf(slog, "[%.2f/%.2f]", lag, off);
+            }
+            fprintf(slog, "\n");
+        }
+    }
+    // Between two pixels (HK_BETWEEN_SUBPIXEL=0: whole pixels, as before). pop'n music 3's notes move 2
+    // pixels a frame on its 384 lines: in whole pixels an in-between picture had one place for them, a
+    // pixel on, and at 240 Hz the four refreshes of a frame showed them 0, 0, 1, 1 pixels on, as 120 Hz
+    // does. So each moving sprite goes at the whole pixel below its place along its move's main axis
+    // (the other rounded), and the picture is drawn again with each sprite a fraction on a pixel
+    // further; where the two differ, each pixel is mixed by the fraction of the sprite that drew it
+    // there (in linear light): a note 1.5 pixels on has its edge half lit, on a fast display a note
+    // between the two. Each sprite its own fraction (in 16ths): the notes each at their own steady
+    // place on the scroll's line (ScrollGuess::on_line), so their distances stay. The picture stays at
+    // the game's own size, so the CRT shaders see the game's lines as before
+    static const bool subpixel = !getenv("HK_BETWEEN_SUBPIXEL") || strcmp(getenv("HK_BETWEEN_SUBPIXEL"), "0") != 0;
+    struct Place { int x, y, axis = -1, q = 0; };   // axis: 0 x, 1 y (-1: whole pixels); q: the fraction past (x, y), 16ths
+    std::vector<Place> place(128);
+    bool any = false;
+    // (a note of the scroll's line goes along it: a frame where the game missed its update for it,
+    // standing still, too: ScrollGuess::on_line)
+    std::vector<char> lined(128, 0);
+    for (int i = 0; i < 128; i++) {
+        const bool still = !moves[i].first && !moves[i].second;
+        double rx, ry;
+        int laxis = 1;
+        if (g_scroll.on_line(i, t, rx, ry, laxis)) {
+            lined[i] = 1;
+        } else if (still) {
+            continue;
+        } else {
+            g_scroll.offset_exact(moves[i].first, moves[i].second, t, rx, ry, i);
+        }
+        Place &pl = place[i];
+        pl.x = cur[i].x + (int)std::lround(rx), pl.y = cur[i].y + (int)std::lround(ry);
+        // HK_DJ_BETWEEN_LOG=FILE: each moving sprite's guess (frame, t, slot, tile, place, last move,
+        // with the scroll, the place it goes to), for reading what the in-between pictures do
+        static FILE *blog = getenv("HK_DJ_BETWEEN_LOG") ? fopen(getenv("HK_DJ_BETWEEN_LOG"), "w") : nullptr;
+        if (blog)
+            fprintf(blog, "%llu %.3f %d %d %d %d %d %d %d %.3f %.3f %d\n", (unsigned long long)g_frame, t, i, cur[i].code, cur[i].x,
+                    cur[i].y, moves[i].first, moves[i].second, (int)g_scroll.scrolls(moves[i].first, moves[i].second), rx, ry, from[i]);
+        if (!subpixel) continue;
+        const int axis = lined[i] ? laxis : std::abs(moves[i].second) >= std::abs(moves[i].first) ? 1 : 0;
+        const double r = axis ? ry : rx, lo = std::floor(r);
+        int q = (int)std::lround((r - lo) * 16);
+        int whole = (int)lo;
+        if (q == 16) whole++, q = 0;
+        (axis ? pl.y : pl.x) = (axis ? cur[i].y : cur[i].x) + whole;
+        if (q) pl.axis = axis, pl.q = q, any = true;
+    }
+    auto put = [&](std::vector<uint8_t> &ram, int i, int x, int y) {
+        put_be32(ram, (uint32_t)i * 16 + 4, (uint32_t)(uint16_t)x | (uint32_t)(uint16_t)y << 16, 0xffffffffu);
+    };
+    // HK_DJ_PLACE_LOG=FILE: every sprite's drawn place (frame, t, slot, tile, x, y, frame-before slot,
+    // its own y), the fraction on included, for measuring how evenly things move
+    if (static FILE *plog = getenv("HK_DJ_PLACE_LOG") ? fopen(getenv("HK_DJ_PLACE_LOG"), "w") : nullptr; plog)
+        for (int i = 0; i < 128; i++) {
+            if (cur[i].code < 0) continue;
+            const bool on = (moves[i].first || moves[i].second || lined[i]);
+            const double fx = on ? place[i].x + (place[i].axis == 0 ? place[i].q / 16.0 : 0) : cur[i].x;
+            const double fy = on ? place[i].y + (place[i].axis == 1 ? place[i].q / 16.0 : 0) : cur[i].y;
+            fprintf(plog, "%llu %.3f %d %d %.4f %.4f %d %d\n", (unsigned long long)g_frame, t, i, cur[i].code, fx, fy, from[i], cur[i].y);
+        }
+    std::vector<uint8_t> moved = g_shown_objram;
+    for (int i = 0; i < 128; i++)
+        if ((moves[i].first || moves[i].second || lined[i]) && (place[i].x != cur[i].x || place[i].y != cur[i].y)) put(moved, i, place[i].x, place[i].y);
+    // drawn as screen_update() draws, into `out`, the machine's own state untouched (`owner`: which
+    // sprite drew each pixel)
+    auto draw = [&](std::vector<uint8_t> &ram, std::vector<uint32_t> &out, int16_t *owner) {
+        g_objram.swap(ram);
+        g_screen.swap(out);
+        g_owner = owner;
+        screen_update();
+        g_owner = nullptr;
+        g_screen.swap(out);
+        g_objram.swap(ram);
+    };
+    static std::vector<int16_t> own0(SCREEN_W * SCREEN_H), own1(SCREEN_W * SCREEN_H);
+    if (!any) {
+        draw(moved, g_between, nullptr);
+        return g_between.data();
+    }
+    draw(moved, g_between, own0.data());
+    std::vector<uint8_t> on = moved;   // each sprite a fraction on, a pixel further
+    for (int i = 0; i < 128; i++)
+        if (place[i].axis >= 0) put(on, i, place[i].x + (place[i].axis ? 0 : 1), place[i].y + (place[i].axis ? 1 : 0));
+    static std::vector<uint32_t> further;
+    further.resize(g_between.size());
+    draw(on, further, own1.data());
+    // the fraction of the sprite that drew the pixel a pixel further on, else of the one that left it
+    hk::subpixel_mix(g_between.data(), further.data(), further.size(), [&](size_t k) {
+        if (const int o = own1[k]; o >= 0 && place[(size_t)o].axis >= 0) return place[(size_t)o].q;
+        if (const int o0 = own0[k]; o0 >= 0 && place[(size_t)o0].axis >= 0) return place[(size_t)o0].q;
+        return 0;
+    });
     return g_between.data();
 }
 void set_frame_rate(double hz) {

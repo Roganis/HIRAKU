@@ -31,7 +31,8 @@ public:
     std::function<void(bool)> irq;                          // to the CPU's EXT0
 
     // Compose the visible frame into `out` (xRGB8888, width*height).
-    void draw(uint32_t *out, int width, int height);
+    // (rows: only the screen rows marked, the rest of `out` left as it is; in-between pictures)
+    void draw(uint32_t *out, int width, int height, const uint8_t *rows = nullptr);
 
     // CRTC timing (for the scheduler)
     int htotal() const;
@@ -58,7 +59,7 @@ private:
 
     uint16_t pix(uint32_t index) const;
     void set_pix(uint32_t index, uint16_t v);
-    void draw_frame(int frame, uint16_t *bitmap, int bw, int bh, bool inverse_trans);
+    void draw_frame(int frame, uint16_t *bitmap, int bw, int bh, bool inverse_trans, const uint8_t *rows = nullptr);
     void draw_object(const uint32_t *cmd);
     void fill_rect(const uint32_t *cmd);
     void draw_character(const uint32_t *cmd);
@@ -88,6 +89,30 @@ private:
     bool m_clip = false;                                    // a replay draws only on the rows marked here
     std::vector<uint8_t> m_clip_row;
     int m_cmd_y0 = 0, m_cmd_y1 = 0;                         // the command running: the rows it drew on
+    // between two pixels (hiraku/subpixel_mix.h): in a replay, which command drew each pixel of the
+    // rows drawn again (a copy passes on what its source's pixel has), -1 none, -2 a fill or character
+    bool m_owning = false;
+    int m_own_cmd = -1;                                     // the command running
+    std::vector<char> m_own_frac;                           // each command: drawn a fraction on
+    std::vector<int> m_own_slot;                            // each VRAM row: its row of m_own (-1: none)
+    std::vector<int32_t> m_own;
+    int32_t *own_at(uint32_t pixel) {
+        const int s = m_own_slot[(pixel >> 10) & (m_own_slot.size() - 1)];
+        return s < 0 ? nullptr : &m_own[(size_t)s * 1024 + (pixel & 1023)];
+    }
+    void own_object(uint32_t address, int x, int y, int width, int height, int orig_height, int xscale, int yscale,
+                    bool xflip, bool yflip, bool trans_enable, uint16_t trans_value);
+    void own_screen(std::vector<int32_t> &out, int w, int h);   // as draw() composes: who drew each pixel
+    // the frame on show composed once (its in-between pictures compose only the rows drawn again):
+    // valid while the frame, the layers and the next frame's drawing so far are as they were
+    struct Composed {
+        std::vector<uint32_t> px;
+        uint32_t mark = ~0u;
+        size_t drawn = 0;
+        uint16_t layer_select = 0, reg_6c = 0;
+        Frame frame[4];
+        int w = 0, h = 0;
+    } m_composed;
     bool row_out(int y) const { return m_clip && !m_clip_row[(uint32_t)y & (m_clip_row.size() - 1)]; }
 
     std::unique_ptr<uint32_t[]> m_vram;

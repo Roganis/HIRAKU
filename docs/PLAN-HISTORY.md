@@ -1495,6 +1495,15 @@ queue at its target). The emulated machine is unchanged.
   mame/README.md), and a save looks at the written ones. DDR EXTREME, saves every 3 s, virtual KWin:
   6 frames not ready before, none after; no save over 4 ms once started. A save that takes 4 ms or
   more is now said in the log ("saves: ...").
+- **Song loading on a hard disk image (2026-11-16):** pop'n music 3's 4.3 GB disk image on the 5400 rpm
+  drive: 70-150 ms frames as it loaded its demo song, sound breaks with them. Linux's
+  posix_fadvise(WILLNEED), the disks' 8 MB read-ahead, ran on the game's thread (not in its "disk"
+  time) and waited there while the drive's queue took the reads. It is now asked by a thread of its
+  own, in the disk's idle class (`sys::will_need`; `HK_READ_AHEAD_HERE=1`: as it was). And the
+  start-up preload now reads a hard disk's image into the cache too, while memory allows (8 GB at
+  most, a third of what's free), last, in 256 KB reads (a game read waited 236 ms behind 4 MB ones):
+  pop'n 3's whole disk in 31 s. Cold cache, virtual KWin, two runs: no slow read, no break after the
+  first 10 s (before: 59-236 ms reads, 76-101 breaks).
 - **Which refresh each picture reached (2026-11-16):** the exit report's "refreshes after the one
   meant" line counts, for the frames' own pictures and their other refreshes' (smooth motion), how many
   refreshes after the one meant each was shown. One number for all is a steady picture; a mix is

@@ -712,7 +712,65 @@ void unmap_file(const void *p, uint64_t size) {
 
 ssize_t pread(int fd, void *buf, size_t n, uint64_t off) { return ::pread(fd, buf, n, (off_t)off); }
 
-void will_need(int fd, uint64_t off, uint64_t n) { posix_fadvise(fd, (off_t)off, (off_t)n, POSIX_FADV_WILLNEED); }
+// will_need: posix_fadvise(WILLNEED), asked by a thread of HIRAKU's own. Linux starts the reads
+// in the call, and on a drive that is slow and busy the call waits until its queue takes them all:
+// on the game's thread, pop'n music 3 (DJ Main, its 4.3 GB disk image on a 5400 rpm drive) stopped
+// for 70-100 ms as it loaded a song, its 8 MB read-ahead not cached (2026-11-16). The thread keeps
+// a file of its own open for each (dup: the game may close its own), and per file only the latest
+// range asked for
+namespace {
+struct ReadAhead {
+    std::mutex mu;
+    std::condition_variable cv;
+    std::map<std::pair<dev_t, ino_t>, std::pair<int, std::pair<uint64_t, uint64_t>>> wanted;   // file: (its fd, range)
+    std::map<std::pair<dev_t, ino_t>, int> fds;                                              // the thread's own
+    bool running = false;
+};
+ReadAhead &read_ahead() {
+    static ReadAhead *r = new ReadAhead;   // (never destroyed: its thread may still run at exit)
+    return *r;
+}
+void read_ahead_thread() {
+    ReadAhead &r = read_ahead();
+    // the disk's idle class (BFQ honours it): the game's own reads go first. In the normal class the
+    // game's next read of a few sectors waited behind the 8 MB asked for, 70-85 ms on that drive
+    syscall(SYS_ioprio_set, 1 /* IOPRIO_WHO_PROCESS */, (int)syscall(SYS_gettid), 3 << 13 /* IOPRIO_CLASS_IDLE */);
+    for (;;) {
+        int fd;
+        uint64_t off, n;
+        {
+            std::unique_lock<std::mutex> lk(r.mu);
+            r.cv.wait(lk, [&] { return !r.wanted.empty(); });
+            auto it = r.wanted.begin();
+            fd = it->second.first, off = it->second.second.first, n = it->second.second.second;
+            r.wanted.erase(it);
+        }
+        posix_fadvise(fd, (off_t)off, (off_t)n, POSIX_FADV_WILLNEED);
+    }
+}
+}  // namespace
+
+void will_need(int fd, uint64_t off, uint64_t n) {
+    static const bool here = getenv("HK_READ_AHEAD_HERE") != nullptr;   // testing: in the caller, as it was
+    if (here) {
+        posix_fadvise(fd, (off_t)off, (off_t)n, POSIX_FADV_WILLNEED);
+        return;
+    }
+    struct stat st;
+    if (!n || fstat(fd, &st) != 0) return;
+    const auto key = std::make_pair(st.st_dev, st.st_ino);
+    ReadAhead &r = read_ahead();
+    std::lock_guard<std::mutex> lk(r.mu);
+    int &own = r.fds[key];
+    if (!own) own = fcntl(fd, F_DUPFD_CLOEXEC, 0);
+    if (own < 0) return;
+    r.wanted[key] = {own, {off, n}};
+    if (!r.running) {
+        r.running = true;
+        std::thread(read_ahead_thread).detach();
+    }
+    r.cv.notify_one();
+}
 uint64_t will_need_read() { return 0; }   // (the kernel reads it)
 
 bool make_dir(const std::string &path) {

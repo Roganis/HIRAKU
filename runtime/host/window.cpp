@@ -498,16 +498,35 @@ void preload_media() {
         if (!std::filesystem::is_regular_file(t, ec) || std::find(files.begin(), files.end(), t.string()) != files.end()) continue;
         files.push_back(t.string());
     }
-    std::thread([files] {
+    std::thread([files]() mutable {
         setpriority(PRIO_PROCESS, (id_t)gettid(), 19);   // behind everything; the disk too: idle class (bfq, mq-deadline honour it)
         syscall(SYS_ioprio_set, 1 /* IOPRIO_WHO_PROCESS */, (int)gettid(), 3 << 13 /* IOPRIO_CLASS_IDLE */);
         constexpr uint64_t MOST = 1ull << 30;   // a file up to 1 GB (a disc's or a ROM's; not a hard disk's image)
+        // A larger one (a hard disk's image) is read into the cache too, last and not locked, while
+        // there's room: up to 8 GB and a third of the memory free. A song's data read cold where the
+        // game asked for it stopped the machine: pop'n music 3's 4.3 GB disk on a 5400 rpm drive,
+        // 30-150 ms frames as it loaded its demo song (2026-11-16). The game's own reads go first
+        // (this thread's disk class is idle)
+        uint64_t room = 0;
+        if (FILE *mi = fopen("/proc/meminfo", "r")) {
+            char line[256];
+            unsigned long long kb;
+            while (fgets(line, sizeof line, mi))
+                if (sscanf(line, "MemAvailable: %llu kB", &kb) == 1) room = std::min<uint64_t>(8ull << 30, kb * 1024 / 3);
+            fclose(mi);
+        }
         // and locked there where RLIMIT_MEMLOCK allows (a PC short of memory otherwise takes the pages
         // back: under memory pressure, a page of code run the first time in minutes was read again)
         rlimit ml{};
         getrlimit(RLIMIT_MEMLOCK, &ml);
         uint64_t budget = ml.rlim_cur == RLIM_INFINITY ? UINT64_MAX : (uint64_t)ml.rlim_cur;
         if (const long pages = sysconf(_SC_PHYS_PAGES); pages > 0) budget = std::min(budget, (uint64_t)pages * 4096 / 16);   // at most 1/16 of the RAM
+        // (the large ones last)
+        if (files.size() > 1)
+            std::stable_partition(files.begin() + 1, files.end(), [](const std::string &f) {
+                std::error_code e;
+                return std::filesystem::file_size(f, e) <= MOST;
+            });
         const uint64_t t0 = prof::now_ns();
         uint64_t total = 0, locked = 0;
         int n = 0;
@@ -516,7 +535,9 @@ void preload_media() {
             const std::string &f = files[k];
             std::error_code e2;
             const uint64_t size = std::filesystem::file_size(f, e2);
-            if (e2 || size == 0 || size > MOST) continue;
+            if (e2 || size == 0 || (size > MOST && (k == 0 || size > room))) continue;
+            const bool large = size > MOST;
+            if (large) room -= size;
             bool done = false;
             if (k == 0 && locked + size <= budget) {   // the binary: its own mappings (code and data), locked
                 if (FILE *maps = fopen("/proc/self/maps", "r")) {
@@ -534,7 +555,7 @@ void preload_media() {
                     fclose(maps);
                     if (got) locked += got, done = true;
                 }
-            } else if (k > 0 && locked + size <= budget) {   // a medium: mapped, locked, kept for the run
+            } else if (k > 0 && !large && locked + size <= budget) {   // a medium: mapped, locked, kept for the run
                 if (int fd = open(f.c_str(), O_RDONLY | O_CLOEXEC); fd >= 0) {
                     void *p = mmap(nullptr, size, PROT_READ, MAP_SHARED, fd, 0);
                     close(fd);
@@ -545,13 +566,17 @@ void preload_media() {
             if (!done) {   // read into the page cache, at least
                 FILE *fp = fopen(f.c_str(), "rb");
                 if (!fp) continue;
-                while (fread(buf.data(), 1, buf.size(), fp) == buf.size()) {}
+                // a large one in reads of 256 KB, the kernel's own read-ahead off: a request on the
+                // drive can't be overtaken, and the game's read waited 236 ms behind those of 4 MB
+                size_t piece = buf.size();
+                if (large) piece = 256 << 10, setvbuf(fp, nullptr, _IONBF, 0), posix_fadvise(fileno(fp), 0, 0, POSIX_FADV_RANDOM);
+                while (fread(buf.data(), 1, piece, fp) == piece) {}
                 fclose(fp);
             }
             total += size, n++;
         }
-        fprintf(stderr, "preload: %d files, %.0f MB (the game's binary and media up to 1 GB) in memory in %.1f s, %.0f MB of it "
-                        "locked there\n", n, total / 1e6, (prof::now_ns() - t0) / 1e9, locked / 1e6);
+        fprintf(stderr, "preload: %d files, %.0f MB (the game's binary and media up to 1 GB, a hard disk's while memory allows) in memory "
+                        "in %.1f s, %.0f MB of it locked there\n", n, total / 1e6, (prof::now_ns() - t0) / 1e9, locked / 1e6);
     }).detach();
 #endif
 }

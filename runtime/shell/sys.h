@@ -43,7 +43,7 @@ void catch_write_faults(bool (*handler)(void *address));
 const void *map_file(int fd, uint64_t size);   // read-only; nullptr if it can't be mapped
 void unmap_file(const void *p, uint64_t size);
 ssize_t pread(int fd, void *buf, size_t n, uint64_t off);
-void will_need(int fd, uint64_t off, uint64_t n);   // a hint: read that ahead
+void will_need(int fd, uint64_t off, uint64_t n);   // a hint: read that ahead (asked by a thread of its own: never waits)
 uint64_t will_need_read();   // bytes read by will_need's own thread (Windows; on Linux the kernel reads: 0)
 // The files read through once on a thread of their own, at a low priority (a .cue with its .bin), up
 // to max_bytes in all: a machine's disk images then come from the system's cache, not the drive,

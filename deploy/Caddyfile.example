@@ -9,6 +9,8 @@
 # need. Open that port in the firewall as it is; never send it through Caddy or any HTTP proxy.
 games.example.org {
 	encode zstd gzip
+	# browsers keep to HTTPS for this name (the log-in cookie is Secure; plain HTTP is only redirected)
+	header Strict-Transport-Security "max-age=31536000"
 	# /api/ and the web pages (/) on the same port
 	reverse_proxy 127.0.0.1:8081
 }

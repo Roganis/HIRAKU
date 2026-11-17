@@ -99,7 +99,11 @@ and the launcher's Settings > e-AMUSEMENT writes them, laid out like spicecfg's 
     its PCBID too, so no `-p` is needed (a `-p` that differs is said at start, and refused). Once
     the database has machines, `serve` takes only cabinets behind an enabled machine's own key,
     and from each only calls as that machine; a key for all (`key.txt`), no key, a disabled
-    machine's or another machine's PCBID get nothing (the calls' port and the relay alike).
+    machine's or another machine's PCBID get nothing (the calls' port and the relay alike). The
+    cabinet is told which: a machine's key whose PCBID is no enabled machine with a key gets four
+    bytes, `HKKU`, and the cabinet says the server doesn't take this machine (unknown or switched
+    off); an enabled machine's PCBID with a key that isn't its own (an old one, say) gets the
+    server's hello and the cabinet finds the keys differ.
     `machine key PCBID` makes a new key at once, the old one no longer taken; `machine list` says
     which machines have one. `serve --no-keys` answers the enabled machines by the PCBID a call
     says instead, for a private network or a VPN where the cabinets can't be given keys.

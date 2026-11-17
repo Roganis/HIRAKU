@@ -30,7 +30,9 @@
 #include "eamuse/listener.h"
 #include "shell/sys.h"
 
-#if !defined(_WIN32) && __has_include(<iconv.h>)
+#ifdef _WIN32
+#include <windows.h>   // (MultiByteToWideChar: code page 932, after httplib.h's winsock2.h)
+#elif __has_include(<iconv.h>)
 #include <iconv.h>
 #define HK_API_ICONV 1
 #endif
@@ -101,8 +103,23 @@ bool from_shift_jis(const std::string &in, std::string &out) {
     out.resize(out.size() - ol);
     return ok && valid_utf8(out);
 }
+#elif defined(_WIN32)
+// ... Windows' own: code page 932 (Microsoft's Shift-JIS, iconv's CP932) to UTF-16, then to UTF-8
+bool from_shift_jis(const std::string &in, std::string &out) {
+    out.clear();
+    if (in.empty() || in.size() > 1 << 20) return in.empty();
+    const int w = MultiByteToWideChar(932, MB_ERR_INVALID_CHARS, in.data(), (int)in.size(), nullptr, 0);
+    if (w <= 0) return false;
+    std::wstring wide((size_t)w, L'\0');
+    if (MultiByteToWideChar(932, MB_ERR_INVALID_CHARS, in.data(), (int)in.size(), wide.data(), w) != w) return false;
+    const int n = WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, wide.data(), w, nullptr, 0, nullptr, nullptr);
+    if (n <= 0) return false;
+    out.assign((size_t)n, '\0');
+    if (WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, wide.data(), w, out.data(), n, nullptr, nullptr) != n) return out.clear(), false;
+    return valid_utf8(out);
+}
 #else
-bool from_shift_jis(const std::string &, std::string &) { return false; }   // (Windows: later)
+bool from_shift_jis(const std::string &, std::string &) { return false; }   // (no iconv: the bytes as hex)
 #endif
 
 // obj[key]: the name as text; one that can't be made text: "" and its bytes as hex beside (key_hex)
@@ -319,16 +336,31 @@ json machine_json(const Machine &m) {
 }
 json maybe(long v) { return v < 0 ? json(nullptr) : json(v); }
 
+// What a game's score tables can ever fill (readers.h): the pages leave out a column it never does
+json shows_json(const ea::Game *g) {
+    const ea::Shows s = g ? ea::shows(*g) : ea::Shows{};
+    return {{"plays", s.plays}, {"song_plays", s.song_plays}, {"clear", s.clear}};
+}
+// A clear mark as the game keeps it, and as a word (null: none, or a value not known)
+void clear_fields(json &o, const ea::Game *g, int clear) {
+    const char *w = g ? ea::clear_name(*g, clear) : nullptr;
+    o["clear"] = maybe(clear);
+    o["clear_name"] = w ? json(w) : json(nullptr);
+}
+
 json stats_json(const std::vector<Stat> &stats) {
     json out = json::array();
     for (const Stat &s : stats) {
         const ea::Game *g = ea::game_by_id(s.game);
-        json o{{"game", s.game}, {"title", g ? g->title : s.game}, {"plays", maybe(s.profile.plays)}};
+        json o{{"game", s.game}, {"title", g ? g->title : s.game}, {"shows", shows_json(g)}, {"plays", maybe(s.profile.plays)}};
         if (!s.card.empty()) o["card"] = s.card;   // (the card's user's, or an admin's: accounts says)
         name_field(o, "player", s.profile.name);
         json scores = json::array();
-        for (const ea::Score &sc : s.scores)
-            scores.push_back({{"song", sc.song}, {"chart", sc.chart}, {"score", maybe(sc.score)}, {"clear", maybe(sc.clear)}, {"plays", maybe(sc.plays)}});
+        for (const ea::Score &sc : s.scores) {
+            json r{{"song", sc.song}, {"chart", sc.chart}, {"score", maybe(sc.score)}, {"plays", maybe(sc.plays)}};
+            clear_fields(r, g, sc.clear);
+            scores.push_back(std::move(r));
+        }
         o["scores"] = std::move(scores);
         out.push_back(std::move(o));
     }
@@ -638,7 +670,8 @@ void Api::Impl::routes() {
         json games = json::array();
         names.refresh();
         for (const ea::Game &g : ea::games())
-            if (*g.model && acc.listed(g)) games.push_back({{"id", game_id(g)}, {"title", g.title}, {"has_names", has_names(g)}});
+            if (*g.model && acc.listed(g))
+                games.push_back({{"id", game_id(g)}, {"title", g.title}, {"has_names", has_names(g)}, {"shows", shows_json(&g)}});
         answer(res, {{"name", acc.server_name()},
                      {"signup", mode == Accounts::SignUp::closed ? "closed" : mode == Accounts::SignUp::invite ? "invite" : "open"},
                      {"games", games}});
@@ -772,7 +805,11 @@ void Api::Impl::routes() {
         names.refresh();
         for (const ea::Game &g : ea::games())
             if (*g.model && acc.listed(g))
-                out.push_back({{"id", game_id(g)}, {"title", g.title}, {"scores", g.readers != nullptr}, {"has_names", has_names(g)}});
+                out.push_back({{"id", game_id(g)},
+                               {"title", g.title},
+                               {"scores", g.readers != nullptr},
+                               {"has_names", has_names(g)},
+                               {"shows", shows_json(&g)}});
         answer(res, {{"games", out}});
     });
     route("GET", "/games/:id/songs", user, [this](Caller &, const Request &req, In &, Response &res) {   // (its pack's names)
@@ -800,14 +837,16 @@ void Api::Impl::routes() {
         const std::string id = req.path_params.at("id");
         std::vector<TopScore> top;
         if (const auto why = acc.top(c.who, id, song, chart, (size_t)limit, top); !why.empty()) return refused(res, why);
+        const ea::Game *g = ea::game_by_id(id);
         json out = json::array();
         for (const TopScore &t : top) {
             json o{{"rank", out.size() + 1}, {"user", t.user.empty() ? json(nullptr) : json(t.user)}, {"song", t.song}, {"chart", t.chart},
-                   {"score", t.score}, {"clear", maybe(t.clear)}};
+                   {"score", t.score}};
+            clear_fields(o, g, t.clear);
             name_field(o, "player", t.player);
             out.push_back(std::move(o));
         }
-        answer(res, {{"game", id}, {"title", ea::game_by_id(id)->title}, {"scores", out}});
+        answer(res, {{"game", id}, {"title", g->title}, {"shows", shows_json(g)}, {"scores", out}});
     });
 
     // --- operators (their own) and admins (all)
@@ -1026,7 +1065,11 @@ void Api::Impl::routes() {
         CardInfo i;
         if (const auto why = acc.card(c.who, req.path_params.at("card"), i); !why.empty()) return refused(res, why);
         json games = json::array();
-        for (const CardGame &g : i.games) games.push_back({{"id", g.game}, {"title", g.title}, {"player", g.player}});
+        for (const CardGame &g : i.games) {
+            json o{{"id", g.game}, {"title", g.title}};
+            name_field(o, "player", g.player);   // (the game's own bytes, as the stats give them)
+            games.push_back(std::move(o));
+        }
         answer(res, {{"card", i.card},
                      {"known", i.known},
                      {"user", i.user.empty() ? json(nullptr) : json(i.user)},
@@ -1070,7 +1113,7 @@ void Api::Impl::routes() {
                              {"charts", p->charts.size()}, {"time", p->time}});
         }
         for (const NameRefusal &r : names.refused()) refused.push_back({{"file", r.file}, {"why", r.why}});
-        answer(res, {{"folder", names.folder()}, {"packs", packs}, {"refused", refused}});
+        answer(res, {{"set", !names.folder().empty()}, {"packs", packs}, {"refused", refused}});   // (never a path on the server's disk)
     });
     route("GET", "/audit", admin, [this](Caller &c, const Request &req, In &, Response &res) {
         long last = 100;
@@ -1154,9 +1197,10 @@ bool Api::start(std::string &error) {
     }
     m.thread = std::thread([&m] { m.http.listen_after_bind(); });
     if (!m.o.quiet) {
-        printf("hiraku-server: the API on http://%s:%d/api/v1/ (put TLS in front of it: docs/SERVER.md)\n", m.o.host.c_str(), m.o.port);
-        if (!pages.empty()) printf("hiraku-server: the web pages from %s on http://%s:%d/\n", pages.c_str(), m.o.host.c_str(), m.o.port);
-        else printf("hiraku-server: no web pages (%s)\n", m.o.web_enabled ? "no web folder found: --web DIR" : "--no-web");
+        const std::string t = ea::utc_now();   // (serve's lines dated, as its calls')
+        printf("%s hiraku-server: the API on http://%s:%d/api/v1/ (put TLS in front of it: docs/SERVER.md)\n", t.c_str(), m.o.host.c_str(), m.o.port);
+        if (!pages.empty()) printf("%s hiraku-server: the web pages from %s on http://%s:%d/\n", t.c_str(), pages.c_str(), m.o.host.c_str(), m.o.port);
+        else printf("%s hiraku-server: no web pages (%s)\n", t.c_str(), m.o.web_enabled ? "no web folder found: --web DIR" : "--no-web");
         fflush(stdout);
     }
     return true;

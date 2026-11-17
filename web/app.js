@@ -137,6 +137,12 @@ async function signOut() {
   toast('Signed out.');
 }
 
+// The server's name beside the logo: none when it is the logo's own word
+export function showServerName(name) {
+  const n = String(name || '').trim();
+  document.getElementById('server-name').textContent = n.toLowerCase() === 'hiraku' ? '' : n;
+}
+
 function closeMenu() {
   document.body.classList.remove('menu-open');
   document.getElementById('menu').setAttribute('aria-expanded', 'false');
@@ -161,7 +167,7 @@ async function start() {
   } catch {
     state.server = {name: 'HIRAKU', signup: 'closed', games: []};
   }
-  document.getElementById('server-name').textContent = state.server.name;
+  showServerName(state.server.name);
   try {
     await refreshMe();
   } catch {

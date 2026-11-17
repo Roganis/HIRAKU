@@ -2,7 +2,52 @@
 
 hiraku-server is HIRAKU's e-AMUSEMENT server for many cabinets on a network: the same answers as
 `hiraku-eamuse` (docs/EAMUSE3.md), with everything it keeps in one SQLite database, plus accounts,
-arcades, machines and a JSON API for web pages and apps. It is built when the system has SQLite 3.
+arcades, machines and a JSON API for web pages and apps. It is built with the system's SQLite 3, or
+where there is none (the Windows build) with SQLite's own source in `third_party/sqlite/`.
+
+## Experimental
+
+hiraku-server is **experimental**: this is its first version. It has been tried with real games in
+HIRAKU's cores against a live server, not run for months by many people. Expect faults, and changes
+between versions. What it doesn't do yet, and what wasn't tried:
+
+- **Card PINs are kept in clear.** They are in the games' own data in the database, as the games send
+  them; the server doesn't hash them (the older games check a PIN themselves, in the player's record
+  the server hands them, and `export` gives a desktop folder back). Whoever can read the database, a
+  backup or an export reads every PIN. The API, the pages and the log never show one.
+- **The games' port is for the internet only behind machine keys.** With them, each cabinet's calls
+  are sealed by its own key (ChaCha20-Poly1305) and taken only as that machine. They don't hide that a
+  cabinet talks to the server, nor protect what was recorded from someone who later gets the key. With
+  `--no-keys`, or before the database has machines and with no `key.txt`, anyone who can reach the
+  port can read and change every player kept, in clear on the way (e-AMUSEMENT's own cipher uses a
+  key every copy of the games holds): a private network or a VPN only.
+- **A machine with its key can still read and change any player:** the games ask for a player by
+  card number, and the server answers any machine it takes. Give keys to cabinets you trust.
+- **One community a server:** one card numbering, one set of rankings and one NET TAISEN lobby for
+  every arcade on it. A separate world is a second server.
+- **No phone app.** The JSON API is there for one; none is made.
+- **Windows:** `hiraku-server.exe` builds from source and was tried (below, "On Windows"), but it has
+  no package, no service and no backup timer, and is not among a release's downloads.
+- **Not tried:** the system service (`deploy/hiraku-server.service`, its own user, installed as
+  root): only the same program as a user's service; the container beyond its build and health check
+  (CI); other proxies than Caddy; long runs under load; other machines reaching a Windows server.
+- **The pages** were checked in Chromium, with the keyboard too; not in Firefox or Safari.
+- **Song names** come only from packs you make from your own games (below): none for GuitarFreaks
+  V and V2; GuitarFreaks and DrumMania titles are their 15-letter sort keys and their charts have no
+  names; IIDX packs have titles only; pop'n 11 to 16 borrow titles from other games' tables, or show
+  the genre. Some games' clear marks have no word yet.
+- **An admin's new PIN** (`card pin`, `PUT /cards/{card}/pin`) doesn't reach pop'n music 9, 10 and 11
+  or beatmania IIDX 9th style (where 9, 10 and IIDX 9th keep it isn't known; whether 11 takes a
+  changed record isn't known); it says which games it set and which not.
+- **The games' port is IPv4 only.** On a slow disk with `--sync full` many cabinets make the games'
+  timed screens run out: use an SSD or `sync = normal` (below, "Load").
+- **Data and API may change.** The database carries its format's number (`PRAGMA user_version`, and
+  the accounts' in its `meta` table): an older program finds a newer database and reads it without
+  writing to it. Nothing converts a database from one format to another yet, and `/api/v1` and the
+  pages may change while this is experimental. Take a backup before every update.
+
+Problems, and what you miss: the repository's issues, https://github.com/Roganis/HIRAKU/issues (no
+card numbers, PINs or keys in them).
 
 ## Starting it
 
@@ -107,7 +152,18 @@ anything. A disabled account's sessions and tokens stop at once.
 **What never goes out:** a password, a PIN, a hash, a session or token or machine key after the
 answer that made it, and a card's number to anyone but its own user or an admin. Players' names are
 given as the games keep them, made UTF-8; one that can't be is `""` with its bytes beside, as hex
-(`player_hex`).
+(`player_hex`), wherever a `player` is sent (stats, best scores, `/cards/{card}`). No answer carries a
+path on the server's disk.
+
+**Scores.** A game object (`/server`'s and `/games`' items, `/games/{id}/top`, each game of the stats)
+has `shows: {plays, song_plays, clear}`: whether the game ever keeps the player's count of plays
+(`plays` of the stats), a chart's own count (a score row's `plays`), a clear mark with a word for it
+(a row's `clear_name`; a game whose marks have none still sends `clear`, as a number).
+It is the game's, not one player's: a page leaves out a column that can only be empty. A score row
+has `clear` (the game's own number, `null`: none) and `clear_name`, the mark as a short word
+("Cleared", "Failed", "Full combo", "No play"...), `null` when the game keeps none or the number's
+meaning isn't known. pop'n's better medals are "Cleared" too (which medal is which isn't known). The System 573 games keep a score for a cleared stage only: a failed one has
+`score: null` and its mark. A score of 0 is in its player's stats, not among the best scores.
 
 **How often:** log-in 10 tries a minute an address and a name, sign-up 5 an hour an address, card
 links 20 an hour an account, anything else 600 a minute a session or token.
@@ -115,7 +171,7 @@ links 20 an hour an account, anything else 600 a minute a session or token.
 | Method | Path | Who | What |
 |---|---|---|---|
 | GET | /health | anyone | `{ok, version, uptime}`; 503 when the database doesn't answer |
-| GET | /server | anyone | the server's name, sign-up mode, games (id, title, has_names) |
+| GET | /server | anyone | the server's name, sign-up mode, games (id, title, has_names, shows) |
 | POST | /signup | anyone | `{name, password[, invite]}` |
 | POST | /login | anyone | `{name, password}`: the cookie, `csrf`, `must_change_password` |
 | POST | /reset | anyone | `{code, password}`: a reset code from an admin |
@@ -127,12 +183,12 @@ links 20 an hour an account, anything else 600 a minute a session or token.
 | DELETE | /me/tokens/{id} | user (log-in) | revoke |
 | GET, POST | /me/cards | user | list; link `{card, pin}` (any game's PIN; five wrong lock the card) |
 | DELETE | /me/cards/{card} | user | unlink |
-| GET | /me/stats | user | each linked card's games: player, plays, scores |
-| GET | /players | user | users whose stats show |
+| GET | /me/stats | user | each linked card's games: title, shows, player, plays, scores (song, chart, score, plays, clear, clear_name) |
+| GET | /players | user | users with a card linked whose stats show |
 | GET | /players/{name}/stats | user | their stats (no card numbers) |
-| GET | /games | user | the games (id, title, scores read, has_names) |
+| GET | /games | user | the games (id, title, scores read, has_names, shows) |
 | GET | /games/{id}/songs | user | the game's names pack: `{songs: {"N": {title, artist, genre}}, charts: {"N": name}}` (empty objects without one) |
-| GET | /games/{id}/top?song=&chart=&limit= | user | best scores among players whose stats show |
+| GET | /games/{id}/top?song=&chart=&limit= | user | the game's title and shows, its best scores (above 0) among players whose stats show: rank, user, player, song, chart, score, clear, clear_name |
 | GET, POST | /arcades | operator | own arcades (admin: all); add `{name, prefecture[, owner]}` |
 | GET, PUT, DELETE | /arcades/{id} | operator | `{name, prefecture}` |
 | GET, POST | /arcades/{id}/machines | operator | list; add `{name}` (its key once) |
@@ -152,7 +208,7 @@ links 20 an hour an account, anything else 600 a minute a session or token.
 | PUT | /cards/{card}/pin | admin | `{pin}` in every place the games keep it |
 | GET, PUT | /settings | admin | the server's own settings and every game's defaults |
 | GET | /audit?limit= | admin | the last actions: when, who, what |
-| GET | /names | admin | the names packs' folder, the packs loaded (game, file, songs, charts, time) and the files refused (file, why) |
+| GET | /names | admin | `set` (a names folder is configured), the packs loaded (game, title, file, songs, charts, time) and the files refused (file, why) |
 
 An operator acts on its own arcades and their machines only; another operator's answer 404.
 
@@ -223,7 +279,8 @@ first line and `/health` say it too.
 ### The log
 
 serve writes its log to standard output, a whole line at a time, flushed at once, so journald or a
-container's log keeps them in order. Times are ISO 8601 in UTC.
+container's log keeps them in order. Every line of serve's begins with its time, ISO 8601 in UTC: the
+start-up lines, the calls', the API's, the refusals' and the stop's.
 
     2026-11-16T09:30:00Z call 0120A1B2C3D4E5F60718 "Front left" F14:J:A:A cardmng.inquire 200 3ms
     2026-11-16T09:30:01Z api POST /api/v1/login 200 96ms -
@@ -233,7 +290,10 @@ A game call's line: the machine's PCBID, its name (`-` when the database has non
 model, `module.method` of each request in the call (comma-separated), the HTTP status and how long
 the answer took. An API request's line: the method, the path without its query string (a card's
 number in it as `*`), the status, the time, and the user's name when one is logged in (`-` if not).
-Refused connections and calls are said as before, each kind once a minute at the most.
+Refused connections and calls are said (`refused: ...`, whatever `--quiet` says), each refusal once a
+minute at the most by its reason and by whom: another reason, another address or another machine is
+said at once. A cabinet with a machine's key the server doesn't take (no such machine, a disabled one) is
+told so (`HKKU`, docs/EAMUSE3.md); an old key is said when its cabinet closes at the server's hello.
 
 **What it never holds:** a call's body, a card's number, a PIN, a password, a session cookie, a
 CSRF value, a token, a reset or invitation code, a machine's key.
@@ -265,17 +325,20 @@ backups beyond the newest 14 (`--keep N`). It never touches a file of another na
 fails its check is removed and the older ones are kept (exit 1). Run it daily from a timer; two in
 the same second fail (the name is taken). `backup FILE` still makes one copy where it is told.
 
-To restore one: stop serve, put the backup in place of the database (removing any `-wal` and `-shm`
-files beside the old one), start serve. Or take things out of a backup without stopping anything:
-`hiraku-server export FOLDER --db BACKUP` makes a data folder of it, which `import` reads into a
-database, or `hiraku-eamuse` serves as it is.
+A backup is the whole server: the games' data and the accounts, arcades, machines and their keys,
+sessions and the audit log. To restore one: stop serve, put the backup in place of the database
+(removing any `-wal` and `-shm` files beside the old one), start serve. Or take the games' data out of
+a backup without stopping anything: `hiraku-server export FOLDER --db BACKUP` makes a data folder of
+it, which `import` reads into a database, or `hiraku-eamuse` serves as it is. `export` holds the
+games' data only (cards and their PINs, players, scores, settings) and says so: no accounts, arcades,
+machines or keys, so a database made from it by `import` has a new first admin and no machines.
 
 ### Stopping and updating
 
 SIGTERM or SIGINT (Ctrl-C) stops serve cleanly: it takes no new connections, lets the calls in hand
 finish (3 seconds at most), stops the API, closes the database (its WAL folded into the file, no
 `-wal` left), prints one line and exits 0. A second signal ends it at once (exit 128 + the
-signal's number). On Windows, Ctrl-C does the same.
+signal's number). On Windows the console's events do the same (below, "On Windows").
 
 To update, stop serve, replace the program (and its web folder), start it again. The database
 carries its format's number (`PRAGMA user_version`, and the accounts' own in its `meta` table): a
@@ -285,8 +348,9 @@ back to that backup.
 
 ## Installing
 
-hiraku-server has a package of its own, `hiraku-server-linux-x86_64.tar.xz` (made by
-`tools/package-server.sh BUILD_DIR`, tried by `tools/smoke-server.sh`): `bin/hiraku-server`, its web
+hiraku-server has a package of its own, `hiraku-server-VERSION-linux-x86_64-experimental.tar.xz`
+among a release's downloads (made by `tools/package-server.sh BUILD_DIR`, without `VERSION` unless
+`HK_VERSION` is set; tried by `tools/smoke-server.sh`): `bin/hiraku-server`, its web
 pages in `share/hiraku-server/web`, these docs and the licences in `share/doc/hiraku-server`, and
 `deploy/` (the files below). It is not in HIRAKU's desktop packages. It needs glibc and libstdc++ as
 new as its README says, and the system's SQLite 3: on Debian or Ubuntu, `apt install libsqlite3-0`.
@@ -297,7 +361,7 @@ The package in `/opt/hiraku-server`, a system user of its own, its data in `/var
 (the database, `key.txt` and `cabinets.txt` beside it, `backups/`), its options in
 `/etc/hiraku-server/server.conf`:
 
-    sudo tar -xJf hiraku-server-linux-x86_64.tar.xz -C /opt
+    sudo tar -xJf hiraku-server-VERSION-linux-x86_64-experimental.tar.xz -C /opt
     sudo useradd --system --user-group --home-dir /var/lib/hiraku-server --shell /usr/sbin/nologin hiraku-server
     cd /opt/hiraku-server/deploy
     sudo install -D -m 0644 server.conf.example /etc/hiraku-server/server.conf     # then read it, change what you need
@@ -320,8 +384,10 @@ The accounts' commands work on the running server's database: run them as the us
 
 ### Behind Caddy
 
-`deploy/Caddyfile.example`: Caddy gets a certificate for the server's name and passes `/api/` and
-the web pages to `127.0.0.1:8081`; `server.conf` then says `api-trust-proxy = true`. The games' port
+`deploy/Caddyfile.example`: Caddy gets a certificate for the server's name, redirects plain HTTP to
+HTTPS, tells browsers to keep to HTTPS (`Strict-Transport-Security`) and passes `/api/` and the web
+pages to `127.0.0.1:8081`; `server.conf` then says `api-trust-proxy = true` (Caddy sets
+`X-Forwarded-For` to the browser's address and drops one the browser sent). The games' port
 (8080) is not proxied: open it in the firewall as plain TCP, each machine's calls encrypted by its key.
 
 ### As a container
@@ -349,13 +415,48 @@ with them), start it. A container: build the new image, `docker rm -f` the old c
 the new one on the same volume. Going back to an older program afterwards means going back to that
 backup (above, "Stopping and updating": an older program reads a newer database without writing).
 
+### On Windows
+
+`hiraku-server.exe` builds in the Windows cross-build (`cmake/x86_64-w64-mingw32.cmake`, target
+`hiraku-server`; SQLite compiled in, nothing beside it to install) and runs on Windows 10 1903 or
+later. It builds from source only: it has no package yet and is not among a release's downloads (the
+desktop zip leaves it out). Copy `hiraku-server.exe` and the `web` folder beside it, then, in a
+console:
+
+    hiraku-server.exe import empty-folder --db D:\hiraku\server.db
+    hiraku-server.exe serve --config D:\hiraku\server.conf
+
+What differs from Linux:
+
+- **No service.** There is no Windows service or scheduled task for it, and no backup timer: it
+  runs in a console window while someone is signed in (or start it with Task Scheduler yourself),
+  and `backup --dir` is run by hand or by a task of your own.
+- **Stopping:** Ctrl-C, Ctrl-Break or closing its console window stop it cleanly, as SIGTERM does on
+  Linux (the log says which: `stopped (the console closed)`); signing out and shutting Windows down
+  are handled the same way (not tried). `taskkill /PID N` without `/F` doesn't stop it (Windows says a console program can only be
+  ended with `/F`); `taskkill /F` ends it without the stop: the database stays whole (SQLite's WAL),
+  its `-wal` file is folded in at the next start.
+- **Paths:** any letters and spaces in the folders' names; the web pages are found in `web` beside
+  the .exe.
+- **Firewall:** bound to `127.0.0.1` it needs nothing; listening on the network (`bind = 0.0.0.0`)
+  needs Windows' firewall to let it in, as any server does (not tried).
+- Player names the games keep in Shift-JIS are turned into UTF-8 by Windows' own code page 932,
+  as by iconv on Linux.
+
+Tried on Windows 11 (2026-11-17, Defender on, a made-up arcade): `serve` from a config file on a new
+database, `health`, the pages and the API (sign-up, log-in, `/me`), an arcade and a machine with its
+key, `key_client.exe` calls behind it (and refused with another key), a player with a Japanese name
+read back through `/me/stats`, `backup --dir`, `export`, each stop above, all in a folder named
+`テスト フォルダ café` too. Under Wine: the ten transcripts, `test_api.py` and `test_accounts.py`.
+Not tried: other machines on a network reaching it, a reverse proxy in front, long runs under load.
+
 ### Never reachable from outside
 
 - the games' port with `no-keys` on (any cabinet that names a PCBID is answered as that machine):
   only on a private network or a VPN;
 - the API's port itself (8081): only through the proxy, which adds HTTPS;
 - the database and its `-wal` and `-shm` files, `key.txt`, `cabinets.txt`, the backups: they hold
-  every card, PIN hash, session and machine key. The service's folder is `0750` and what it makes
+  every card and its PIN (in clear: above, "Experimental"), every session and what the machines' keys are made from. The service's folder is `0750` and what it makes
   `0640` at most (`UMask=0027`); a container's are in its volume. Copies of backups kept elsewhere need the same care.
 
 ## Load

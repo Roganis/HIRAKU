@@ -5,11 +5,11 @@ import {del, enc, get, post, put} from './api.js';
 import {state} from './app.js';
 import {settingsForm} from './settings.js';
 import {
-  ago, ask, button, card, chip, clear, confirm, empty, errorNote, field, form, h, note, pageHead, prefecture, prefectureOptions, secret,
+  ago, ask, button, card, chip, clear, confirm, count, empty, keepFocus, errorNote, field, form, h, moreActions, note, pageHead, prefecture, prefectureOptions, secret,
   table, toast, value,
 } from './ui.js';
 
-const LAUNCHER = 'Paste it into the launcher: Settings > e-AMUSEMENT > Server key.';
+const LAUNCHER = 'Paste it into the launcher: Settings > e\u2011AMUSEMENT > Server key.';   // (a hyphen that doesn't break)
 
 export async function arcades(view, {still, go}) {
   const isAdmin = state.me.role === 'admin';
@@ -45,7 +45,7 @@ export async function arcades(view, {still, go}) {
         h('div', {class: 'arcade-main'},
           h('h2', {}, h('a', {href: '#/arcades/' + x.id, text: x.name})),
           h('p', {class: 'muted'}, prefecture(x.prefecture), isAdmin ? ` · ${x.owner ? 'owner ' + x.owner : 'no owner'}` : ''),
-          h('p', {class: 'chips'}, chip(`${ms.length} machine${ms.length === 1 ? '' : 's'}`), ms.length && on < ms.length ? chip(`${ms.length - on} disabled`, 'warn') : null)),
+          h('p', {class: 'chips'}, chip(count(ms.length, 'machine')), ms.length && on < ms.length ? chip(`${ms.length - on} disabled`, 'warn') : null)),
         h('div', {class: 'arcade-actions'},
           h('a', {class: 'btn btn-primary', href: '#/arcades/' + x.id, text: 'Machines'}),
           h('a', {class: 'btn', href: `#/arcades/${x.id}/settings`, text: 'Settings'}),
@@ -97,7 +97,7 @@ export async function machines(view, {params, still}) {
   });
   view.append(shown, list, card('Add a machine', h('p', {class: 'muted', text: 'Its key is shown once, when it is made.'}), add));
   function showKey(name, key) {
-    clear(shown).append(secret(`${name}: its key`, key, LAUNCHER, 'The server takes this machine’s calls with this key only.'));
+    clear(shown, secret(`${name}: its key`, key, LAUNCHER, 'The server takes this machine’s calls with this key only.'));
     shown.scrollIntoView({block: 'nearest'});
   }
   async function act(fn) {
@@ -106,25 +106,27 @@ export async function machines(view, {params, still}) {
   async function draw() {
     const j = await get(`/arcades/${x.id}/machines`);
     if (!still()) return;
+    const back = keepFocus(list);
     clear(list);
     if (!j.machines.length) {
       list.append(card(null, empty('No machine yet. Add one: its key goes into that cabinet’s launcher.')));
       return;
     }
+    const phone = matchMedia('(max-width: 760px)').matches;   // (there every action shows, as a row's own lines)
     list.append(card(`Machines (${j.machines.length})`, table([
-      {key: 'name', label: 'Name', cell: (m) => h('strong', {text: m.name})},
+      {key: 'name', label: 'Name', cls: 'nowrap', cell: (m) => h('strong', {text: m.name, title: m.name})},
       {key: 'pcbid', label: 'PCBID', cls: 'mono small', wide: true},
       {key: 'enabled', label: 'State', sort: (m) => (m.enabled ? 0 : 1), cell: (m) => chip(m.enabled ? 'enabled' : 'disabled', m.enabled ? 'ok' : 'warn')},
       {key: 'has_key', label: 'Key', sort: (m) => (m.has_key ? 0 : 1), cell: (m) => chip(m.has_key ? 'has a key' : 'no key', m.has_key ? 'ok' : 'bad')},
-      {key: 'last_seen', label: 'Last seen', wide: true, cell: (m) => h('span', {title: m.last_seen ? new Date(m.last_seen * 1000).toLocaleString() : null, text: ago(m.last_seen)})},
-      {key: 'pcbid', label: 'Actions', sortable: false, cell: (m) => h('div', {class: 'row-actions'},
+      {key: 'last_seen', label: 'Last seen', wide: true, cls: 'nowrap', cell: (m) => h('span', {title: m.last_seen ? new Date(m.last_seen * 1000).toLocaleString() : null, text: ago(m.last_seen)})},
+      {key: 'pcbid', label: 'Actions', sortable: false, cell: (m) => {
+        const more = moreActions(button(m.enabled ? 'Disable' : 'Enable', 'small', () => act(async () => {
+          await put('/machines/' + enc(m.pcbid), {enabled: !m.enabled});
+          toast(`${m.name} ${m.enabled ? 'disabled' : 'enabled'}.`);
+        })), [
         button('Rename', 'small', () => act(async () => {
           const name = await ask(`Rename ${m.name}`, 'Name', {value: m.name, required: true, maxlength: 64});
           if (name !== null) await put('/machines/' + enc(m.pcbid), {name});
-        })),
-        button(m.enabled ? 'Disable' : 'Enable', 'small', () => act(async () => {
-          await put('/machines/' + enc(m.pcbid), {enabled: !m.enabled});
-          toast(`${m.name} ${m.enabled ? 'disabled' : 'enabled'}.`);
         })),
         button(m.has_key ? 'New key' : 'Make a key', 'small', () => act(async () => {
           if (m.has_key && !await confirm(`A new key for ${m.name}?`, 'Make a new key', true, 'Its old key stops working at once: the cabinet needs the new one.')) return;
@@ -135,8 +137,12 @@ export async function machines(view, {params, still}) {
           if (!await confirm(`Remove ${m.name}?`, 'Remove the machine', true, 'Its key stops working at once.')) return;
           await del('/machines/' + enc(m.pcbid));
           toast(`${m.name} removed.`);
-        })))},
-    ], j.machines, {caption: 'Machines', class: 'machines'})));
+        }))], `More for ${m.name}`);
+        if (phone) more.querySelector('details').open = true;
+        return more;
+      }},
+    ], j.machines, {caption: 'Machines', class: 'machines', rowKey: (m) => m.pcbid})));
+    back();
   }
   await draw();
 }

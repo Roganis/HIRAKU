@@ -9,14 +9,16 @@
 //
 //   cabinet  "HKK1", 16 bytes by chance
 //            (or "HKK2", 16 bytes by chance, the machine's PCBID's 10 bytes: a machine's own key)
-//   server   "HKK1", 16 bytes by chance, an empty record        (or "HKK0": I have no key)
+//   server   "HKK1", 16 bytes by chance, an empty record        (or "HKK0": I have no key; four
+//            bytes and a close for the other refusals: "HKKS", "HKKM", "HKKU" below)
 //   then records each way: the bytes' count (2 bytes, 16384 at most), the bytes sealed, a 16-byte tag
 //
 // Each direction has a key of its own, made from the text and both sides' 16 bytes (HMAC-SHA-256),
 // so nothing recorded from one connection means anything in another; a record is sealed with
 // ChaCha20-Poly1305 (RFC 8439) under its number in its direction, so none can be changed, left out,
 // said twice or turned round. The server's empty record tells the cabinet the keys are one; the
-// cabinet's first record tells the server (nothing it sends is read before its tag holds).
+// cabinet's first record tells the server (nothing it sends is read before its tag holds): Keyed's
+// cabinet side sends an empty one at once, so a connection closed without one had another key.
 // The text itself is stretched (PBKDF2, kRounds) so that each guess at a weak one costs.
 //
 // A key for one machine (hiraku-server's, machine add / machine key): "hk2.PCBID.SECRET", the
@@ -108,6 +110,8 @@ size_t hello_size(const void *first4); // kHello, kHello2, or 0: not a hello
 extern const char kNoKey[4];           // "HKK0": a server without one says so, and closes
 extern const char kOneKey[4];          // "HKKS": a server with one key for all, to a machine's key
 extern const char kMachinesOnly[4];    // "HKKM": a server that takes machines' keys only, to another
+extern const char kUnknownMachine[4];  // "HKKU": a machine's key ("HKK2") whose PCBID the server doesn't
+                                       // take (no such machine, a disabled one, one without a key)
 // The cabinet's hello ("HKK1"); false if the system gives no random bytes
 bool client_hello(uint8_t hello[kHello]);
 // ... with key's: "HKK2" (*size kHello2) for a machine's key, else "HKK1" (kHello)

@@ -18,6 +18,13 @@ export function h(tag, props, ...children) {
   return el;
 }
 
+// Children into an element: null, undefined and false are left out (the DOM's own append writes them
+// as the words "null" and "undefined"); every page adds through this, h() or clear()
+export function append(el, ...children) {
+  add(el, children);
+  return el;
+}
+
 function add(el, children) {
   for (const c of children) {
     if (c === null || c === undefined || c === false) continue;
@@ -26,8 +33,10 @@ function add(el, children) {
   }
 }
 
-export function clear(el) {
+// An element emptied, then given children (as append)
+export function clear(el, ...children) {
   while (el.firstChild) el.firstChild.remove();
+  add(el, children);
   return el;
 }
 
@@ -176,7 +185,7 @@ export function confirm(question, yes = 'Yes', danger = true, detail = '') {
   return new Promise((resolve) => {
     const d = h('dialog', {class: 'dialog', 'aria-labelledby': 'dq'});
     const end = (v) => { d.close(); d.remove(); resolve(v); };
-    d.append(h('h2', {id: 'dq', text: question}), detail ? h('p', {text: detail}) : null,
+    append(d, h('h2', {id: 'dq', text: question}), detail ? h('p', {text: detail}) : null,
       h('div', {class: 'actions'}, button(yes, danger ? 'danger' : 'primary', () => end(true)), button('Cancel', '', () => end(false))));
     d.addEventListener('cancel', (e) => { e.preventDefault(); end(false); });
     document.body.append(d);
@@ -210,7 +219,7 @@ export function ask(question, label, opts = {}) {
 // --- tables
 
 // cols: [{key, label, num, wide, sort(row), cell(row) -> node|text}] (wide: a long value, a line of its own at phone width); rows sortable by a heading's button.
-// At phone width each row is a block of label/value lines (data-label).
+// At phone width each row is a block of label/value lines (data-label). opts.rowKey(row): the row's own key (keepFocus).
 export function table(cols, rows, opts = {}) {
   let by = opts.sort ?? null, desc = opts.desc ?? false;
   const tbody = h('tbody');
@@ -244,7 +253,7 @@ export function table(cols, rows, opts = {}) {
     }
     clear(tbody);
     for (const r of list) {
-      tbody.append(h('tr', {}, cols.map((c) => {
+      tbody.append(h('tr', {'data-key': opts.rowKey ? String(opts.rowKey(r)) : null}, cols.map((c) => {
         const v = c.cell ? c.cell(r) : r[c.key];
         return h('td', {class: [c.num ? 'num' : c.cls, c.wide && 'wide'], 'data-label': c.label}, v === null || v === undefined || v === '' ? h('span', {class: 'none', text: '–'}) : v);
       })));
@@ -255,7 +264,36 @@ export function table(cols, rows, opts = {}) {
     h('thead', {}, h('tr', {}, ths)), tbody));
 }
 
+// A list drawn again (after an action in one of its rows): the focus put back on the same control,
+// found by its aria-label, or by its row's key (table's rowKey) and its place in the row, so a
+// keyboard user isn't sent back to the page's top. Call before clearing: the function to call after
+export function keepFocus(root) {
+  const a = document.activeElement;
+  if (!a || a === document.body || !root.contains(a)) return () => {};
+  const label = a.getAttribute('aria-label'), tr = a.closest('tr[data-key]');
+  const at = (row) => [...row.querySelectorAll('button, select, input, a, summary')];
+  const key = tr ? tr.dataset.key : null, place = tr ? at(tr).indexOf(a) : -1;
+  return () => {
+    let el = label ? [...root.querySelectorAll('[aria-label]')].find((e) => e.getAttribute('aria-label') === label) : null;
+    if (!el && key !== null) {
+      const row = [...root.querySelectorAll('tr[data-key]')].find((r) => r.dataset.key === key);
+      if (row) el = at(row)[place];
+    }
+    if (!el) return;
+    // (a control in a closed "More": opened again, so it can take the focus)
+    const d = el.tagName === 'SUMMARY' ? null : el.closest('details');
+    if (d) d.open = true;
+    el.focus();
+  };
+}
+
 // --- words
+
+// a count and its word, one or more: count(1, 'chart') "1 chart", count(2, 'chart') "2 charts",
+// count(3, 'try', 'tries'). Every count the pages show goes through it
+export function count(n, one, many = one + 's') {
+  return `${n} ${n === 1 ? one : many}`;
+}
 
 export function when(t) {
   if (!t) return null;
@@ -267,9 +305,9 @@ export function ago(t) {
   if (!t) return 'never';
   const s = Math.max(0, Date.now() / 1000 - t);
   if (s < 90) return 'just now';
-  if (s < 5400) return `${Math.round(s / 60)} minutes ago`;
-  if (s < 129600) return `${Math.round(s / 3600)} hours ago`;
-  return `${Math.round(s / 86400)} days ago`;
+  if (s < 5400) return `${count(Math.round(s / 60), 'minute')} ago`;
+  if (s < 129600) return `${count(Math.round(s / 3600), 'hour')} ago`;
+  return `${count(Math.round(s / 86400), 'day')} ago`;
 }
 
 // a card number in groups of four, as printed
@@ -294,6 +332,13 @@ export const prefectureOptions = () => PREFECTURES.map((p, i) => [i + 1, `${i + 
 
 export function chip(text, kind) {
   return h('span', {class: ['chip', kind && `chip-${kind}`], text});
+}
+
+// A row's actions: the first ones always shown, the rest behind a small "More" (a details element:
+// opened by Enter or Space, its buttons then next in the tab order). label: the More's own name
+export function moreActions(shown, rest, label) {
+  return h('div', {class: 'row-actions'}, shown,
+    h('details', {class: 'more'}, h('summary', {class: 'btn btn-small', 'aria-label': label}, 'More'), h('div', {class: 'more-list'}, rest)));
 }
 
 // a short-lived word at the bottom of the screen ("Saved.")

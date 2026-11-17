@@ -2,7 +2,10 @@
 // A settings form built from the API's list: each game's declared settings (label, help, range,
 // default, the value now). For an arcade, "As the server's" leaves a setting to the server's value;
 // for the server, "Default" leaves it to the game's default. Only what changed is sent.
-import {clear, errorNote, h, note, toast, uid} from './ui.js';
+import {clear, count, errorNote, h, note, toast, uid} from './ui.js';
+
+// A value as words: a list ("1,2,3") with a space after each comma, so a long one can wrap; none: "(none)"
+const shown = (v) => (v === '' || v === null || v === undefined ? '(none)' : /^[^,\s]+(,[^,\s]+)+$/.test(String(v)) ? String(v).replace(/,/g, ', ') : String(v));
 
 // games: [{id, title, settings: [{name, label, help, kind, min, max, default, value, server_value}]}]
 // save(game, [{game, name, value}]) -> the answer's games (drawn again)
@@ -10,7 +13,7 @@ export function settingsForm(games, {arcade, save, open}) {
   const wrap = h('div', {class: 'settings'});
   const find = h('input', {type: 'search', placeholder: 'Find a game or a setting', 'aria-label': 'Find a game or a setting'});
   const list = h('div', {class: 'settings-list'});
-  if (games.length > 1) wrap.append(h('div', {class: 'toolbar'}, find, h('span', {class: 'muted small', text: `${games.length} games`})));
+  if (games.length > 1) wrap.append(h('div', {class: 'toolbar'}, find, h('span', {class: 'muted small', text: count(games.length, 'game')})));
   wrap.append(list);
   const opened = new Set(open || []);
   function draw(gs) {
@@ -65,7 +68,7 @@ export function settingsForm(games, {arcade, save, open}) {
       } finally { saveBtn.disabled = false; }
     });
     d.append(h('summary', {}, h('span', {class: 'summary-title', text: g.title}),
-      h('span', {class: 'summary-sub', text: `${g.settings.length} setting${g.settings.length === 1 ? '' : 's'}${own ? ` · ${own} set ${arcade ? 'here' : 'on the server'}` : ''}`})), f);
+      h('span', {class: 'summary-sub', text: `${count(g.settings.length, 'setting')}${own ? ` · ${own} set ${arcade ? 'here' : 'on the server'}` : ''}`})), f);
     return d;
   }
 
@@ -86,15 +89,15 @@ export function settingsForm(games, {arcade, save, open}) {
       else input.focus();
     });
     const range = number ? `${s.min} to ${s.max}` : null;
-    const facts = [range ? `From ${range}.` : null, `Default ${s.default === '' ? '(none)' : s.default}.`,
-      arcade && s.server_value !== null && s.server_value !== undefined ? `The server’s: ${s.server_value}.` : null].filter(Boolean).join(' ');
+    const facts = [range ? `From ${range}.` : null, `Default ${shown(s.default)}.`,
+      arcade && s.server_value !== null && s.server_value !== undefined ? `The server’s: ${shown(s.server_value)}.` : null].filter(Boolean).join(' ');
     const el = h('div', {class: ['setting', now !== null && 'setting-own']},
       h('div', {class: 'setting-text'},
         h('label', {for: id, text: s.label || s.name}),
         h('p', {class: 'help', id: id + 'h'}, s.help ? h('span', {text: s.help + ' '}) : null, h('span', {class: 'facts-line', text: facts}))),
       h('div', {class: 'setting-input'}, input,
         h('span', {class: 'leave'}, leave, h('label', {for: id + 'l', text: arcade ? 'As the server’s' : 'Default'})),
-        h('span', {class: 'muted small', text: now === null ? `Now ${fallbackWord}: ${fallback === '' || fallback === null ? '(none)' : fallback}` : `Set ${arcade ? 'here' : 'on the server'}`})));
+        h('span', {class: 'muted small', text: now === null ? `Now ${fallbackWord}: ${shown(fallback)}` : `Set ${arcade ? 'here' : 'on the server'}`})));
     return {
       el, name: s.name, focus: () => input.focus(),
       change() {

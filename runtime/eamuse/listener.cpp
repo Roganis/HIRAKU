@@ -256,6 +256,9 @@ int Listener::serve(Server &server, const std::string &kept) {
         relay_log = server.log;
     }
     const char *const me = program;
+    // hiraku-server's lines (call_lines) each begin with the time, ISO 8601 in UTC, as its calls' do
+    const bool stamped = call_lines;
+    auto head = [stamped] { return stamped ? utc_now() + " " : std::string(); };
     // What was refused, said whatever --quiet says (a cabinet that gets no answer is looked for here), each
     // once a minute at the most
     std::mutex noting;
@@ -264,10 +267,12 @@ int Listener::serve(Server &server, const std::string &kept) {
         std::lock_guard<std::mutex> one(noting);
         const auto t = std::chrono::steady_clock::now();
         if (noted.size() > 256) noted.clear();
-        const auto [at, fresh] = noted.try_emplace(what, t);
+        // (each refusal by its kind and by whom: the reason, the address and the machine or cabinet
+        // are all in its line, so one refusal never hides another kind, or another's)
+        const auto [at, fresh] = noted.try_emplace(what + "\n" + line, t);
         if (!fresh && t - at->second < std::chrono::minutes(1)) return;
         at->second = t;
-        printf("%s: %s\n", me, line.c_str());
+        printf("%s%s: %s\n", head().c_str(), me, line.c_str());
         fflush(stdout);
     };
     auto dotted = [](uint32_t ip) {
@@ -307,28 +312,28 @@ int Listener::serve(Server &server, const std::string &kept) {
     if (fd < 0)
         if (const int status = open(); status >= 0) return status;
     const int ls = fd;
-    printf("%s: e-AMUSE3 on %s:%d, data in %s%s\n", me, bind.c_str(), port, kept.c_str(), version.empty() ? "" : (", build " + version).c_str());
+    printf("%s%s: e-AMUSE3 on %s:%d, data in %s%s\n", head().c_str(), me, bind.c_str(), port, kept.c_str(), version.empty() ? "" : (", build " + version).c_str());
     // e-AMUSE3 has no log-in of its own: a cabinet is whoever sends its calls, unless told which to take
-    if (!allowed.empty()) printf("%s: connections taken from %s and this computer only\n", me, allowed.text().c_str());
+    if (!allowed.empty()) printf("%s%s: connections taken from %s and this computer only\n", head().c_str(), me, allowed.text().c_str());
     if (cabinets.in_force()) {
-        printf("%s: calls answered for the %zu cabinet%s in %s only\n", me, cabinets.size(), cabinets.size() == 1 ? "" : "s",
+        printf("%s%s: calls answered for the %zu cabinet%s in %s only\n", head().c_str(), me, cabinets.size(), cabinets.size() == 1 ? "" : "s",
                cabinets.file().c_str());
-        for (const std::string &line : cabinets.not_read()) printf("%s: %s, line %s: not a PCBID (20 hex digits)\n", me, cabinets.file().c_str(), line.c_str());
+        for (const std::string &line : cabinets.not_read()) printf("%s%s: %s, line %s: not a PCBID (20 hex digits)\n", head().c_str(), me, cabinets.file().c_str(), line.c_str());
     }
     if (wait_at_limit)
-        printf("%s: %d connections at once, any more wait their turn; %s\n", me, max_connections,
+        printf("%s%s: %d connections at once, any more wait their turn; %s\n", head().c_str(), me, max_connections,
                per_address > 0 ? ("at most " + std::to_string(per_address) + " at once from one address (this computer's: no limit)").c_str()
                                : "any number from one address");
     if (key.set())
-        printf("%s: calls and relay taken only behind the key in %s; nothing goes over the network in clear\n", me, key_file.c_str());
+        printf("%s%s: calls and relay taken only behind the key in %s; nothing goes over the network in clear\n", head().c_str(), me, key_file.c_str());
     else if (bind != "127.0.0.1" && allowed.empty() && !cabinets.in_force())
-        printf("%s: whoever can reach this port can read and change the players kept here: for a network you trust. "
+        printf("%s%s: whoever can reach this port can read and change the players kept here: for a network you trust. "
                "--new-key gives the server a key that every cabinet must have, --allow ADDRESSES takes connections from those "
-               "only, --new-cabinet starts a list of the cabinets answered (--bind 127.0.0.1: this computer only)\n", me);
+               "only, --new-cabinet starts a list of the cabinets answered (--bind 127.0.0.1: this computer only)\n", head().c_str(), me);
     else if (bind != "127.0.0.1" && allowed.empty())
-        printf("%s: NET TAISEN's relay takes any address (it carries no PCBID): --allow ADDRESSES or a key (--new-key) for that\n", me);
+        printf("%s%s: NET TAISEN's relay takes any address (it carries no PCBID): --allow ADDRESSES or a key (--new-key) for that\n", head().c_str(), me);
     else if (bind != "127.0.0.1")
-        printf("%s: what is said goes over the network in clear (PCBIDs, cards, PINs): a key (--new-key) hides it\n", me);
+        printf("%s%s: what is said goes over the network in clear (PCBIDs, cards, PINs): a key (--new-key) hides it\n", head().c_str(), me);
     auto turned_away = [&](uint32_t ip, const char *port_name, const char *why) {
         note("key " + dotted(ip) + why, "refused: a connection from " + dotted(ip) + " (" + port_name + ") " + why);
     };
@@ -341,7 +346,7 @@ int Listener::serve(Server &server, const std::string &kept) {
         relay_server.turned_away = [&](uint32_t ip, const char *why) { turned_away(ip, "the relay", why); };
         relay_server.admit = [&](uint32_t ip) { return from_allowed(ip, "the relay"); };
         if (relay_server.start(bind, Lobby::PORT))
-            printf("%s: NET TAISEN lobby and relay on %s:%u\n", me, bind.c_str(), Lobby::PORT);
+            printf("%s%s: NET TAISEN lobby and relay on %s:%u\n", head().c_str(), me, bind.c_str(), Lobby::PORT);
     }
     fflush(stdout);
     // The game makes one request per connection (HTTP/1.0). Each connection is read and answered on a
@@ -372,7 +377,7 @@ int Listener::serve(Server &server, const std::string &kept) {
                 while (connections > 0 && std::chrono::steady_clock::now() < until) sys::sleep_for(std::chrono::milliseconds(20));
                 std::lock_guard<std::mutex> last(answering);   // (no call answered after this one)
                 if (connections > 0)
-                    say_line(std::string(me) + ": " + std::to_string(connections.load()) + " connection" + (connections == 1 ? "" : "s") +
+                    say_line(head() + me + ": " + std::to_string(connections.load()) + " connection" + (connections == 1 ? "" : "s") +
                              " still open after " + std::to_string(kStopSeconds) + " seconds: not answered");
                 if (stopped) stopped();
                 return 0;
@@ -442,6 +447,7 @@ int Listener::serve(Server &server, const std::string &kept) {
                 if (!keyed.hear(fd, (const uint8_t *)first)) {
                     come = false;
                 } else if (!machine_key(keyed.id(), mk)) {
+                    net::send(fd, net::keyed::kUnknownMachine, 4);
                     turned_away(ip, "e-AMUSE3", ("with machine " + keyed.id() + "'s key, which isn't an enabled machine of the database with a key (machine list)").c_str());
                     come = false;
                 } else {
@@ -493,6 +499,9 @@ int Listener::serve(Server &server, const std::string &kept) {
                 }
             } else if (come && with_key && keyed.wrong()) {
                 turned_away(ip, "e-AMUSE3", machine ? ("with another key than machine " + machine_id + "'s").c_str() : "with another key");
+            } else if (come && with_key && !keyed.proven()) {   // (a cabinet sends an empty record once the keys are one: Keyed::connect)
+                turned_away(ip, "e-AMUSE3", machine ? ("closed at the server's hello: another key than machine " + machine_id + "'s (an old one?)").c_str()
+                                                    : "closed at the server's hello: another key");
             }
             net::close(fd);
             {

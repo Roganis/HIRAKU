@@ -9,7 +9,7 @@ Made-up calls; key_client is a cabinet's side.
 
     tests/eamuse/test_machine_keys.py HIRAKU-SERVER KEY_CLIENT [HIRAKU-EAMUSE]      exit 0 when all hold
 """
-import os, shutil, socket, subprocess, sys, tempfile, threading, time
+import os, re, shutil, socket, subprocess, sys, tempfile, threading, time
 SERVER, CLIENT = sys.argv[1], sys.argv[2]
 EAMUSE = sys.argv[3] if len(sys.argv) > 3 else None
 T = tempfile.mkdtemp(prefix='hk-mkey-')
@@ -157,15 +157,24 @@ try:
     a = client('call', s.port, SHARED, req=request(ID1))
     check(a.startswith(b'error:') and b'machine' in a, 'a key for all: refused, and the cabinet is told machines\' own keys are wanted')
     a = client('call', s.port, 'hk2.0120FFFFFFFFFFFFFF00.' + SHARED, req=request('0120FFFFFFFFFFFFFF00'))
-    check(a.startswith(b'error:'), 'a machine\'s key the database has no machine for: refused')
+    check(a.startswith(b'error:') and b"doesn't take this machine" in a, 'a machine\'s key the database has no machine for: refused, the cabinet told so (HKKU)')
     check('which isn\'t an enabled machine of the database with a key' in s.said(), '... and the server says so')
     cmd(db, 'machine', 'disable', ID2)
-    check(client('call', s.port, K2, req=request(ID2)).startswith(b'error:'), 'a disabled machine\'s key: refused')
+    a = client('call', s.port, K2, req=request(ID2))
+    check(a.startswith(b'error:') and b"doesn't take this machine (unknown or switched off" in a and b'another' not in a,
+          'a disabled machine\'s key: refused, the cabinet told the machine isn\'t taken (not a wrong key)')
     st, out, err = cmd(db, 'machine', 'key', ID1)
     K1b = out.strip()
     check(st == 0 and out.count('\n') == 1 and K1b.startswith('hk2.' + ID1 + '.') and K1b != K1, 'machine key: a new key, one line on stdout')
     a = client('call', s.port, K1, req=request(ID1))
-    check(a.startswith(b'error:') and b'another' in a, '... the old one refused at once (the keys differ)')
+    check(a.startswith(b'error:') and b'another' in a and b"doesn't take" not in a, '... the old one refused at once (the keys differ), told so')
+    said = s.said()
+    check(f"another key than machine {ID1}'s (an old one?)" in said, '... and the server says so (the cabinet closed at its hello)')
+    check(f"with machine 0120FFFFFFFFFFFFFF00's key, which isn't" in said and f"with machine {ID2}'s key, which isn't" in said,
+          'refusals within a minute from one address: each machine\'s said (once a minute by reason and by whom)')
+    stamped = [l for l in said.splitlines() if 'refused:' in l]
+    check(stamped and all(re.match(r'\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ hiraku-server: refused: ', l) for l in stamped),
+          '... each refusal line dated (ISO 8601, UTC)')
     check(answered(client('call', s.port, K1b, req=request(ID1))), '... the new one answered')
     tap = Tap(s.port)
     a = client('call', tap.port, K1b, req=request(ID1))
@@ -226,7 +235,8 @@ try:
     else:
         check(client('relay', 5740, '-').startswith(b'error:'), 'the relay: a cabinet without a key is not taken')
         check(client('relay', 5740, K1).startswith(b'error:'), '... nor one with an old key')
-        check(client('relay', 5740, K2).startswith(b'error:'), '... nor a disabled machine\'s')
+        a = client('relay', 5740, K2)
+        check(a.startswith(b'error:') and b"doesn't take this machine" in a, '... nor a disabled machine\'s (told so)')
         check(client('relay', 5740, SHARED).startswith(b'error:'), '... nor a key for all')
         b = subprocess.Popen([CLIENT, 'relay', '127.0.0.1', '5740', K3], stdout=subprocess.PIPE)
         addr = b.stdout.readline().decode().split()

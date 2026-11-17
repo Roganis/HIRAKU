@@ -46,13 +46,31 @@ struct PinReset {
 };
 bool reset_pin(Store &, const Identity &, const std::string &pin, PinReset &);
 
+// What a game's readers can ever fill, whatever one player holds (a page's columns): the player's
+// count of plays (Profile::plays), a chart's own count (Score::plays), a clear mark (Score::clear)
+// that has a word for at least one value (clear_name)
+struct Shows {
+    bool plays = false, song_plays = false, clear = false;
+};
+Shows shows(const Game &);
+// A clear mark as a short word ("Cleared", "Full combo"...); nullptr: none kept, or a value whose
+// meaning the server's code doesn't establish
+const char *clear_name(const Game &, int clear);
+// A game's clear marks' words, a value each, ended by one with no word
+struct ClearWord {
+    int value;
+    const char *word;
+};
+
 // A family's way of reading (a row's Readers in games.cpp)
 struct Readers {
     bool (*profile)(const Store &, const Game &, const Identity &, Profile &);
     std::vector<Score> (*scores)(const Store &, const Game &, const Identity &);
+    Shows (*shows)(const Game &);                        // (clear: rows carry a mark, words or not)
+    const ClearWord *(*clear_words)(const Game &);       // nullptr: no mark kept
 };
 extern const Readers POPN_READERS;         // pop'n music 9-18
-extern const Readers POPN_LATER_READERS;   // the later PC pop'n games (M39)
+extern const Readers POPN_LATER_READERS;   // pop'n music, later PC versions (M39)
 extern const Readers IIDX9_READERS;        // beatmania IIDX 9th style
 extern const Readers IIDX_READERS;         // beatmania IIDX 10th style to EMPRESS
 extern const Readers GFDMV_READERS;        // GuitarFreaks and DrumMania V

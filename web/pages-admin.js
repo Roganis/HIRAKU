@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // An admin's pages: users, sign-up and invitations, cards, the server's settings, the audit log.
 import {del, enc, get, post, put} from './api.js';
-import {state} from './app.js';
+import {showServerName, state} from './app.js';
 import {settingsForm} from './settings.js';
 import {
-  ask, button, card, cardNumber, chip, clear, confirm, empty, errorNote, field, form, h, loading, note, pageHead, secret, table, toast,
-  toggle, value, when,
+  append, ask, button, card, cardNumber, chip, clear, confirm, count, empty, keepFocus, errorNote, field, form, h, loading, note, pageHead, secret, table, toast,
+  playerName, toggle, value, when,
 } from './ui.js';
 
 // --- Users
@@ -27,16 +27,27 @@ export async function users(view, {still}) {
   function fill() {
     const q = find.value.trim().toLowerCase();
     const rows = all.filter((u) => u.name.toLowerCase().includes(q));
-    clear(list).append(rows.length ? table([
+    const back = keepFocus(list);
+    clear(list, rows.length ? table([
       {key: 'name', label: 'Name', cell: (u) => h('span', {}, h('strong', {text: u.name}), u.name === state.me.name ? h('span', {class: 'muted small', text: ' (you)'}) : null,
         u.must_change_password ? chip('must change password', 'warn') : null)},
       {key: 'role', label: 'Role', wide: true, sort: (u) => ({player: 1, operator: 2, admin: 3})[u.role], cell: (u) => {
+        // (chosen, then saved: a select changes on each arrow key, which must not change the account)
         const s = h('select', {'aria-label': `Role of ${u.name}`}, ['player', 'operator', 'admin'].map((r) => h('option', {value: r, text: r, selected: r === u.role})));
-        s.addEventListener('change', () => act(async () => {
-          await put('/users/' + enc(u.name), {role: s.value});
-          toast(`${u.name} is now ${s.value === 'admin' ? 'an admin' : s.value === 'operator' ? 'an operator' : 'a player'}.`);
-        }));
-        return s;
+        const a = (r) => (r === 'admin' ? 'an admin' : r === 'operator' ? 'an operator' : 'a player');
+        const save = button('Save', 'small', () => {
+          if (s.value === u.role) return;
+          act(async () => {
+            if (!await confirm(`Make ${u.name} ${a(s.value)}?`, 'Save the role', s.value === 'admin',
+              s.value === 'admin' ? 'An admin can change every account, card and setting of this server.' : '')) return;   // (Cancel: drawn back as it is)
+            await put('/users/' + enc(u.name), {role: s.value});
+            toast(`${u.name} is now ${a(s.value)}.`);
+          });
+        }, {'aria-label': `Save the role of ${u.name}`});
+        s.addEventListener('keydown', (e) => {
+          if (e.key === 'Escape' && s.value !== u.role) { e.preventDefault(); s.value = u.role; }
+        });
+        return h('span', {class: 'role-edit'}, s, save);
       }},
       {key: 'disabled', label: 'Sign-in', sort: (u) => (u.disabled ? 1 : 0), cell: (u) => chip(u.disabled ? 'disabled' : 'allowed', u.disabled ? 'bad' : 'ok')},
       {key: 'hide_stats', label: 'Stats', sort: (u) => (u.hide_stats ? 1 : 0), cell: (u) => (u.hide_stats ? 'hidden' : 'shown')},
@@ -50,14 +61,15 @@ export async function users(view, {still}) {
         button('Reset code', 'small', () => act(async () => {
           if (!await confirm(`A reset code for ${u.name}?`, 'Make a code', false, 'They set a new password with it, once, within a day. Give it to them yourself.')) return;
           const j = await post('/users/' + enc(u.name) + '/reset');
-          clear(shown).append(secret(`${u.name}: reset code`, j.code, `They enter it under “I have a reset code” on the sign-in page, within ${j.hours} hours.`));
+          clear(shown, secret(`${u.name}: reset code`, j.code, `They enter it under “I have a reset code” on the sign-in page, within ${count(j.hours, 'hour')}.`));
         })),
         button('Delete', 'small-quiet', () => act(async () => {
           if (!await confirm(`Delete ${u.name}?`, 'Delete the account', true, 'Their cards are unlinked; the cards’ players and scores stay on the server. This can’t be undone.')) return;
           await del('/users/' + enc(u.name));
           toast(`${u.name} deleted.`);
         })))},
-    ], rows, {sort: 0, caption: 'Users', class: 'users'}) : empty('Nobody by that name.'));
+    ], rows, {sort: 0, caption: 'Users', class: 'users', rowKey: (u) => u.name}) : empty('Nobody by that name.'));
+    back();
   }
   async function draw() {
     const j = await get('/users');
@@ -79,26 +91,34 @@ export async function signUp(view, {still}) {
   const radios = h('fieldset', {class: 'radios'}, h('legend', {text: 'Sign-up is'}), Object.entries(WORDS).map(([k, t]) => {
     const id = 'mode-' + k;
     const r = h('input', {type: 'radio', name: 'mode', id, value: k, checked: c.signup === k});
-    r.addEventListener('change', async () => {
-      clear(modeOut);
-      try {
-        const j = await put('/config', {signup: k});
-        state.server.signup = j.signup;
-        toast('Sign-up: ' + WORDS[j.signup].split(':')[0].toLowerCase() + '.');
-      } catch (err) { modeOut.append(errorNote(err)); }
-    });
     return h('div', {class: 'radio'}, r, h('label', {for: id, text: t}));
   }));
+  // (chosen with the arrow keys, which move the choice at each press, then saved: never on the way)
+  let saved = c.signup;
+  const chosen = () => (radios.querySelector('input[name="mode"]:checked') || {}).value;
+  const restore = () => { for (const r of radios.querySelectorAll('input[name="mode"]')) r.checked = r.value === saved; };
+  radios.addEventListener('keydown', (e) => { if (e.key === 'Escape' && chosen() !== saved) { e.preventDefault(); restore(); } });
+  const saveMode = button('Save', 'primary', async () => {
+    clear(modeOut);
+    const k = chosen();
+    if (!k || k === saved) return;
+    try {
+      const j = await put('/config', {signup: k});
+      saved = j.signup;
+      state.server.signup = j.signup;
+      toast('Sign-up: ' + WORDS[j.signup].split(':')[0].toLowerCase() + '.');
+    } catch (err) { restore(); modeOut.append(errorNote(err)); }
+  }, {'aria-label': 'Save how sign-up is'});
   const shown = h('div');
   const inv = form([
     field('Uses', 'uses', {type: 'number', min: 1, max: 10000, value: 1, required: true, help: 'How many accounts it may make.'}),
     field('Days', 'days', {type: 'number', min: 1, max: 365, value: 7, required: true, help: 'How long it works.'}),
   ], 'Make an invitation', async (f) => {
     const j = await post('/config/invites', {uses: parseInt(value(f, 'uses'), 10), days: parseInt(value(f, 'days'), 10)});
-    clear(shown).append(secret('Invitation code', j.code,
-      `It makes ${j.uses} account${j.uses === 1 ? '' : 's'} within ${j.days} day${j.days === 1 ? '' : 's'}, entered on the Sign up page.`));
+    clear(shown, secret('Invitation code', j.code,
+      `It makes ${count(j.uses, 'account')} within ${count(j.days, 'day')}, entered on the Sign up page.`));
   }, {class: 'form-row'});
-  view.append(h('div', {class: 'grid-2'}, card('Mode', radios, modeOut),
+  view.append(h('div', {class: 'grid-2'}, card('Mode', radios, h('div', {class: 'actions'}, saveMode), modeOut),
     card('Invitations', h('p', {class: 'muted', text: 'A code for sign-up by invitation. Only a code’s fingerprint is kept: copy it now.'}), inv)), shown);
 }
 
@@ -114,7 +134,7 @@ export async function cards(view) {
       : empty('No card is linked to this account.')));
   }, {class: 'form-row'});
   const byNumber = form([field('Card number', 'card', {required: true, maxlength: 24, help: 'The 16 letters and digits the games show. Spaces are fine.'})], 'Open', async (f) => {
-    clear(out).append(card('A card', h('ul', {class: 'cards'}, cardRow(value(f, 'card').replace(/[\s-]/g, '')))));
+    clear(out, card('A card', h('ul', {class: 'cards'}, cardRow(value(f, 'card').replace(/[\s-]/g, '')))));
   }, {class: 'form-row'});
   view.append(h('div', {class: 'grid-2'}, card('Find by user', byUser), card('Find by number', byNumber)), out);
 
@@ -122,36 +142,46 @@ export async function cards(view) {
   function cardRow(number) {
     const facts = h('div', {}, loading());
     const said = h('div', {'aria-live': 'polite'});
+    const lock = h('span');   // (Unlock, or Forget wrong PINs, or nothing: as the card is)
+    const unlink = h('span');   // (Unlink: only a card linked to an account)
     const act = async (fn) => {
       clear(said);
-      try { const n = await fn(); if (n) said.append(n); } catch (err) { said.append(errorNote(err)); }
+      try { const n = await fn(); if (n) append(said, n); } catch (err) { append(said, errorNote(err)); }
       await show();   // (drawn again as it now is)
     };
     async function show() {
       let c;
-      try { c = await get('/cards/' + enc(number)); } catch (err) { clear(facts).append(errorNote(err)); return; }
-      clear(facts).append(
+      try { c = await get('/cards/' + enc(number)); } catch (err) { clear(facts, errorNote(err)); return; }
+      const wrong = c.wrong_pins || 0;
+      clear(facts,
         h('p', {class: 'chips'},
           chip(c.known ? 'played on this server' : 'not known to this server', c.known ? 'ok' : 'warn'),
-          c.locked ? chip('locked for linking', 'bad') : chip(`${c.tries_left} wrong PIN${c.tries_left === 1 ? '' : 's'} before the lock`, c.wrong_pins ? 'warn' : null)),
+          c.locked ? chip('locked for linking', 'bad') : chip(`${count(c.tries_left, 'wrong PIN')} before the lock`, wrong ? 'warn' : null)),
         c.user ? h('p', {class: 'muted small'}, `Linked to ${c.user} `, when(c.linked)) : h('p', {class: 'muted small', text: 'Linked to no account.'}),
-        c.wrong_pins ? h('p', {class: 'muted small', text: `Wrong PINs so far: ${c.wrong_pins}.`}) : null,
-        c.games.length ? h('p', {class: 'chips', 'aria-label': 'Games with a player on this card'}, c.games.map((g) => chip(`${g.title}: ${g.player || '(no name)'}`, 'game')))
+        wrong ? h('p', {class: 'muted small', text: `Wrong PINs so far: ${wrong}.`}) : null,
+        c.games.length ? h('p', {class: 'chips', 'aria-label': 'Games with a player on this card'},
+          c.games.map((g) => h('span', {class: 'chip chip-game'}, `${g.title}: `, playerName(g) || '(no name)')))
           : h('p', {class: 'muted small', text: 'No game has a player on this card.'}));
+      // (the unlock call forgets the wrong PINs too: offered as that when the card isn't locked)
+      clear(lock, c.locked ? button('Unlock', 'small', () => act(async () => {
+        await post('/cards/' + enc(number) + '/unlock');
+        return note('ok', 'Unlocked: it may be linked again.');
+      })) : wrong ? button('Forget wrong PINs', 'small', () => act(async () => {
+        await post('/cards/' + enc(number) + '/unlock');
+        return note('ok', 'Its wrong PINs are forgotten.');
+      })) : null);
+      clear(unlink, c.user ? button('Unlink', 'small', () => act(async () => {
+        if (!await confirm('Unlink this card from its account?', 'Unlink', true, 'Its players and scores stay; the account loses them until it links the card again.')) return null;
+        await del('/cards/' + enc(number));
+        return note('ok', 'Unlinked.');
+      })) : null);
     }
     show();
     return h('li', {class: 'card-item'}, h('div', {class: 'card-face', 'aria-hidden': 'true'}),
       h('div', {class: 'card-body'}, cardNumber(number), facts,
         h('div', {class: 'row-actions'},
-          button('Unlock', 'small', () => act(async () => {
-            await post('/cards/' + enc(number) + '/unlock');
-            return note('ok', 'Unlocked: it may be linked again.');
-          })),
-          button('Unlink', 'small', () => act(async () => {
-            if (!await confirm('Unlink this card from its account?', 'Unlink', true, 'Its players and scores stay; the account loses them until it links the card again.')) return null;
-            await del('/cards/' + enc(number));
-            return note('ok', 'Unlinked.');
-          })),
+          lock,
+          unlink,
           button('Reset PIN', 'small', () => act(async () => {
             const pin = await ask('A new PIN for this card', 'New PIN', {type: 'password', inputmode: 'numeric', pattern: '[0-9]{4}', maxlength: 4, required: true,
               help: 'Four digits, set in every game that keeps a PIN for it.', ok: 'Set the PIN'});
@@ -173,7 +203,7 @@ export async function settings(view, {still}) {
   const name = form([field('Server name', 'name', {required: true, maxlength: 64, value: c.name, help: 'Shown on these pages’ sign-in and title.'})], 'Save', async (f) => {
     const j = await put('/config', {name: value(f, 'name')});
     state.server.name = j.name;
-    document.getElementById('server-name').textContent = j.name;
+    showServerName(j.name);
     return note('ok', 'Saved.');
   }, {class: 'form-row'});
   const all = toggle('List every game', c.list_all_games, 'Also the games marked unlisted: their rows show in the lists, stats and settings. It changes no game’s answers.');
@@ -196,28 +226,34 @@ export async function settings(view, {still}) {
     card('The server’s own', own), songNamesCard(n), card('Each game’s defaults', h('p', {class: 'muted', text: 'An arcade’s own value wins over these; a game’s default holds where neither is set.'}), gamesBox));
   const save = (game, list) => put('/settings', {settings: list});
   function drawGames(j) {
-    clear(own).append(j.server && j.server.length
+    clear(own, j.server && j.server.length
       ? settingsForm([{id: 'server', title: 'The server', settings: j.server}], {arcade: false, open: ['server'], save: async (g, list) => {
         const a = await save(g, list);
         return {games: [{id: 'server', title: 'The server', settings: a.server || []}]};
       }})
       : empty('The server has no settings of its own.'));
-    clear(gamesBox).append(j.games.length ? settingsForm(j.games, {arcade: false, save}) : empty('No game has settings.'));
+    clear(gamesBox, j.games.length ? settingsForm(j.games, {arcade: false, save}) : empty('No game has settings.'));
   }
   drawGames(s);
 }
 
-// The song names' packs the server has read (GET /names): the games with names, and the files refused
+// The song names' packs the server has read (GET /names): the games with names, and the files refused.
+// No folder's path is shown (an older server's "folder": only whether one is set)
 function songNamesCard(n) {
-  const body = [h('p', {class: 'muted'}, 'Packs made from your own games with tools/eamuse/names.py, read from ', h('code', {class: 'path', text: n.folder || '(none)'}),
-    ' and again when one changes. They are yours: not to be shared or put in a repository.')];
+  const set = n.set !== undefined ? !!n.set : !!n.folder;
+  if (!set) {
+    return card('Song names', h('p', {class: 'muted'}, 'No names folder is set: scores show song numbers. ',
+      h('code', {text: 'serve --names <folder>'}), ' sets one.'));
+  }
+  const body = [h('p', {class: 'muted', text: 'Packs made from your own games with tools/eamuse/names.py, read from the names folder '
+    + 'and again when one changes. They are yours: not to be shared or put in a repository.'})];
   body.push(n.packs.length ? table([
     {key: 'title', label: 'Game', wide: true},
     {key: 'songs', label: 'Songs', num: true},
     {key: 'charts', label: 'Charts', num: true},
     {key: 'time', label: 'File changed', num: true, wide: true, cell: (p) => when(p.time)},
   ], n.packs, {sort: 0, caption: 'Games with song names'}) : empty('No game has song names: scores show song numbers.'));
-  if (n.refused.length) {
+  if (n.refused && n.refused.length) {
     body.push(h('h3', {text: 'Files not read'}), table([
       {key: 'file', label: 'File', cell: (r) => h('code', {text: r.file})},
       {key: 'why', label: 'Why', cls: 'wrap', wide: true},
@@ -241,7 +277,7 @@ export async function audit(view, {still, query}) {
   const fill = () => {
     const q = find.value.trim().toLowerCase();
     const rows = j.audit.filter((l) => !q || `${l.user} ${l.action} ${l.detail}`.toLowerCase().includes(q));
-    clear(holder).append(rows.length ? table([
+    clear(holder, rows.length ? table([
       {key: 'at', label: 'When', num: true, cell: (l) => when(l.at)},
       {key: 'user', label: 'Who'},
       {key: 'action', label: 'Action', cell: (l) => h('code', {text: l.action})},

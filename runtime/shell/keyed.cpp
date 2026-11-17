@@ -192,6 +192,7 @@ namespace keyed {
 const char kNoKey[4] = {'H', 'K', 'K', '0'};
 const char kOneKey[4] = {'H', 'K', 'K', 'S'};
 const char kMachinesOnly[4] = {'H', 'K', 'K', 'M'};
+const char kUnknownMachine[4] = {'H', 'K', 'K', 'U'};
 
 size_t hello_size(const void *first4) {
     return memcmp(first4, kMagic, 4) == 0 ? kHello : memcmp(first4, kMagic2, 4) == 0 ? kHello2 : 0;
@@ -268,6 +269,10 @@ bool Keyed::connect(int fd, const Key &key, std::string *error) {
         *error = "the server takes each machine's own key only (hiraku-server machine add or machine key PCBID makes one: hk2....)";
         return false;
     }
+    if (memcmp(answer, keyed::kUnknownMachine, 4) == 0) {   // (a wrong key of a machine it takes: client_take below)
+        *error = "this server doesn't take this machine (unknown or switched off: its operator's machine list)";
+        return false;
+    }
     if (!keyed::is_hello(answer) || !recv_all(fd, answer + 4, sizeof answer - 4)) {
         *error = "it gave no answer to the key (not a hiraku-eamuse, or one older than keys)";
         return false;
@@ -276,7 +281,11 @@ bool Keyed::connect(int fd, const Key &key, std::string *error) {
         *error = "the server's key is another than the one given here (-eakey)";
         return false;
     }
-    return true;
+    // an empty record: the server knows at once that this side has the key, even if nothing else
+    // is sent (a check that the server is there); one that closes without it had another key
+    std::string wire;
+    out_.seal(nullptr, 0, wire);
+    return send_all(fd, wire.data(), wire.size());
 }
 
 bool Keyed::accept(int fd, const Key &key, const uint8_t first4[4]) { return hear(fd, first4) && answer(key); }

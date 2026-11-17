@@ -187,7 +187,7 @@ const std::vector<Game> &games() {
          {GAME_PHASE, IR_PHASE_18, EVENT_PHASE_18, NETVS_PHASE_18, LICENSE_PHASE_18, PSP_PHASE_18, PSP_MONTH_18, PSP_DAY_18,
           LOCAL_MATCHING, MATCHING_SEC, BOSS_DIFF_18, BOSS_POINT_18},
          &POPN_READERS},
-        {"popn-pc-later", "the later PC pop'n games", "M39", Family::popn_pc_later, {&S::answer_hc, &S::answer_p24, later, shared, popn9},
+        {"popn-pc-later", "pop'n music, later PC versions", "M39", Family::popn_pc_later, {&S::answer_hc, &S::answer_p24, later, shared, popn9},
          {PHASES_LATER, UNLOCK_LATER, NETVS_LATER}, &POPN_LATER_READERS, /*unlisted*/ true},
         {"iidx9", "beatmania IIDX 9th style", "C02", Family::iidx9, {c02, iidx_userdata, shared, popn9}, {WEEKLY_SONG_9, COURSES_9},
          &IIDX9_READERS},
@@ -203,8 +203,8 @@ const std::vector<Game> &games() {
         {"drmnv2j", "DrumMania V2", "F02", Family::gfdm_v, {&S::answer_gfdmv, later, shared, popn9}, {}, &GFDMV_READERS},
         {"", "GuitarFreaks V", "E03", Family::gfdm_v, {&S::answer_gfdmv, later, shared, popn9}, {}, &GFDMV_READERS},
         {"", "GuitarFreaks V2", "F03", Family::gfdm_v, {&S::answer_gfdmv, later, shared, popn9}, {}, &GFDMV_READERS},
-        {"gfdm573-gf", "the System 573 GuitarFreaks", "?39", Family::gfdm_573, {&S::answer_gfdm, shared}, {}, &GFDM573_READERS},
-        {"gfdm573-dm", "the System 573 DrumMania", "?40", Family::gfdm_573, {&S::answer_gfdm, shared}, {}, &GFDM573_READERS},
+        {"gfdm573-gf", "GuitarFreaks (System 573)", "?39", Family::gfdm_573, {&S::answer_gfdm, shared}, {}, &GFDM573_READERS},
+        {"gfdm573-dm", "DrumMania (System 573)", "?40", Family::gfdm_573, {&S::answer_gfdm, shared}, {}, &GFDM573_READERS},
         // last: a model no row above names, answered as a later pop'n (its phase by the call's model: phase-Z99)
         {"", "a game the table doesn't name", "", Family::unknown, {later, shared, popn9}, {phase(-1)}},
     };

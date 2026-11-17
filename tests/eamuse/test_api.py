@@ -127,10 +127,18 @@ try:
     scores = (b'id=10000001\tmid=1001\tcl=1\tex=1500\tplays=2\tclear=4\n'
               b'id=10000002\tmid=1001\tcl=1\tex=1700\tplays=3\tclear=4\n'
               b'id=10000003\tmid=1001\tcl=1\tex=1600\tplays=1\tclear=2\n'
-              b'id=10000002\tmid=1002\tcl=0\tex=800\tplays=1\tclear=1\n')
+              b'id=10000002\tmid=1002\tcl=0\tex=800\tplays=1\tclear=1\n'
+              b'id=10000002\tmid=1003\tcl=0\tex=0\tplays=1\tclear=1\n')   # (a score of 0: no best score)
+    # carol's System 573 DrumMania: a stage cleared (its score) and one failed (no score kept)
+    gfdm = f'id={CARD_B}\tgdid=7\tname=CAROL\tpass={PIN_B}\n'.encode()
+    # carol's pop'n 12 record: song 5's marks 1, 2 and 3 on charts 0-2 (no PIN kept in it: 0xff)
+    popn12 = bytearray(0x708)
+    popn12[0:5], popn12[0x34:0x38], popn12[0x3c + 2 * 5] = b'CAROL', b'\xff' * 4, 0b111001
+    gfdm_rows = b'netid=12\tseqmode=1\tperc=91\tclear=1\tscore=80000\tplays=2\nnetid=13\tseqmode=2\tperc=60\tplays=1\n'
     check(ADMIN_PW != '' and put('cards', cards.encode()) and put('iidx-FDD-players', players) and put('iidx-FDD-scores', scores) and
           put(f'phc-{REF_M}', b'name=MPLAYER\taccount.total_play_cnt=4\n') and
-          put(f'phcs-{REF_M}', b'music=5\tsheet=1\tscore=90000\tcnt=1\tclear_type=3\n'), 'the made-up data put in a new database')
+          put(f'phcs-{REF_M}', b'music=5\tsheet=1\tscore=90000\tcnt=1\tclear_type=3\n') and
+          put('gfdm-cards', gfdm) and put('gfdm-D40-7', gfdm_rows) and put(f'pdata-E12-{CARD_B}', bytes(popn12)), 'the made-up data put in a new database')
 
     PORT, API_PORT = free_port(), free_port()
     log = open(os.path.join(T, 'serve.txt'), 'w+')
@@ -285,9 +293,17 @@ try:
     erin, _, _, _ = login('erin', PASSWORDS['erin'])
     check(api('POST', '/me/cards', {'card': CARD_B, 'pin': PIN_B}, who=carol)[0] == 201, "carol links hers")
     check(api('POST', '/me/cards', {'card': CARD_A, 'pin': PIN_A}, who=carol)[0] == 409, "another's card: 409")
-    results = [api('POST', '/me/cards', {'card': CARD_C, 'pin': '0000'}, who=dave)[1]['error'] for _ in range(5)]
+    st, j, _ = api('GET', f'/cards/{CARD_C}', who=admin)
+    check(st == 200 and j['locked'] is False and j['wrong_pins'] == 0 and j['tries_left'] == 5,
+          'GET /cards/CARD: locked, wrong_pins and tries_left there with no wrong PIN yet')
+    api('POST', '/me/cards', {'card': CARD_C, 'pin': '0000'}, who=dave)
+    st, j, _ = api('GET', f'/cards/{CARD_C}', who=admin)
+    check(st == 200 and j['locked'] is False and j['wrong_pins'] == 1 and j['tries_left'] == 4, '... one wrong PIN: 1, 4 left')
+    results = [api('POST', '/me/cards', {'card': CARD_C, 'pin': '0000'}, who=dave)[1]['error'] for _ in range(4)]
     st, j, _ = api('POST', '/me/cards', {'card': CARD_C, 'pin': PIN_C}, who=dave)
     check(results[0] == 'wrong_pin' and st == 403 and j['error'] == 'card_locked', 'five wrong PINs lock the card: the right one refused')
+    st, j, _ = api('GET', f'/cards/{CARD_C}', who=admin)
+    check(st == 200 and j['locked'] is True and j['wrong_pins'] == 5 and j['tries_left'] == 0, '... GET /cards/CARD: locked, 5, none left')
     check(api('POST', f'/cards/{CARD_C}/unlock', who=admin)[0] == 200, '... the admin unlocks it')
     check(api('POST', '/me/cards', {'card': CARD_C, 'pin': PIN_C}, who=dave)[0] == 201, '... then it links')
     check(api('DELETE', f'/me/cards/{CARD_B}', who=bob)[0] == 404, "unlinking another's card: 404")
@@ -316,6 +332,42 @@ try:
     check(rows and rows[1]['user'] is None and rows[1]['player'] == '' and rows[1].get('player_hex') == '81ff',
           "... a card no one linked by the game's name, which can't be text: its bytes as hex")
     check(not any(c in json.dumps(j) for c in (CARD_A, CARD_B, CARD_D)), '... no card number')
+    check(rows and [r['clear_name'] for r in rows] == ['Hard clear', 'Easy clear', 'Hard clear'] and [r['clear'] for r in rows] == [4, 2, 4],
+          "... each row's clear mark as a word (clear_name) beside its number")
+    check(j and j['shows'] == {'plays': True, 'song_plays': True, 'clear': True}, '... and what the game\'s rows can hold (shows)')
+    st, j, _ = api('GET', '/games/iidx13/top?song=1003', who=carol)
+    check(st == 200 and j['scores'] == [], '... a score of 0: not among the best scores')
+    st, j, _ = api('GET', '/me/stats', who=carol)
+    games = {s['game']: s for s in j['stats']} if j else {}
+    r1003 = [r for r in games.get('iidx13', {}).get('scores', []) if r['song'] == 1003]
+    check(st == 200 and r1003 and r1003[0]['score'] == 0 and r1003[0]['clear_name'] == 'Failed',
+          "... the player's own stats keep it (DistorteD's clear 1: Failed)")
+    dm = games.get('gfdm573-dm', {})
+    check(dm.get('title') == 'DrumMania (System 573)' and dm.get('shows') == {'plays': True, 'song_plays': True, 'clear': True} and
+          sorted((r['song'], r['score'], r['clear'], r['clear_name']) for r in dm.get('scores', [])) == [(12, 80000, 1, 'Cleared'), (13, None, 0, 'Failed')],
+          "System 573 DrumMania in one's stats: its title, a cleared stage's score, a failed one's mark (no score)")
+    p12 = sorted((r['chart'], r['clear'], r['clear_name']) for r in games.get('popn12', {}).get('scores', []) if r['song'] == 5)
+    check(p12 == [(0, 1, 'Cleared'), (1, 2, 'Cleared'), (2, 3, 'Cleared')], "pop'n's better medals (2, 3): Cleared too")
+    st, j, _ = api('GET', '/games', who=carol)
+    shows = {g['id']: g['shows'] for g in j['games']} if j else {}
+    want = {'popn12': (False, False, True), 'popn15': (True, False, True), 'iidx9': (False, True, True), 'iidx10': (False, True, True),
+            'iidx13': (True, True, True), 'drmnvj': (True, True, False), 'gfdm573-gf': (True, True, True),
+            'iidx16': (True, True, False)}   # (EMPRESS: its marks have no word, so no clear column)
+    check(st == 200 and all(shows.get(k) == dict(zip(('plays', 'song_plays', 'clear'), v)) for k, v in want.items()),
+          'GET /games: each game says which columns its rows can fill (shows)')
+    st, j, _ = api('GET', f'/cards/{CARD_A}', who=admin)
+    p13 = [g for g in j['games'] if g['id'] == 'iidx13'] if j else []
+    check(st == 200 and p13 and p13[0]['player'] == SJIS_NAME, "GET /cards/CARD: the game's Shift-JIS name as UTF-8")
+    st, j, _ = api('GET', f'/cards/{CARD_D}', who=admin)
+    p13 = [g for g in j['games'] if g['id'] == 'iidx13'] if j else []
+    check(st == 200 and p13 and p13[0]['player'] == '' and p13[0].get('player_hex') == '81ff', '... one that can\'t be text: its bytes as hex')
+    st, j, _ = api('GET', '/players', who=carol)
+    check(st == 200 and sorted(p['name'] for p in j['players']) == ['bob', 'carol', 'dave'],
+          'GET /players: only accounts with a card (no admin, operators, nor erin)')
+    st, j, _ = api('GET', '/users', who=admin)
+    check(st == 200 and {'admin', 'op1', 'erin'} <= {u['name'] for u in j['users']}, "... the admin's users list: every account")
+    st, j, _ = api('GET', '/names', who=admin)
+    check(st == 200 and isinstance(j.get('set'), bool) and 'folder' not in j, 'GET /names: "set", no folder')
     check(api('PUT', '/me/hide_stats', {'hide_stats': True}, who=bob)[0] == 200, 'bob hides his stats')
     st, j, _ = api('GET', '/players/bob/stats', who=carol)
     check(st == 403 and j['error'] == 'stats_hidden', '... others are refused (403)')
@@ -332,8 +384,10 @@ try:
     check(not any(g['id'] == 'popn-pc-later' for g in api('GET', '/games', who=bob)[1]['games']), '... not in GET /games')
     check(api('GET', '/games/popn-pc-later/top', who=bob)[0] == 404, '... its best scores: 404')
     check(api('PUT', '/config', {'list_all_games': True}, who=admin)[1]['list_all_games'] is True, 'the admin lists all games')
-    check(any(g['id'] == 'popn-pc-later' for g in api('GET', '/server')[1]['games']) and
-          any(s['game'] == 'popn-pc-later' for s in api('GET', '/me/stats', who=bob)[1]['stats']), '... then it is listed and shown')
+    later = [s for s in api('GET', '/me/stats', who=bob)[1]['stats'] if s['game'] == 'popn-pc-later']
+    check(any(g['id'] == 'popn-pc-later' for g in api('GET', '/server')[1]['games']) and later, '... then it is listed and shown')
+    check(later and later[0]['scores'][0]['clear'] == 3 and later[0]['scores'][0]['clear_name'] is None and later[0]['shows']['clear'] is False,
+          "... a clear mark whose meaning isn't known: its number, no word, and no clear column (shows)")
     api('PUT', '/config', {'list_all_games': False}, who=admin)
     check(not any(g['id'] == 'popn-pc-later' for g in api('GET', '/server')[1]['games']), '... and hidden again')
 
@@ -440,6 +494,7 @@ try:
     check(not leaks, f'no password, PIN, token, code or key in any of {len(seen)} answers but the one that made it' +
           (f' (answer {leaks[0][0]})' if leaks else ''))
     check(not any('pbkdf2' in b or '$' in b and 'sha256' in b for b, _ in seen), '... and no hash')
+    check(not any(T in b or T.replace('/', '\\/') in b for b, _ in seen), "... and no path on the server's disk")
     check(not any(holds(output, s) for s in secret_list + PINS), "none in serve's output")
 finally:
     if serve:

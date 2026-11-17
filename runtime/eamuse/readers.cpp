@@ -46,6 +46,24 @@ std::vector<Score> scores(const Store &st, const Game &g, const Identity &id) {
 }
 
 namespace {
+const ClearWord *words_of(const Game &g) { return g.readers && g.readers->clear_words ? g.readers->clear_words(g) : nullptr; }
+}  // namespace
+
+Shows shows(const Game &g) {
+    Shows s = g.readers && g.readers->shows ? g.readers->shows(g) : Shows{};
+    const ClearWord *w = words_of(g);
+    s.clear = s.clear && w && w->word;   // (a mark with no word for any value: no column)
+    return s;
+}
+
+const char *clear_name(const Game &g, int clear) {
+    if (clear < 0) return nullptr;
+    for (const ClearWord *w = words_of(g); w && w->word; w++)
+        if (w->value == clear) return w->word;
+    return nullptr;
+}
+
+namespace {
 
 // The PIN places inside pop'n records (server_popn.cpp's answer_playerdata and conv): a digit a
 // byte, four bytes. pop'n 12's record by card, 13's by ref id; 11's userdata (base64) by card
@@ -156,6 +174,9 @@ std::string popn_record(const Store &st, const Game &g, const Identity &id) {
     if (blob_game(m)) return unbase64_b(st.get(tables::userdata, {m, key}));
     return st.get(tables::pdata, {m, key});
 }
+// pop'n 15-18: the songs played, a count a song (pplays-GAME-REF, server_pc.cpp: a <music> of a
+// set counts one). pop'n 9-14 keep no count of plays: their records and set calls carry none
+bool counts_plays(const std::string &m) { return m == "G15" || m == "H16" || m == "I17" || m == "J39"; }
 bool popn_profile(const Store &st, const Game &g, const Identity &id, Profile &p) {
     const std::string rec = popn_record(st, g, id);
     if (rec.empty()) return false;
@@ -164,12 +185,20 @@ bool popn_profile(const Store &st, const Game &g, const Identity &id, Profile &p
         p.name = rec.substr(0, 13);
         p.name.resize(std::strlen(p.name.c_str()));
     }
+    if (counts_plays(g.model)) {   // (the songs played: a credit is one to four of them)
+        p.plays = 0;
+        for (const Record &e : from_lines(st.get(tables::pplays, {g.model, popn_key(g, id)}))) p.plays += std::max(0L, num(e, "count"));
+    }
     return true;
 }
+// A chart's clear mark: pop'n 9-18 keep two bits for each of a song's four charts 0-3 (Normal,
+// Hyper, 5 buttons, EX: popn::marks_in). Their other sheets (4-5 battle, 13-18's own 5-button
+// charts as 6 and 7) have no mark in the record: -1. A chart's plays: none (15-18 count a song's,
+// not a chart's: the profile's plays)
 std::vector<Score> popn_scores(const Store &st, const Game &g, const Identity &id) {
     const std::string m = g.model, rec = popn_record(st, g, id);
     std::map<std::pair<long, long>, Score> out;
-    auto mark = [&](long n, long chart) -> int {   // pop'n 12's four charts' marks (others: none)
+    auto mark = [&](long n, long chart) -> int {
         if (rec.empty() || chart < 0 || chart > 3 || !popn::has_song(m, (size_t)n)) return -1;
         return popn::marks_in(m, rec, (size_t)n) >> 2 * chart & 3;
     };
@@ -186,7 +215,7 @@ std::vector<Score> popn_scores(const Store &st, const Game &g, const Identity &i
     return list;
 }
 
-// --- the later PC pop'n games: a player a line (phc-REF, p24-REF), scores a line a chart
+// --- pop'n music, later PC versions: a player a line (phc-REF, p24-REF), scores a line a chart
 // (phcs-REF, p24s-REF). The row is both games': what either keeps
 bool later_profile(const Store &st, const Game &, const Identity &id, Profile &p) {
     if (!safe_name(id.ref)) return false;
@@ -327,13 +356,50 @@ std::vector<Score> gfdm_scores(const Store &st, const Game &g, const Identity &i
     return out;
 }
 
+// --- what each family's rows can hold, and its clear marks as words (a table a game: shows() and
+// clear_name() both read it, so a game with no word has no clear column). Only the meanings the
+// server's code and docs/EAMUSE3.md establish; any other value: no word (a page shows nothing)
+constexpr ClearWord NO_WORDS[] = {{-1, nullptr}};   // (an empty table: the end only)
+// pop'n 9-18: two bits a chart, 1 a clear (pop'n 9 keeps only that), 2-3 "the better medals": clears
+// too, which medal is which isn't established, so "Cleared"; 0 with a score kept: played, not cleared
+constexpr ClearWord POPN_WORDS[] = {{0, "Failed"}, {1, "Cleared"}, {2, "Cleared"}, {3, "Cleared"}, {-1, nullptr}};
+Shows popn_shows(const Game &g) { return {counts_plays(g.model), false, true}; }
+const ClearWord *popn_words(const Game &) { return POPN_WORDS; }
+// pop'n music, later PC versions: clear_type, kept as the game sends it (its values aren't established)
+Shows later_shows(const Game &) { return {true, true, true}; }
+const ClearWord *later_words(const Game &) { return NO_WORDS; }
+// IIDX 9th style: cleared ever (music reg's last argument); the System 573 GuitarFreaks and DrumMania:
+// a stage cleared or not (a score kept for a cleared one)
+constexpr ClearWord CLEARED_WORDS[] = {{0, "Failed"}, {1, "Cleared"}, {-1, nullptr}};
+Shows iidx9_shows(const Game &) { return {false, true, true}; }
+const ClearWord *cleared_words(const Game &) { return CLEARED_WORDS; }
+// IIDX 10th style on: each game's music reg clear as it sends it (server_iidx.cpp, docs/EAMUSE3.md).
+// 10th style keeps no plays (no pc save); 10th's 0 is "none" (no mark); RED's and HAPPY SKY's 1, 3, 4
+// and GOLD's and DJ TROOPERS' 3-5 aren't seen; EMPRESS's values aren't established
+constexpr ClearWord IIDX10_WORDS[] = {{1, "Easy clear"}, {2, "Clear"}, {3, "Full combo"}, {-1, nullptr}};
+constexpr ClearWord IIDX11_WORDS[] = {{0, "No play"}, {2, "Easy clear"}, {5, "Full combo"}, {-1, nullptr}};
+constexpr ClearWord IIDX13_WORDS[] = {{1, "Failed"}, {2, "Easy clear"}, {3, "Clear"}, {4, "Hard clear"}, {5, "Full combo"}, {-1, nullptr}};
+constexpr ClearWord IIDX14_WORDS[] = {{0, "No play"}, {1, "Failed"}, {2, "Assist clear"}, {6, "Full combo"}, {-1, nullptr}};
+Shows iidx_shows(const Game &g) { return {std::strcmp(g.model, "D01") != 0, true, true}; }
+const ClearWord *iidx_words(const Game &g) {
+    const std::string m = g.model;
+    if (m == "D01") return IIDX10_WORDS;
+    if (m == "E11" || m == "ECO") return IIDX11_WORDS;
+    if (m == "FDD") return IIDX13_WORDS;
+    if (m == "GLD" || m == "HDD") return IIDX14_WORDS;
+    return NO_WORDS;
+}
+// GuitarFreaks and DrumMania V: no clear mark kept
+Shows gfdmv_shows(const Game &) { return {true, true, false}; }
+Shows gfdm_shows(const Game &) { return {true, true, true}; }
+
 }  // namespace
 
-const Readers POPN_READERS{popn_profile, popn_scores};
-const Readers POPN_LATER_READERS{later_profile, later_scores};
-const Readers IIDX9_READERS{iidx9_profile, iidx9_scores};
-const Readers IIDX_READERS{iidx_profile, iidx_scores};
-const Readers GFDMV_READERS{gfdmv_profile, gfdmv_scores};
-const Readers GFDM573_READERS{gfdm_profile, gfdm_scores};
+const Readers POPN_READERS{popn_profile, popn_scores, popn_shows, popn_words};
+const Readers POPN_LATER_READERS{later_profile, later_scores, later_shows, later_words};
+const Readers IIDX9_READERS{iidx9_profile, iidx9_scores, iidx9_shows, cleared_words};
+const Readers IIDX_READERS{iidx_profile, iidx_scores, iidx_shows, iidx_words};
+const Readers GFDMV_READERS{gfdmv_profile, gfdmv_scores, gfdmv_shows, nullptr};
+const Readers GFDM573_READERS{gfdm_profile, gfdm_scores, gfdm_shows, cleared_words};
 
 }  // namespace hk::ea

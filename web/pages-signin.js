@@ -34,7 +34,8 @@ export function signIn(view, {go}) {
   ], 'Sign in', async (f) => {
     await logIn(value(f, 'name'), f.elements.namedItem('password').value, go);
   });
-  view.append(box(`Sign in to ${state.server.name}`, 'Your cards, scores and arcades on this e-AMUSEMENT server.', f,
+  // (e\u2011AMUSEMENT: a hyphen that doesn't break the word over two lines)
+  view.append(box(`Sign in to ${state.server.name}`, 'Your cards, scores and arcades on this e\u2011AMUSEMENT server.', f,
     links(mode !== 'closed' ? a('signup', 'Sign up') : null, a('reset', 'I have a reset code')),
     mode === 'closed' ? h('p', {class: 'help center', text: 'Sign-up is closed on this server: its admin makes accounts.'}) : null));
 }

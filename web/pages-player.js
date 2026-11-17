@@ -5,7 +5,7 @@
 import {del, enc, get, post, put} from './api.js';
 import {state} from './app.js';
 import {
-  ago, button, card, cardNumber, chip, clear, confirm, empty, errorNote, field, form, h, loading, note, pageHead, playerName, secret,
+  ago, button, card, cardNumber, chip, clear, confirm, count, empty, errorNote, field, form, h, loading, note, pageHead, playerName, secret,
   sentence, table, toast, toggle, value, when,
 } from './ui.js';
 
@@ -62,7 +62,7 @@ function linkCard(done) {
       // (a wrong PIN: how many more before the card is locked for linking, or that it is)
       return h('div', {}, errorNote(err), err.code === 'card_locked' || err.triesLeft === 0
         ? note('warn', 'The card is locked for linking: an admin of this server unlocks it.')
-        : note('warn', `${err.triesLeft} ${err.triesLeft === 1 ? 'try' : 'tries'} left before the card is locked for linking.`));
+        : note('warn', `${count(err.triesLeft, 'try', 'tries')} left before the card is locked for linking.`));
     }
     f.reset();
     toast('Card linked.');
@@ -93,10 +93,12 @@ export function songCell(names, n) {
     h('span', {class: 'song-no', text: `#${n}`}));
 }
 
-// A chart: the pack's name for its number, with the number; else the number
+// A chart: the pack's name for its number, with the number; unnamed, "chart N" (as "song N")
 export function chartCell(names, c) {
+  if (c === null || c === undefined) return null;
   const name = names && names.charts[String(c)];
-  return name ? h('span', {class: 'chart'}, h('span', {text: name}), h('span', {class: 'song-no', text: `#${c}`})) : c;
+  return name ? h('span', {class: 'chart'}, h('span', {text: name}), h('span', {class: 'song-no', text: `#${c}`}))
+    : h('span', {class: 'song-none', text: `chart ${c}`});
 }
 
 // Does song n answer what the user typed: part of its title (or genre, artist), or its number's start
@@ -126,17 +128,18 @@ function statsView(view, stats, query, base) {
   view.append(h('div', {class: 'toolbar'}, h('label', {for: 'game-pick', text: 'Game'}), sel), body);
   async function draw() {
     const s = stats[pick];
-    clear(body).append(loading());
+    clear(body, loading());
     const names = await songNames(s.game);
     if (stats[pick] !== s) return;   // (another game picked meanwhile)
     clear(body);
     const best = s.scores.reduce((m, x) => (x.score !== null && x.score > m ? x.score : m), 0);
+    const shows = showsOf(s, s.scores);
     body.append(h('div', {class: 'facts'},
-      fact('Player', playerName(s) || h('span', {class: 'none', text: '–'})),
-      fact('Plays', s.plays ?? '–'),
-      fact('Songs with a score', new Set(s.scores.map((x) => x.song)).size),
+      fact('Player', playerName(s) || h('span', {class: 'none', text: '–'}), 'fact-name', s.player || null),
+      shows.plays ? fact('Plays', s.plays ?? '–') : null,
+      fact('Songs with a score', new Set(s.scores.filter((x) => x.score != null).map((x) => x.song)).size),   // (a failed stage may keep none)
       fact('Best score', best || '–'),
-      s.card ? fact('Card', cardNumber(s.card)) : null));
+      s.card ? fact('Card', cardNumber(s.card), 'fact-card') : null));
     if (!s.scores.length) {
       body.append(card(null, empty('No scores kept for this game yet.')));
       return;
@@ -148,29 +151,44 @@ function statsView(view, stats, query, base) {
     const fill = () => {
       const q = find.value.trim();
       const rows = q ? s.scores.filter((x) => songMatches(names, x.song, q)) : s.scores;
-      clear(holder).append(rows.length ? scoresTable(rows, names) : empty(named ? `No song matches “${q}”.` : `No song number starting ${q}.`));
+      clear(holder, rows.length ? scoresTable(rows, names, shows) : empty(named ? `No song matches “${q}”.` : `No song number starting ${q}.`));
     };
     find.addEventListener('input', fill);
-    body.append(card('Scores', h('div', {class: 'toolbar'}, find, h('span', {class: 'muted small', text: `${s.scores.length} charts`})), holder));
+    body.append(card('Scores', h('div', {class: 'toolbar'}, find, h('span', {class: 'muted small', text: count(s.scores.length, 'chart')})), holder));
     fill();
   }
   draw();
 }
 
-function fact(k, v) {
-  return h('div', {class: 'fact'}, h('span', {class: 'fact-k', text: k}), h('span', {class: 'fact-v'}, v));
+// A tile: a word and its value. cls: 'fact-name' (one line, cut short with its whole text as the title),
+// 'fact-card' (a card number on one line)
+function fact(k, v, cls, title) {
+  return h('div', {class: ['fact', cls]}, h('span', {class: 'fact-k', text: k}), h('span', {class: 'fact-v', title}, v));
 }
 
-export const clearMark = (c) => (c === null || c === undefined ? null : h('span', {class: ['clear', `clear-${Math.min(Math.max(c, 0), 9)}`], title: `Clear type ${c}`, text: String(c)}));
+// What a game's scores carry (the server's "shows"): a play count for the player (plays), one a row
+// (song_plays), a clear mark a row (clear). An older server says nothing: what the rows have
+function showsOf(game, rows) {
+  if (game && game.shows) return game.shows;
+  return {plays: true, song_plays: rows.some((r) => r.plays !== null && r.plays !== undefined), clear: rows.some((r) => r.clear_name)};
+}
 
-function scoresTable(rows, names) {
+// A row's clear mark: the server's word for it, coloured as failed, cleared or a full combo; none: nothing
+export function clearMark(r) {
+  const w = r.clear_name;
+  if (!w) return null;
+  const kind = /fail/i.test(w) ? 'bad' : /full|perfect/i.test(w) ? 'best' : /clear/i.test(w) ? 'ok' : null;
+  return chip(w, kind);
+}
+
+function scoresTable(rows, names, shows) {
   return table([
     {key: 'song', label: 'Song', wide: true, cls: 'song-col', cell: (r) => songCell(names, r.song)},
     {key: 'chart', label: 'Chart', num: true, cell: (r) => chartCell(names, r.chart)},
     {key: 'score', label: 'Score', num: true},
-    {key: 'clear', label: 'Clear', num: true, cell: (r) => clearMark(r.clear)},
-    {key: 'plays', label: 'Plays', num: true},
-  ], rows, {sort: 0, desc: false, caption: 'Scores'});
+    shows.clear ? {key: 'clear', label: 'Clear', num: true, cell: clearMark} : null,
+    shows.song_plays ? {key: 'plays', label: 'Plays', num: true} : null,
+  ].filter(Boolean), rows, {sort: 0, desc: false, caption: 'Scores'});
 }
 
 export async function myStats(view, {query, still}) {
@@ -201,7 +219,7 @@ export async function players(view, {still}) {
     if (!list.length) ul.append(h('li', {class: 'muted', text: 'Nobody by that name.'}));
   };
   find.addEventListener('input', fill);
-  view.append(card(null, h('div', {class: 'toolbar'}, find, h('span', {class: 'muted small', text: `${j.players.length} players`})), ul));
+  view.append(card(null, h('div', {class: 'toolbar'}, find, h('span', {class: 'muted small', text: count(j.players.length, 'player')})), ul));
   fill();
 }
 
@@ -247,7 +265,7 @@ export async function gameTop(view, {params, query, still}) {
     named ? field('Song', 'song', {type: 'search', maxlength: 100, value: query.get('song') || '', help: 'Part of a title, or a song number. Empty: every song.'})
       : field('Song number', 'song', {type: 'number', min: 0, inputmode: 'numeric', value: query.get('song') || '', help: 'Empty: every song.'}),
     chartNames.length ? field('Chart', 'chart', {options: [['', 'Every chart'], ...chartNames.map(([n, c]) => [n, c])], value: query.get('chart') || ''})
-      : field('Chart', 'chart', {type: 'number', min: 0, inputmode: 'numeric', value: query.get('chart') || '', help: 'Empty: every chart.'}),
+      : field('Chart number', 'chart', {type: 'number', min: 0, inputmode: 'numeric', value: query.get('chart') || '', help: 'The game’s own number for a chart. Empty: every chart.'}),
     field('How many', 'limit', {options: [[10, '10'], [20, '20'], [50, '50'], [100, '100']], value: query.get('limit') || '20'}),
   ], 'Show', async (f) => {
     clear(picks);
@@ -257,7 +275,7 @@ export async function gameTop(view, {params, query, still}) {
       if (!found.length) return note('info', `No song’s title has “${want}” in it.`);
       if (found.length > 1) {
         const shown = found.slice(0, 30);
-        picks.append(h('p', {class: 'muted small', text: found.length > shown.length ? `${found.length} songs match; the first ${shown.length}:` : `${found.length} songs match:`}),
+        picks.append(h('p', {class: 'muted small', text: found.length > shown.length ? `${count(found.length, 'song matches', 'songs match')}; the first ${shown.length}:` : `${count(found.length, 'song matches', 'songs match')}:`}),
           h('ul', {class: 'pick-list'}, shown.map((n) => h('li', {}, button(songCell(names, n), 'quiet', () => {
             f.elements.namedItem('song').value = String(n);
             f.requestSubmit();
@@ -273,13 +291,14 @@ export async function gameTop(view, {params, query, still}) {
   }, {class: 'form-row'});
   view.append(card(null, f, picks), out);
   async function draw(q) {
-    clear(out).append(loading());
+    clear(out, loading());
     const j = await get(`/games/${enc(params.id)}/top?${q}`);
     clear(out);
     if (!j.scores.length) {
       out.append(card(null, empty('No scores for that yet.')));
       return;
     }
+    const shows = showsOf(j.shows ? j : g, j.scores);
     out.append(card(null, table([
       {key: 'rank', label: 'Rank', num: true},
       {key: 'user', label: 'Player', wide: true, cls: 'player-col', sort: (r) => r.user || r.player || '', cell: (r) => r.user
@@ -288,13 +307,13 @@ export async function gameTop(view, {params, query, still}) {
       {key: 'song', label: 'Song', wide: true, cls: 'song-col', cell: (r) => songCell(names, r.song)},
       {key: 'chart', label: 'Chart', num: true, cell: (r) => chartCell(names, r.chart)},
       {key: 'score', label: 'Score', num: true},
-      {key: 'clear', label: 'Clear', num: true, cell: (r) => clearMark(r.clear)},
-    ], j.scores, {sort: 0, caption: 'Best scores'})));
+      shows.clear ? {key: 'clear', label: 'Clear', num: true, cell: clearMark} : null,
+    ].filter(Boolean), j.scores, {sort: 0, caption: 'Best scores'})));
   }
   const q = new URLSearchParams();
   for (const k of ['song', 'chart', 'limit']) if (query.get(k)) q.set(k, query.get(k));
   if (named && q.get('song') && !/^\d+$/.test(q.get('song'))) f.requestSubmit();   // (a title in the link: found as typed)
-  else try { await draw(q); } catch (err) { clear(out).append(errorNote(err)); }
+  else try { await draw(q); } catch (err) { clear(out, errorNote(err)); }
 }
 
 // --- Account: password, hidden stats, personal tokens
@@ -336,7 +355,7 @@ export async function account(view, {still}) {
   ], 'Make a token', async (f) => {
     const j = await post('/me/tokens', {label: value(f, 'label'), scope: value(f, 'scope')});
     f.reset();
-    clear(made).append(secret(`Token “${j.label}”`, j.token, 'An app or a script sends it as “Authorization: Bearer” and the token. Keep it like a password.'));
+    clear(made, secret(`Token “${j.label}”`, j.token, 'An app or a script sends it as “Authorization: Bearer” and the token. Keep it like a password.'));
     drawTokens();
   });
 

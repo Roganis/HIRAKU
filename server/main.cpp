@@ -53,7 +53,12 @@
 #include "eamuse/store_sqlite.h"
 #include "shell/sys.h"
 
-#ifndef _WIN32
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>   // (after HIRAKU's headers: its macros are not theirs)
+#else
 #include <termios.h>
 #include <unistd.h>
 #endif
@@ -65,6 +70,8 @@ constexpr const char *ME = "hiraku-server";
 
 int usage(int status) {
     fprintf(status ? stderr : stdout,
+            "hiraku-server is EXPERIMENTAL, a first version: what it doesn't do yet is listed in docs/SERVER.md\n"
+            "(in the package: share/doc/hiraku-server/SERVER.md), \"Experimental\".\n"
             "usage: hiraku-server serve --db FILE [--port N] [--bind ADDR] [--allow ADDRESSES] [--cabinets FILE]\n"
             "                     [--key-file FILE] [--clock \"YYYY-MM-DD HH:MM:SS\"] [--tz H] [--quiet] [--no-relay] [--no-keys]\n"
             "                     [--api ADDR:PORT | --no-api] [--api-insecure-cookies] [--api-trust-proxy]\n"
@@ -73,7 +80,8 @@ int usage(int status) {
             "       hiraku-server serve --db FILE [--cabinets FILE] --new-cabinet [NAME]\n"
             "       hiraku-server serve --db FILE [--key-file FILE] --new-key\n"
             "       hiraku-server import FOLDER --db FILE   a data folder's files into the database (made if none)\n"
-            "       hiraku-server export FOLDER --db FILE   the database as a data folder (a new or empty one)\n"
+            "       hiraku-server export FOLDER --db FILE   the games' data as a data folder (a new or empty one): no accounts,\n"
+            "                                               arcades, machines or keys (backup: the whole server)\n"
             "       hiraku-server put NAME --db FILE        stdin kept as the data folder's file NAME would be\n"
             "       hiraku-server get NAME --db FILE        that thing to stdout\n"
             "       hiraku-server backup FILE --db FILE     a copy of the database, safe while serve runs\n"
@@ -140,7 +148,15 @@ namespace srv = hk::srv;
 // A line of stdin: a password, PIN or code. Asked for (not shown as typed) when stdin is a terminal
 bool secret(const char *prompt, std::string &out) {
     out.clear();
-#ifndef _WIN32
+#ifdef _WIN32
+    const HANDLE in = GetStdHandle(STD_INPUT_HANDLE);
+    DWORD was = 0;
+    const bool tty = in != INVALID_HANDLE_VALUE && GetConsoleMode(in, &was);   // (a console, not a pipe or file)
+    if (tty) {
+        fprintf(stderr, "%s: ", prompt);
+        SetConsoleMode(in, was & ~(DWORD)ENABLE_ECHO_INPUT);
+    }
+#else
     const bool tty = isatty(0);
     termios was{};
     if (tty) {
@@ -155,12 +171,14 @@ bool secret(const char *prompt, std::string &out) {
     bool any = false;
     while ((c = fgetc(stdin)) != EOF && c != '\n') out += (char)c, any = true;
     any = any || c == '\n';
-#ifndef _WIN32
     if (tty) {
+#ifdef _WIN32
+        SetConsoleMode(in, was);
+#else
         tcsetattr(0, TCSANOW, &was);
+#endif
         fputc('\n', stderr);
     }
-#endif
     if (!out.empty() && out.back() == '\r') out.pop_back();
     return any;
 }
@@ -411,10 +429,14 @@ int accounts_command(srv::Accounts &acc, const std::vector<std::string> &w, cons
     return 2;
 }
 
+// serve's lines begin with the time (ISO 8601, UTC), as its calls' do; the other commands' don't
+bool g_serving = false;
+std::string stamp() { return g_serving ? ea::utc_now() + " " : std::string(); }
+
 // The first admin's password, the once it is made
 void first_admin(const srv::Accounts &acc) {
     if (acc.first_password().empty()) return;
-    printf("%s: the first admin is \"admin\", password %s (shown this once; change it: %s user password admin --as admin)\n", ME,
+    printf("%s%s: the first admin is \"admin\", password %s (shown this once; change it: %s user password admin --as admin)\n", stamp().c_str(), ME,
            acc.first_password().c_str(), ME);
     fflush(stdout);
 }
@@ -525,10 +547,41 @@ extern "C" void on_stop_signal(int sig) {
     if (stop_signal.exchange(sig)) std::_Exit(128 + sig);
 }
 
+#ifdef _WIN32
+// Windows has no SIGTERM: the console's events are its stops (Ctrl-C, Ctrl-Break, the console window
+// closed, the user signing out, the PC shutting down). stop_signal holds kWinStop + the event.
+// (taskkill without /F asks a program's windows to close; it refuses a console program, a hidden
+// window or not: taskkill /F is the end without a stop, the database whole all the same, SQLite's WAL)
+constexpr int kWinStop = 1000;
+
+std::string stop_name(int sig) {
+    switch (sig - kWinStop) {
+    case CTRL_C_EVENT: return "Ctrl-C";
+    case CTRL_BREAK_EVENT: return "Ctrl-Break";
+    case CTRL_CLOSE_EVENT: return "the console closed";
+    case CTRL_LOGOFF_EVENT: return "signed out";
+    case CTRL_SHUTDOWN_EVENT: return "Windows shutting down";
+    }
+    return "event " + std::to_string(sig);
+}
+
+// Ctrl-C and Ctrl-Break return at once (a second ends the program). Windows ends the program when the
+// handler of any other event returns: this one waits for the stop to finish (stopped() ends the
+// program), the calls in hand answered, at most kStopSeconds and a little (Windows allows 5 s to a
+// console being closed)
+BOOL WINAPI on_console_event(DWORD event) {
+    if (stop_signal.exchange(kWinStop + (int)event)) std::_Exit(128 + 2);
+    if (event != CTRL_C_EVENT && event != CTRL_BREAK_EVENT) Sleep((ea::Listener::kStopSeconds + 1) * 1000);
+    return TRUE;
+}
+#else
+std::string stop_name(int sig) { return sig == SIGTERM ? "SIGTERM" : sig == SIGINT ? "SIGINT" : "signal " + std::to_string(sig); }
+#endif
+
 void catch_stop_signals() {
 #ifdef _WIN32
-    signal(SIGINT, on_stop_signal);   // (Ctrl-C; a second one ends it as Windows does)
-    signal(SIGTERM, on_stop_signal);
+    SetConsoleCtrlHandler(nullptr, FALSE);   // (Ctrl-C taken even when the program that started it ignores it)
+    SetConsoleCtrlHandler(on_console_event, TRUE);
 #else
     struct sigaction sa {};
     sa.sa_handler = on_stop_signal;
@@ -742,6 +795,7 @@ int main(int argc0, char **argv0) {
 
     if (cmd == "serve") {
         const bool serving = !new_cabinet && !new_key;
+        g_serving = serving;
         // what would stop it, said before anything else in one line each: the database's folder, the
         // web pages' folder, the cabinets' list and the key, the games' port
         if (serving && !db_place_ok(db)) return 1;
@@ -791,10 +845,10 @@ int main(int argc0, char **argv0) {
             }
         }
         if (const size_t m = a.machine_count()) {
-            printf("%s: calls answered for the database's enabled machines only (%zu machine%s; machine list)%s\n", ME, m, m == 1 ? "" : "s",
+            printf("%s%s: calls answered for the database's enabled machines only (%zu machine%s; machine list)%s\n", stamp().c_str(), ME, m, m == 1 ? "" : "s",
                    no_keys ? ", by the PCBID a call says (--no-keys)" : ", each behind its own key");
             if (const size_t u = a.machines_without_key(); u && !no_keys)
-                printf("%s: %zu machine%s no key, and %s answered: machine key PCBID makes one\n", ME, u, u == 1 ? " has" : "s have", u == 1 ? "isn't" : "aren't");
+                printf("%s%s: %zu machine%s no key, and %s answered: machine key PCBID makes one\n", stamp().c_str(), ME, u, u == 1 ? " has" : "s have", u == 1 ? "isn't" : "aren't");
         }
         // how hard a change waits for the disk, as in force on the store's and the accounts' connections
         {
@@ -803,18 +857,23 @@ int main(int argc0, char **argv0) {
                 fprintf(stderr, "%s: the database's synchronous is %d and %d, not the %d asked for (--sync)\n", ME, s1, s2, want);
                 return 1;
             }
-            printf(want == 2 ? "%s: --sync full: each change on the disk before its answer goes (synchronous=FULL)\n"
-                             : "%s: --sync normal: changes on the disk at the WAL's checkpoints (synchronous=NORMAL): "
+            printf(want == 2 ? "%s%s: --sync full: each change on the disk before its answer goes (synchronous=FULL)\n"
+                             : "%s%s: --sync normal: changes on the disk at the WAL's checkpoints (synchronous=NORMAL): "
                                "a power cut may lose the last moments' calls, never the database\n",
-                   ME);
+                   stamp().c_str(), ME);
         }
         // the log: a line a call (eamuse/listener.h), or with --log-calls their bodies, PINs hidden
         listener.call_lines = true;
         listener.log_calls = log_calls;
         listener.version = hk::sys::build_id();
         if (log_calls && !listener.quiet)
-            printf("%s: --log-calls: every call's body is logged, cards and names in it (PINs and passwords as ***): "
-                   "for finding a fault, not for every day\n", ME);
+            printf("%s%s: --log-calls: every call's body is logged, cards and names in it (PINs and passwords as ***): "
+                   "for finding a fault, not for every day\n", stamp().c_str(), ME);
+        // a first version (docs/SERVER.md, "Experimental"): said at every start, --quiet too, beside
+        // the lines a service's log keeps
+        printf("%s%s: EXPERIMENTAL, a first version: card PINs are kept in clear, the games' port faces the internet "
+               "only behind machine keys; the rest of what it doesn't do yet: docs/SERVER.md, \"Experimental\"\n",
+               stamp().c_str(), ME);
         // SIGTERM or SIGINT: no more connections, the calls in hand answered, the API stopped, the
         // database closed (its WAL folded in), exit 0. Nothing is asked of the accounts or the store
         // after it (`one` stays held), and the program ends there
@@ -825,7 +884,7 @@ int main(int argc0, char **argv0) {
             acc.reset();
             server.reset();
             const int sig = stop_signal.load();
-            ea::say_line(std::string(ME) + ": stopped (" + (sig == SIGTERM ? "SIGTERM" : sig == SIGINT ? "SIGINT" : "signal " + std::to_string(sig)) +
+            ea::say_line(stamp() + ME + ": stopped (" + stop_name(sig) +
                          "): the calls in hand answered, the database closed");
             std::_Exit(0);
         };
@@ -858,6 +917,8 @@ int main(int argc0, char **argv0) {
         ea::FolderStore to(folder);
         const ea::Copied c = ea::copy_store(st, to);
         report(c, db.c_str(), folder.c_str());
+        printf("%s: (the games' data: cards, players, scores, settings; not the accounts, arcades, machines or keys: "
+               "backup copies the whole server)\n", ME);
         return c.not_put.empty() ? 0 : 1;
     }
     if (cmd == "put" || cmd == "get") {

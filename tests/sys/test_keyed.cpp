@@ -12,6 +12,11 @@
 
 #include "shell/keyed.h"
 
+#ifndef _WIN32
+#include <sys/socket.h>
+#include <unistd.h>
+#endif
+
 using namespace hk::net;
 
 static int failed = 0;
@@ -170,6 +175,33 @@ int main() {
                   keyed::is_hello(h2) && keyed::hello_id(h2) == id,
               "a machine's key: HKK2, 30 bytes, its PCBID's 10 bytes at the end");
         check(keyed::hello_size("HKK0") == 0 && keyed::hello_size("HKKS") == 0 && keyed::hello_size("HTTP") == 0, "HKK0, HKKS, HTTP: not hellos");
+        const char *refusals[] = {keyed::kNoKey, keyed::kOneKey, keyed::kMachinesOnly, keyed::kUnknownMachine};
+        bool distinct = true;
+        for (const char *a : refusals) {
+            distinct = distinct && keyed::hello_size(a) == 0;
+            for (const char *b : refusals) distinct = distinct && (a == b || memcmp(a, b, 4) != 0);
+        }
+        check(distinct && memcmp(keyed::kUnknownMachine, "HKKU", 4) == 0, "HKKU, a machine not taken: a refusal of its own, not a hello");
+#ifndef _WIN32
+        // the cabinet's side told each refusal apart (a server's four bytes, then its close)
+        auto told = [&](const Key &k, const char *said) {
+            int sv[2];
+            if (socketpair(AF_UNIX, SOCK_STREAM, 0, sv) != 0) return std::string("no socketpair");
+            if (write(sv[1], said, 4) != 4) return std::string("no write");
+            shutdown(sv[1], SHUT_WR);
+            Keyed c;
+            std::string why;
+            const bool ok = c.connect(sv[0], k, &why);
+            close(sv[0]), close(sv[1]);
+            return ok ? std::string("connected") : why;
+        };
+        const std::string unknown = told(mine, keyed::kUnknownMachine);
+        check(unknown.find("doesn't take this machine (unknown or switched off") != std::string::npos && unknown.find("another") == std::string::npos,
+              "HKKU: the cabinet says the server doesn't take this machine, not a wrong key");
+        check(told(mine, keyed::kMachinesOnly).find("own key only") != std::string::npos && told(mine, keyed::kOneKey).find("one key for all") != std::string::npos &&
+                  told(key, keyed::kNoKey).find("no key") != std::string::npos && told(mine, "XXXX").find("gave no answer") != std::string::npos,
+              "... HKKM, HKKS, HKK0 and no answer each said as before");
+#endif
 
         // the server's machines: one with the key above, one with another
         const std::string other_id = "0120000000000000AB00";

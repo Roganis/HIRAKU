@@ -197,7 +197,7 @@ public:
     Refusal make_reset(const Who &, const std::string &user, std::string &code);   // an admin: a code for a day, once
     // user "": the code's own user
     Refusal use_reset(const std::string &user, const std::string &code, const std::string &password);
-    // The users whose stats show (not hidden, not disabled), by name: anyone signed in
+    // The users whose stats show (not hidden, not disabled, with a card linked), by name: anyone signed in
     Refusal players(const Who &, std::vector<std::string> &);
 
     SignUp sign_up_mode() const;
@@ -233,7 +233,7 @@ public:
     Refusal cards(const Who &, const std::string &user, std::vector<LinkedCard> &);   // user "": who's own
     Refusal stats(const Who &, const std::string &user, std::vector<Stat> &);   // the games listed (listed())
     // A game's best scores among the players whose stats show (a card linked to no user: by the game's
-    // player name), best first; song, chart -1: any; at most `limit`
+    // player name), best first, a score of 0 left out; song, chart -1: any; at most `limit`
     Refusal top(const Who &, const std::string &game, long song, long chart, size_t limit, std::vector<TopScore> &);
 
     // Arcades and machines: an operator's own, every one for an admin

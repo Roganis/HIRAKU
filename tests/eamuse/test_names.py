@@ -181,6 +181,8 @@ try:
     packs = {p['game']: p for p in j['packs']} if j else {}
     check(st == 200 and packs.get('popn12', {}).get('songs') == 2 and packs['popn12'].get('charts') == 2 and packs['popn12'].get('time', 0) > 0 and
           j.get('refused') == [], 'GET /names (an admin): the pack, its songs, charts and time; none refused')
+    check(j and j.get('set') is True and 'folder' not in j and not any(os.sep + 'names' in str(v) for v in j.values()),
+          "... a names folder is set (\"set\"), and no path on the server's disk")
 
     # --- a change read again; the refusals, each in one line, the good packs kept
     write('popn12.json', pack('popn12', {'5': {'title': 'Made-up Song 5 again'}, '20': {'title': 'Made-up Song 20'}}))

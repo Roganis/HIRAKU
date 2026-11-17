@@ -296,6 +296,7 @@ void RelayServer::run() {
                     if (hello == net::keyed::kHello2) {
                         const std::string id = net::keyed::hello_id((const uint8_t *)c.raw.data());
                         if (!machine_key(id, k)) {
+                            send_all(fd, net::keyed::kUnknownMachine, 4);
                             away(c, ("with machine " + id + "'s key, which isn't an enabled machine of the database with a key").c_str());
                             gone.push_back(fd);
                             continue;

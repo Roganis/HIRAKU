@@ -601,7 +601,9 @@ Accounts::Refusal Accounts::players(const Who &who, std::vector<std::string> &ou
     out.clear();
     if (!db_) return {Refused::failed, "the database isn't open"};
     if (who.nobody) return not_allowed();
-    St q(db_, "SELECT name FROM users WHERE hide_stats=0 AND disabled=0 ORDER BY name COLLATE NOCASE");
+    // (an account with no card has no stats to show: the admin, operators)
+    St q(db_, "SELECT name FROM users WHERE hide_stats=0 AND disabled=0 AND EXISTS(SELECT 1 FROM cards c WHERE c.user=users.id) "
+              "ORDER BY name COLLATE NOCASE");
     while (q.row()) out.push_back(q.text(0));
     return {};
 }
@@ -940,7 +942,8 @@ Accounts::Refusal Accounts::top(const Who &who, const std::string &game, long so
         ea::Profile p;
         if (!ea::profile(store_, *g, id, p)) continue;
         for (const ea::Score &sc : ea::scores(store_, *g, id)) {
-            if (sc.score < 0 || (song >= 0 && sc.song != song) || (chart >= 0 && sc.chart != chart)) continue;
+            // (a score of 0 ranks nothing: left out here; the player's own stats keep it)
+            if (sc.score <= 0 || (song >= 0 && sc.song != song) || (chart >= 0 && sc.chart != chart)) continue;
             out.push_back({o == owners.end() ? "" : o->second.name, p.name, sc.song, sc.chart, sc.score, sc.clear});
         }
     }

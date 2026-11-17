@@ -83,6 +83,7 @@ h1:focus { outline: none; }
 .l5 { color: var(--c4); transform: rotate(-5deg); }
 .l6 { color: var(--c5); transform: rotate(3deg) translateY(-1px); }
 .server-name { font-weight: 700; color: var(--muted); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.server-name:empty { display: none; }
 .who { margin-left: auto; display: flex; align-items: center; gap: 8px; min-width: 0; }
 .who-name { font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .role { font-size: .75rem; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; padding: 2px 8px; border-radius: 999px; background: var(--accent-soft); color: var(--accent-ink); }
@@ -196,6 +197,14 @@ fieldset.radios legend { font-weight: 700; margin-bottom: 6px; padding: 0; }
 .btn.busy { opacity: .7; }
 .btn.busy::after { content: "…"; }
 .row-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.row-actions > span:empty { display: none; }
+/* a row's other actions, behind "More" */
+.more > summary { list-style: none; }
+.more > summary::-webkit-details-marker { display: none; }
+.more > summary::after { content: "▾"; font-size: .75em; }
+.more[open] > summary::after { content: "▴"; }
+.more-list { display: flex; gap: 6px; margin-top: 6px; }
+.role-edit { display: inline-flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 
 /* --- chips, marks */
 .chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 0; }
@@ -205,14 +214,7 @@ fieldset.radios legend { font-weight: 700; margin-bottom: 6px; padding: 0; }
 .chip-warn { background: var(--warn-bg); color: var(--warn-ink); border-color: transparent; }
 .chip-bad { background: var(--bad-bg); color: var(--bad-ink); border-color: transparent; }
 td .chip + .chip, strong + .chip { margin-left: 6px; }
-.clear { display: inline-flex; align-items: center; justify-content: center; min-width: 26px; height: 22px; padding: 0 6px; border-radius: 7px; font-weight: 800; font-size: .82rem; color: #fff; background: var(--muted); }
-.clear-1 { background: var(--c4-ink); }
-.clear-2 { background: var(--c3-ink); }
-.clear-3 { background: var(--c2-ink); }
-.clear-4 { background: var(--c1-ink); }
-.clear-5 { background: var(--c0-ink); }
-.clear-6, .clear-7, .clear-8, .clear-9 { background: var(--c5-ink); }
-@media (prefers-color-scheme: dark) { .clear { color: #120d26; } }
+.chip-best { background: var(--accent-soft); color: var(--accent-ink); border-color: transparent; }
 
 /* --- tables */
 .table-wrap { width: 100%; overflow-x: auto; }
@@ -223,6 +225,13 @@ table.rows { width: 100%; border-collapse: collapse; font-variant-numeric: tabul
 .rows tbody tr:hover td { background: var(--hover); }
 .rows .num { text-align: right; }
 .rows td.wrap { overflow-wrap: anywhere; }
+.rows td.nowrap { white-space: nowrap; }
+.rows td.nowrap strong { display: inline-block; max-width: 12em; overflow: hidden; text-overflow: ellipsis; vertical-align: bottom; }
+.rows td .row-actions { flex-wrap: nowrap; align-items: flex-start; }
+.rows td .more .more-list { flex-direction: column; align-items: stretch; }
+/* the machines: room for every column at 1100 px */
+.rows.machines th, .rows.machines td { padding-left: 7px; padding-right: 7px; }
+.rows.machines td.mono { font-size: .8rem; }
 .rows td select { min-height: 34px; padding: 4px 8px; width: auto; }
 button.sort { background: none; border: 0; padding: 0; color: inherit; font: inherit; text-transform: inherit; letter-spacing: inherit; cursor: pointer; display: inline-flex; gap: 4px; align-items: center; }
 button.sort:hover { color: var(--ink); }
@@ -231,11 +240,14 @@ th[aria-sort="ascending"] .arrow::after { content: "▲"; font-size: .7em; }
 th[aria-sort="descending"] .arrow::after { content: "▼"; font-size: .7em; }
 
 /* --- stats */
-.facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 18px; }
-.fact { background: var(--base); border: 2px solid var(--line); border-radius: var(--radius); padding: 12px 14px; display: flex; flex-direction: column; gap: 2px; border-top: 4px solid var(--sec); min-width: 0; }
+.facts { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 18px; }
+.fact { flex: 1 1 130px; background: var(--base); border: 2px solid var(--line); border-radius: var(--radius); padding: 12px 14px; display: flex; flex-direction: column; gap: 2px; border-top: 4px solid var(--sec); min-width: 0; }
 .fact-k { font-size: .78rem; font-weight: 800; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
 .fact-v { font-size: 1.25rem; font-weight: 800; overflow-wrap: anywhere; }
-.fact-v .card-no { font-size: .95rem; }
+/* a player's name and a card number: one line each; the tile as wide as they need (a name too long: cut, whole in its title) */
+.fact-name, .fact-card { flex: 1 1 auto; }
+.fact-name .fact-v, .fact-card .fact-v { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; overflow-wrap: normal; }
+.fact-v .card-no { font-size: .95rem; overflow-wrap: normal; }
 #game-pick { width: auto; max-width: 100%; flex: 0 1 420px; }
 
 /* --- cards (the e-AMUSEMENT ones) */
@@ -296,6 +308,7 @@ details.game-settings > summary:hover { background: var(--hover); }
 details.game-settings > .form { padding: 4px 16px 16px; }
 .setting { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 8px 18px; padding: 12px 0; border-top: 1px solid var(--line); }
 .setting-own .setting-text label::after { content: "set"; margin-left: 8px; font-size: .72rem; font-weight: 800; text-transform: uppercase; padding: 1px 7px; border-radius: 999px; background: var(--accent-soft); color: var(--accent-ink); vertical-align: .1em; }
+.setting-text, .setting-input { min-width: 0; overflow-wrap: anywhere; }
 .setting-input { display: flex; flex-direction: column; gap: 6px; }
 .leave { display: inline-flex; align-items: center; gap: 8px; font-size: .9rem; }
 .leave label { font-weight: 600; }
@@ -368,7 +381,11 @@ code.path { overflow-wrap: anywhere; }
   .rows td { overflow-wrap: normal; word-break: normal; hyphens: none; }
   .rows td > * { min-width: auto; overflow-wrap: normal; word-break: normal; }
   .rows td.wide, .rows td.wide > * { min-width: 0; overflow-wrap: anywhere; }
-  .rows td .row-actions { justify-content: flex-end; }
+  .rows td .row-actions { justify-content: flex-end; flex-wrap: wrap; }
+  .rows td .more .more-list { justify-content: flex-end; }
+  /* opened, the More's own button steps aside: its actions show as before */
+  .rows td .more[open] > summary { display: none; }
+  .rows td .more[open] .more-list { margin-top: 0; }
   .rows .num { text-align: right; }
   .rows td.song-col .song { justify-content: flex-end; text-align: right; }
   .rows td.player-col { white-space: normal; }

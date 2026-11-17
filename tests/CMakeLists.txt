@@ -103,6 +103,17 @@ if(WIN32 AND TARGET hiraku_host)
   add_test(NAME swapchain_own COMMAND test_swapchain own)
   add_test(NAME swapchain_tight COMMAND test_swapchain tight 120 5.0 900)
 endif()
+# Display pacing's judgement of the compositor's deadline (runtime/host/pacing.cpp) from made-up
+# presentation feedback, as Wayland's fifo-v1 gives it: windows missed after a late commit leave the
+# lead where it was; and the old catch-up (HK_PACING_DRAIN=0). (Windows: the swap chain tests)
+if(NOT WIN32 AND TARGET hiraku_host)
+  add_executable(test_pacing host/test_pacing.cpp)
+  target_include_directories(test_pacing PRIVATE ${CMAKE_SOURCE_DIR}/runtime)
+  target_link_libraries(test_pacing PRIVATE SDL3::SDL3)
+  add_test(NAME host_pacing COMMAND test_pacing)
+  add_test(NAME host_pacing_no_drain COMMAND test_pacing)
+  set_tests_properties(host_pacing_no_drain PROPERTIES ENVIRONMENT "HK_PACING_DRAIN=0")
+endif()
 
 # beatmania III's floppy controller and drive (runtime/dev/fdc.h) against a made-up disk: an empty
 # drive as before, a cylinder read, written and read back, disk change, write protect

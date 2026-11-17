@@ -227,14 +227,21 @@ bool draining() { return g_fifo_on && g_drain && !(g_active && g_exact); }
             missed = median > g_best + g_T / 2;
         }
         // Wayland fifo: a miss after a late commit is the pictures still a refresh behind it (smooth
-        // motion's, which go on queueing); caught up, but the deadline hasn't moved: the lead stays
+        // motion's, which go on queueing); caught up, but the deadline hasn't moved: the lead stays,
+        // neither raised nor let down by this window (it falling through to the step below, a window
+        // that says nothing of the deadline counted towards a later commit: with late commits often
+        // enough the lead came down to two refreshes after the vblank and settled there). A deadline
+        // that really moved while the game stalls this often is not seen until the stalls stop
         const bool games = g_fifo_on && g_overrun_seen;
         g_overrun_seen = false;
         if (missed && !g_sweep && games) {
             if (draining()) g_drop = true;
             else g_target += g_T;
             g_skip = 6;
-        } else if (missed && !g_sweep) {   // a miss: catch up, then commit earlier
+            g_streak = 0;
+            return;
+        }
+        if (missed && !g_sweep) {   // a miss: catch up, then commit earlier
             // Wayland fifo: the next commit taken with the late one; the machine keeps its time
             if (draining()) g_drop = true;
             else g_target += g_T;

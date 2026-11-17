@@ -834,11 +834,25 @@ add_library(hiraku_eanet STATIC runtime/eamuse/listener.cpp runtime/eamuse/admin
 target_link_libraries(hiraku_eanet PUBLIC hiraku_eamuse)
 target_link_libraries(hiraku-eamuse PRIVATE hiraku_eanet)
 # hiraku-server: the same server keeping its data in a SQLite 3 database (runtime/eamuse/store_sqlite.h,
-# server/main.cpp, server/accounts.h), built when the system has SQLite 3; in no package yet
+# server/main.cpp, server/accounts.h), with the system's SQLite 3; in no desktop package
 find_package(SQLite3 QUIET)
-if(SQLite3_FOUND)
+set(HK_SQLITE SQLite::SQLite3)
+if(TARGET SQLite3::SQLite3)   # (CMake 4.1 and later: the old name deprecated)
+  set(HK_SQLITE SQLite3::SQLite3)
+endif()
+# ... where the system has none (the Windows build): SQLite's own one file, third_party/sqlite/, in it
+if(NOT SQLite3_FOUND AND EXISTS ${CMAKE_SOURCE_DIR}/third_party/sqlite/sqlite3.c)
+  add_library(hiraku_sqlite3 STATIC third_party/sqlite/sqlite3.c)
+  target_include_directories(hiraku_sqlite3 SYSTEM PUBLIC third_party/sqlite)
+  # thread-safe, no extensions loaded, double quotes for names only (as Arch's own build has it)
+  target_compile_definitions(hiraku_sqlite3 PRIVATE SQLITE_THREADSAFE=1 SQLITE_OMIT_LOAD_EXTENSION=1 SQLITE_DQS=0
+                             SQLITE_DEFAULT_MEMSTATUS=0 SQLITE_DEFAULT_SYNCHRONOUS=2 SQLITE_DEFAULT_WAL_SYNCHRONOUS=2)
+  target_compile_options(hiraku_sqlite3 PRIVATE -w -O2)   # (its warnings aren't ours)
+  set(HK_SQLITE hiraku_sqlite3)
+endif()
+if(SQLite3_FOUND OR TARGET hiraku_sqlite3)
   add_library(hiraku_easqlite STATIC runtime/eamuse/store_sqlite.cpp)
-  target_link_libraries(hiraku_easqlite PUBLIC hiraku_eamuse SQLite::SQLite3)
+  target_link_libraries(hiraku_easqlite PUBLIC hiraku_eamuse ${HK_SQLITE})
   add_executable(hiraku-server server/main.cpp server/accounts.cpp server/api.cpp)   # (accounts.h: its accounts, arcades, machines)
   target_link_libraries(hiraku-server PRIVATE hiraku_easqlite hiraku_eanet)
   target_sources(hiraku-server PRIVATE server/names.cpp)   # (names.h: the song names' packs, read at run time)

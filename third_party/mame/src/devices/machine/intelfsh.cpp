@@ -633,6 +633,7 @@ uint32_t intelfsh_device::read_full(uint32_t address)
 void intelfsh_device::write_full(uint32_t address, uint32_t data)
 {
 	//logerror( "intelflash_write( %u : %08x, %08x )\n", m_flash_mode, address, data );
+	m_hk_written = 1;   // HIRAKU: this chip looked at by the next save while playing (shell/saves.h)
 
 	address += m_bank << 16;
 

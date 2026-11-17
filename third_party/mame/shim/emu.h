@@ -1747,6 +1747,9 @@ public:
     virtual bool nvram_write(util::write_stream &) { return true; }
     virtual bool nvram_can_write() const { return true; }
     device_t &nvram_device() { return *m_nvram_device; }
+    // HIRAKU: a device that marks its writes (MAME's flash, intelfsh.cpp: 1 on each write) is looked
+    // at by a save while playing only when marked, and unmarked then (0); -1: it doesn't mark them
+    int m_hk_written = -1;
 
 private:
     device_t *m_nvram_device;
@@ -1946,8 +1949,9 @@ public:
     // While a game is played (HIRAKU's, shell/saves.h): the memories that changed since they were last
     // written, as they are at this moment, handed to the writer thread as one set. The small ones
     // (clock chips, EEPROMs) are looked at each time; the large ones (flash chips, 2 MiB each and
-    // 50 MB of them on a 573) only after the board said one was written (m_nvram_large_written):
-    // looking at them all takes the time of a frame.
+    // 50 MB of them on a 573) only once written: a flash chip marks its own writes
+    // (device_nvram_interface::m_hk_written), another large one after the board said one was
+    // written (m_nvram_large_written). Looking at them all takes the time of a frame.
     void nvram_save_now();
     bool m_nvram_large_written = false;
     std::function<void()> m_after_nvram_load;   // run after nvram_load at start (MAME sets the RTCs there)

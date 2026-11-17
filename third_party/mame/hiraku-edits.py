@@ -2568,6 +2568,15 @@ void device_ata_hle_interface::command_r(offs_t offset, PAIR16 &data, uint16_t m
 """, 'machine/atahle.cpp burst')
 
 
+def machine_intelfsh_cpp(s):
+    # each write marks the chip (device_nvram_interface::m_hk_written, the shim's): a save while
+    # playing looks at the flash chips written since the last, not all 24 of a 573 (48 MB)
+    return edit(s, '''	//logerror( "intelflash_write( %u : %08x, %08x )\\n", m_flash_mode, address, data );
+''', '''	//logerror( "intelflash_write( %u : %08x, %08x )\\n", m_flash_mode, address, data );
+	m_hk_written = 1;   // HIRAKU: this chip looked at by the next save while playing (shell/saves.h)
+''', 'machine/intelfsh.cpp written')
+
+
 def main():
     if len(sys.argv) != 2:
         sys.exit(__doc__)
@@ -2586,7 +2595,8 @@ def main():
                     ('bus/nscsi/cd.h', bus_nscsi_cd_h), ('bus/nscsi/cd.cpp', bus_nscsi_cd_cpp),
                     ('bus/ata/atadev.h', bus_ata_atadev_h), ('bus/ata/hdd.h', bus_ata_hdd_h),
                     ('bus/ata/ataintf.h', bus_ata_ataintf_h), ('bus/ata/ataintf.cpp', bus_ata_ataintf_cpp),
-                    ('machine/atahle.h', machine_atahle_h), ('machine/atahle.cpp', machine_atahle_cpp)]:
+                    ('machine/atahle.h', machine_atahle_h), ('machine/atahle.cpp', machine_atahle_cpp),
+                    ('machine/intelfsh.cpp', machine_intelfsh_cpp)]:
         p = root / rel
         text = p.read_text()
         if 'HIRAKU' in text:

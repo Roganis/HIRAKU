@@ -1108,7 +1108,11 @@ void running_machine::nvram_changed(std::vector<std::pair<std::string, std::stri
         if (!nv || !nv->nvram_can_save()) continue;
         const std::string name = nvram_filename(*d);
         const auto kept = m_nvram_kept.find(name);
-        if (!large && kept != m_nvram_kept.end() && kept->second.size >= LARGE) continue;
+        // (a large one that marks its writes: only if written since it was last looked at. Each
+        // flash command marked them all, and a 573's 24 chips took 13-34 ms of a frame each 15 s)
+        const bool marks = nv->m_hk_written >= 0, written = nv->m_hk_written > 0;
+        if (marks) nv->m_hk_written = 0;
+        if (kept != m_nvram_kept.end() && kept->second.size >= LARGE && !all && (marks ? !written : !large)) continue;
         memory_write_stream st;
         nv->nvram_save(st);
         const uint64_t h = hk::saves::hash(st.data);

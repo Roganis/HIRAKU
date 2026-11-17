@@ -1488,6 +1488,13 @@ queue at its target). The emulated machine is unchanged.
   (virtual KWin, pop'n 3, a 20 ms stall every 150 frames: lead 2.0 ms, 1 move; 17.2 ms, 15 moves
   without). pop'n 3's notes move 2 pixels a frame (384 lines): an in-between picture has one place
   for them, a pixel on, so 240 Hz shows them as 120 Hz does.
+- **A 573's save while playing dropped a frame (2026-11-16):** any write to one flash chip (a flash
+  command too) marked them all, and the next save every 15 s serialized and hashed all 24 (48 MB)
+  on the game's thread: 13-34 ms (DDR EXTREME, Dancing Stage featuring DREAMS COME TRUE, Mambo A
+  Go-Go). Each chip now marks its own writes (MAME's `intelfsh.cpp`, `m_hk_written`; third_party/
+  mame/README.md), and a save looks at the written ones. DDR EXTREME, saves every 3 s, virtual KWin:
+  6 frames not ready before, none after; no save over 4 ms once started. A save that takes 4 ms or
+  more is now said in the log ("saves: ...").
 - **Which refresh each picture reached (2026-11-16):** the exit report's "refreshes after the one
   meant" line counts, for the frames' own pictures and their other refreshes' (smooth motion), how many
   refreshes after the one meant each was shown. One number for all is a steady picture; a mix is

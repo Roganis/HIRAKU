@@ -704,7 +704,14 @@ int main(int argc, char **argv) {
         if (save_every > 0)
             if (const auto t = std::chrono::steady_clock::now(); std::chrono::duration<double>(t - last_save).count() >= save_every) {
                 last_save = t;
+                const uint64_t t0 = prof::now_ns();
                 machine.save_now();
+                // (what the game's thread spends on it: a frame dropped if it's long, a 573's flash 13-34 ms)
+                static int said = 0;
+                if (const double ms = (double)(prof::now_ns() - t0) / 1e6; ms >= 4.0 && said < 10) {
+                    said++;
+                    fprintf(stderr, "saves: the machine's memories looked at in %.1f ms of frame %llu\n", ms, (unsigned long long)f);
+                }
             }
         if (digest)
             fprintf(digest, "%llu %016llx %016llx\n", (unsigned long long)f,

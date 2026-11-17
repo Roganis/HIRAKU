@@ -290,8 +290,11 @@ void poll() {
                 menukey::input(menukey::OWN_KEY, r > 0);
                 continue;
             }
-        if (e.type == SDL_EVENT_KEY_DOWN && !e.key.repeat && e.key.key == SDLK_F12) {   // F12: this screen, the game's picture
-            g_picture_asked = true;   // (after the player's own way out: a key:F12 there is theirs)
+        // F12: this screen, the game's picture. After the player's own way out (a key:F12 there is
+        // theirs), and only while none of the game's controls is bound to F12: one that is stays the
+        // control's, the key going on to the bindings and no picture taken
+        if (e.type == SDL_EVENT_KEY_DOWN && !e.key.repeat && e.key.key == SDLK_F12 && !input_key_bound(e)) {
+            g_picture_asked = true;
             continue;
         }
         if (e.type == SDL_EVENT_KEY_DOWN && !e.key.repeat && e.key.key == SDLK_F10 && g_gl)   // F10: off, light, full, lola

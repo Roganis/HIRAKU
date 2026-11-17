@@ -460,6 +460,14 @@ int input_binding_event(const std::string &binding, const SDL_Event &e) {
     }
 }
 
+bool input_key_bound(const SDL_Event &e) {
+    if (e.type != SDL_EVENT_KEY_DOWN && e.type != SDL_EVENT_KEY_UP) return false;
+    for (const auto &[name, list] : g_bind)
+        for (const Binding &b : list)
+            if (b.src == Src::key && b.key == e.key.key) return true;   // (as input_event matches them)
+    return false;
+}
+
 void input_update(double ms) {
     // Keyboardmania's wheels on keys or buttons: up and down move it (about MAME's KEYDELTA, 10 a
     // 60 Hz frame); let go, it goes back to the middle as fast (MAME's paddle with keys: its

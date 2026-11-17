@@ -33,6 +33,9 @@ void input_event(const SDL_Event &e);
 // "joy0:axis1+") against an event: 1 it's pressed (a key's auto-repeat too), -1 released, 0 not this
 // binding (host/shaderview.h's controls)
 int input_binding_event(const std::string &binding, const SDL_Event &e);
+// Whether a key event's key is bound to one of the game's controls (the defaults or the bindings
+// file): the window's own keys (F12) then leave it to the game
+bool input_key_bound(const SDL_Event &e);
 void input_joystick_added(unsigned int instance_id);   // hot-plugged controller
 void input_joystick_removed(unsigned int instance_id); // unplugged
 void input_update(double elapsed_ms);                 // turntable keys, analog axes

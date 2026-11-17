@@ -162,7 +162,9 @@ the turntable.
 - **Try in a game** starts one of the cabinet's games; press Test there for its I/O check.
 
 The beatmania cabinets (DJ Main, IIDX, III) share one set of controls, and so do the pop'n music
-ones. Lamps on controller LEDs: [LIGHTS.md](LIGHTS.md).
+ones. **Separate controls for beatmania (DJ Main), beatmania IIDX and beatmania III** (under the
+cabinet's name, with one of them chosen) gives each of the three its own, started as a copy of the
+shared ones; untick it to share again. Lamps on controller LEDs: [LIGHTS.md](LIGHTS.md).
 
 ### Card readers
 

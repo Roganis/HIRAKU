@@ -5,7 +5,9 @@
 #include "../third_party/mdi/icons.h"
 
 #include <QApplication>
+#include <QCheckBox>
 #include <QComboBox>
+#include <QSignalBlocker>
 #include <QDialogButtonBox>
 #include <QDir>
 #include <QFile>
@@ -197,6 +199,29 @@ ControlsDialog::ControlsDialog(const QString &family, QWidget *parent) : QDialog
     m_setLabel = new QLabel;
     m_setLabel->setWordWrap(true);
     v->addWidget(m_setLabel);
+    m_opened = family;
+    m_apart = new QCheckBox("Separate controls for beatmania (DJ Main), beatmania IIDX and beatmania III");
+    m_apart->setToolTip("Each of the three keeps its own bindings, started as a copy of the shared ones. Untick to "
+                        "share one set again (the separate ones are kept for next time).");
+    m_apart->setChecked(cfg::beatmaniaApart());
+    v->addWidget(m_apart);
+    connect(m_apart, &QCheckBox::toggled, this, [this](bool on) {
+        if (on == cfg::beatmaniaApart()) return;
+        if (!m_dirty.isEmpty() && !save()) {   // (the changes so far go to the set they were made in)
+            QSignalBlocker b(m_apart);
+            m_apart->setChecked(!on);
+            return;
+        }
+        cfg::setBeatmaniaApart(on);
+        m_edits.clear();
+        const QString to = on ? (cfg::isBeatmania(m_opened) ? m_opened : QString("iidx")) : QString("beatmania");
+        {
+            QSignalBlocker b(m_familyBox);
+            fillCabinetBox(m_familyBox, true);
+            m_familyBox->setCurrentIndex(m_familyBox->findData(to));
+        }
+        showFamily(to);
+    });
 
     m_joyLabel = new QLabel;
     m_joyLabel->setWordWrap(true);
@@ -400,6 +425,7 @@ void ControlsDialog::showFamily(const QString &family) {
     auto &defs = setControls(family);
     QStringList sharing = cfg::controlsSetMembers(family);
     m_setLabel->setVisible(sharing.size() > 1);
+    m_apart->setVisible(family == "beatmania" || cfg::isBeatmania(family));
     if (sharing.size() > 1) {
         QStringList names;
         for (const QString &m : sharing) names << cfg::familyName(m);

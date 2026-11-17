@@ -144,6 +144,8 @@ QString controlsFile(const QString &family) { return configDir() + "/controls/" 
 void mergeControls() {
     for (auto &series : controlsSeries())
         for (const QString &set : series.second) {
+            // (a set's file of its own is there already: its members' are theirs, kept apart)
+            if (!controlsSetMembers(set).contains(set) && QFileInfo::exists(controlsFile(set))) continue;
             QFileInfoList old;
             for (const QString &m : controlsSetMembers(set))
                 if (QFileInfo f(configDir() + "/controls/" + m + ".txt"); f.exists()) old << f;
@@ -241,8 +243,31 @@ QList<QPair<QString, QStringList>> familySeries() {
             {"Other games", {"ddr", "ddrsolo", "dmx", "drmn", "gtrf", "kbm", "mambo", "ppp"}}};
 }
 
+bool isBeatmania(const QString &family) { return family == "djbm" || family == "iidx" || family == "bm3"; }
+
+bool beatmaniaApart() { return settings().value("controls/beatmaniaApart", false).toBool(); }
+
+// Each its own: a member without a file of its own starts from the shared one (and its controllers'
+// layouts from the shared ones). Together again: the shared file as it was; the members' stay
+// where they are for the next time.
+void setBeatmaniaApart(bool apart) {
+    if (apart) {
+        const QString dir = configDir() + "/controls";
+        for (const QString &m : {QString("djbm"), QString("iidx"), QString("bm3")}) {
+            if (!QFileInfo::exists(dir + "/" + m + ".txt") && QFileInfo::exists(dir + "/beatmania.txt"))
+                QFile::copy(dir + "/beatmania.txt", dir + "/" + m + ".txt");
+            QDir from(dir + "/layouts/beatmania");
+            for (const QString &f : from.entryList(QDir::Files)) {
+                QDir().mkpath(dir + "/layouts/" + m);
+                if (!QFileInfo::exists(dir + "/layouts/" + m + "/" + f)) QFile::copy(from.filePath(f), dir + "/layouts/" + m + "/" + f);
+            }
+        }
+    }
+    settings().setValue("controls/beatmaniaApart", apart);
+}
+
 QString controlsSet(const QString &family) {
-    if (family == "djbm" || family == "iidx" || family == "bm3") return "beatmania";
+    if (isBeatmania(family)) return beatmaniaApart() ? family : "beatmania";
     if (family == "djpopn" || family == "pypopn" || family == "pcpopn" || family == "pcpopnhc") return "popn";
     return family;
 }
@@ -271,7 +296,8 @@ QString controlsMemberName(const QString &family) {
 }
 
 QList<QPair<QString, QStringList>> controlsSeries() {
-    return {{"", {"beatmania", "popn", "djpstage", "ddr", "ddrsolo", "dmx", "drmn", "gtrf", "kbm", "mambo", "ppp"}}};
+    const QStringList bm = beatmaniaApart() ? QStringList{"djbm", "iidx", "bm3"} : QStringList{"beatmania"};
+    return {{"", bm + QStringList{"popn", "djpstage", "ddr", "ddrsolo", "dmx", "drmn", "gtrf", "kbm", "mambo", "ppp"}}};
 }
 
 QStringList families() {

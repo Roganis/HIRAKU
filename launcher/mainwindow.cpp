@@ -1336,7 +1336,7 @@ static void cabinetArguments(QStringList &a, const QString &family) {
     if (!r1.isEmpty()) a << "--reader" << r1;
     if (s.value("readers/scard", false).toBool()) a << "--scard";
     if (s.value("readers/cardio", false).toBool()) a << "--cardio";
-    if (QString b = s.value("cabinet/bio2").toString(); !b.isEmpty() && cfg::controlsSet(family) == "beatmania")
+    if (QString b = s.value("cabinet/bio2").toString(); !b.isEmpty() && cfg::isBeatmania(family))
         a << "--bio2" << b;   // the IIDX cabinet's controls and lamps (runtime/host/bio2.h)
     if (QString b = s.value("cabinet/popnio").toString(); !b.isEmpty() && cfg::controlsSet(family) == "popn") {
         a << "--popn-io" << b;   // the pop'n cabinet's buttons and lamps (runtime/host/popnio.h)

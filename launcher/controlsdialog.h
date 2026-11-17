@@ -14,6 +14,7 @@
 #include "games.h"
 #include "shell/cabinet.h"
 
+class QCheckBox;
 class QComboBox;
 class QLabel;
 class QMenu;
@@ -84,6 +85,8 @@ private:
 
     QComboBox *m_familyBox;
     QLabel *m_setLabel;
+    QCheckBox *m_apart;                             // beatmania: a set each for DJ Main, IIDX and III
+    QString m_opened;                               // the family the dialog was opened for
     QLabel *m_joyLabel;
     QLabel *m_banner;                               // a controller not set up yet, pad numbers to tie
     QLabel *m_lastLabel;                            // the last input pressed

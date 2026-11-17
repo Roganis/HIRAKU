@@ -153,8 +153,11 @@ the turntable.
   input bound twice.
 - *Bind all in turn* asks for each control in order. Layouts can be saved and used as player 1
   or 2.
-- **Turntables:** the binding's menu sets the speed (×0.5 to ×4) and the direction. On buttons
-  (a PS2 controller's), lower **Speed (buttons)** if a short turn goes past several songs.
+- **Turntables:** the binding's menu sets the speed (×0.5 to ×16) and the direction. On buttons
+  (a PS2 controller's), lower **Speed (buttons)** if a short turn goes past several songs. At ×1
+  a step of the controller's is a step of the game's; a turntable on an axis bound in HIRAKU
+  0.11.1 or earlier now turns a quarter as far, and ×4 gives the old feel of ×1 (×8 of ×2, ×12
+  of ×3).
 - **Analog controls** (Keyboardmania's wheels, GuitarFreaks' effect knobs, the IIDX effector
   sliders) take an axis.
 - A PS2 controller on a USB adapter may report buttons or an axis held from the start: HIRAKU

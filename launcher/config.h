@@ -65,6 +65,9 @@ bool isBeatmania(const QString &family);             // djbm, iidx, bm3
 bool beatmaniaApart();                              // the three have a controls set each (else one, "beatmania")
 void setBeatmaniaApart(bool apart);                 // ... a new one started from the shared file
 QString controlsSet(const QString &family);          // djbm, iidx, bm3 -> beatmania; djpopn, pypopn -> popn
+// Two families played on one cabinet (the game menu's "games that fit"): the same controls set, or
+// two of the beatmania three, whose sets may be apart while the cabinet is still the one
+bool sameCabinet(const QString &a, const QString &b);
 QStringList controlsSetMembers(const QString &set);  // popn -> djpopn, popn, pypopn; ddr -> ddr
 QString controlsSetName(const QString &set);         // "pop'n music"
 QString controlsMemberName(const QString &family);   // within its set: "IIDX", "Konami Python"

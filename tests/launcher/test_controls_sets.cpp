@@ -2,12 +2,14 @@
 // The controls sets (launcher/config.h): the beatmania cabinets (DJ Main, IIDX, III) share one
 // bindings file until the player sets them apart; then each has its own, started as a copy of the
 // shared one (and its controllers' layouts), and the shared one is left as it was for when they
-// share again. The old per-family files are joined into the shared one only when it isn't there.
-//   test_controls_sets DIR
+// share again. The old per-family files are joined into the shared one only in a folder from before
+// the shared set: not while the shared one is there, nor once the three have been set apart. And
+// which games fit one cabinet (the game menu's list): the beatmania three always do.
+//   test_controls_sets DIR   (DIR is made a portable install's folder, on Linux and Windows alike:
+//                             the launcher's settings go to DIR/user/config, never the player's)
 #include <QCoreApplication>
 #include <QDir>
 #include <QFile>
-#include <QStandardPaths>
 
 #include <cstdio>
 
@@ -31,12 +33,22 @@ static void write(const QString &path, const QByteArray &text) {
 
 int main(int argc, char **argv) {
     if (argc < 2) return 2;
-    QDir(argv[1]).removeRecursively();
-    qputenv("XDG_CONFIG_HOME", argv[1]);
+    const QString root = QDir(QString::fromLocal8Bit(argv[1])).absolutePath();
+    QDir(root).removeRecursively();
+    // a portable install's folder (launcher/config.cpp, portableRoot): games/ makes it HIRAKU's
+    // root, user/ makes it portable, and its settings are then in user/config
+    QDir().mkpath(root + "/games");
+    QDir().mkpath(root + "/user");
+    qputenv("HIRAKU_ROOT", root.toLocal8Bit());
     QCoreApplication app(argc, argv);
-    QStandardPaths::setTestModeEnabled(false);
+    // before anything is written: the settings folder must be this test's own, never a player's
+    // (a portable install around the test's program would take precedence)
+    if (!cfg::portable() || !QDir::cleanPath(cfg::configDir()).startsWith(root + "/")) {
+        fprintf(stderr, "FAIL: the settings folder %s isn't under %s: not run, so as not to touch it\n",
+                qPrintable(cfg::configDir()), qPrintable(root));
+        return 1;
+    }
     const QString dir = cfg::configDir() + "/controls";
-    CHECK(cfg::configDir().startsWith(QString(argv[1])));
 
     // shared: the three are one set, in one file
     CHECK(!cfg::beatmaniaApart());
@@ -46,6 +58,8 @@ int main(int argc, char **argv) {
         CHECK(cfg::controlsFile(f) == dir + "/beatmania.txt");
     }
     CHECK(!cfg::isBeatmania("popn") && cfg::controlsSet("pypopn") == "popn");
+    CHECK(cfg::sameCabinet("iidx", "bm3") && cfg::sameCabinet("djpopn", "pypopn") && !cfg::sameCabinet("iidx", "popn"));
+    CHECK(cfg::sameCabinet("ddr", "ddr") && !cfg::sameCabinet("ddr", "drmn"));
     CHECK(cfg::controlsSeries()[0].second.contains("beatmania") && !cfg::controlsSeries()[0].second.contains("iidx"));
 
     // apart: each its own file, started from the shared one, its layouts too
@@ -63,6 +77,8 @@ int main(int argc, char **argv) {
     const QStringList sets = cfg::controlsSeries()[0].second;
     CHECK(!sets.contains("beatmania") && sets.contains("djbm") && sets.contains("iidx") && sets.contains("bm3") && sets.contains("popn"));
     CHECK(cfg::controlsSetName("bm3") == "beatmania III");
+    // the game menu's games that fit: still the three together, their sets apart or not
+    CHECK(cfg::sameCabinet("iidx", "bm3") && cfg::sameCabinet("djbm", "iidx") && !cfg::sameCabinet("bm3", "popn"));
 
     // the start-up's joining leaves them as they are, apart ...
     write(dir + "/iidx.txt", "P1 Button 1 = key:X\n");
@@ -80,8 +96,17 @@ int main(int argc, char **argv) {
     CHECK(read(dir + "/iidx.txt") == "P1 Button 1 = key:X\n");   // (not copied over)
     cfg::setBeatmaniaApart(false);
 
-    // an older launcher's files, one a family and no shared one: joined into it, as before
+    // together again with no shared file yet (never saved): the three are still that choice's,
+    // not joined into one and put away as .old
     QFile::remove(dir + "/beatmania.txt");
+    cfg::mergeControls();
+    CHECK(!QFile::exists(dir + "/beatmania.txt"));
+    CHECK(read(dir + "/iidx.txt") == "P1 Button 1 = key:X\n" && !QFile::exists(dir + "/iidx.txt.old"));
+    CHECK(QFile::exists(dir + "/djbm.txt") && QFile::exists(dir + "/bm3.txt"));
+
+    // an older launcher's folder (from before the shared set: the setting never written), its files
+    // one a family and no shared one: joined into it, as before
+    cfg::settings().remove("controls/beatmaniaApart");
     QFile::remove(dir + "/djbm.txt");
     QFile::remove(dir + "/bm3.txt");
     cfg::mergeControls();

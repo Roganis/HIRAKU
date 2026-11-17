@@ -144,8 +144,12 @@ QString controlsFile(const QString &family) { return configDir() + "/controls/" 
 void mergeControls() {
     for (auto &series : controlsSeries())
         for (const QString &set : series.second) {
-            // (a set's file of its own is there already: its members' are theirs, kept apart)
+            // (a set's file of its own is there already: its members' are theirs, kept apart. Nor
+            // once the beatmania three have been set apart (the setting written, ticked or not): their
+            // files are then that choice's, kept for the next time, even with no shared one yet;
+            // the folders from before the shared set never had the setting)
             if (!controlsSetMembers(set).contains(set) && QFileInfo::exists(controlsFile(set))) continue;
+            if (set == "beatmania" && settings().contains("controls/beatmaniaApart")) continue;
             QFileInfoList old;
             for (const QString &m : controlsSetMembers(set))
                 if (QFileInfo f(configDir() + "/controls/" + m + ".txt"); f.exists()) old << f;
@@ -270,6 +274,10 @@ QString controlsSet(const QString &family) {
     if (isBeatmania(family)) return beatmaniaApart() ? family : "beatmania";
     if (family == "djpopn" || family == "pypopn" || family == "pcpopn" || family == "pcpopnhc") return "popn";
     return family;
+}
+
+bool sameCabinet(const QString &a, const QString &b) {
+    return (isBeatmania(a) && isBeatmania(b)) || controlsSet(a) == controlsSet(b);
 }
 
 // The first member's table gives the order (IIDX: the seven keys together)

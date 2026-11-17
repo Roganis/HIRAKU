@@ -1643,7 +1643,7 @@ void MainWindow::openMenu(const QString &left, const QString &notice) {
     QString text = notice;
     for (int k : m_order) {
         const Game &g = m_games[k];
-        if (g.status != Game::Ready || (!all && cfg::controlsSet(g.family) != cfg::controlsSet(from->family))) continue;
+        if (g.status != Game::Ready || (!all && !cfg::sameCabinet(g.family, from->family))) continue;
         listed << Listed{&g, shelf(g)};
         text += listed.last().sh.series + g.title + g.year + listed.last().sh.system;
     }

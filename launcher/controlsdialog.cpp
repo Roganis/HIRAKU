@@ -643,7 +643,8 @@ void ControlsDialog::bindingMenu(int k, QMenu *menu) {
     rev->setCheckable(true);
     rev->setChecked(scale < 0);
     auto *speed = menu->addMenu("Speed");
-    for (double x : {0.5, 0.75, 1.0, 1.25, 1.5, 2.0, 3.0, 4.0}) {
+    // (×4, ×8, ×12: what ×1, ×2 and ×3 turned in HIRAKU 0.11 and earlier, four counts a step)
+    for (double x : {0.5, 0.75, 1.0, 1.25, 1.5, 2.0, 3.0, 4.0, 8.0, 12.0, 16.0}) {
         auto *a = speed->addAction(x == 1.0 ? QString("×1 (as the controller sends it)") : QString("×%1").arg(x), this,
                                    [setScale, scale, x] { setScale(scale < 0 ? -x : x); });
         a->setCheckable(true);

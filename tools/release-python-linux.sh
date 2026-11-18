@@ -12,8 +12,9 @@
 #   - its libraries built by PCSX2's own script (.github/workflows/scripts/linux/
 #     build-dependencies-qt.sh in the source), less what HIRAKU doesn't use: its Qt and
 #     KDDockWidgets (PCSX2's own interface is off), its SDL (HIRAKU's, from LINUX_DEPS: the core
-#     draws in HIRAKU's window) and its FFmpeg (only its headers: PCSX2 loads FFmpeg at run time,
-#     for video capture);
+#     draws in HIRAKU's window) and its FFmpeg (its shared libraries with FFV1, FLAC, Matroska and
+#     file writing only: HIRAKU's recorder links them, runtime/host/record.h, so the package carries
+#     them, and PCSX2's own video capture, which loads them at run time, finds the same);
 #   - hiraku-python (--game ID: any Python game), with Reliquary's resources/ beside it.
 # WORK/pcsx2-reliquary/build/bin/hiraku-python is then packaged by tools/release.sh linux.
 # The build tools: tools/release-setup-ubuntu.sh python.
@@ -60,7 +61,8 @@ if [ ! -f "$deps/.done" ]; then
   curl -fL --retry 3 -o "$t/ffmpeg.tar.xz" "https://ffmpeg.org/releases/ffmpeg-$FFMPEG.tar.xz"
   tar -xf "$t/ffmpeg.tar.xz" -C "$t"
   (cd "$t/ffmpeg-$FFMPEG" && ./configure --prefix="$deps" --disable-all --disable-autodetect --disable-static --enable-shared \
-     --enable-avcodec --enable-avformat --enable-avutil --enable-swresample --enable-swscale --disable-x86asm > /dev/null &&
+     --enable-avcodec --enable-avformat --enable-avutil --enable-swresample --enable-swscale --disable-x86asm \
+     --enable-encoder=ffv1,flac --enable-muxer=matroska --enable-protocol=file > /dev/null &&
    make -j"$jobs" > /dev/null && make install > /dev/null)
   rm -rf "$t"
   touch "$deps/.done"

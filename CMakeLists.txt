@@ -279,6 +279,21 @@ target_include_directories(hiraku_shell PUBLIC runtime)
 find_package(Threads REQUIRED)
 find_package(ZLIB REQUIRED)   # mods' PNG pictures (runtime/host/png.h)
 target_link_libraries(hiraku_shell PUBLIC hiraku_cabinet Threads::Threads ZLIB::ZLIB)
+# The game recorded to a video file (runtime/host/record.h: --record, F6), with FFmpeg's own
+# encoders (FFV1, FLAC, Matroska: tools/ffmpeg-min.sh builds them in); without FFmpeg, it says so.
+# (The same libraries as Twinkle's background video, below)
+find_package(PkgConfig QUIET)
+if(PKG_CONFIG_FOUND)
+  pkg_check_modules(HK_FFMPEG IMPORTED_TARGET libavformat libavcodec libavutil)
+endif()
+add_library(hiraku_record STATIC runtime/host/record.cpp)
+target_include_directories(hiraku_record PUBLIC runtime)
+target_link_libraries(hiraku_record PUBLIC hiraku_sys Threads::Threads)
+if(HK_FFMPEG_FOUND)
+  target_compile_definitions(hiraku_record PRIVATE HK_WITH_RECORD=1)
+  target_link_libraries(hiraku_record PRIVATE PkgConfig::HK_FFMPEG)
+endif()
+target_link_libraries(hiraku_shell PUBLIC hiraku_record)
 # The shell's main() (runtime/main.cpp) and the sampling profiler: compiled once for every core's
 # binaries. Which game a per-game binary is: runtime/shell/built.h, a one-line file each
 add_library(hiraku_main OBJECT runtime/main.cpp runtime/core/sampler.cpp)

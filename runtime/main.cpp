@@ -30,6 +30,7 @@
 #include "host/menukey.h"
 #include "host/menupic.h"
 #include "host/mods.h"
+#include "host/record.h"
 #include "host/script.h"
 #include "shell/cabinet.h"
 #include "shell/built.h"
@@ -59,6 +60,14 @@ static const char COMMON_OPTIONS[] = R"HK(  --frames N        stop after N video
   --ata-log         log ATA/ATAPI commands
   --script FILE     run an oracle input script (.his): same inputs, same frames as in MAME
   --wav FILE        record the sound output (16-bit stereo, at the core's rate: 44.1 kHz, DJ Main 48 kHz)
+  --record [FILE]   record the game to a video file from the start: its own frames at their own size
+                    and rate, with its sound, timed by the machine's clock (a slow moment on the PC
+                    doesn't slow the video). FFV1 and FLAC in Matroska (.mkv, lossless); FILE a
+                    folder or none: a file named by the game and the time in it, or in
+                    --record-folder's. With --window, F6 starts and stops it. host/record.h
+  --record-folder DIR  where F6's recordings go (default: <saves' folder>/recordings, as --nvram's)
+  --record-format F ffv1 (the default) or h264 (.mp4, where this build's FFmpeg has an H.264 encoder
+                    that works on this PC)
   --digest FILE     write one line per frame: frame number, a hash of the picture and a running
                     hash of all sound so far (tools/regress.py checks runs are bit-identical with it)
   --debug-every N   print the CPU state every N frames
@@ -366,6 +375,8 @@ int main(int argc, char **argv) {
     double game_menu_hold = 2.0;
     std::string game_menu_key, menu_picture, menu_picture_own;
     double menu_picture_at = 0;
+    bool record_at_start = false;   // --record: host/record.h
+    std::string record_path, record_folder, record_format = "ffv1";
     for (int k = 1; k < argc; k++) {
         std::string a = argv[k];
         // one dash is two, as spice2x writes its options (-url, -p, -card0: shell/eaoptions.h)
@@ -385,6 +396,9 @@ int main(int argc, char **argv) {
         else if (a == "--ata-log") opt.ata_log = true;
         else if (a == "--debug-every") debug_every = std::stoull(val());
         else if (a == "--wav") wav_path = val();
+        else if (a == "--record") record_at_start = true, record_path = (k + 1 < argc && argv[k + 1][0] != '-') ? val() : "";
+        else if (a == "--record-folder") record_folder = val();
+        else if (a == "--record-format") record_format = val();
         else if (a == "--digest") digest_path = val();
         else if (a == "--script") script_path = val();
         else if (a == "--bindings") bindings = val();
@@ -471,8 +485,10 @@ int main(int argc, char **argv) {
     FILE *digest = digest_path.empty() ? nullptr : fopen(digest_path.c_str(), "w");
     if (!digest_path.empty() && !digest) { fprintf(stderr, "cannot write %s\n", digest_path.c_str()); return 1; }
     uint64_t audio_hash = HASH_SEED;
+    static host::record::Capture capture;   // --record, F6 (host/record.h): nothing while it doesn't record
     // the sink goes in before init(): machines make sound while the skipped BIOS time passes
     machine.set_audio_sink([&](const float *lr, int n) {
+        capture.sound(lr, n);
         if (digest) audio_hash = hash_words(audio_hash, lr, 2 * (size_t)n);
 #ifdef HK_WITH_SDL
         if (window_scale) host::audio_push(lr, n);
@@ -537,6 +553,8 @@ int main(int argc, char **argv) {
                    (double)between_max * prof::ns_per_tick() / 1e6, (unsigned long long)between_hash);
         machine.report();
         close_wav();
+        // (the file finished, and any F6 ended still being finished: every way out comes here)
+        if (const std::string line = capture.stop(); !line.empty()) printf("%s\n", line.c_str());
         if (digest) { fclose(digest); digest = nullptr; }
 #ifdef HK_WITH_SDL
         if (window_scale) printf("%s\n", host::audio_describe().c_str());
@@ -665,6 +683,57 @@ int main(int argc, char **argv) {
             printf("game menu: this game's picture kept, %.1f s in\n", machine.seconds());
         menu_picture.clear();
     };
+    // --record and F6 (host/record.h): the frames the window shows (a core's picture at the end of
+    // vertical blank, where it has one), else the frame hook's; finished in report() at any way out
+    host::record::Capture::Setup record_setup;
+    record_setup.format = record_format;
+    record_setup.audio_rate = machine.audio_rate();
+    record_setup.native_rate = machine.native_rate();
+    record_setup.aspect = machine.display_aspect();
+    record_setup.cover = [&machine](int w, int h, double &cw, double &ch) { machine.display_cover(w, h, cw, ch); };
+    record_setup.wait = !window_scale;   // headless: no real time to keep, so the game waits for the encoder
+    std::string record_error;
+    const bool can_record = capture.setup(record_setup, record_error);
+    if (record_at_start && !can_record) {
+        fprintf(stderr, "--record: %s\n", record_error.c_str());
+        return 2;
+    }
+    if (record_folder.empty()) record_folder = hk::user_data_dir(opt.root) + "/recordings";
+    auto record_start = [&](std::string path) {   // a file, or a folder ("": --record-folder's) to name one in
+        if (path.empty() || path.back() == '/' || path.back() == '\\' || hk::sys::is_dir(path))
+            path = host::record::file_name(path.empty() ? record_folder : path, game, record_format);
+        if (!capture.start(path, record_error)) {
+            fprintf(stderr, "record: %s\n", record_error.c_str());
+            return false;
+        }
+        printf("record: to %s, from %.2f s of the machine's time\n", path.c_str(), machine.seconds());
+        return true;
+    };
+    if (record_at_start && !record_start(record_path)) return 2;
+#ifdef HK_WITH_SDL
+    host::record::set_mark(record_at_start && window_scale);   // (over the window's picture, not in the file)
+#endif
+    auto record_picture = [&](const uint32_t *rgb, int w, int h) {
+#ifdef HK_WITH_SDL
+        if (window_scale && host::window_record_asked()) {   // F6
+            if (capture.on()) {
+                host::record::set_mark(false);
+                capture.stop_later([](const std::string &line, const std::string &path) {
+                    printf("%s\n", line.c_str());
+                    host::notice::hint({"Recording kept", path}, 8, host::ui::Icon::picture);
+                });
+            } else if (can_record && record_start("")) {
+                host::record::set_mark(true);
+                host::notice::hint({"Recording (F6 ends it)", capture.path()}, 4, host::ui::Icon::picture);
+            } else {
+                host::notice::hint({"No recording", record_error}, 8, host::ui::Icon::alert);
+            }
+        }
+        // the fast start-up keeps no real time either: the game waits for the encoder meanwhile
+        if (window_scale && capture.on()) capture.set_wait(host::warp::on());
+#endif
+        capture.picture(rgb, w, h, machine.seconds());
+    };
 #ifdef HK_WITH_SDL
     // a core that can show the window its picture at the end of vertical blank does: the picture
     // the monitor then shows, the game's flip during the blank included, which the frame hook's
@@ -674,6 +743,7 @@ int main(int argc, char **argv) {
         window_scale && machine.set_present_hook([&](const uint32_t *rgb, int w, int h) {
             host::window_present(rgb, w, h, machine.seconds());
             title_picture(rgb, w, h);
+            record_picture(rgb, w, h);
         });
 #endif
     // HK_BETWEEN_BENCH: the in-between pictures where a window asks for them (with the picture at
@@ -763,7 +833,10 @@ int main(int argc, char **argv) {
 #ifdef HK_WITH_SDL
         if (!present_at_vblank_end)
 #endif
+        {
             title_picture(rgb, w, h);
+            record_picture(rgb, w, h);
+        }
         if (between_at_frame) between_draw(w, h);
         if (prof::g_sample_frame) prof::g_sample_frame(f);   // HK_PROFILE_FRAMES
         if (lights_log) lights_log(f);

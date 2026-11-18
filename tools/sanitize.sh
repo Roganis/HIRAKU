@@ -52,18 +52,22 @@ if [ "$which" = -DHK_SANITIZE_THREAD=ON ] && [ -z "${TSAN_OPTIONS:-}" ]; then
   # debug files) only for the tests that paint big enough for Qt's paint threads; the rest
   # without them
   paint='^(launcher_theme|launcher_game_cards)$'
+  record='^host_record$'   # (and FFmpeg's encoder threads: its own section, for the recorder's test alone)
   awk '/^# ==== Only for/ { exit } { print }' "$root/tests/tsan.supp" > "$build/tsan-base.supp"
   section() {   # the base lines and the section whose marker begins "# ==== Only for $1"
     cat "$build/tsan-base.supp"
     awk -v m="# ==== Only for $1" 'index($0, m) == 1 { on = 1; next } /^# ==== Only for/ { on = 0 } on' "$root/tests/tsan.supp"
   }
   section "the tests that paint" > "$build/tsan-paint.supp"
+  section "the video recorder" > "$build/tsan-record.supp"
   opts="second_deadlock_stack=1 history_size=4"
   rc=0
   TSAN_OPTIONS="suppressions=$build/tsan-base.supp $opts" \
-    ctest --test-dir "$build" --output-on-failure --timeout 600 -E "$paint" || rc=$?
+    ctest --test-dir "$build" --output-on-failure --timeout 600 -E "$paint|$record" || rc=$?
   TSAN_OPTIONS="suppressions=$build/tsan-paint.supp $opts" \
     ctest --test-dir "$build" --output-on-failure --timeout 600 -R "$paint" || rc=$?
+  TSAN_OPTIONS="suppressions=$build/tsan-record.supp $opts" \
+    ctest --test-dir "$build" --output-on-failure --timeout 600 -R "$record" || rc=$?
   exit $rc
 fi
 export TSAN_OPTIONS=${TSAN_OPTIONS:-suppressions=$root/tests/tsan.supp second_deadlock_stack=1 history_size=4}

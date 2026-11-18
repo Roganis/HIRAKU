@@ -29,3 +29,16 @@ race:libQt6Gui
 # race on a QWaitCondition's destruction (the latter matched above). QThread::start is exported
 # (named with or without debug files); HIRAKU starts no QThread of its own.
 thread:QThread::start
+
+# ==== Only for the video recorder's test (host_record, tools/sanitize.sh: $record) ====
+# FFmpeg's FFV1 encoder spreads a frame's slices over libavcodec's own slice threads
+# (avpriv_slicethread): a worker takes its next slice with an atomic counter and the last one
+# done wakes the caller, all inside libavcodec, which isn't built with ThreadSanitizer, so it
+# can't see that hand-over: a slice's buffers (memset on av_malloc'd memory) written by one
+# worker in a frame and another in the next show as a race, both sides in libavcodec's threads.
+# runtime/host/record.cpp only hands the encoder a frame and waits for its packets, on one thread.
+race:libavcodec
+# ... and the test's H.264 file where the FFmpeg linked has libx264 (a distribution's; a release's
+# has none): x264's own frame threads (threadpool.c) hand over its contexts in the same unseen way
+# (x264_8_encoder_encode's thread_sync_context and slice_write's cabac_context_init, both in libx264)
+race:libx264

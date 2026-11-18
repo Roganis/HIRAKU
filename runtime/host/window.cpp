@@ -45,6 +45,7 @@
 #include "menukey.h"
 #include "menuview.h"
 #include "picture.h"
+#include "record.h"
 #include "input.h"
 #include "../core/prof.h"
 #ifdef _WIN32
@@ -242,6 +243,7 @@ void (*g_glFlush)() = nullptr;
 auto g_last_poll = std::chrono::steady_clock::now();
 uint64_t g_pointer_until = 0;     // full screen: the pointer shown until then (the mouse moved with the performance overlay up)
 std::atomic<bool> g_picture_asked{false};   // F12 (window_picture_asked)
+std::atomic<bool> g_record_asked{false};    // F6 (window_record_asked)
 
 // Poll controls: called every few milliseconds of emulated time.
 void poll() {
@@ -295,6 +297,11 @@ void poll() {
         // control's, the key going on to the bindings and no picture taken
         if (e.type == SDL_EVENT_KEY_DOWN && !e.key.repeat && e.key.key == SDLK_F12 && !input_key_bound(e)) {
             g_picture_asked = true;
+            continue;
+        }
+        // F6: the game recorded to a video file, or no longer (host/record.h), likewise unless a control has it
+        if (e.type == SDL_EVENT_KEY_DOWN && !e.key.repeat && e.key.key == SDLK_F6 && !input_key_bound(e)) {
+            g_record_asked = true;
             continue;
         }
         if (e.type == SDL_EVENT_KEY_DOWN && !e.key.repeat && e.key.key == SDLK_F10 && g_gl)   // F10: off, light, full, lola
@@ -369,6 +376,7 @@ void window_set_picture(const std::string &mode, const std::string &shaders_dir,
 void window_set_display_sync(bool on) { g_display_sync = on; }
 void window_set_lights_overlay(bool on) { lampview::set_shown(on); }
 bool window_picture_asked() { return g_picture_asked.exchange(false); }
+bool window_record_asked() { return g_record_asked.exchange(false); }
 bool window_set_stats_overlay(const std::string &level, const std::string &store) {
     statsview::Level l;
     if (!statsview::parse_level(level, l)) return false;
@@ -1010,6 +1018,10 @@ static void draw_overlays(int ww, int wh) {
         statsview::place(p, ww, wh, px, py, pw, ph);
         picture::overlay(p.pixels->data(), p.w, p.h, px, py, pw, ph, 1.0f, ww, wh);
     }
+    if (record::Mark m; record::mark(m)) {   // recording (F6, host/record.h): top right, whole times a 360-line screen's
+        const int k = std::max(1, wh / 360);
+        picture::overlay(m.pixels->data(), m.w, m.h, std::max(0, ww - (m.w + 6) * k), 6 * k, m.w * k, m.h * k, 1.0f, ww, wh);
+    }
 }
 
 // The second monitor's half in player 2's window (window_set_split), after the first window's
@@ -1521,6 +1533,24 @@ static void show_frame(const uint32_t *rgb, int w, int h, double frame_aspect, b
                 statsview::place(p, ow, oh, px, py, pw, ph);
                 const SDL_FRect r{(float)px, (float)py, (float)pw, (float)ph};
                 SDL_RenderTexture(g_ren, st, nullptr, &r);
+                SDL_SetRenderLogicalPresentation(g_ren, lw, lh, lm);
+            }
+        }
+        if (record::Mark m; record::mark(m)) {   // recording (F6), likewise: top right
+            static SDL_Texture *rt = nullptr;
+            if (!rt && (rt = SDL_CreateTexture(g_ren, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STATIC, m.w, m.h))) {
+                SDL_UpdateTexture(rt, nullptr, m.pixels->data(), m.w * 4);
+                SDL_SetTextureBlendMode(rt, SDL_BLENDMODE_BLEND);
+                SDL_SetTextureScaleMode(rt, SDL_SCALEMODE_NEAREST);
+            }
+            int lw, lh, ow, oh;
+            SDL_RendererLogicalPresentation lm;
+            if (rt && SDL_GetRenderLogicalPresentation(g_ren, &lw, &lh, &lm)) {
+                SDL_SetRenderLogicalPresentation(g_ren, 0, 0, SDL_LOGICAL_PRESENTATION_DISABLED);
+                SDL_GetCurrentRenderOutputSize(g_ren, &ow, &oh);
+                const int k = std::max(1, oh / 360);
+                const SDL_FRect r{(float)std::max(0, ow - (m.w + 6) * k), (float)(6 * k), (float)(m.w * k), (float)(m.h * k)};
+                SDL_RenderTexture(g_ren, rt, nullptr, &r);
                 SDL_SetRenderLogicalPresentation(g_ren, lw, lh, lm);
             }
         }

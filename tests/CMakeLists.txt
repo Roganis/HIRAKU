@@ -163,6 +163,15 @@ add_executable(test_part_volume midi/test_part_volume.cpp)
 target_include_directories(test_part_volume PRIVATE ${CMAKE_SOURCE_DIR}/runtime)
 add_test(NAME midi_part_volume COMMAND test_part_volume)
 
+# The video recorder (runtime/host/record.h): made-up frames and sound to a file, read back with the
+# same FFmpeg libraries (frames, size, rate, times, pixels, every sound sample, sizes, a queue full)
+if(HK_FFMPEG_FOUND)
+  add_executable(test_record host/test_record.cpp)
+  target_link_libraries(test_record PRIVATE hiraku_record PkgConfig::HK_FFMPEG)
+  add_test(NAME host_record COMMAND test_record ${CMAKE_CURRENT_BINARY_DIR}/record)
+  set_tests_properties(host_record PROPERTIES SKIP_RETURN_CODE 77)   # (an FFmpeg without the recorder's parts)
+endif()
+
 # The performance overlay (runtime/host/statsview.h): what it reads of the system's files (made-up
 # ones), its panel from made-up frames, its levels, and its place: the corners, a drag with the
 # mouse, kept in a file

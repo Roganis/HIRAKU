@@ -49,6 +49,7 @@ add_library(hk_python_shell STATIC
 	${HK}/runtime/host/popnio.cpp
 	${HK}/runtime/host/menukey.cpp
 	${HK}/runtime/host/menupic.cpp
+	${HK}/runtime/host/record.cpp
 	${HK}/runtime/host/hidout.cpp
 	${HK}/runtime/host/window.cpp
 	${HK}/runtime/host/alsa.cpp
@@ -70,6 +71,16 @@ target_compile_definitions(hk_python_shell PUBLIC HK_WITH_SDL=1)
 target_link_libraries(hk_python_shell PUBLIC SDL3::SDL3)
 find_package(ZLIB REQUIRED)   # mods' PNG pictures (runtime/host/png.h)
 target_link_libraries(hk_python_shell PUBLIC ZLIB::ZLIB)
+# The game recorded to a video file (runtime/host/record.h, --record, F6) with the FFmpeg libraries
+# PCSX2's video capture loads at run time (GSCapture.cpp, by their versioned names: the same
+# headers, so the same libavcodec.so.N / avcodec-N.dll): linked here, they are the one copy in the
+# process, whichever asks first. A release carries them: Linux's tools/release-python-linux.sh builds
+# them with FFV1, FLAC, Matroska and file writing (tools/package.sh takes what the binary links),
+# Windows' are PCSX2's own (its build-dependencies.bat has those and more)
+if(TARGET FFMPEG::avcodec AND TARGET FFMPEG::avformat AND TARGET FFMPEG::avutil)
+	set_source_files_properties(${HK}/runtime/host/record.cpp PROPERTIES COMPILE_DEFINITIONS HK_WITH_RECORD=1)
+	target_link_libraries(hk_python_shell PUBLIC FFMPEG::avformat FFMPEG::avcodec FFMPEG::avutil)
+endif()
 if(WIN32)   # as HIRAKU's own build: Winsock (shell/net.h); WASAPI exclusive mode and ASIO (host/wasapi.h,
             # asio.h); the DXGI swap chain (host/swapchain.h)
 	target_sources(hk_python_shell PRIVATE ${HK}/runtime/host/wasapi.cpp ${HK}/runtime/host/asio.cpp ${HK}/runtime/host/dwm.cpp ${HK}/runtime/host/swapchain.cpp)

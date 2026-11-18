@@ -2,8 +2,10 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # The FFmpeg a release needs, and nothing else: Twinkle's background video (runtime/twinkle/video.cpp)
 # reads the player's Video CD or DVD as an MPEG program stream ("mpeg" demuxer) and decodes its
-# MPEG-1 or MPEG-2 video. Built static (LGPL: no --enable-gpl), so the games carry it and a PC needs
-# no FFmpeg of its own (PLAN.md section 28, R-2).
+# MPEG-1 or MPEG-2 video; a game recorded to a video file (runtime/host/record.h, --record) is
+# FFV1 and FLAC in Matroska, FFmpeg's own encoders (and their decoders and the Matroska reader, for
+# its test, tests/host/test_record.cpp). Built static (LGPL: no --enable-gpl), so the games carry
+# it and a PC needs no FFmpeg of its own (PLAN.md section 28, R-2).
 #
 #   tools/ffmpeg-min.sh PREFIX                        (Linux: position-independent, for the games)
 #   tools/ffmpeg-min.sh PREFIX x86_64-w64-mingw32     (Windows, cross-built with mingw-w64's gcc)
@@ -18,10 +20,13 @@ VER=9.0.2
 # mpegvideo (the raw stream demuxer): the program stream demuxer probes its video stream with it,
 # else the stream has no codec. The audio streams' parsers and decoders (a Video CD's MP2, a DVD's
 # AC-3 or LPCM): without them stream detection reads on to its time limit before giving up on them.
-DEMUXERS=mpegps,mpegvideo
-DECODERS=mpeg1video,mpeg2video,mp2,ac3,pcm_dvd
+DEMUXERS=mpegps,mpegvideo,matroska
+DECODERS=mpeg1video,mpeg2video,mp2,ac3,pcm_dvd,ffv1,flac
 PARSERS=mpegvideo,mpegaudio,ac3
-sig="ffmpeg-$VER host=$host demuxers=$DEMUXERS decoders=$DECODERS parsers=$PARSERS"
+ENCODERS=ffv1,flac
+MUXERS=matroska
+PROTOCOLS=file   # (the recorder writes its file through it; --disable-everything takes it away)
+sig="ffmpeg-$VER host=$host demuxers=$DEMUXERS decoders=$DECODERS parsers=$PARSERS encoders=$ENCODERS muxers=$MUXERS protocols=$PROTOCOLS"
 if [ -f "$prefix/lib/libavcodec.a" ] && [ "$(cat "$prefix/.ffmpeg-min" 2>/dev/null)" = "$sig" ]; then
   echo "ffmpeg-min: already in $prefix"
   exit 0
@@ -42,8 +47,9 @@ command -v nasm >/dev/null 2>&1 || { echo "ffmpeg-min: needs nasm (the nasm pack
 ./configure --prefix="$prefix" "${cross[@]}" --enable-pic \
   --disable-autodetect --disable-everything \
   --enable-demuxer="$DEMUXERS" --enable-decoder="$DECODERS" --enable-parser="$PARSERS" \
+  --enable-encoder="$ENCODERS" --enable-muxer="$MUXERS" --enable-protocol="$PROTOCOLS" \
   --disable-programs --disable-doc --disable-avdevice --disable-avfilter --disable-swscale \
-  --disable-swresample --disable-network --disable-encoders --disable-muxers --disable-devices \
+  --disable-swresample --disable-network --disable-devices \
   --enable-static --disable-shared
 make -j"$(nproc)"
 make install

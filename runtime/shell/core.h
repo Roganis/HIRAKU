@@ -36,7 +36,9 @@ public:
         }
     };
     using FrameHook = std::function<void(uint64_t frame, const uint32_t *rgb, int w, int h)>;
-    using AudioSink = std::function<void(const float *lr, int frames)>;   // stereo, at audio_rate()
+    // stereo, at audio_rate(); called on the thread that calls the frame and present hooks (the
+    // machine's own: the shell's recorder, host/record.h, counts on it)
+    using AudioSink = std::function<void(const float *lr, int frames)>;
 
     virtual ~Core() = default;
 

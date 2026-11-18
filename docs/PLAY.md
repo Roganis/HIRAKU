@@ -84,6 +84,7 @@ The keys, with beatmania III as the example (each game's own are in its section)
 | F9 | the game's lights over the picture ([LIGHTS.md](LIGHTS.md)) |
 | F8 | the CRT shader's settings, changed while you play |
 | F7 | how the game runs on this PC: one line, a panel, everything, off |
+| F6 | record the game to a video file; again to stop ([below](#recording-video-f6)) |
 | Ctrl+1 … Ctrl+9 | type one of the game's codes |
 | Esc | quit |
 
@@ -302,6 +303,32 @@ break in the sound. Drag it, or **Shift+F7** moves it. On Windows, **Settings > 
 can switch to the High performance power plan while a game runs.
 
 Details: [PLAY-NOTES.md](PLAY-NOTES.md#the-performance-overlay-f7)
+
+## Recording video (F6)
+
+**F6** records the game to a video file, and stops it: a red **REC** in the corner while it
+records (not in the video). The video is the game's own picture at its own size and frame rate,
+before the picture mode, scaling or smooth motion, with its sound, and timed by the game's clock:
+if the PC is slow for a moment, the video doesn't slow down. Recordings go to `recordings/` in
+the saves' folder (`user/data/recordings/` in a release package), named by the game and the time.
+
+Every game records: DJ Main, Firebeat, System 573, Twinkle, the Konami Python games (pop'n music
+9–14 at 512x448, as their TV picture: the file says its shape) and the PC games (as HIRAKU shows
+them). A picture size that changes and stays (a game's boot screens, a new video mode) goes on
+in a second file (`...-2.mkv`), from the moment it changed.
+
+The files are lossless FFV1 video with FLAC sound in Matroska (`.mkv`), so they are big: under
+1 MB a second for a still screen, 3–5 MB a second while a beatmania or pop'n song plays, and up
+to about 20 MB a second for a PC game's detailed pictures (pop'n music 15's title: 18 MB a
+second, 65 GB an hour). VLC, mpv, MPC-HC, Shotcut, Kdenlive and FFmpeg read them; Windows' own
+player and browsers don't, so convert one to share it, e.g. `ffmpeg -i in.mkv -c:v libx264
+-crf 16 -pix_fmt yuv420p -c:a aac out.mp4`.
+
+From the command line (**Arguments…**): `--record` records from the start (`--record FILE`
+to a file or folder of yours), `--record-folder DIR` sets F6's folder, and `--record-format h264`
+writes MP4 instead where the program's FFmpeg has an H.264 encoder that works on the PC: the
+Python games on Windows (their FFmpeg has x264 and the graphics cards' encoders), and builds from
+source on a distribution's FFmpeg; not the other games of a release.
 
 ## The last runs' logs
 

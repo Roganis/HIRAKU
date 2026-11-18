@@ -190,18 +190,24 @@ bool draining() { return g_fifo_on && g_drain && !(g_active && g_exact); }
     }
     g_prev_k = k;
     if (g_debug) fprintf(stderr, "pacing: commit to screen %.3f ms, lead %.2f ms, overrun %d\n", d / 1e6, g_lead / 1e6, (int)overrun);
-    if (g_skip > 0) {
-        g_skip--;
-        return;
-    }
     if (overrun) {   // committed late: says nothing about the deadline
         // (DXGI: and the pictures after it may still be queued behind it, shown late with their
         // own commits on time: not a deadline missed either; counted as such, each of a game's
         // stalls raised the lead for good, past a refresh, and the swap chain's queue backed up)
         // (Wayland fifo: the pictures after it no longer queue behind it, the next commit taken with
         // it, but any of them judged with it would still be the game's lateness)
-        if (g_dxgi || g_fifo_on) g_skip = std::max(g_skip, 4), g_window.clear(), g_late.clear();
+        // Among the pictures skipped after a catch-up or an earlier late commit, too: it was let go
+        // with them, unseen, and the window after it, missed for the game's lateness, raised the lead
+        // as the deadline's (a stall every 16-20 frames at 240 Hz, smooth motion's fifo: up at each
+        // one, without end). A game late every 4 pictures or more often is then never judged: no
+        // window of its says anything of the deadline
+        if (g_dxgi || g_fifo_on) g_skip = std::max(g_skip - 1, 4), g_window.clear(), g_late.clear();
+        else if (g_skip > 0) g_skip--;
         g_overrun_seen = true;
+        return;
+    }
+    if (g_skip > 0) {
+        g_skip--;
         return;
     }
     // A miss: on Wayland, the commit to the screen took half a refresh longer than its best (the

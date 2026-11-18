@@ -268,6 +268,29 @@ int main(int argc, char **argv) {
     g_machine.reach(0x1000, regs);
     check(e.empty() && has(stopped(), "no register 'r9'") && has(stopped(), "a hook's call"), "a hook's call on a register the machine hasn't: stopped");
 
+    // the exit line: a callback too small for the count hook's step is "under 1000", not 0
+    e = load({mod("small", SCRIPT_TOML, "function on_frame() hk.write8(6, 1) end\n")});
+    frames(3);
+    {
+        const auto lines = hk::modscript::report_lines();
+        const std::string l = lines.empty() ? "" : lines[0];
+        check(e.empty() && has(l, "4 calls"), "the exit line counts the calls, the first run included (" + l + ")");
+        check(has(l, "the most instructions in one under 1000"), "... and a small callback's instructions as under 1000, not 0");
+    }
+    e = load({mod("bigger", SCRIPT_TOML, "function on_frame() local n = 0 for i = 1, 5000 do n = n + i end hk.write32(8, n) end\n")});
+    frames(1);
+    {
+        const auto lines = hk::modscript::report_lines();
+        const std::string l = lines.empty() ? "" : lines[0];
+        check(e.empty() && has(l, "the most instructions in one ") && !has(l, "under") && !has(l, " one 0"),
+              "a bigger callback: its count, to the step (" + l + ")");
+    }
+
+    // a finalizer (__gc) run as the state closes: hk refused then (at exit the machine may be gone)
+    e = load({mod("finalizer", SCRIPT_TOML, "keep = setmetatable({}, {__gc = function() hk.write8(5, 1) end})\n")});
+    hk::mods::clear();
+    check(e.empty() && g_machine.ram[5] == 0, "a __gc finalizer as the script closes: hk does nothing there");
+
     // ---- the sample, twice ----------------------------------------------------------------------
     if (argc > 2) {
         const Run a = sample_run(argv[2], true);

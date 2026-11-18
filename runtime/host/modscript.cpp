@@ -49,6 +49,12 @@ struct Script {
     uint64_t calls = 0;
     int64_t most = 0;                // the most instructions one callback took
     std::string stopped;             // why the script was stopped
+    bool closing = false;            // its state being closed: hk does nothing (finalizers, __gc)
+
+    Script() = default;
+    Script(const Script &) = delete;
+    Script &operator=(const Script &) = delete;
+    ~Script();   // its state closed (clear(), and at exit: g_scripts' own end)
 };
 
 std::deque<Script> g_scripts;   // (a deque: the Lua states' extra space points at them)
@@ -71,6 +77,13 @@ bool g_wants_input = false;                     // a script has on_input (set at
 uint64_t g_dropped = 0;
 
 Script &of(lua_State *L) { return **static_cast<Script **>(lua_getextraspace(L)); }
+// ... for hk's functions: an error while the state is being closed (a __gc finalizer then: at exit
+// the machine and the mods' settings may be gone already)
+Script &live(lua_State *L) {
+    Script &s = of(L);
+    if (s.closing) luaL_error(L, "the script is being closed");
+    return s;
+}
 
 void *alloc(void *ud, void *ptr, size_t osize, size_t nsize) {
     Script &s = *static_cast<Script *>(ud);
@@ -107,14 +120,25 @@ void say(Script &s, const std::string &line) {
     if (g_notice) g_notice({s.mod, line.substr(0, 60)});
 }
 
+// The script's Lua state closed and freed: whatever it holds, through alloc (which frees whatever
+// the cap), its finalizers run with hk refused and a budget of their own
+void close_state(Script &s) {
+    if (!s.L) return;
+    s.closing = true;
+    s.budget = s.left = kBudget;
+    s.over_budget = false;
+    lua_sethook(s.L, count_hook, LUA_MASKCOUNT, kStep);
+    lua_close(s.L);
+    s.L = nullptr;
+}
+
 void stop(Script &s, const std::string &why) {
     if (!s.alive) return;
     s.alive = false;
     s.stopped = why + " (in " + s.in + ")";
     fprintf(stderr, "mods: %s: its script is stopped, the game goes on: %s\n", s.mod.c_str(), s.stopped.c_str());
     if (g_notice) g_notice({s.mod, "Its script stopped: see the log"});
-    lua_close(s.L);
-    s.L = nullptr;
+    close_state(s);
 }
 
 // The function on the stack with the nargs values above it, in a protected call with `budget`
@@ -197,7 +221,7 @@ void need_memory(lua_State *L, Script &s, const char *fn) {
 }
 
 int read_n(lua_State *L, int size, const char *fn) {
-    Script &s = of(L);
+    Script &s = live(L);
     need_memory(L, s, fn);
     const uint32_t a = (uint32_t)luaL_checkinteger(L, 1);
     const bool sign = lua_toboolean(L, 2);
@@ -212,7 +236,7 @@ int read_n(lua_State *L, int size, const char *fn) {
     return 1;
 }
 int write_n(lua_State *L, int size, const char *fn) {
-    Script &s = of(L);
+    Script &s = live(L);
     need_memory(L, s, fn);
     if (s.drawing) return luaL_error(L, "hk.%s: not while drawing (draw_game, draw_window only draw)", fn);
     const uint32_t a = (uint32_t)luaL_checkinteger(L, 1);
@@ -235,7 +259,7 @@ int l_write16(lua_State *L) { return write_n(L, 2, "write16"); }
 int l_write32(lua_State *L) { return write_n(L, 4, "write32"); }
 
 int l_setting(lua_State *L) {
-    Script &s = of(L);
+    Script &s = live(L);
     const char *name = luaL_checkstring(L, 1);
     int64_t v;
     if (!mods::setting_value(s.folder, name, v)) return luaL_error(L, "hk.setting: the mod has no [[setting]] '%s'", name);
@@ -243,7 +267,7 @@ int l_setting(lua_State *L) {
     return 1;
 }
 int l_set_setting(lua_State *L) {
-    Script &s = of(L);
+    Script &s = live(L);
     if (s.drawing) return luaL_error(L, "hk.set_setting: not while drawing");
     const char *name = luaL_checkstring(L, 1);
     const lua_Integer v = luaL_checkinteger(L, 2);
@@ -253,25 +277,27 @@ int l_set_setting(lua_State *L) {
     return 1;
 }
 int l_counter(lua_State *L) {
-    Script &s = of(L);
+    Script &s = live(L);
     lua_pushinteger(L, (lua_Integer)mods::counter_value(s.folder, luaL_checkstring(L, 1)));
     return 1;
 }
 int l_frame(lua_State *L) {
+    live(L);
     lua_pushinteger(L, (lua_Integer)core().frame_count());
     return 1;
 }
 int l_time(lua_State *L) {
+    live(L);
     lua_pushnumber(L, core().seconds());
     return 1;
 }
 int l_log(lua_State *L) {
-    Script &s = of(L);
+    Script &s = live(L);
     fprintf(stderr, "mods: %s: %s\n", s.mod.c_str(), luaL_checkstring(L, 1));
     return 0;
 }
 int l_notice(lua_State *L) {
-    Script &s = of(L);
+    Script &s = live(L);
     say(s, luaL_checkstring(L, 1));
     return 0;
 }
@@ -288,7 +314,7 @@ int l_rgb(lua_State *L) {
 
 // a hook's registers: regs.r3, regs.lr = ... (the core's names)
 int regs_index(lua_State *L) {
-    Script &s = of(L);
+    Script &s = live(L);
     const char *name = luaL_checkstring(L, 2);
     if (!s.hook_regs) return luaL_error(L, "the registers are a hook's, while its call runs");
     auto it = s.regs.find(name);
@@ -297,7 +323,7 @@ int regs_index(lua_State *L) {
     return 1;
 }
 int regs_newindex(lua_State *L) {
-    Script &s = of(L);
+    Script &s = live(L);
     const char *name = luaL_checkstring(L, 2);
     if (!s.hook_regs) return luaL_error(L, "the registers are a hook's, while its call runs");
     auto it = s.regs.find(name);
@@ -320,7 +346,7 @@ uint32_t colour(lua_State *L, int i) {
 }
 // the layer a drawing method is for (its upvalue), and its first argument past the object
 std::vector<Piece> &layer(lua_State *L, int &base) {
-    Script &s = of(L);
+    Script &s = live(L);
     if (!s.drawing) luaL_error(L, "drawing is for draw_game and draw_window");
     base = lua_istable(L, 1) ? 2 : 1;   // (g:rect(...) or g.rect(...))
     std::vector<Piece> &out = lua_tointeger(L, lua_upvalueindex(1)) ? g_window : g_game;
@@ -448,7 +474,7 @@ void set_int(lua_State *L, const char *k, int v) {
 
 // The sandbox and hk, as the script's file first runs (in a protected call)
 int open(lua_State *L) {
-    Script &s = of(L);
+    Script &s = live(L);
     const luaL_Reg libs[] = {{LUA_GNAME, luaopen_base}, {LUA_STRLIBNAME, luaopen_string}, {LUA_TABLIBNAME, luaopen_table},
                              {LUA_MATHLIBNAME, luaopen_math}, {LUA_UTF8LIBNAME, luaopen_utf8}};
     for (const luaL_Reg &l : libs) {
@@ -536,6 +562,8 @@ void blend(uint32_t &d, uint32_t s) {
     d = o;
 }
 
+Script::~Script() { close_state(*this); }
+
 }  // namespace
 
 int load(const std::string &mod, const std::string &folder, const std::string &file, const std::vector<std::string> &needs,
@@ -573,7 +601,7 @@ int load(const std::string &mod, const std::string &folder, const std::string &f
     lua_pushlightuserdata(s.L, (void *)&text);
     if (std::string why; !protected_call(s, 1, "the file, as it first runs", kLoadBudget, why)) {
         err = why.rfind(s.chunk, 0) == 0 ? why : s.chunk + ": " + why;   // (Lua's own messages name the file and line)
-        lua_close(s.L);
+        close_state(s);
         g_scripts.pop_back();
         return -1;
     }
@@ -587,7 +615,7 @@ int load(const std::string &mod, const std::string &folder, const std::string &f
     else if ((s.draw_game || s.draw_window) && !has("draw")) refused = "it has draw_game or draw_window: its requires lists \"draw\" with it";
     if (!refused.empty()) {
         err = s.chunk + ": " + refused;
-        lua_close(L);
+        close_state(s);
         g_scripts.pop_back();
         return -1;
     }
@@ -716,10 +744,24 @@ void set_view(int x, int y, int w, int h, int ww, int wh) {
 void set_font(const uint8_t (*glyphs)[8]) { g_font = glyphs; }
 void set_notice(std::function<void(const std::vector<std::string> &)> fn) { g_notice = std::move(fn); }
 
+std::vector<std::string> report_lines() {
+    std::vector<std::string> out;
+    for (const Script &s : g_scripts) {
+        // (instructions are counted kStep at a time, by the count hook, each call afresh: a call
+        // under kStep never reaches a count, so what's known is "under kStep", else to kStep)
+        char most[64];
+        if (s.most <= 0) snprintf(most, sizeof most, "under %d", kStep);
+        else snprintf(most, sizeof most, "%lld to %lld", (long long)s.most, (long long)(s.most + kStep - 1));
+        char b[256];
+        snprintf(b, sizeof b, "script: %llu calls, the most instructions in one %s, memory at most %zu KB", (unsigned long long)s.calls, most,
+                 s.peak >> 10);
+        out.push_back(s.mod + ": " + b + (s.alive ? "" : "; stopped: " + s.stopped));
+    }
+    return out;
+}
+
 void report() {
-    for (const Script &s : g_scripts)
-        fprintf(stderr, "mods: %s: script: %llu calls, the most instructions in one %lld, memory at most %zu KB%s%s\n", s.mod.c_str(),
-                (unsigned long long)s.calls, (long long)s.most, s.peak >> 10, s.alive ? "" : "; stopped: ", s.stopped.c_str());
+    for (const std::string &l : report_lines()) fprintf(stderr, "mods: %s\n", l.c_str());
     if (g_dropped) fprintf(stderr, "mods: %llu controls not given to on_input (over 1024 in a frame)\n", (unsigned long long)g_dropped);
 }
 
@@ -731,9 +773,7 @@ std::vector<std::string> stopped() {
 }
 
 void clear() {
-    for (Script &s : g_scripts)
-        if (s.L) lua_close(s.L);
-    g_scripts.clear();
+    g_scripts.clear();   // (each closes its state)
     g_game.clear();
     g_window.clear();
     std::lock_guard<std::mutex> lock(g_input_lock);

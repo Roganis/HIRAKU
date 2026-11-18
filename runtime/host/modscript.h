@@ -76,6 +76,7 @@ void set_font(const uint8_t (*glyphs)[8]);
 void set_notice(std::function<void(const std::vector<std::string> &)> fn);
 
 void report();   // a line each in the log (at exit): what each script took
+std::vector<std::string> report_lines();   // ... those lines ("mod: script: ...")
 std::vector<std::string> stopped();   // "mod: why" for each script stopped (the tests)
 void clear();    // every script closed (host/mods.h clear(): the tests)
 

@@ -141,9 +141,12 @@ int scale_for(const std::string &format, int scale, int w, int h, const std::str
 // A lossless recording (FFV1 in Matroska, this recorder's) to H.264 and AAC in MP4, as --record-format
 // h264 would have written it: every frame at its time, the sound, the pixels' shape; `in`'s later
 // parts (NAME-2.mkv...) to out's (OUT-2.mp4...). out "": in's name, .mp4. s: its encoder and scale
-// (format, rates and shape come from the file). progress: 0..1, now and then. line: for the log
+// (format, rates and shape come from the file). progress: 0..1, now and then. line: for the log.
+// A recording cut short or damaged (a crash, a power cut: its reader or decoder complains) is
+// converted as far as it can be read: true, *ended_early set, and line begins with a "convert: IN
+// ended early: N frames (S s) kept" line for each such part
 bool convert(const std::string &in, const std::string &out, const Capture::Setup &s, const std::function<void(double)> &progress,
-             std::string &line, std::string &error);
+             std::string &line, std::string &error, bool *ended_early = nullptr);
 // The names convert() writes for in and out (the first part's; out "": in's, .mp4)
 std::string converted_name(const std::string &in, const std::string &out);
 

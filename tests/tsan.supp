@@ -44,3 +44,16 @@ race:libavcodec
 # (x264_8_encoder_encode's thread_sync_context and slice_write's cabac_context_init, both in x264)
 race:libx264
 race:x264_
+# ... and the test's conversion of a lossless file (record.cpp convert_part): FFmpeg's FFV1 and FLAC
+# decoders decode on their own frame threads ("av:ffv1:df0"), into frames from libavutil's buffer
+# pools, and hand each finished frame to the caller with their progress counters and the pools'
+# reference counts, atomics inside libavutil and libavcodec, which aren't built with
+# ThreadSanitizer: it sees the decoder thread allocate and clear a frame (av_malloc,
+# av_buffer_allocz) and then the caller read and free it (av_buffer_unref), with no hand-over
+# between. record.cpp reads a frame only after avcodec_receive_frame has given it, and frees it
+# with av_frame_unref, as FFmpeg's API has it. (The pool's own mutex shows as the same pair: its
+# memory allocated by av_malloc on the decoder thread.) Named by those functions, not record.cpp,
+# so that a race of the recorder's own is still reported
+race:av_malloc
+race:av_buffer_allocz
+race:av_buffer_unref

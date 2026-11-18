@@ -77,7 +77,8 @@ static const char COMMON_OPTIONS[] = R"HK(  --frames N        stop after N video
                     halving); auto (the default): the most within 1920x1440 with a graphics card's
                     encoder, 1 (the game's own size) with the processor's. ffv1 is always 1
   --convert-recording IN [OUT]  a lossless recording (.mkv, and its -2, -3... parts) to H.264 MP4
-                    (OUT, default IN's name .mp4), with --record-encoder and --record-scale, then exit
+                    (OUT, default IN's name .mp4), with --record-encoder and --record-scale, then exit:
+                    0 done, 3 done as far as a recording cut short or damaged could be read, 1 failed
   --digest FILE     write one line per frame: frame number, a hash of the picture and a running
                     hash of all sound so far (tools/regress.py checks runs are bit-identical with it)
   --debug-every N   print the CPU state every N frames
@@ -486,12 +487,13 @@ int main(int argc, char **argv) {
         int said = -1;
         std::string line, error;
         printf("convert: %s to %s\n", convert_in.c_str(), host::record::converted_name(convert_in, convert_out).c_str());
+        bool early = false;
         const bool ok = host::record::convert(convert_in, convert_out, cs, [&](double f) {
             if (const int pc = (int)(f * 100); pc != said) printf("convert: %d %%\n", said = pc);
-        }, line, error);
+        }, line, error, &early);
         if (!ok) fprintf(stderr, "convert: %s\n", error.c_str());
         else printf("%s\n", line.c_str());
-        return ok ? 0 : 1;
+        return !ok ? 1 : early ? 3 : 0;   // (3: converted up to where the recording ends early)
     }
     // the mod API (host/mods.h): what the shell offers besides the core's (actions: a window's
     // keys and controllers), and --mod-api's answer

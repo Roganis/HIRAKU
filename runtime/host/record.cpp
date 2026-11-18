@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <cstdarg>
 #include <cmath>
 #include <condition_variable>
 #include <cstdio>
@@ -166,7 +167,7 @@ bool Capture::on() const { return false; }
 std::string Capture::path() const { return {}; }
 Capture::Stats Capture::stats() const { return {}; }
 bool convert(const std::string &, const std::string &, const Capture::Setup &, const std::function<void(double)> &, std::string &,
-             std::string &error) {
+             std::string &error, bool *) {
     error = "this build can't convert recordings (it was built without FFmpeg's libraries)";
     return false;
 }
@@ -215,10 +216,65 @@ std::string ffmpeg_name(const std::string &cand) {
 }
 
 // FFmpeg's log quieter while encoders are tried (one that can't open here says why at length)
+// FFmpeg's messages: on the recorder's own threads (the encoder's, a conversion's), and from its
+// codecs on FFmpeg's threads (kOurs), its warnings and
+// errors become one "record: NAME: ..." line each on stderr (no context address in them, so two
+// runs' logs compare), its information is dropped, and nothing at all while encoders are tried
+// (Quiet: one that can't open here says why at length). av_log's callback is the process's one, so
+// for everything else (Twinkle's video decoder, PCSX2's own capture in the Python core, the
+// test's own reading back) it does exactly what FFmpeg's own does: av_log_default_callback at
+// av_log_get_level's level, as before.
+// The recorder's encoders and decoders have this as their opaque: their messages from FFmpeg's own
+// threads (a decoder's slices, x264's frames) are the recorder's too
+char kOurs;
+std::atomic<int> g_input_trouble{0};   // warnings and errors from what a conversion reads (any thread)
+thread_local bool t_ours = false, t_quiet = false;
+thread_local std::string t_line;   // a message's parts until its end of line
+
+AVCodecContext *ours(AVCodecContext *c) {
+    if (c) c->opaque = &kOurs;
+    return c;
+}
+
+void log_line(void *avcl, int level, const char *fmt, va_list vl) {
+    const AVClass *cls = avcl ? *static_cast<const AVClass *const *>(avcl) : nullptr;
+    const bool codec_ours = cls == avcodec_get_class() && static_cast<AVCodecContext *>(avcl)->opaque == &kOurs;
+    if (!t_ours && !codec_ours) {
+        av_log_default_callback(avcl, level, fmt, vl);
+        return;
+    }
+    if (level <= AV_LOG_WARNING && !t_quiet && cls &&   // (a file read that complains: convert()'s "ended early")
+        ((cls == avcodec_get_class() && av_codec_is_decoder(static_cast<AVCodecContext *>(avcl)->codec)) ||
+         (cls == avformat_get_class() && static_cast<AVFormatContext *>(avcl)->iformat)))
+        g_input_trouble++;
+    if (t_quiet || level > AV_LOG_WARNING) return;
+    char b[1024];
+    vsnprintf(b, sizeof b, fmt, vl);
+    t_line += b;
+    if (t_line.empty() || t_line.back() != '\n') return;
+    t_line.pop_back();
+    const char *name = cls && cls->item_name ? cls->item_name(avcl) : nullptr;
+    fprintf(stderr, "record: %s%s%s\n", name ? name : "", name ? ": " : "", t_line.c_str());
+    t_line.clear();
+}
+
+// the callback, once, for the process (Capture::setup, convert)
+void own_log() {
+    static std::once_flag once;
+    std::call_once(once, [] { av_log_set_callback(log_line); });
+}
+
+// this thread's FFmpeg messages the recorder's (the encoder's thread, a conversion) for its life
+struct Ours {
+    bool was = t_ours;
+    Ours() { t_ours = true; }
+    ~Ours() { t_ours = was; }
+};
+
 struct Quiet {
-    int was = av_log_get_level();
-    Quiet() { av_log_set_level(AV_LOG_FATAL); }
-    ~Quiet() { av_log_set_level(was); }
+    bool was = t_quiet;
+    Quiet() { t_quiet = true; }
+    ~Quiet() { t_quiet = was; }
 };
 
 // An H.264 encoder, open: its context, and for a card's that takes only its own frames (VAAPI,
@@ -258,7 +314,7 @@ bool open_h264(const std::string &cand, int w, int h, AVRational rate, AVRationa
         fc->initial_pool_size = 16;
         if ((r = av_hwframe_ctx_init(e.frames)) < 0) return why = "its frames can't be made (" + av_error(r) + ")", false;
     }
-    AVCodecContext *v = e.c = avcodec_alloc_context3(codec);
+    AVCodecContext *v = e.c = ours(avcodec_alloc_context3(codec));
     v->width = w, v->height = h;
     v->time_base = {rate.den, rate.num};
     v->framerate = rate;
@@ -494,6 +550,7 @@ Capture::Capture() : d(std::make_unique<Impl>()) {}
 Capture::~Capture() { stop(); }
 
 bool Capture::setup(const Setup &s, std::string &error) {
+    own_log();
     d->s = s;
     d->wait = s.wait;
     {
@@ -695,6 +752,7 @@ std::string Capture::stop() {
 // --- the encoder's thread --------------------------------------------------------------------
 
 void Capture::Impl::run() {
+    Ours ours;
     const double cpu0 = hk::sys::thread_cpu_ms();
     for (;;) {
         Item it;
@@ -830,7 +888,7 @@ bool Capture::Impl::open_part(int w, int h, double cw, double ch) {
         P.venc = P.h264.c;
     } else {
         const AVCodec *vc = avcodec_find_encoder(AV_CODEC_ID_FFV1);
-        P.venc = avcodec_alloc_context3(vc);
+        P.venc = ours(avcodec_alloc_context3(vc));
         AVCodecContext *v = P.venc;
         v->width = w, v->height = h;
         v->time_base = {rate_q.den, rate_q.num};
@@ -859,7 +917,7 @@ bool Capture::Impl::open_part(int w, int h, double cw, double ch) {
     // the sound
     const AVCodec *ac = avcodec_find_encoder(h264v ? AV_CODEC_ID_AAC : AV_CODEC_ID_FLAC);
     if (!ac) return error = "no sound encoder", false;
-    P.aenc = avcodec_alloc_context3(ac);
+    P.aenc = ours(avcodec_alloc_context3(ac));
     AVCodecContext *a = P.aenc;
     a->sample_rate = s.audio_rate;
     av_channel_layout_default(&a->ch_layout, 2);
@@ -1015,7 +1073,9 @@ namespace {
 // One part: in (FFV1 and FLAC in Matroska) to out (H.264 and AAC in MP4). done/total: the progress
 // over all parts, in seconds of video
 bool convert_part(const std::string &in, const std::string &out, const Capture::Setup &setup, double done, double total,
-                  const std::function<void(double)> &progress, Capture::Stats &st, double &sound_s, std::string &error) {
+                  const std::function<void(double)> &progress, Capture::Stats &st, double &sound_s, std::string &ended,
+                  std::string &error) {
+    g_input_trouble = 0;
     AVFormatContext *fmt = nullptr;
     int e;
     if ((e = avformat_open_input(&fmt, in.c_str(), nullptr, nullptr)) < 0) return error = "can't read " + in + ": " + av_error(e), false;
@@ -1040,7 +1100,7 @@ bool convert_part(const std::string &in, const std::string &out, const Capture::
         if (w < 0 || (w == 0 ? vi : ai) >= 0) continue;
         const AVCodec *codec = avcodec_find_decoder(p->codec_id);
         if (!codec) return error = in + ": no decoder for its " + (w ? "sound" : "picture") + " (" + avcodec_get_name(p->codec_id) + ") in this build", false;
-        c.dec[w] = avcodec_alloc_context3(codec);
+        c.dec[w] = ours(avcodec_alloc_context3(codec));
         avcodec_parameters_to_context(c.dec[w], p);
         c.dec[w]->thread_count = 0;
         if ((e = avcodec_open2(c.dec[w], codec, nullptr)) < 0) return error = in + ": " + av_error(e), false;
@@ -1111,11 +1171,14 @@ bool convert_part(const std::string &in, const std::string &out, const Capture::
         }
         return true;
     };
-    while (ok && av_read_frame(fmt, c.pkt) >= 0) {
+    int r;
+    while (ok && (r = av_read_frame(fmt, c.pkt)) >= 0) {
         const int which = c.pkt->stream_index == vi ? 0 : c.pkt->stream_index == ai ? 1 : -1;
-        if (which >= 0 && avcodec_send_packet(c.dec[which], c.pkt) >= 0) ok = take(which);
+        if (which >= 0 && avcodec_send_packet(c.dec[which], c.pkt) < 0) g_input_trouble++;   // (a damaged packet: left out)
+        else if (which >= 0) ok = take(which);
         av_packet_unref(c.pkt);
     }
+    if (ok && r != AVERROR_EOF) g_input_trouble++;   // (the file can't be read on)
     for (int w = 0; ok && w < 2; w++)
         if (c.dec[w]) avcodec_send_packet(c.dec[w], nullptr), ok = take(w);
     if (I.part.fmt && !I.close_part()) ok = false;
@@ -1124,6 +1187,12 @@ bool convert_part(const std::string &in, const std::string &out, const Capture::
         return false;
     }
     if (!I.st.frames) return error = in + ": no picture could be read", false;
+    if (g_input_trouble > 0) {   // a recording cut short (a crash, a power cut) or damaged: what could be read is kept
+        char b[512];
+        snprintf(b, sizeof b, "convert: %s ended early: %llu frames (%.2f s) kept", in.c_str(), (unsigned long long)I.st.frames,
+                 (double)I.st.length / rate);
+        ended = b;
+    }
     st.frames += I.st.frames, st.samples += I.st.samples, st.parts++;
     sound_s += (double)I.st.samples / I.s.audio_rate;
     st.length += I.st.length, st.w = I.st.w, st.h = I.st.h, st.rate = rate, st.encoder = I.st.encoder;
@@ -1142,10 +1211,13 @@ double seconds_of(const std::string &path) {   // a file's length (0: unknown)
 }  // namespace
 
 bool convert(const std::string &in, const std::string &out_, const Capture::Setup &s, const std::function<void(double)> &progress,
-             std::string &line, std::string &error) {
+             std::string &line, std::string &error, bool *ended_early) {
+    if (ended_early) *ended_early = false;
     const std::string out = converted_name(in, out_);
     if (!hk::sys::exists(in)) return error = "no " + in, false;
     if (out == in) return error = "the converted file would be " + in + " itself", false;
+    own_log();
+    Ours ours;
     Capture::Setup h = s;
     h.format = "h264";
     if (Capture probe; !probe.setup(h, error)) return false;
@@ -1159,8 +1231,11 @@ bool convert(const std::string &in, const std::string &out_, const Capture::Setu
     Capture::Stats st;
     const uint64_t t = prof::now_ns();
     double done = 0, sound_s = 0;
+    std::string early;   // the parts that ended early: a line each
     for (size_t k = 0; k < parts.size(); k++) {
-        if (!convert_part(parts[k], numbered(out, (int)k + 1), h, done, total, progress, st, sound_s, error)) return false;
+        std::string e;
+        if (!convert_part(parts[k], numbered(out, (int)k + 1), h, done, total, progress, st, sound_s, e, error)) return false;
+        if (!e.empty()) early += e + "\n";
         done = 0;
         for (size_t j = 0; j <= k; j++) done += seconds_of(parts[j]);
     }
@@ -1170,7 +1245,8 @@ bool convert(const std::string &in, const std::string &out_, const Capture::Setu
     snprintf(b, sizeof b, "convert: %s: %llu frames %dx%d at %.3f fps by %s, %.2f s long, %.2f s of sound, %d file%s, in %.1f s (%.2f ms a frame)",
              out.c_str(), (unsigned long long)st.frames, st.w, st.h, st.rate, st.encoder.c_str(), st.rate > 0 ? (double)st.length / st.rate : 0.0,
              sound_s, st.parts, st.parts == 1 ? "" : "s", secs, st.frames ? secs * 1000 / (double)st.frames : 0.0);
-    line = b;
+    line = early + b;
+    if (ended_early) *ended_early = !early.empty();
     return true;
 }
 

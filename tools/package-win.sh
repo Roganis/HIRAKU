@@ -9,7 +9,7 @@
 # one they go in %LOCALAPPDATA%\hiraku.
 #
 # The zip holds hiraku/HIRAKU.exe (which starts the launcher), hiraku/bin (the games and the
-# launcher hiraku.exe, stripped, with SDL3.dll: the launcher's Qt is linked into it,
+# launcher hiraku.exe, stripped, with SDL3.dll and FFmpeg's DLLs: the launcher's Qt is linked into it,
 # tools/win-deps.sh), hiraku/games, hiraku/docs and an empty
 # hiraku/dumps. The binaries take the folder above them
 # as their root. Game data goes in with tools/pack-data.py, or tools/ingest.py on that PC.
@@ -38,6 +38,12 @@ done
 if [ -f "$build/hiraku-start.exe" ]; then "$strip" -o "$d/HIRAKU.exe" "$build/hiraku-start.exe"
 else echo "no $build/hiraku-start.exe: the package has no HIRAKU.exe" >&2; fi
 cp "$build"/SDL3.dll "$d/bin/"
+# FFmpeg's DLLs (tools/ffmpeg-min.sh: avcodec, avformat, avutil), one copy for every program here and
+# the Konami Python core: Twinkle's background video and the recorder (PCSX2's own video capture,
+# which HIRAKU never starts, would also want swscale and swresample: not here, it would say so)
+ffdlls=$(ls "$build" | grep -E '^(avcodec|avformat|avutil)-[0-9]+\.dll$' || true)
+[ -n "$ffdlls" ] || { echo "package-win: no FFmpeg DLLs in $build (tools/ffmpeg-min.sh builds them)" >&2; exit 1; }
+for f in $ffdlls; do "$strip" -o "$d/bin/$f" "$build/$f"; done
 # the PC games' DLLs (runtime/pc/), 32-bit, which hiraku-pc copies beside the game's program
 # (by name: a d3d9.dll there would be the 64-bit loader's Direct3D on Windows too)
 if [ -d "$build/pc" ]; then
@@ -53,7 +59,12 @@ for f in ${HK_PACKAGE_BIN:-}; do cp -L "$f" "$d/bin/"; done
 # HK_PYTHON_WIN: the Konami Python core's folder (the release workflow's python-windows job:
 # hiraku-python.exe, its DLLs, PCSX2's resources\), into bin\ beside the other cores
 if [ -n "${HK_PYTHON_WIN:-}" ]; then
-  cp -n "$HK_PYTHON_WIN"/*.dll "$d/bin/"   # (SDL3.dll is the same release as the one above)
+  # (SDL3.dll is the same release as the one above; PCSX2's own FFmpeg DLLs stay out: the core
+  # loads HIRAKU's above, of the same versions, checked below)
+  for f in "$HK_PYTHON_WIN"/*.dll; do
+    case $(basename "$f") in avcodec-*|avformat-*|avutil-*|avdevice-*|avfilter-*|swscale-*|swresample-*|postproc-*) continue ;; esac
+    cp -n "$f" "$d/bin/"
+  done
   cp "$HK_PYTHON_WIN"/hiraku-python.exe "$d/bin/"
   cp -r "$HK_PYTHON_WIN"/resources "$d/bin/resources"
 fi
@@ -63,6 +74,10 @@ objdump=$(command -v llvm-objdump || command -v x86_64-w64-mingw32-objdump)
 for f in "$d"/bin/*.exe "$d"/bin/*.dll; do
   for n in $("$objdump" -p "$f" | awk '/DLL Name:/ {print $3}' | grep -iE '^(msvcp|vcruntime|concrt)'); do
     ls "$d/bin" | grep -qix "$n" || { echo "package-win: $(basename "$f") needs $n, which isn't in bin" >&2; exit 1; }
+  done
+  # ... and FFmpeg's DLLs, of the versions it was built with (the Python core: PCSX2's headers)
+  for n in $("$objdump" -p "$f" | awk '/DLL Name:/ {print $3}' | grep -iE '^(av[a-z]+|sw[a-z]+|postproc)-[0-9]+\.dll$'); do
+    ls "$d/bin" | grep -qix "$n" || { echo "package-win: $(basename "$f") needs $n, which isn't in bin (FFmpeg's DLLs: $ffdlls)" >&2; exit 1; }
   done
 done
 # Python for tools/ingest.py and unlock.py: python.org's embeddable one (tools/win-deps.sh), so

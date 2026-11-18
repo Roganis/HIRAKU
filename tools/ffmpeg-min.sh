@@ -8,9 +8,11 @@
 # cards' encoders that load their driver's library only when asked (NVIDIA's NVENC, AMD's AMF,
 # Vulkan video: libvulkan.so.1 or vulkan-1.dll, loaded by FFmpeg, never linked;
 # Windows' Media Foundation, any card's or Microsoft's own), FFmpeg's AAC encoder. Their decoders
-# and the MP4 reader are there for the recorder's test (tests/host/test_record.cpp). Built static,
-# so the games carry it and a PC needs no FFmpeg of its own (PLAN.md section 28, R-2); with x264 it
-# is GPL (--enable-gpl), as HIRAKU is.
+# and the MP4 reader are there for the recorder's test (tests/host/test_record.cpp). A PC needs no
+# FFmpeg of its own (PLAN.md section 28, R-2): on Linux it is built static, in each program (the
+# .tar.xz compresses the copies as one); on Windows shared, one copy of avcodec, avformat and avutil
+# DLLs in the package's bin\ for every program and the Python core (a .zip compresses each file
+# alone: a copy in each program cost 15 MB). With x264 it is GPL (--enable-gpl), as HIRAKU is.
 #
 #   tools/ffmpeg-min.sh PREFIX                        (Linux: position-independent, for the games)
 #   tools/ffmpeg-min.sh PREFIX x86_64-w64-mingw32     (Windows, cross-built with mingw-w64's gcc)
@@ -40,8 +42,12 @@ MUXERS=matroska,mp4
 PROTOCOLS=file   # (the recorder writes its file through it; --disable-everything takes it away)
 asm=on
 [ "${HK_NO_ASM:-}" = 1 ] && asm=off
-sig="ffmpeg-$VER host=$host demuxers=$DEMUXERS decoders=$DECODERS parsers=$PARSERS encoders=$ENCODERS muxers=$MUXERS protocols=$PROTOCOLS hw=${HW[*]} asm=$asm enc-deps=$(sha256sum < "$here/enc-deps.sh" | cut -c1-16)"
-if [ -f "$prefix/lib/libavcodec.a" ] && [ "$(cat "$prefix/.ffmpeg-min" 2>/dev/null)" = "$sig" ]; then
+link=(--enable-static --disable-shared)
+# Windows: DLLs (bin/avcodec-N.dll...; lib/*.dll.a to link them), with nothing of mingw's to bring
+# along (libgcc and its atomics linked into them)
+[ -n "$host" ] && link=(--enable-shared --disable-static --extra-ldflags=-static-libgcc --extra-ldflags=-static)
+sig="ffmpeg-$VER host=$host demuxers=$DEMUXERS decoders=$DECODERS parsers=$PARSERS encoders=$ENCODERS muxers=$MUXERS protocols=$PROTOCOLS hw=${HW[*]} asm=$asm link=${link[*]} enc-deps=$(sha256sum < "$here/enc-deps.sh" | cut -c1-16)"
+if { [ -f "$prefix/lib/libavcodec.a" ] || [ -f "$prefix/lib/libavcodec.dll.a" ]; } && [ "$(cat "$prefix/.ffmpeg-min" 2>/dev/null)" = "$sig" ]; then
   echo "ffmpeg-min: already in $prefix"
   exit 0
 fi
@@ -73,7 +79,7 @@ PKG_CONFIG_LIBDIR=$prefix/lib/pkgconfig PKG_CONFIG_PATH= ./configure --prefix="$
   --enable-encoder="$ENCODERS" --enable-muxer="$MUXERS" --enable-protocol="$PROTOCOLS" \
   --disable-programs --disable-doc --disable-avdevice --disable-avfilter --disable-swscale \
   --disable-swresample --disable-network --disable-devices \
-  --enable-static --disable-shared
+  "${link[@]}"
 make -j"${HK_JOBS:-$(nproc)}"
 make install
 echo "$sig" > "$prefix/.ffmpeg-min"

@@ -2292,7 +2292,7 @@ void MainWindow::convertRecordings() {
     struct State {
         int at = -1;
         bool stopped = false;
-        QStringList made, failed;
+        QStringList made, partial, failed;   // (partial: up to where a recording cut short ends)
         QByteArray pending;
     };
     auto st = std::make_shared<State>();
@@ -2301,8 +2301,12 @@ void MainWindow::convertRecordings() {
     *next = [this, box, proc, st, files, exe, opts] {
         if (++st->at >= files.size() || st->stopped) {
             box->close();
-            QString text = st->made.isEmpty() ? QString("No recording was converted.")
-                                              : "Made:\n" + st->made.join("\n");
+            QString text = st->made.isEmpty() && st->partial.isEmpty() ? QString("No recording was converted.")
+                           : st->made.isEmpty() ? QString() : "Made:\n" + st->made.join("\n");
+            if (!st->partial.isEmpty())
+                text += QString(text.isEmpty() ? "" : "\n\n") +
+                        "Converted up to the damage (the recording was cut short or is damaged; the log says how much "
+                        "was kept):\n" + st->partial.join("\n");
             if (!st->failed.isEmpty()) text += "\n\nNot converted (the log says why):\n" + st->failed.join("\n");
             QMessageBox::information(this, "Convert recordings", text);
             return;
@@ -2324,7 +2328,9 @@ void MainWindow::convertRecordings() {
     });
     connect(proc, &QProcess::finished, box, [files, st, next](int code, QProcess::ExitStatus how) {
         const QString in = files[st->at], out = recording::convertedName(in);
-        if (how == QProcess::NormalExit && code == 0) st->made << out;
+        const recording::Result r = recording::resultOf(how == QProcess::NormalExit, code);
+        if (r == recording::Result::Done) st->made << out;
+        else if (r == recording::Result::UpToDamage) st->partial << out;
         else {
             if (st->stopped) QFile::remove(out);   // (half made)
             st->failed << in;

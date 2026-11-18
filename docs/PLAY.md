@@ -344,7 +344,9 @@ minute; enlarged 3x: about 12 ms, spread over several cores). **Graphics card** 
 
 **File > Convert recordings for sharing** makes an exact recording into an H.264 `.mp4` beside it
 afterwards, with the same encoder and size settings; a recording in parts (`...-2.mkv`) becomes as
-many `.mp4` files. **File > Open the recordings folder** opens the folder.
+many `.mp4` files. A recording cut short (the PC lost power, the game crashed) or damaged is
+converted as far as it can be read: the box says "Converted up to the damage", and the log how
+many frames and seconds were kept. **File > Open the recordings folder** opens the folder.
 
 From the command line (**Arguments…**): `--record` records from the start (`--record FILE`
 to a file or folder of yours), `--record-folder DIR` sets F6's folder, `--record-format h264`

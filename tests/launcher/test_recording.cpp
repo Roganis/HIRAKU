@@ -37,6 +37,10 @@ int main() {
     check(recording::progressOf("convert: /r/a.mkv to /r/a.mp4\n") == -1, "... not another of its lines");
     check(recording::convertedName("/r/pop-1.mkv") == "/r/pop-1.mp4", "the MP4 beside the recording");
     check(recording::convertedName("/r/a.b/x.y.mkv") == "/r/a.b/x.y.mp4", "... its name up to the last dot");
+    using recording::Result;
+    check(recording::resultOf(true, 0) == Result::Done, "exit 0: converted");
+    check(recording::resultOf(true, 3) == Result::UpToDamage, "exit 3: converted up to the damage");
+    check(recording::resultOf(true, 1) == Result::Failed && recording::resultOf(false, 0) == Result::Failed, "else: not converted");
     printf(failed ? "%d FAILED\n" : "recording ok\n", failed);
     return failed ? 1 : 0;
 }

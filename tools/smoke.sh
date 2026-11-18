@@ -72,6 +72,13 @@ done
 # hiraku-server is a package of its own (tools/package-server.sh): it needs the system's SQLite
 if [ -e "$root/bin/hiraku-server$ext" ]; then bad "bin/hiraku-server$ext is in the package (it has its own: tools/package-server.sh)"
 else ok "no hiraku-server in the package (its own: tools/package-server.sh)"; fi
+# Windows: FFmpeg is one set of DLLs in bin\ for every program, the Python core's too (tools/ffmpeg-min.sh)
+if [ "$how" = wine ]; then
+  ff=$(ls "$root/bin" | grep -ciE '^(avcodec|avformat|avutil)-[0-9]+\.dll$' || true)
+  other=$(ls "$root/bin" | grep -iE '^(avdevice|avfilter|swscale|swresample|postproc)-[0-9]+\.dll$' || true)
+  [ "$ff" = 3 ] && [ -z "$other" ] && ok "FFmpeg: one avcodec, avformat and avutil DLL in bin" ||
+    bad "FFmpeg's DLLs in bin: $ff of avcodec/avformat/avutil (3 wanted)${other:+, and $other}"
+fi
 
 # --- the game menu, by a script, to its choice ---
 printf 'hiraku-menu-list 1\ncurrent\tfirst\ngame\tfirst\tA shelf\tThe first game\t2001\ngame\tsecond\tA shelf\tThe second game\t2002\n' > "$tmp/list.txt"

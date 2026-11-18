@@ -298,6 +298,20 @@ if(HK_FFMPEG_FOUND)
   target_compile_definitions(hiraku_record PRIVATE HK_WITH_RECORD=1)
   target_link_libraries(hiraku_record PRIVATE PkgConfig::HK_FFMPEG)
 endif()
+# Windows' FFmpeg is DLLs (tools/ffmpeg-min.sh: one copy for every program): beside the programs,
+# where Windows looks for them, before anything that links them is run (the build's generators,
+# under Wine); tests/CMakeLists.txt puts them beside the tests too, tools/package-win.sh in bin\
+set(HK_FFMPEG_DLLS "")
+if(WIN32 AND HK_FFMPEG_FOUND)
+  foreach(d ${HK_FFMPEG_LIBRARY_DIRS})
+    file(GLOB found "${d}/../bin/avcodec-*.dll" "${d}/../bin/avformat-*.dll" "${d}/../bin/avutil-*.dll")
+    list(APPEND HK_FFMPEG_DLLS ${found})
+  endforeach()
+  if(HK_FFMPEG_DLLS)
+    add_custom_target(hiraku_ffmpeg_dlls ALL COMMAND ${CMAKE_COMMAND} -E copy_if_different ${HK_FFMPEG_DLLS} ${CMAKE_BINARY_DIR})
+    add_dependencies(hiraku_record hiraku_ffmpeg_dlls)
+  endif()
+endif()
 target_link_libraries(hiraku_shell PUBLIC hiraku_record)
 # The shell's main() (runtime/main.cpp) and the sampling profiler: compiled once for every core's
 # binaries. Which game a per-game binary is: runtime/shell/built.h, a one-line file each

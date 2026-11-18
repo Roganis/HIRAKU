@@ -49,6 +49,14 @@ inline int progressOf(const QByteArray &line) {
     return m.hasMatch() ? m.captured(1).toInt() : -1;
 }
 
+// How a conversion ended, by the converter's exit code (runtime/main.cpp --convert-recording): 0
+// done, 3 done up to where a recording cut short or damaged could be read, anything else failed
+enum class Result { Done, UpToDamage, Failed };
+inline Result resultOf(bool normalExit, int code) {
+    if (!normalExit) return Result::Failed;
+    return code == 0 ? Result::Done : code == 3 ? Result::UpToDamage : Result::Failed;
+}
+
 // The MP4 a conversion writes for in (runtime/host/record.h's converted_name)
 inline QString convertedName(const QString &in) {
     const QFileInfo f(in);

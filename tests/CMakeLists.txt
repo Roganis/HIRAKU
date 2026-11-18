@@ -610,6 +610,10 @@ if(WIN32 AND NOT MSVC)
     add_custom_target(hiraku_tests_sdl3_dll ALL
       COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:SDL3::SDL3-shared> ${CMAKE_CURRENT_BINARY_DIR})
   endif()
+  if(HK_FFMPEG_DLLS)   # ... and FFmpeg's DLLs (CMakeLists.txt, tools/ffmpeg-min.sh)
+    add_custom_target(hiraku_tests_ffmpeg_dlls ALL COMMAND ${CMAKE_COMMAND} -E copy_if_different ${HK_FFMPEG_DLLS} ${CMAKE_CURRENT_BINARY_DIR})
+    add_dependencies(hiraku_record hiraku_tests_ffmpeg_dlls)
+  endif()
 endif()
 
 # HK_TESTS_REQUIRED: tests that must be there (a list of names). A test whose tool is missing is

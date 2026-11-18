@@ -566,6 +566,22 @@ void converted(const std::string &dir) {
     CHECK(p1.w == 512 && p1.h == 480 && p1.frames.size() == 28);
     CHECK(p2.w == 640 && p2.h == 480 && p2.frames.size() == 50);
     CHECK(p1.sar.num * 4 == p1.sar.den * 5);
+    // a recording cut short (a crash, a power cut: its last part never written): converted as far as
+    // it can be read, and said so; a whole one isn't
+    bool early = true;
+    CHECK(hk::host::record::convert(dir + "/sizes.mkv", dir + "/sizes-whole.mp4", s, nullptr, line, err, &early) && !early);
+    {
+        const std::string whole = read_all(dir + "/basic.mkv");
+        std::ofstream(dir + "/cut.mkv", std::ios::binary) << whole.substr(0, whole.size() * 55 / 100);
+    }
+    early = false;
+    CHECK(hk::host::record::convert(dir + "/cut.mkv", "", s, nullptr, line, err, &early));
+    printf("%s%s\n", line.c_str(), err.c_str());
+    CHECK(early && line.find("ended early: ") != std::string::npos);
+    Decoded cut;
+    CHECK(decode(dir + "/cut.mp4", cut));
+    CHECK(cut.frames.size() > 50 && cut.frames.size() < 180);
+    CHECK(line.find("ended early: " + std::to_string(cut.frames.size()) + " frames") != std::string::npos);
     // not a recording: said
     CHECK(!hk::host::record::convert(dir + "/h264.mp4", dir + "/x.mp4", s, nullptr, line, err) && !err.empty());
     printf("convert of an MP4: %s\n", err.c_str());

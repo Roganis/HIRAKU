@@ -136,7 +136,8 @@ QString saveDir(const QString &game) {
     return QFileInfo(nvramDir(game)).path() + "/" + name;
 }
 
-QString controlsFile(const QString &family) { return configDir() + "/controls/" + controlsSet(family) + ".txt"; }
+QString controlsFile(const QString &family) { return controlsSetFile(controlsSet(family)); }
+QString controlsSetFile(const QString &set) { return configDir() + "/controls/" + set + ".txt"; }
 
 // The members of a set (beatmania, pop'n music) had a bindings file each before they shared the set's:
 // the files there are joined into it, oldest first (a later line for an input replaces an earlier
@@ -270,8 +271,10 @@ void setBeatmaniaApart(bool apart) {
     settings().setValue("controls/beatmaniaApart", apart);
 }
 
-QString controlsSet(const QString &family) {
-    if (isBeatmania(family)) return beatmaniaApart() ? family : "beatmania";
+QString controlsSet(const QString &family) { return controlsSet(family, beatmaniaApart()); }
+
+QString controlsSet(const QString &family, bool apart) {
+    if (isBeatmania(family)) return apart ? family : "beatmania";
     if (family == "djpopn" || family == "pypopn" || family == "pcpopn" || family == "pcpopnhc") return "popn";
     return family;
 }
@@ -303,9 +306,47 @@ QString controlsMemberName(const QString &family) {
     return familyName(family);
 }
 
-QList<QPair<QString, QStringList>> controlsSeries() {
-    const QStringList bm = beatmaniaApart() ? QStringList{"djbm", "iidx", "bm3"} : QStringList{"beatmania"};
+QList<QPair<QString, QStringList>> controlsSeries() { return controlsSeries(beatmaniaApart()); }
+
+QList<QPair<QString, QStringList>> controlsSeries(bool apart) {
+    const QStringList bm = apart ? QStringList{"djbm", "iidx", "bm3"} : QStringList{"beatmania"};
     return {{"", bm + QStringList{"popn", "djpstage", "ddr", "ddrsolo", "dmx", "drmn", "gtrf", "kbm", "mambo", "ppp"}}};
+}
+
+void ControlsEdits::setApart(bool on, const std::function<Bindings(const QString &)> &read) {
+    apart = on;
+    for (const QString &m : {QString("djbm"), QString("iidx"), QString("bm3")}) {
+        if (!on) {   // (ticked and unticked again: nothing left to save for it)
+            if (copied.contains(m) && edits.value(m) == edits.value("beatmania")) edits.remove(m), dirty.remove(m), copied.remove(m);
+            continue;
+        }
+        // as setBeatmaniaApart() starts them: a copy of the shared file, here with the changes to it
+        // not saved yet. Written at the Save as a set changed, so that what is saved is what was shown
+        // (the setting may not change then, and with it nothing would be copied)
+        if (edits.contains(m) || QFileInfo::exists(controlsSetFile(m))) continue;
+        if (!dirty.contains("beatmania") && !QFileInfo::exists(controlsSetFile("beatmania"))) continue;
+        if (!edits.contains("beatmania")) edits["beatmania"] = read("beatmania");
+        edits[m] = edits.value("beatmania");
+        dirty.insert(m), copied.insert(m);
+    }
+}
+
+bool ControlsEdits::save(const std::function<QByteArray(const QString &, const Bindings &)> &text, QString *error) {
+    bool member = false;
+    for (const QString &set : std::as_const(dirty)) {
+        QDir().mkpath(configDir() + "/controls");
+        QSaveFile f(controlsSetFile(set));
+        if (!f.open(QIODevice::WriteOnly | QIODevice::Text) || f.write(text(set, edits.value(set))) < 0 || !f.commit()) {
+            if (error) *error = f.fileName() + ": " + f.errorString();
+            return false;
+        }
+        member |= isBeatmania(set);
+    }
+    dirty.clear(), copied.clear();
+    // the setting when it changed, or when one of the three's files was written with it never set (ticked,
+    // changed and unticked again): mergeControls() leaves their files alone only once it has been
+    if (apart != beatmaniaApart() || (member && !settings().contains("controls/beatmaniaApart"))) setBeatmaniaApart(apart);
+    return true;
 }
 
 QStringList families() {

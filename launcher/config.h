@@ -7,9 +7,13 @@
 // are in user/config instead, and the saves in user/data: the folder is the whole install.
 #pragma once
 
+#include <QMap>
+#include <QSet>
 #include <QSettings>
 #include <QString>
 #include <QStringList>
+
+#include <functional>
 
 namespace cfg {
 
@@ -40,6 +44,7 @@ QString menuPicturesDir();
 QString musicDir();
 constexpr int kRunLogs = 10;
 QString controlsFile(const QString &family);  // the family's controls set's file
+QString controlsSetFile(const QString &set);  // a set's file, the beatmania three's whether apart or not
 void mergeControls();                       // once: a set's members' old files joined into the set's
 QString lightsFile(const QString &family);
 QString lightsSocket();                    // $XDG_RUNTIME_DIR/hiraku-lights.sock; on Windows 127.0.0.1:PORT
@@ -65,6 +70,7 @@ bool isBeatmania(const QString &family);             // djbm, iidx, bm3
 bool beatmaniaApart();                              // the three have a controls set each (else one, "beatmania")
 void setBeatmaniaApart(bool apart);                 // ... a new one started from the shared file
 QString controlsSet(const QString &family);          // djbm, iidx, bm3 -> beatmania; djpopn, pypopn -> popn
+QString controlsSet(const QString &family, bool apart);   // ... the beatmania three apart or not, as given
 // Two families played on one cabinet (the game menu's "games that fit"): the same controls set, or
 // two of the beatmania three, whose sets may be apart while the cabinet is still the one
 bool sameCabinet(const QString &a, const QString &b);
@@ -72,5 +78,29 @@ QStringList controlsSetMembers(const QString &set);  // popn -> djpopn, popn, py
 QString controlsSetName(const QString &set);         // "pop'n music"
 QString controlsMemberName(const QString &family);   // within its set: "IIDX", "Konami Python"
 QList<QPair<QString, QStringList>> controlsSeries(); // the sets, as familySeries() (one list, no header)
+QList<QPair<QString, QStringList>> controlsSeries(bool apart);
+
+// The Controls dialog's sets as it shows and edits them until its Save: each set's bindings (read when
+// first shown), the ones changed, and whether the beatmania three are shown apart (its tick box).
+// Nothing is written before save(): the box saved every set changed so far and set the three apart
+// (their files copied) the moment it was ticked, without asking, and Cancel undid neither.
+struct ControlsEdits {
+    using Bindings = QMap<QString, QStringList>;   // control name -> bindings
+    QMap<QString, Bindings> edits;                 // set -> its bindings, once shown
+    QSet<QString> dirty;                           // sets changed since the last save
+    QSet<QString> copied;                          // the three's started from the shared set by setApart
+    bool apart = beatmaniaApart();                 // the three shown apart, saved or not
+
+    QString set(const QString &family) const { return controlsSet(family, apart); }
+    QList<QPair<QString, QStringList>> series() const { return controlsSeries(apart); }
+    bool unsaved() const { return !dirty.isEmpty() || apart != beatmaniaApart(); }
+    // Ticked: each of the three without a file of its own starts from the shared set as shown here,
+    // with its changes not saved yet (`read`: a set's bindings from its file, when not shown yet).
+    // Unticked: the shared set again, and a copy not changed since it was started is dropped
+    void setApart(bool on, const std::function<Bindings(const QString &set)> &read);
+    // The sets changed, each to its own file (`text`: what is written for a set), then the setting.
+    // False if a file couldn't be written (`error`: which, and why), the setting left as it was
+    bool save(const std::function<QByteArray(const QString &set, const Bindings &)> &text, QString *error);
+};
 
 }  // namespace cfg

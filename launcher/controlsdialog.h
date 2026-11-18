@@ -11,6 +11,7 @@
 #include <QTimer>
 #include <QVector>
 
+#include "config.h"
 #include "games.h"
 #include "shell/cabinet.h"
 
@@ -23,9 +24,10 @@ class QToolButton;
 class QWidget;
 class TurntableMeter;
 
-// The cabinet picker the Controls and Lights dialogs share: the controls sets (cfg::controlsSeries)
-// or the families under a header per series (cfg::familySeries), each item's data its set or family
-void fillCabinetBox(QComboBox *box, bool controlSets);
+// The cabinet picker the Controls and Lights dialogs share: the controls sets (cfg::controlsSeries,
+// the beatmania three `apart` or not: the Controls dialog's tick box, saved or not) or the families
+// under a header per series (cfg::familySeries), each item's data its set or family
+void fillCabinetBox(QComboBox *box, bool controlSets, bool apart = false);
 
 class ControlsDialog : public QDialog {
     Q_OBJECT
@@ -94,8 +96,9 @@ private:
     QString m_family;                               // the controls set shown
     QVector<Row> m_rows;
     QVector<Section> m_sections;
-    QMap<QString, Bindings> m_edits;                // set -> its bindings, once shown
-    QSet<QString> m_dirty;                          // sets changed since the last save
+    cfg::ControlsEdits m_sets;                      // the sets shown and changed, the beatmania three apart or not
+    QMap<QString, Bindings> &m_edits = m_sets.edits;   // set -> its bindings, once shown
+    QSet<QString> &m_dirty = m_sets.dirty;          // sets changed since the last save
     QSet<QString> m_active;                         // sources held down now (canonicalBinding)
     QSet<QString> m_hidden;                         // controllers the banner was told to leave out (settings)
     QList<Game> m_games;

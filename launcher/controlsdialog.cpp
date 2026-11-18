@@ -161,11 +161,11 @@ const std::vector<hk::cab::Control> &setControls(const QString &set) {
 
 }  // namespace
 
-void fillCabinetBox(QComboBox *box, bool controlSets) {
+void fillCabinetBox(QComboBox *box, bool controlSets, bool apart) {
     auto *model = new QStandardItemModel(box);
     QFont bold = box->font();
     bold.setBold(true);
-    for (auto &[series, fams] : controlSets ? cfg::controlsSeries() : cfg::familySeries()) {
+    for (auto &[series, fams] : controlSets ? cfg::controlsSeries(apart) : cfg::familySeries()) {
         if (!series.isEmpty()) {
             auto *header = new QStandardItem(series);
             header->setFlags(Qt::NoItemFlags);   // not a choice
@@ -190,7 +190,7 @@ ControlsDialog::ControlsDialog(const QString &family, QWidget *parent) : QDialog
     auto *top = new QHBoxLayout;
     top->addWidget(new QLabel("Cabinet:"));
     m_familyBox = new QComboBox;
-    fillCabinetBox(m_familyBox, true);
+    fillCabinetBox(m_familyBox, true, m_sets.apart);
     top->addWidget(m_familyBox, 1);
     v->addLayout(top);
     m_setLabel = new QLabel;
@@ -200,21 +200,16 @@ ControlsDialog::ControlsDialog(const QString &family, QWidget *parent) : QDialog
     m_apart = new QCheckBox("Separate controls for beatmania (DJ Main), beatmania IIDX and beatmania III");
     m_apart->setToolTip("Each of the three keeps its own bindings, started as a copy of the shared ones. Untick to "
                         "share one set again (the separate ones are kept for next time).");
-    m_apart->setChecked(cfg::beatmaniaApart());
+    m_apart->setChecked(m_sets.apart);
     v->addWidget(m_apart);
+    // what is shown and edited only: the setting and the files are written at the Save, with the other
+    // sets changed (cfg::ControlsEdits), and Cancel leaves them as they were
     connect(m_apart, &QCheckBox::toggled, this, [this](bool on) {
-        if (on == cfg::beatmaniaApart()) return;
-        if (!m_dirty.isEmpty() && !save()) {   // (the changes so far go to the set they were made in)
-            QSignalBlocker b(m_apart);
-            m_apart->setChecked(!on);
-            return;
-        }
-        cfg::setBeatmaniaApart(on);
-        m_edits.clear();
+        m_sets.setApart(on, [this](const QString &set) { return load(set); });
         const QString to = on ? (cfg::isBeatmania(m_opened) ? m_opened : QString("iidx")) : QString("beatmania");
         {
             QSignalBlocker b(m_familyBox);
-            fillCabinetBox(m_familyBox, true);
+            fillCabinetBox(m_familyBox, true, on);
             m_familyBox->setCurrentIndex(m_familyBox->findData(to));
         }
         showFamily(to);
@@ -277,7 +272,7 @@ ControlsDialog::ControlsDialog(const QString &family, QWidget *parent) : QDialog
         tryMenu->clear();
         QList<Game> ready;
         for (const Game &g : m_games)
-            if (g.status == Game::Ready && cfg::controlsSet(g.family) == m_family) ready << g;
+            if (g.status == Game::Ready && m_sets.set(g.family) == m_family) ready << g;
         std::sort(ready.begin(), ready.end(), [](const Game &a, const Game &b) { return a.title < b.title; });
         if (ready.isEmpty()) tryMenu->addAction("No " + cfg::controlsSetName(m_family) + " game is ready to play")->setEnabled(false);
         for (const Game &g : ready)
@@ -315,8 +310,8 @@ ControlsDialog::ControlsDialog(const QString &family, QWidget *parent) : QDialog
     });
 
     connect(m_familyBox, &QComboBox::currentIndexChanged, this, [this] { showFamily(m_familyBox->currentData().toString()); });
-    int idx = m_familyBox->findData(cfg::controlsSet(family));
-    m_familyBox->setCurrentIndex(idx < 0 ? m_familyBox->findData(cfg::controlsSet("bm3")) : idx);
+    int idx = m_familyBox->findData(m_sets.set(family));
+    m_familyBox->setCurrentIndex(idx < 0 ? m_familyBox->findData(m_sets.set("bm3")) : idx);
     showFamily(m_familyBox->currentData().toString());
 
     // live feedback
@@ -366,7 +361,7 @@ ControlsDialog::Bindings ControlsDialog::load(const QString &family) const {
     std::string text;
     for (auto &c : setControls(family))
         if (!c.defaults.empty()) text += c.name + " = " + c.defaults + "\n";
-    QFile f(cfg::controlsFile(family));
+    QFile f(cfg::controlsSetFile(family));   // (the set's, the three apart or not as shown)
     if (f.open(QIODevice::ReadOnly)) text += f.readAll().toStdString();   // the file's lines replace the defaults
     Bindings b;
     for (auto &c : setControls(family)) b[QString::fromStdString(c.name)] = {};
@@ -379,33 +374,25 @@ ControlsDialog::Bindings ControlsDialog::load(const QString &family) const {
 }
 
 bool ControlsDialog::save() {
-    for (const QString &fam : m_dirty) {
-        QDir().mkpath(cfg::configDir() + "/controls");
-        QSaveFile f(cfg::controlsFile(fam));
-        if (!f.open(QIODevice::WriteOnly | QIODevice::Text)) {
-            QMessageBox::warning(this, "Controls", "Cannot write " + f.fileName() + ": " + f.errorString());
-            return false;
-        }
-        QString text = "# HIRAKU controls for " + cfg::controlsSetName(fam) + ", written by the launcher.\n"
-                       "# Format: runtime/host/input.h. An input with nothing after '=' is unbound.\n";
-        const Bindings &b = m_edits[fam];
-        for (auto &c : setControls(fam)) {
-            std::vector<std::string> items;
-            for (const QString &s : b.value(QString::fromStdString(c.name))) items.push_back(s.toStdString());
-            text += QString::fromStdString(hk::cab::format_entry(c.name, items)) + "\n";
-        }
-        f.write(text.toUtf8());
-        if (!f.commit()) {
-            QMessageBox::warning(this, "Controls", "Cannot write " + f.fileName() + ": " + f.errorString());
-            return false;
-        }
-    }
-    m_dirty.clear();
-    return true;
+    QString error;
+    const bool saved = m_sets.save(
+        [](const QString &fam, const Bindings &b) {
+            QString text = "# HIRAKU controls for " + cfg::controlsSetName(fam) + ", written by the launcher.\n"
+                           "# Format: runtime/host/input.h. An input with nothing after '=' is unbound.\n";
+            for (auto &c : setControls(fam)) {
+                std::vector<std::string> items;
+                for (const QString &s : b.value(QString::fromStdString(c.name))) items.push_back(s.toStdString());
+                text += QString::fromStdString(hk::cab::format_entry(c.name, items)) + "\n";
+            }
+            return text.toUtf8();
+        },
+        &error);
+    if (!saved) QMessageBox::warning(this, "Controls", "Cannot write " + error);
+    return saved;
 }
 
 void ControlsDialog::reject() {
-    if (!m_dirty.isEmpty()) {
+    if (m_sets.unsaved()) {   // (the separate beatmania sets ticked or unticked too)
         auto r = QMessageBox::question(this, "Controls", "Save the changed controls?",
                                        QMessageBox::Save | QMessageBox::Discard | QMessageBox::Cancel);
         if (r == QMessageBox::Cancel) return;
@@ -888,6 +875,9 @@ QString layoutFile(const QString &set, const QString &pad) {
 ControlsDialog::Layout ControlsDialog::savedLayout(const QString &pad) const {
     Layout l;
     QFile f(layoutFile(m_family, pad));
+    // (one of the beatmania three set apart and not saved yet: its layouts are copied from the
+    // shared set's at the Save, cfg::setBeatmaniaApart)
+    if (!f.exists() && cfg::isBeatmania(m_family)) f.setFileName(layoutFile("beatmania", pad));
     if (!f.open(QIODevice::ReadOnly)) return l;
     for (auto &en : hk::cab::parse_list_file(f.readAll().toStdString()))
         for (auto &it : en.items) l[QString::fromStdString(en.name)] << QString::fromStdString(it);

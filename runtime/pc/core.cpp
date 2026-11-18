@@ -747,6 +747,7 @@ public:
     // (0: the cabinet's own again). Its clock, its sound's samples and the shell's time go on
     // without a jump; the DLL counts the cabinet's ticks for the patches tied to the rate
     bool frame_repeated() const override { return repeating_; }
+    bool mod_memory() const override { return false; }   // (mem(): the watched words only)
     bool set_vsync_rate(double hz) override {
         if (pc64_) return false;
         want_hz_ = hz > 0 ? hz : cab_hz();

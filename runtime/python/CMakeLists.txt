@@ -41,6 +41,7 @@ add_library(hk_python_shell STATIC
 	${HK}/runtime/host/script.cpp
 	${HK}/runtime/host/macro.cpp
 	${HK}/runtime/host/mods.cpp
+	${HK}/runtime/host/modscript.cpp
 	${HK}/runtime/host/pythondisk.cpp
 	${HK}/runtime/host/png.cpp
 	${HK}/runtime/host/acio.cpp
@@ -71,6 +72,9 @@ target_compile_definitions(hk_python_shell PUBLIC HK_WITH_SDL=1)
 target_link_libraries(hk_python_shell PUBLIC SDL3::SDL3)
 find_package(ZLIB REQUIRED)   # mods' PNG pictures (runtime/host/png.h)
 target_link_libraries(hk_python_shell PUBLIC ZLIB::ZLIB)
+include(${HK}/cmake/lua.cmake)   # mods' scripts (runtime/host/modscript.h)
+hk_add_lua(hk_python_lua)
+target_link_libraries(hk_python_shell PUBLIC hk_python_lua)
 # The game recorded to a video file (runtime/host/record.h, --record, F6) with the FFmpeg libraries
 # PCSX2's video capture loads at run time (GSCapture.cpp, by their versioned names: the same
 # headers, so the same libavcodec.so.N / avcodec-N.dll): linked here, they are the one copy in the

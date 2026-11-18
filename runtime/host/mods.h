@@ -96,6 +96,12 @@ std::string action_name(size_t id);   // "mod: action", for the log
 // The settings now ("folder/name", value), the counters ("folder/name", count)
 std::vector<std::pair<std::string, int64_t>> settings();
 std::vector<std::pair<std::string, uint64_t>> counters();
+// For a mod's script (host/modscript.h): a setting of the mod whose folder's name is `folder` (false:
+// it has none of that name); set, clamped to its ends and kept as an action keeps it (now: its
+// value then); a [[hook]] counter's count (0: none of that name)
+bool setting_value(const std::string &folder, const std::string &name, int64_t &value);
+bool set_setting(const std::string &folder, const std::string &name, int64_t value, int64_t &now);
+uint64_t counter_value(const std::string &folder, const std::string &name);
 void report();   // the counters and settings, in the log (at exit)
 void clear();    // every mod forgotten (the tests; a core's hooks stay)
 

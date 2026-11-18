@@ -44,6 +44,7 @@
 #include "warp.h"
 #include "menukey.h"
 #include "menuview.h"
+#include "modscript.h"
 #include "picture.h"
 #include "record.h"
 #include "input.h"
@@ -78,6 +79,9 @@ std::vector<uint32_t> g_half[2];  // the frame's two halves, when split
 // A new window: 480 lines a scale step, as wide as the core's monitor shape makes them (640 for
 // 4:3; IIDX's 16:9 tube, 853), or one of its monitors' when split
 static int window_width(int scale) {
+    // HK_WINDOW_WIDTH=N: N pixels wide (what shows beside the picture, mods' side panels, tried
+    // without a wide display: with HK_WINDOW_SNAP)
+    if (const char *e = getenv("HK_WINDOW_WIDTH"); e && atoi(e) >= 160) return atoi(e);
     double a = core().display_aspect();
     if (a <= 0) a = 4.0 / 3.0;
     if (g_split) a /= core().screens();
@@ -986,6 +990,8 @@ static void place_warp(const warp::Panel &p, int win_w, int win_h, int &x, int &
 
 // The overlays over a picture in the GL window: the banner (host/notice.h) and the lights
 static void draw_overlays(int ww, int wh) {
+    // mods' scripts' window layer (host/modscript.h), under HIRAKU's own boxes
+    for (const modscript::Piece &p : modscript::window_pieces()) picture::overlay(p.argb.data(), p.w, p.h, p.x, p.y, p.dw, p.dh, 1.0f, ww, wh);
     if (warp::Panel p; warp::panel(p)) {   // the fast start-up's box (host/warp.h): in the middle
         int px, py, pw, ph;
         place_warp(p, ww, wh, px, py, pw, ph);
@@ -1182,6 +1188,7 @@ static void show_frame(const uint32_t *rgb, int w, int h, double frame_aspect, b
 // before_work: the core hands its picture over at the end of vertical blank (its present hook), with
 // the frame's work and sound still to come; else at the frame's end (window_frame)
 static void present(const uint32_t *rgb, int w, int h, double vsec, bool before_work) {
+    rgb = modscript::compose_frame(rgb, w, h);   // mods' scripts' game layer, on the window's copy (host/modscript.h)
     // the sound paces this frame and is still to come: the picture after it (g_kept)
     if (before_work && g_after_sound && g_frame_paced && !g_fast && g_audio && core().picture_after_sound()) {
         g_kept.rgb.assign(rgb, rgb + (size_t)w * h);
@@ -1220,7 +1227,7 @@ uint64_t g_shots_shown = 0;
 
 // the core's in-between picture for the frame's refresh i (nullptr: nothing moved), or the kept one
 static const uint32_t *between_picture(int i, int &w, int &h) {
-    if (!g_showing) return core().render_between(pacing::phase(i), w, h);
+    if (!g_showing) return modscript::compose_between(core().render_between(pacing::phase(i), w, h), w, h);
     const Shot::Picture &b = g_showing->between[i];
     if (!b.has) return nullptr;
     w = b.w, h = b.h;
@@ -1243,7 +1250,7 @@ static void keep_shot(const uint32_t *rgb, int w, int h, double frame_aspect, do
     if (!beam_now(true) && g_smooth_motion) {
         auto ask = [&](int i) {
             int bw = w, bh = h;
-            const uint32_t *px = core().render_between(pacing::phase(i), bw, bh);
+            const uint32_t *px = modscript::compose_between(core().render_between(pacing::phase(i), bw, bh), bw, bh);
             Shot::Picture &b = s.between[i];
             b.has = px != nullptr;
             if (px) b.px.assign(px, px + (size_t)bw * bh), b.w = bw, b.h = bh;
@@ -1319,6 +1326,7 @@ static void show_frame(const uint32_t *rgb, int w, int h, double frame_aspect, b
         double cw, ch;
         core().display_cover(w, h, cw, ch);
         vw = std::max(1, (int)std::lround(vw * cw)), vh = std::max(1, (int)std::lround(vh * ch));
+        modscript::set_view((ww - vw) / 2, (wh - vh) / 2, vw, vh, ww, wh);   // (mods' scripts' window layer)
         // --crt-beam: each of the frame's refreshes is the beam's pass at its moment (picture.h), with
         // two refreshes a frame or more (120 Hz and up): the display's rate over the game's decides,
         // not the frame's own count (2 or 3 at 144 Hz), so it doesn't come and go from frame to frame

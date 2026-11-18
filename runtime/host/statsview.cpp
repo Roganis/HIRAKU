@@ -513,6 +513,11 @@ bool event(const SDL_Event &e, float scale) {
 
 bool dragging() { return g_dragging; }
 
+const uint8_t (*font())[8] {
+    if (!g_font_read) read_font();
+    return g_font;
+}
+
 bool panel(Panel &p) {
     if (g_level == Level::off) return false;
     const uint64_t now = g_clock();

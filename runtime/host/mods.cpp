@@ -23,6 +23,7 @@
 #include <unistd.h>
 #endif
 
+#include "host/modscript.h"
 #include "host/png.h"
 #include "host/pythondisk.h"
 #include "shell/core.h"
@@ -212,7 +213,7 @@ struct Place {
 struct Hook {
     std::string mod, where;
     uint32_t at = 0;
-    enum class Op { set, add, sub, count } op = Op::set;
+    enum class Op { set, add, sub, count, call } op = Op::set;
     Place target;
     int64_t imm = 0;
     Setting *setting = nullptr;   // the operand: a setting's value, else imm
@@ -221,6 +222,7 @@ struct Hook {
     Place when_at;
     int64_t min = INT64_MIN, max = INT64_MAX;
     Counter *counter = nullptr;
+    int script = -1, ref = 0;     // call: the mod's script's function (host/modscript.h)
     bool missed = false;          // its RAM wasn't there once (said once)
 };
 // (deques: hooks and actions point into them, and the core holds the hooks)
@@ -262,6 +264,10 @@ void run_hook(void *ctx, uint32_t *regs) {
     }
     if (h.op == Hook::Op::count) {
         h.counter->n.fetch_add(1, std::memory_order_relaxed);
+        return;
+    }
+    if (h.op == Hook::Op::call) {
+        modscript::call_hook(h.script, h.ref, regs, h.at);
         return;
     }
     int64_t operand = h.setting ? h.setting->value.load(std::memory_order_relaxed) : h.imm;
@@ -572,9 +578,9 @@ bool load(const std::vector<std::string> &dirs, const std::string &game, const s
             int api = 0;
             std::vector<std::string> needs;
             bool needs_given = false;
-            std::string program;
+            std::string program, script;
             std::map<std::string, std::string> used;   // capability -> the first table of it ("[[hook]]")
-            struct PendingHook { Hook h; std::string setting, count; };
+            struct PendingHook { Hook h; std::string setting, count, call; };
             struct PendingAction { Action a; std::string setting, where; };
             std::vector<PendingHook> hooks;
             std::vector<PendingAction> actions;
@@ -684,7 +690,7 @@ bool load(const std::vector<std::string> &dirs, const std::string &game, const s
                 };
                 if (t.kind.empty()) {
                     if (text.empty()) continue;
-                    known({"name", "version", "game", "author", "description", "api", "requires", "program"});
+                    known({"name", "version", "game", "author", "description", "api", "requires", "program", "script"});
                     mod.name = str("name", true);
                     mod.version = str("version", false);
                     if (const std::string g = str("game", true); g != game) fail("this mod is for " + g + ", not " + game);
@@ -708,6 +714,18 @@ bool load(const std::vector<std::string> &dirs, const std::string &game, const s
                             at = close + 1;
                         }
                         needs_given = true;
+                    }
+                    if (t.values.count("script")) {   // its Lua script (host/modscript.h): a file in its folder
+                        if (!api) fail("'script' is the mod API's: api = 1 goes with it");
+                        script = str("script", true);
+                        const std::filesystem::path sp = fs_path(script);
+                        if (script.empty() || sp.is_absolute() || sp.has_root_name() || script.find("..") != std::string::npos ||
+                            script.find(':') != std::string::npos)
+                            fail("'script' is a file in the mod's folder (\"mod.lua\")");
+                        std::error_code ec;
+                        if (!std::filesystem::is_regular_file(fs_path(dir + "/" + script), ec)) fail("'script' file " + script + " not found");
+                        named.insert(script);
+                        used.try_emplace("script", "script = \"" + script + "\"");
                     }
                     if (t.values.count("program")) {   // the SHA-1 of the program it was made for
                         if (!api) fail("'program' is the mod API's: api = 1 goes with it");
@@ -752,20 +770,26 @@ bool load(const std::vector<std::string> &dirs, const std::string &game, const s
                     actions.push_back(std::move(p));
                 } else if (t.kind == "hook") {
                     used.try_emplace("hook", "[[hook]]");
-                    known({"at", "set", "add", "sub", "count", "value", "size", "scale", "when", "when_size", "min", "max"});
+                    known({"at", "set", "add", "sub", "count", "call", "value", "size", "scale", "when", "when_size", "min", "max"});
                     PendingHook p;
                     Hook &h = p.h;
                     h.mod = mod.name;
                     h.where = where;
                     h.at = (uint32_t)num("at");
                     const char *does = nullptr;
-                    for (const char *k : {"set", "add", "sub", "count"})
+                    for (const char *k : {"set", "add", "sub", "count", "call"})
                         if (t.values.count(k)) {
-                            if (does) fail("a hook does one thing: set, add, sub or count");
+                            if (does) fail("a hook does one thing: set, add, sub, count or call");
                             does = k;
                         }
-                    if (!does) fail("a hook does one thing: set, add, sub (a register or memory, by a value) or count");
-                    if (!strcmp(does, "count")) {
+                    if (!does) fail("a hook does one thing: set, add, sub (a register or memory, by a value), count or call (a function of the mod's script)");
+                    if (!strcmp(does, "call")) {
+                        h.op = Hook::Op::call;
+                        p.call = ident("call");
+                        used.try_emplace("script", "[[hook]] with call");
+                        for (const char *k : {"value", "scale", "size"})
+                            if (t.values.count(k)) fail(std::string("'") + k + "' isn't a call's");
+                    } else if (!strcmp(does, "count")) {
                         h.op = Hook::Op::count;
                         p.count = ident("count");
                         for (const char *k : {"value", "scale", "size"})
@@ -935,8 +959,22 @@ bool load(const std::vector<std::string> &dirs, const std::string &game, const s
                     if (s.folder == folder && s.name == name) return &s;
                 throw std::runtime_error(where + ": no [[setting]] '" + name + "' in this mod");
             };
+            // its script: run once now (its functions defined), refused with the mod if it fails
+            int script_id = -1;
+            if (!script.empty()) {
+                std::string why;
+                script_id = modscript::load(mod.name, folder, dir + "/" + script, needs, why);
+                if (script_id < 0) fail(why);
+            } else if (used.count("script")) {
+                fail("a [[hook]] calls a function of the mod's script, and the mod has no script = \"...\"");
+            }
             mod_hooks.emplace_back();
             for (PendingHook &p : hooks) {
+                if (!p.call.empty()) {
+                    p.h.script = script_id;
+                    p.h.ref = modscript::function_ref(script_id, p.call);
+                    if (!p.h.ref) throw std::runtime_error(p.h.where + ": its script has no function " + p.call + " (a global one)");
+                }
                 if (!p.setting.empty()) p.h.setting = setting_of(p.setting, p.h.where);
                 if (!p.count.empty()) {
                     for (Counter &c : g_counters)
@@ -1215,6 +1253,9 @@ std::vector<std::string> describe() {
 std::vector<std::string> capabilities() {
     std::vector<std::string> c = core().mod_capabilities();
     c.push_back("settings");   // (the shell's: settings files, read by hooks)
+    c.push_back("script");     // ... a script (host/modscript.h), the controls the game is given
+    c.push_back("input");
+    if (core().mod_memory()) c.push_back("memory");   // ... and the machine's memory, where it's its own
     for (const std::string &o : g_offered)
         if (std::find(c.begin(), c.end(), o) == c.end()) c.push_back(o);
     return c;
@@ -1322,7 +1363,36 @@ std::vector<std::pair<std::string, uint64_t>> counters() {
     return out;
 }
 
+bool setting_value(const std::string &folder, const std::string &name, int64_t &value) {
+    for (const Setting &s : g_settings)
+        if (s.folder == folder && s.name == name) {
+            value = s.value.load();
+            return true;
+        }
+    return false;
+}
+
+bool set_setting(const std::string &folder, const std::string &name, int64_t value, int64_t &now) {
+    for (Setting &s : g_settings)
+        if (s.folder == folder && s.name == name) {
+            now = std::clamp(value, s.min, s.max);
+            if (s.value.exchange(now) != now) {
+                save_settings(folder);
+                fprintf(stderr, "mods: %s: %s = %s (its script)\n", s.mod.c_str(), s.name.c_str(), shown(s).c_str());
+            }
+            return true;
+        }
+    return false;
+}
+
+uint64_t counter_value(const std::string &folder, const std::string &name) {
+    for (const Counter &c : g_counters)
+        if (c.folder == folder && c.name == name) return c.n.load();
+    return 0;
+}
+
 void report() {
+    modscript::report();
     for (const Counter &c : g_counters)
         fprintf(stderr, "mods: %s: count %s = %llu\n", c.mod.c_str(), c.name.c_str(), (unsigned long long)c.n.load());
     for (const Setting &s : g_settings) fprintf(stderr, "mods: %s: %s = %s at the end\n", s.mod.c_str(), s.name.c_str(), shown(s).c_str());
@@ -1339,6 +1409,7 @@ void clear() {
     g_settings.clear();
     g_overrides.clear();
     g_hand_over.clear();
+    modscript::clear();
     // (g_hooks: the core may still hold them; kept)
 }
 

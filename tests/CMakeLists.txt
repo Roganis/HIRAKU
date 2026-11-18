@@ -474,6 +474,10 @@ add_test(NAME mods_patch_order COMMAND test_patch_order)
 add_executable(test_mod_api mods/test_mod_api.cpp)
 target_link_libraries(test_mod_api PRIVATE hiraku_shell)
 add_test(NAME mods_api COMMAND test_mod_api ${CMAKE_CURRENT_BINARY_DIR}/mod-api-test ${CMAKE_CURRENT_SOURCE_DIR}/mods/sample-hook)
+# ... and mods' scripts (runtime/host/modscript.h), with the sample under tests/mods/sample-script
+add_executable(test_mod_script mods/test_mod_script.cpp)
+target_link_libraries(test_mod_script PRIVATE hiraku_shell)
+add_test(NAME mods_script COMMAND test_mod_script ${CMAKE_CURRENT_BINARY_DIR}/mod-script-test ${CMAKE_CURRENT_SOURCE_DIR}/mods/sample-script)
 # tools/ingest.py (Python 3.11 or later: tomllib): a Konami Python game waiting for its BIOS and keys,
 # finished when they're dropped
 if(Python3_Interpreter_FOUND AND Python3_VERSION VERSION_GREATER_EQUAL 3.11)

@@ -1,0 +1,46 @@
+# A sample of the mod API's scripts (docs/MODS.md, "Scripts"), for test_mod_script's made-up machine
+# (game "test": 256 bytes of RAM, big-endian, registers r0-r7): the addresses are made up, no game's.
+# A timing-and-overlay mod has this shape: hooks that shift the time a press is judged by and count
+# the judgments early and late, the presses watched, counters drawn beside the picture and a cover
+# over part of it, settings moved by keys.
+name = "Sample script"
+version = "0.1"
+game = "test"
+api = 1
+requires = ["hook", "script", "input", "draw", "memory", "settings", "actions"]
+script = "mod.lua"
+
+[[setting]]
+name = "shift"
+label = "Judging (ms)"
+min = -100
+max = 100
+default = 0
+
+[[setting]]
+name = "cover"
+label = "Cover"
+min = 0
+max = 200
+default = 40
+step = 10
+
+[[action]]
+name = "cover-down"
+binding = "key:Keypad 3"
+setting = "cover"
+do = "up"
+
+[[action]]
+name = "cover-up"
+binding = "key:Keypad 9"
+setting = "cover"
+do = "down"
+
+[[hook]]                # the judging function's entry: the press's time in r3
+at = 0x1000
+call = "on_judge"
+
+[[hook]]                # a judgment made: its kind in r2, how far off in r1 (signed)
+at = 0x2000
+call = "on_result"

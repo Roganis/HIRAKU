@@ -328,15 +328,17 @@ byte order and the program's SHA-1, and exits:
 ```
 $ hiraku-firebeat --game bm3final --mod-api
 mod API 1
-capabilities: hook settings actions
+capabilities: hook settings script input memory actions draw
 registers: r0 r1 ... r31 cr xer lr ctr
 memory: big-endian
 program: 1b5bd916011107a82f5324558f60c1cbb144c0e3 (.../dumps/bm3final/program.bin)
 ```
 
-Which programs have what: `settings` every one; `actions` every one with a window (all of a
-release's); `hook` only `hiraku-firebeat`, the executor (PLAN.md section 27), which builds the
-program's functions at start and puts a hook's step in before its instruction. A Firebeat game's
+Which programs have what: `settings`, `script` and `input` every one; `memory` every one whose
+machine is emulated (not the PC games, whose memory is their own process's); `actions` and `draw`
+every one with a window (all of a release's); `hook` only `hiraku-firebeat`, the executor
+(PLAN.md section 27), which builds the program's functions at start and puts a hook's step in
+before its instruction. A Firebeat game's
 own binary (`hiraku-bm3final`, built from source with the game's code compiled in) has no hooks:
 given a mod that needs them, it starts `hiraku-firebeat` from its own folder in its place, with
 `--game` and the same options (on Windows, where a release has only `hiraku-firebeat` anyway, it
@@ -345,10 +347,141 @@ for frame, when the hook changes nothing (a setting at 0): no cycle moves; the e
 remembering the runs of an exception's handler that pass one (each run runs its hooks). With no
 mod nothing is added: no step, no check on the way.
 
+### Scripts
+
+What a fixed hook can't do, a script can: a Lua 5.4 file in the mod's folder, with functions the
+game calls on its frames, on the controls it's given, on hooked instructions, and to draw over its
+picture or beside it. A timing mod's counters, a cover over part of the playfield, panels in the
+bars beside a 4:3 picture: all in a `mod.toml` and a `mod.lua`, on a release's program. The
+sample in `tests/mods/sample-script` (made-up addresses) has each.
+
+```toml
+name = "Timing panel"
+game = "bm3final"
+api = 1
+requires = ["hook", "script", "input", "draw", "memory", "settings"]
+script = "mod.lua"                       # a file in the mod's folder
+# ... [[setting]]s "shift" and "cover" as above
+
+[[hook]]
+at = 0x80012340
+call = "on_judge"                        # a function of the script's, in place of set/add/sub/count
+```
+
+```lua
+local early, late = 0, 0
+
+function on_judge(regs, at)              -- before the instruction at `at`
+  regs.r3 = regs.r3 - hk.setting("shift")
+  local off = hk.read32(0x80123450, true)   -- (made up) signed
+  if off < 0 then early = early + 1 else late = late + 1 end
+end
+
+function on_input(name, down, time)      -- "P1 Button 3", true/false, the machine's seconds
+end
+
+function on_frame()                      -- once a game frame
+end
+
+function draw_game(g)                    -- in the game picture's pixels
+  g:rect(100, 0, 200, hk.setting("cover"), 0x404040)
+end
+
+function draw_window(w)                  -- in the window's pixels, after the picture mode
+  if w.picture_x > 0 then
+    w:rect(0, 0, w.picture_x, w.height, hk.rgb(16, 20, 28))
+    w:text(8 * w.unit, 8 * w.unit, "EARLY " .. early, 0xff6060, 2 * w.unit)
+  end
+end
+```
+
+**Capabilities** (`requires`): `script` for `script =`, and for a hook's `call` with `hook`;
+`input` for `on_input`; `draw` for `draw_game` and `draw_window`; `memory` for `hk.read*` and
+`hk.write*`. A script that defines a callback its `requires` doesn't allow is refused at start.
+
+**The callbacks** (each optional, global functions):
+
+- `on_frame()`: once a game frame, after the frame's controls and the frame's input script or
+  macro steps.
+- `on_input(name, down, time)`: each button the game is given, pressed (`down` true) or let go,
+  by its name in the game's control table (as a bindings file names it: "P1 Button 3", "1 Player Start";
+  `runtime/shell/cabinet.cpp` has each cabinet's), after the player's bindings: from a key or a controller, an input script (`--script`) or a macro. `time` is
+  the machine's time in seconds (as `hk.time()`) when the game was given it. They come before the
+  frame's `on_frame`, in order; only changes (a button given again as it was isn't one); analog
+  controls (a turntable's or a slider's position) aren't given.
+- `function(regs, at)` named by a `[[hook]]`'s `call`: before the instruction at `at`, as the
+  hook rules above. `regs.r3` reads a register by the machine's own name (a 32-bit value, 0 and
+  up), `regs.r3 = v` writes it (taken as 32 bits: -1 is 0xffffffff); a name the machine hasn't is
+  an error. `regs` is only good during that call. `when`, `min` and `max` still apply.
+- `draw_game(g)`: once a game frame, where the game has a window. `g.width`, `g.height`: the
+  game's picture (Firebeat 640 x 480). What it draws is laid over the window's copy of the picture,
+  before the picture mode (a CRT shader takes it with the picture), and over smooth motion's
+  in-between pictures (`--smooth-motion`) too.
+- `draw_window(w)`: likewise, in the window's own pixels, after the picture mode, under HIRAKU's
+  own boxes. `w.width`, `w.height`: the window; `w.picture_x`, `w.picture_y`, `w.picture_w`,
+  `w.picture_h`: where the picture is in it (the bars beside a 4:3 picture on a wide screen are
+  `0 .. picture_x` and `picture_x + picture_w .. width`); `w.unit`: whole times a 360-line screen
+  (2 at 720 lines, 3 at 1080), for sizes that follow the window. Only in HIRAKU's OpenGL
+  window (every program with a window, unless it fell back to SDL's renderer: then the game layer
+  shows and this one doesn't).
+
+**Drawing** (methods of `g` and `w`; x, y in pixels from the top left, numbers taken down to whole
+ones; a colour is `0xRRGGBB` (opaque), `0xAARRGGBB`, or `hk.rgb(r, g, b [, a])`, alpha 0-255):
+
+- `:rect(x, y, width, height, colour)`: a filled rectangle.
+- `:box(x, y, width, height, colour [, thickness])`: its outline (1 pixel by default).
+- `:line(x1, y1, x2, y2, colour [, thickness])`: a line, both ends in it.
+- `:text(x, y, text, colour [, scale])`: the 8x8 font of HIRAKU's own panels (ASCII; anything else
+  shows as `?`), `scale` whole times (1-16); its width in pixels back. `:text_width(text [, scale])`
+  without drawing. At most 256 characters.
+- Later drawing goes over earlier, each mod's over the mods' after it in the list. Up to 4096
+  drawings a layer a frame. Drawing functions draw nothing else: `hk.write*` and `hk.set_setting`
+  are errors there.
+
+**hk** (the one table a script is given):
+
+| | |
+|---|---|
+| `hk.read8(a)`, `hk.read16(a)`, `hk.read32(a)` | the machine's memory at `a`, in its own byte order, 0 and up; `hk.read16(a, true)` signed; nil where `a` isn't plain memory (as `[[patch]]`'s addresses) |
+| `hk.write8(a, v)`, `hk.write16(a, v)`, `hk.write32(a, v)` | written (taken as that many bits); false where it isn't plain memory. The machine's code there is translated again, as for a patch; don't write code from a hook's call |
+| `hk.setting(name)` | a `[[setting]]` of this mod's, now |
+| `hk.set_setting(name, v)` | set (clamped to its ends) and kept, as an action does; its value back |
+| `hk.counter(name)` | a `[[hook]]` `count`'s count (0: none of that name) |
+| `hk.frame()` | the game frame's number |
+| `hk.time()` | the machine's time, seconds since power-on (never the PC's clock) |
+| `hk.log(text)` | a line in the log (`print` too) |
+| `hk.notice(text)` | a line on the window for three seconds, under the mod's name (and the log) |
+| `hk.rgb(r, g, b [, a])` | a colour |
+| `hk.api` | the mod API's version, 1 |
+
+**The sandbox**: Lua 5.4's base library less `dofile`, `loadfile` and `require` (`load` takes text
+only; `collectgarbage` only `"count"`; `print` goes to the log), and `string` (less `dump`),
+`table`, `math` and `utf8`. Nothing of `io`, `os`, `package`, `debug` or `coroutine`: no files, no
+clock, nothing outside the game. `math.random` starts from a fixed seed, and `math.randomseed`
+takes one only with a number; a script's string hashes are fixed too, so with the same controls a
+run does the same each time (the order `pairs` gives for keys that are tables or functions is
+the one thing that isn't: don't let it decide what is written).
+
+**Limits**: a callback may take a million Lua instructions (a hook's call 100,000; the file as it
+first runs, ten million), and a script hold 32 MB. Over either, or an error in a callback (a
+`pcall` in the script that catches it doesn't stop that), and **the script is stopped**: the log
+says why and where ("mods: Timing panel: its script is stopped, the game goes on: over its budget
+of 1000000 instructions (in on_frame)"), the window says so, and the game plays on without it
+(its hooks with `call` do nothing from then on; the mod's other hooks and patches stay). An error
+as the file **first runs** (at start, before the machine: memory isn't there yet, nor the
+settings as kept: read them from `on_frame` on) refuses the mod, with the file and line.
+
+**What stays the game's own**: the picture a run's digests, snapshots, input scripts' pictures and
+**recordings (`--record`, F6) have no mod drawing in them**: only the window's copy has it. With no
+mod nothing changes; with a script, its callbacks run on the machine's thread, between its frames
+(and before its hooked instructions), so two runs with the same input script give the same digests.
+
+At exit the log has a line for each script: its calls, the most instructions one took, its memory
+at most, and why it stopped if it did.
+
 Not there yet (later versions of the API): hooks on the other cores (DJ Main, System 573, Twinkle,
-the Konami Python and PC games), hooks that do more than one fixed thing (several conditions, a
-value worked out from two registers), drawing over the game's picture or beside it, the game's
-inputs as events, and scripts.
+the Konami Python and PC games), pictures and sounds from a mod's files, a mod's settings in the
+launcher.
 
 ## High frame rates (`[[rate]]`)
 

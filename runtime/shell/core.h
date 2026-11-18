@@ -198,6 +198,11 @@ public:
     // the frame hook's thread, until it gets "". Nothing by default
     virtual std::string take_notice() { return {}; }
 
+    // The mod API's "memory" (docs/MODS.md, "Scripts"): mem() is the machine's own memory, which a
+    // mod's script may read and write as [[patch]]es do. false where it isn't (the PC games: their
+    // memory is their own process's, and mem() has only the words a [[rate]] watches)
+    virtual bool mod_memory() const { return true; }
+
     // New virtual functions go here, after the others: cores are also built in separate trees (the
     // Python core's), and one built against an older copy of this class keeps the ones it knows in
     // their places rather than a shifted table.

@@ -9,6 +9,7 @@
 #include <stdexcept>
 
 #include "../shell/core.h"
+#include "modscript.h"
 
 namespace hk::macro {
 
@@ -209,9 +210,11 @@ void frame(uint64_t f) {
         if (g_cb) g_cb(m.info.name);
     }
     uint64_t t = f - g_start;
-    for (const Step &s : m.steps)
-        if (s.offset == t && !core().set_input(s.field, s.value))
-            fprintf(stderr, "macro \"%s\": unknown input '%s'\n", m.info.name.c_str(), s.field.c_str());
+    for (const Step &s : m.steps) {
+        if (s.offset != t) continue;
+        if (!core().set_input(s.field, s.value)) fprintf(stderr, "macro \"%s\": unknown input '%s'\n", m.info.name.c_str(), s.field.c_str());
+        else modscript::input(s.field, s.value);   // (mods' scripts see it as a player's, on_input)
+    }
     if (t >= m.length) {
         g_running = -1;
         if (g_cb) g_cb("");

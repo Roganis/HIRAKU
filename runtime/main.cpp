@@ -30,6 +30,7 @@
 #include "host/menukey.h"
 #include "host/menupic.h"
 #include "host/mods.h"
+#include "host/modscript.h"
 #include "host/record.h"
 #include "host/script.h"
 #include "shell/cabinet.h"
@@ -47,6 +48,7 @@
 #include "host/warp.h"
 #include "host/window.h"
 #include "host/pacing.h"
+#include "host/statsview.h"
 #endif
 
 // The options every core takes (--help prints them: a release has no source to read them in)
@@ -495,6 +497,7 @@ int main(int argc, char **argv) {
     // keys and controllers), and --mod-api's answer
 #ifdef HK_WITH_SDL
     mods::offer("actions");
+    mods::offer("draw");   // (scripts' drawing: over the window's picture, host/modscript.h)
 #endif
     if (mod_api) {
         printf("%s", mods::api_text(opt.root, game).c_str());
@@ -674,6 +677,10 @@ int main(int argc, char **argv) {
     if (window_scale) {   // a player's readers and cabinet; scripted runs keep to their inputs
 #ifdef HK_WITH_SDL
         host::notice::warn(machine.setup_warning());   // e.g. Keyboardmania's blank sound flash
+        if (modscript::any()) {   // mods' scripts: their text's font, their hk.notice on the window
+            modscript::set_font(host::statsview::font());
+            modscript::set_notice([](const std::vector<std::string> &lines) { host::notice::hint(lines, 3); });
+        }
         host::notice::start(opt.root);   // a new release, said on the window (not from the launcher)
 #endif
         host::readers_start();
@@ -856,6 +863,8 @@ int main(int argc, char **argv) {
                 hk::sys::exit(machine.exit_code());
             }
         }
+        // mods' scripts (host/modscript.h): the controls given, on_frame, their drawing where there's a window
+        if (modscript::any()) modscript::frame(f, w, h, window_scale != 0);
         // the lamps the frame just emulated lit, out now: before the wait for the frame's time below
         // (most of a frame, on a PC that keeps up), not after it. The controls are read after it.
 #ifdef HK_WITH_SDL

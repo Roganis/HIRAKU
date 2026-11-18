@@ -279,6 +279,11 @@ target_include_directories(hiraku_shell PUBLIC runtime)
 find_package(Threads REQUIRED)
 find_package(ZLIB REQUIRED)   # mods' PNG pictures (runtime/host/png.h)
 target_link_libraries(hiraku_shell PUBLIC hiraku_cabinet Threads::Threads ZLIB::ZLIB)
+# Mods' scripts (runtime/host/modscript.h, docs/MODS.md "Scripts"): Lua, sandboxed (cmake/lua.cmake)
+include(cmake/lua.cmake)
+hk_add_lua(hk_lua)
+target_sources(hiraku_shell PRIVATE runtime/host/modscript.cpp)
+target_link_libraries(hiraku_shell PRIVATE hk_lua)
 # The game recorded to a video file (runtime/host/record.h: --record, F6), with FFmpeg's own
 # encoders (FFV1, FLAC, Matroska: tools/ffmpeg-min.sh builds them in); without FFmpeg, it says so.
 # (The same libraries as Twinkle's background video, below)

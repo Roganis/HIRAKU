@@ -96,5 +96,8 @@ void place(const Panel &p, int win_w, int win_h, int &x, int &y, int &dw, int &d
 // For tests: the clock (ns) in place of the steady one, and the place as fractions of the free room
 void set_clock(uint64_t (*now)());
 void where(double &fx, double &fy);
+// SDL's 8x8 font as this panel draws it: 96 glyphs from ' ', a byte a row, bit 0 the left pixel (the
+// text of mods' scripts, host/modscript.h)
+const uint8_t (*font())[8];
 
 }  // namespace hk::host::statsview

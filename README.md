@@ -72,7 +72,7 @@ Firebeat games are statically recompiled from PowerPC to C (the packages, which 
 
 ## Licence
 
-GPL-3.0-or-later (see `LICENSE`). Code taken from other projects keeps its own licence and notices: MAME (BSD-3-Clause), Musashi (MIT), PCSX2 Reliquary (GPL-3.0-or-later), minimp3 (CC0), libchdr (BSD-3-Clause, with dr_flac and the LZMA SDK decoder, public domain), libretro's slang-shaders (GPL-2.0-or-later), Lola Retro (MIT) and the Blur Busters CRT Beam Simulator (MIT). Parts of HIRAKU were written after spice2x (GPL-3.0: the card readers, the BIO2 board, the PC games' I/O) and kbinxml (MIT: binary XML). popnhax (CrazyRedMachine) gave the ideas for presses judged when they happened, the PIN typed for the player and text mods; it has no licence, so none of its code is used. The full list is in the launcher's Help > About HIRAKU.
+GPL-3.0-or-later (see `LICENSE`). Code taken from other projects keeps its own licence and notices: MAME (BSD-3-Clause), Musashi (MIT), PCSX2 Reliquary (GPL-3.0-or-later), minimp3 (CC0), libchdr (BSD-3-Clause, with dr_flac and the LZMA SDK decoder, public domain), libretro's slang-shaders (GPL-2.0-or-later), Lola Retro (MIT), the Blur Busters CRT Beam Simulator (MIT) and Lua (MIT). Parts of HIRAKU were written after spice2x (GPL-3.0: the card readers, the BIO2 board, the PC games' I/O) and kbinxml (MIT: binary XML). popnhax (CrazyRedMachine) gave the ideas for presses judged when they happened, the PIN typed for the player and text mods; it has no licence, so none of its code is used. The full list is in the launcher's Help > About HIRAKU.
 
 Thanks to the testers, tyam, yaladre, [MohaHtn](https://github.com/MohaHtn) and [CrazyRedMachine](https://github.com/CrazyRedMachine), who tried HIRAKU on their own PCs and cabinets.
 

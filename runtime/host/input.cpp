@@ -19,6 +19,7 @@
 #include "axisturn.h"
 #include "menukey.h"
 #include "mods.h"
+#include "modscript.h"
 #include "notice.h"
 #include "warp.h"
 
@@ -139,6 +140,7 @@ void press(const std::string &name, bool down, double speed = 1.0) {
     if (name.find(" Wheel Up") != std::string::npos || name.find(" Wheel Down") != std::string::npos) return;   // likewise
     if (name.rfind("Volume ", 0) == 0 && (name.find(" Up") != std::string::npos || name.find(" Down") != std::string::npos)) return;
     menukey::input(name, n > 0 ? 1 : 0);   // (the way out to the game menu watches what the game is given)
+    modscript::input(name, n > 0 ? 1 : 0);   // (... and mods' scripts, on_input)
     core().set_input(name, n > 0 ? 1 : 0);
 }
 

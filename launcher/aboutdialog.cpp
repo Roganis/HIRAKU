@@ -38,6 +38,7 @@ const Licence kLicences[] = {
     {"crt-guest-advanced-fast: GNU GPL v2 or later", "third_party/slang-shaders/crt/shaders/guest/fast/bloom_horizontal.slang", 22},
     {"Lola Retro: MIT", "third_party/lola-retro/LICENSE", 0},
     {"TinySoundFont (the launcher's music): MIT", "third_party/tinysoundfont/LICENSE", 0},
+    {"Lua (mods' scripts): MIT", "third_party/lua/LICENSE", 0},
     {"Blur Busters CRT Beam Simulator: MIT", "third_party/crt-beam-simulator/LICENSE", 0},
     {"Wayland presentation-time: MIT", "third_party/wayland/presentation-time.xml", 26},
     {"Wayland fifo-v1: MIT", "third_party/wayland/fifo-v1.xml", 24},
@@ -105,6 +106,8 @@ QString softwareHtml() {
          "</b> (MIT, Zoki): the analog CRT picture, the signal, the TV and the tube.</li>";
     h += "<li><b>" + link("https://github.com/blurbusters/crt-beam-simulator", "Blur Busters CRT Beam Simulator") +
          "</b> (MIT, Mark Rejhon and Timothy Lottes): a CRT's rolling scan on a fast display.</li>";
+    h += "<li><b>" + link("https://www.lua.org", "Lua") +
+         "</b> 5.4 (MIT, Lua.org, PUC-Rio): the language of mods' scripts.</li>";
     h += "<li><b>" + link("https://gitlab.freedesktop.org/wayland/wayland-protocols", "wayland-protocols") +
          "</b> (MIT): presentation-time (Collabora) and fifo-v1 (Valve), for frame pacing.</li>";
     h += "<li><b>" + link("https://spice2x.github.io", "spice2x") +

@@ -116,6 +116,7 @@ public:
     void report() override { printf("menu: %llu frames\n", (unsigned long long)frame_); }
     double seconds() const override { return (double)frame_ / 60.0; }
     const uint8_t *mem(uint32_t, uint32_t) const override { return nullptr; }
+    bool mod_memory() const override { return false; }
     uint64_t frame_count() const override { return frame_; }
     const std::vector<uint8_t> &lamp_state() const override { return lamps_; }
     uint64_t lamp_changes() const override { return lamp_changes_; }

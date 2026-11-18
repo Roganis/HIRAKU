@@ -5,6 +5,7 @@
 #include "gamemenu.h"
 #include "powerplan.h"
 #include "menufont.h"
+#include "recording.h"
 #include "../third_party/mdi/icons.h"
 #include "nvidia.h"
 
@@ -48,6 +49,7 @@
 #include <QStandardPaths>
 #include <QPlainTextEdit>
 #include <QPushButton>
+#include <QProgressDialog>
 #include <QInputDialog>
 #include <QCheckBox>
 #include <QJsonArray>
@@ -509,6 +511,12 @@ MainWindow::MainWindow() {
     file->addSeparator();
     file->addAction(addFiles);
     file->addAction(addFolder);
+    file->addSeparator();
+    file->addAction("Convert recordings for sharing…", this, &MainWindow::convertRecordings);
+    file->addAction("Open the recordings folder", this, [] {
+        QDir().mkpath(cfg::recordingsDir());
+        QDesktopServices::openUrl(QUrl::fromLocalFile(cfg::recordingsDir()));
+    });
     file->addSeparator();
     file->addAction("Open the HIRAKU folder", this, [] { QDesktopServices::openUrl(QUrl::fromLocalFile(cfg::rootDir())); });
     file->addAction("Open the settings folder", this, [] {
@@ -1385,6 +1393,10 @@ QStringList MainWindow::arguments(const Game &g) const {
     }
     if (s.value("lights/overlay", false).toBool()) a << "--lights-overlay";   // runtime/host/lampview.h
     if (const QString o = s.value("video/statsOverlay", "off").toString(); o != "off") a << "--stats-overlay" << o;   // host/statsview.h
+    // F6's recordings (Settings > Display > Recording; runtime/host/record.h), in the saves' folder's
+    a << "--record-folder" << cfg::recordingsDir()
+      << recording::arguments(s.value("record/format", "ffv1").toString(), s.value("record/encoder", "auto").toString(),
+                              s.value("record/scale", 0).toInt());
     if (s.value("game/fastBoot", true).toBool() && g.core != "pc") {   // runtime/host/warp.h
         // a start that installs the game's data (minutes): fast to the install's end instead
         if (g.installSeconds > 0 && (firstBoot(g) || installCassette(g) || installCd(g)))
@@ -2248,6 +2260,87 @@ void MainWindow::log(const QString &text) {
     m_log->moveCursor(QTextCursor::End);
     m_log->insertPlainText(text);
     m_log->moveCursor(QTextCursor::End);
+}
+
+// File > Convert recordings for sharing: lossless recordings (F6's .mkv) made into H.264 MP4 beside
+// them, one after another, by a game's program (--convert-recording: hiraku-menu's, which every
+// package has), with Settings' encoder and size; a progress box, Stop ends it (the file half-made
+// goes); each result in the log
+void MainWindow::convertRecordings() {
+    QString exe;
+    for (const QString &name : {"hiraku-menu", "hiraku-djmain", "hiraku-sys573", "hiraku-twinkle", "hiraku-firebeat"})
+        for (const QString &d : {cfg::binDir(), QCoreApplication::applicationDirPath(), cfg::rootDir() + "/bin", cfg::rootDir() + "/build/cmake"})
+            if (const QFileInfo f(d + "/" + cfg::exeName(name)); exe.isEmpty() && f.isFile() && f.isExecutable()) exe = f.absoluteFilePath();
+    if (exe.isEmpty()) {
+        QMessageBox::warning(this, "Convert recordings", "No program to convert with: hiraku-menu isn't in " + cfg::binDir() + ".");
+        return;
+    }
+    QDir().mkpath(cfg::recordingsDir());
+    const QStringList files = recording::firstParts(QFileDialog::getOpenFileNames(
+        this, "Convert recordings for sharing (H.264, .mp4)", cfg::recordingsDir(), "Exact recordings (*.mkv)"));
+    if (files.isEmpty()) return;
+    auto &s = cfg::settings();
+    const QStringList opts = recording::arguments("h264", s.value("record/encoder", "auto").toString(), s.value("record/scale", 0).toInt(), true);
+    auto *box = new QProgressDialog("Converting…", "Stop", 0, 100 * (int)files.size(), this);
+    box->setWindowTitle("Convert recordings");
+    box->setWindowModality(Qt::WindowModal);
+    box->setMinimumDuration(0);
+    box->setAttribute(Qt::WA_DeleteOnClose);
+    box->setAutoClose(false), box->setAutoReset(false);
+    auto *proc = new QProcess(box);
+    proc->setProcessChannelMode(QProcess::MergedChannels);
+    struct State {
+        int at = -1;
+        bool stopped = false;
+        QStringList made, failed;
+        QByteArray pending;
+    };
+    auto st = std::make_shared<State>();
+    auto *next = new std::function<void()>;   // (the next file, or the end: the box's, gone with it)
+    connect(box, &QObject::destroyed, [next] { delete next; });
+    *next = [this, box, proc, st, files, exe, opts] {
+        if (++st->at >= files.size() || st->stopped) {
+            box->close();
+            QString text = st->made.isEmpty() ? QString("No recording was converted.")
+                                              : "Made:\n" + st->made.join("\n");
+            if (!st->failed.isEmpty()) text += "\n\nNot converted (the log says why):\n" + st->failed.join("\n");
+            QMessageBox::information(this, "Convert recordings", text);
+            return;
+        }
+        const QString in = files[st->at];
+        box->setLabelText(QString("Converting %1 (%2 of %3)…").arg(QFileInfo(in).fileName()).arg(st->at + 1).arg(files.size()));
+        box->setValue(100 * st->at);
+        log("convert: " + in + "\n");
+        proc->start(exe, QStringList{"--convert-recording", in} + opts);
+    };
+    connect(proc, &QProcess::readyRead, box, [this, box, proc, st] {
+        st->pending += proc->readAll();
+        for (int nl; (nl = (int)st->pending.indexOf('\n')) >= 0;) {
+            const QByteArray line = st->pending.left(nl + 1);
+            st->pending.remove(0, nl + 1);
+            if (const int pc = recording::progressOf(line); pc >= 0) box->setValue(100 * st->at + pc);
+            else log(QString::fromUtf8(line));
+        }
+    });
+    connect(proc, &QProcess::finished, box, [files, st, next](int code, QProcess::ExitStatus how) {
+        const QString in = files[st->at], out = recording::convertedName(in);
+        if (how == QProcess::NormalExit && code == 0) st->made << out;
+        else {
+            if (st->stopped) QFile::remove(out);   // (half made)
+            st->failed << in;
+        }
+        (*next)();
+    });
+    connect(proc, &QProcess::errorOccurred, box, [files, st, next](QProcess::ProcessError e) {
+        if (e != QProcess::FailedToStart) return;
+        st->failed << files[st->at];
+        (*next)();
+    });
+    connect(box, &QProgressDialog::canceled, proc, [proc, st] {
+        st->stopped = true;
+        proc->kill();
+    });
+    (*next)();
 }
 
 // A game that stopped by itself with an error: why, in words, its last messages, and its log

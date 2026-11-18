@@ -9,7 +9,8 @@
 #     and PipeWire itself when it finds them, so it is built with their headers there (the
 #     workflow installs them) and needs none of them to start;
 #   - zstd, static (libchdr's CHDs);
-#   - FFmpeg's MPEG-1/2 decoding, static (tools/ffmpeg-min.sh: Twinkle's background video);
+#   - FFmpeg, static (tools/ffmpeg-min.sh): Twinkle's background video, and the games' video
+#     recordings with x264 and the graphics cards' encoders (tools/enc-deps.sh);
 #   - Qt 6.12 for the launcher, from the Qt Company's binaries (aqtinstall), bundled by
 #     tools/package.sh;
 #   - 7-Zip's 7zz, static, for .7z sets (tools/mameset.py looks in the package's bin/ first);
@@ -17,7 +18,7 @@
 #   - DXVK's 64-bit d3d9.dll (zlib licence) for the 64-bit PC games under Wine (Wine's own
 #     Direct3D 9 misplaces its pictures: PLAN.md section 32), in the package's bin/pc/.
 # Each step is skipped when its result is already there (the workflow caches PREFIX). The source
-# tarballs are kept in PREFIX/src (the LGPL ones are published beside the packages).
+# tarballs are kept in PREFIX/src (FFmpeg's, SDL's and x264's are published beside the packages).
 set -euo pipefail
 prefix=${1:?prefix}
 mkdir -p "$prefix/src"

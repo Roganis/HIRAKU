@@ -317,18 +317,41 @@ Every game records: DJ Main, Firebeat, System 573, Twinkle, the Konami Python ga
 them). A picture size that changes and stays (a game's boot screens, a new video mode) goes on
 in a second file (`...-2.mkv`), from the moment it changed.
 
-The files are lossless FFV1 video with FLAC sound in Matroska (`.mkv`), so they are big: under
-1 MB a second for a still screen, 3–5 MB a second while a beatmania or pop'n song plays, and up
-to about 20 MB a second for a PC game's detailed pictures (pop'n music 15's title: 18 MB a
-second, 65 GB an hour). VLC, mpv, MPC-HC, Shotcut, Kdenlive and FFmpeg read them; Windows' own
-player and browsers don't, so convert one to share it, e.g. `ffmpeg -i in.mkv -c:v libx264
--crf 16 -pix_fmt yuv420p -c:a aac out.mp4`.
+There are two kinds of recording (Settings > Display > Recording):
+
+- **Exact, lossless** (the default): FFV1 video with FLAC sound in Matroska (`.mkv`), every pixel
+  and sound as the game made them, so they are big: under 1 MB a second for a still screen, 2–5 MB
+  a second while a beatmania or pop'n song plays (beatmania's attract: about 115 MB a minute), and
+  up to about 20 MB a second for a PC game's detailed pictures (pop'n music 15's title: 18 MB a
+  second, 65 GB an hour). VLC, mpv, MPC-HC, Shotcut, Kdenlive and FFmpeg read them; Windows' own
+  player, phones and browsers don't.
+- **For sharing, H.264** (`.mp4`, AAC sound): plays everywhere, about a sixth of the size or less
+  (beatmania's attract: 19 MB a minute). H.264 keeps the colours at half the resolution, which
+  smears pixel art at the game's own size, so the picture can first be enlarged by whole pixels.
+  **Automatic** (the default) does it when a graphics card encodes, as many times as fit in
+  1920x1440 (beatmania 3x, 1536x1152; pop'n 640x480 3x), and keeps the game's own size when the
+  processor does (several times the work there; most games are 480 lines or fewer). 2x, 3x, 4x
+  or the game's own size, chosen in Settings, is used whichever encodes. The pixels' shape stays
+  as the game's.
+
+The encoder for H.264 (**Encoder** in Settings): **Automatic** takes the graphics card's own
+encoder when one works on the PC (NVIDIA's NVENC, AMD's AMF on Windows, Vulkan video with AMD
+and Intel cards, VAAPI too when HIRAKU is built from source on Linux, Windows' Media Foundation
+with any card), and x264 on the processor otherwise. A card's encoder costs the game nearly
+nothing; x264 takes some processor time (beatmania at its own size: about 2 ms a frame, 5 MB a
+minute; enlarged 3x: about 12 ms, spread over several cores). **Graphics card** and
+**Processor** choose. The run's log says which encoder was taken and why the others weren't.
+
+**File > Convert recordings for sharing** makes an exact recording into an H.264 `.mp4` beside it
+afterwards, with the same encoder and size settings; a recording in parts (`...-2.mkv`) becomes as
+many `.mp4` files. **File > Open the recordings folder** opens the folder.
 
 From the command line (**Arguments…**): `--record` records from the start (`--record FILE`
-to a file or folder of yours), `--record-folder DIR` sets F6's folder, and `--record-format h264`
-writes MP4 instead where the program's FFmpeg has an H.264 encoder that works on the PC: the
-Python games on Windows (their FFmpeg has x264 and the graphics cards' encoders), and builds from
-source on a distribution's FFmpeg; not the other games of a release.
+to a file or folder of yours), `--record-folder DIR` sets F6's folder, `--record-format h264`
+records for sharing, `--record-encoder auto|gpu|x264` and `--record-scale auto|1|2|3...` as in
+Settings, and `hiraku-menu --convert-recording IN.mkv [OUT.mp4]` converts one (any HIRAKU program
+does it). A run with no window (or the fast start-up) always takes x264, so its file is the same
+every time.
 
 ## The last runs' logs
 

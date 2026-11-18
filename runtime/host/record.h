@@ -9,14 +9,20 @@
 // FLAC (the sound as --wav has it, 16-bit) in Matroska (.mkv), with FFmpeg's own encoders, in every
 // build: the PCs' players that use FFmpeg's decoders (VLC, mpv, MPC-HC, PotPlayer), its editors
 // (Shotcut, Kdenlive, Olive, Avidemux) and FFmpeg itself (to convert) read it; Windows' own player
-// and browsers don't. --record-format h264: H.264 and AAC in MP4, which plays everywhere, where the
-// FFmpeg linked has an H.264 encoder (libx264 in a distribution's FFmpeg, or a graphics card's: NVENC,
-// AMF, Quick Sync, Media Foundation): the Python core's on Windows (PCSX2's FFmpeg DLLs); the other
-// cores' release builds (tools/ffmpeg-min.sh, static) have none.
+// and browsers don't. --record-format h264: H.264 and AAC in MP4, which plays everywhere and is about
+// a sixth of the size, for sharing. Its encoder (--record-encoder): x264, on the processor, or
+// a graphics card's own (NVIDIA's NVENC, AMD's AMF, Intel's Quick Sync, VAAPI or Vulkan video on
+// Linux, Media Foundation on Windows: any card's), in a constant-quality mode; "auto" takes a card's
+// when one opens here and encodes a first picture, else x264; a run that keeps no real time always
+// takes x264 (its file the same every time). Before 4:2:0 halves the colour's resolution, the
+// picture may be enlarged by a whole number (nearest pixels; --record-scale), so pixel art stays
+// sharp: by default only with a card's encoder (it costs the processor nothing there).
+// A lossless recording becomes such a file afterwards with convert() (--convert-recording).
 //
-// The FFmpeg: the other cores link tools/ffmpeg-min.sh's static libraries (CMakeLists.txt); the
-// Python core links the shared ones PCSX2's own video capture loads at run time, so the process has
-// one copy (runtime/python/CMakeLists.txt).
+// The FFmpeg: the other cores link tools/ffmpeg-min.sh's static libraries (CMakeLists.txt; x264 and
+// the cards' encoders that load their driver only when asked, tools/enc-deps.sh); the Python core
+// links the shared ones PCSX2's own video capture loads at run time, so the process has one copy
+// (runtime/python/CMakeLists.txt).
 //
 // The frames: each picture's time is the machine's seconds since the file began, at the frames'
 // own rate (measured from the machine's clock when its frames come steadily, else the core's
@@ -58,6 +64,11 @@ class Capture {
 public:
     struct Setup {
         std::string format = "ffv1";   // ffv1 (.mkv) or h264 (.mp4)
+        // h264's encoder: auto (a graphics card's that works here, else x264; x264 while waiting),
+        // gpu (a card's, even while waiting; x264 if none works), x264, or an FFmpeg encoder's name
+        // (that one only: h264_mf is then Microsoft's own, in software)
+        std::string encoder = "auto";
+        int scale = 0;                  // h264: enlarged this many times (0: auto, scale_for)
         int audio_rate = 44100;         // Core::audio_rate
         double native_rate = 59.94;     // Core::native_rate: the frames' rate when their times vary
         double aspect = 4.0 / 3.0;      // Core::display_aspect (0: square pixels)
@@ -101,8 +112,9 @@ public:
         double encode_ms = 0;        // the worker's time encoding and writing, all frames
         double worker_cpu_ms = 0;    // its thread's CPU time
         int parts = 0;
-        int w = 0, h = 0;            // the last part's size
+        int w = 0, h = 0;            // the last part's size (enlarged)
         double rate = 0;             // its frame rate
+        std::string encoder;         // the video encoder taken (FFmpeg's name: ffv1, libx264, h264_vaapi...)
     };
     Stats stats() const;   // the last recording's (after stop)
 
@@ -114,6 +126,26 @@ private:
 // A new file's name in `folder`: <game>-YYYYMMDD-HHMMSS.<ext of the format> (local time), -2, -3...
 // when one is there already
 std::string file_name(const std::string &folder, const std::string &game, const std::string &format);
+
+// The H.264 encoder taken for `pref` (Setup::encoder; wait: Setup::wait): each of h264_order's
+// names tried in turn with try_one, which says "" when it opened here and encoded a first picture,
+// else why not; the first that did. `why`: the ones passed over and why, for the log. "" if none did
+std::vector<std::string> h264_order(const std::string &pref, bool wait);
+std::string choose_h264(const std::string &pref, bool wait, const std::function<std::string(const std::string &name)> &try_one,
+                        std::string &why);
+// The whole number a w x h picture is enlarged by in `format` with Setup::scale `scale` and the
+// encoder taken (h264_order's name): a number given, else (auto) the most within 1920x1440 with a
+// graphics card's encoder, the game's own size with the processor's (x264, Microsoft's h264_mf)
+int scale_for(const std::string &format, int scale, int w, int h, const std::string &encoder);
+
+// A lossless recording (FFV1 in Matroska, this recorder's) to H.264 and AAC in MP4, as --record-format
+// h264 would have written it: every frame at its time, the sound, the pixels' shape; `in`'s later
+// parts (NAME-2.mkv...) to out's (OUT-2.mp4...). out "": in's name, .mp4. s: its encoder and scale
+// (format, rates and shape come from the file). progress: 0..1, now and then. line: for the log
+bool convert(const std::string &in, const std::string &out, const Capture::Setup &s, const std::function<void(double)> &progress,
+             std::string &line, std::string &error);
+// The names convert() writes for in and out (the first part's; out "": in's, .mp4)
+std::string converted_name(const std::string &in, const std::string &out);
 
 // The mark over the window's picture while recording (not in the file: the window draws it over the
 // game's picture): a red dot and REC. pixels ARGB, w x h, at a 360-line screen's size

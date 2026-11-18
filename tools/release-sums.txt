@@ -17,3 +17,10 @@ a951bd163c7b80fc6b8c88d7668fb56abf91c152373e13c10666763238131307  qtbase-everywh
 # Of the file as downloaded on 2026-11-12 (its publisher gives no sum):
 9a93b2b7dfdac77ceba5a558a580e74667dd6fede4585b91eefb60f03b72df23  zlib-1.3.1.tar.gz
 a5cb1a6ded7d2d7e92d550ba28edd21be2d1d4044662b399887351023e30ce64  dxvk-2.6.2-LICENSE
+# The H.264 encoders' sources (tools/enc-deps.sh), as PCSX2 Reliquary 1.9.4's Windows build lists
+# them (its build-dependencies.bat), the same sums as the files downloaded on 2026-11-18:
+d95d059eff81cc565165cd058b66e208f0cc9874106a8fe94a811a66cf8a85a2  x264-b35605ace3ddf7c1a5d67a2eb553f034aef41d55.zip
+13da39edb3a40ed9713ae390ca89faa2f1202c9dda869ef306a8d4383e242bee  nv-codec-headers-13.0.19.0.tar.gz
+d3c12eb324edf05e214608b6a395a51dd95770ed9d45520185d6c3a206811c99  AMF-headers-v1.5.2.tar.gz
+# (PCSX2 Reliquary 1.9.4's Linux build-dependencies-qt.sh lists this one, the same sum as downloaded on 2026-11-18:)
+c465aa56757e7746ac707f582b6e2d51546569a4a2488c1172fb543aa5fdfc2c  Vulkan-Headers-vulkan-sdk-1.4.328.1.tar.gz

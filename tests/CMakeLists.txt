@@ -426,6 +426,12 @@ if(Qt6_FOUND)
     target_link_libraries(test_menufont PRIVATE Qt6::Gui hiraku_menu)
     add_test(NAME launcher_menu_font COMMAND test_menufont ${CMAKE_CURRENT_BINARY_DIR})
   endif()
+  # recording, the launcher's side (launcher/recording.h): Settings' choices as the game's options,
+  # the files a conversion takes, the converter's progress
+  add_executable(test_recording launcher/test_recording.cpp)
+  target_include_directories(test_recording PRIVATE ${CMAKE_SOURCE_DIR}/launcher)
+  target_link_libraries(test_recording PRIVATE Qt6::Core)
+  add_test(NAME launcher_recording COMMAND test_recording)
   # Windows' power plan while a game runs, the launcher's steps (launcher/powerplan.h)
   add_executable(test_powerplan launcher/test_powerplan.cpp ${CMAKE_SOURCE_DIR}/launcher/powerplan.cpp)
   target_include_directories(test_powerplan PRIVATE ${CMAKE_SOURCE_DIR}/launcher)

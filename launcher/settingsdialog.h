@@ -50,6 +50,7 @@ private:
     QComboBox *m_pyRenderer;                // the Konami Python games' GS: Vulkan, OpenGL, software
     QComboBox *m_motion;                    // on a fast display: frames held, smooth motion, the CRT beam
     QComboBox *m_statsOverlay;              // the performance overlay from the start (runtime/host/statsview.h)
+    QComboBox *m_recFormat, *m_recEncoder, *m_recScale;   // F6's recordings (recording.h, runtime/host/record.h)
     QDoubleSpinBox *m_beamGamma, *m_beamGain;
     QLineEdit *m_soundfont, *m_root, *m_bin, *m_nvram, *m_extra;
     QCheckBox *m_musicShuffle;               // the launcher's music (music.h)

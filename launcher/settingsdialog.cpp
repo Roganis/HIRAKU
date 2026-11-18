@@ -540,6 +540,43 @@ void SettingsDialog::displayPage(QVBoxLayout *v) {
     });
     fv->addRow("Picture:", pic);
     v->addWidget(frames);
+    // F6 in the game: the game to a video file (runtime/host/record.h, docs/PLAY.md "Recording video")
+    auto *rec = new QGroupBox("Recording (F6 in the game)");
+    auto *fr = new QFormLayout(rec);
+    m_recFormat = new QComboBox;
+    m_recFormat->addItem("Exact, lossless (.mkv: every pixel and sound as the game made them; large)", "ffv1");
+    m_recFormat->addItem("For sharing, H.264 (.mp4: plays everywhere, about a sixth of the size)", "h264");
+    m_recFormat->setCurrentIndex(std::max(0, m_recFormat->findData(s.value("record/format", "ffv1").toString())));
+    m_recFormat->setToolTip("Exact recordings play in VLC, mpv and FFmpeg's other players and editors, and can be made "
+                            "into the other kind afterwards (File > Convert recordings for sharing). Recordings go to "
+                            "the recordings folder in the saves' folder.");
+    fr->addRow("Recording:", m_recFormat);
+    m_recEncoder = new QComboBox;
+    m_recEncoder->addItem("Automatic: the graphics card's when it can, else the processor", "auto");
+    m_recEncoder->addItem("Graphics card (NVIDIA, AMD, Intel, or Windows' own)", "gpu");
+    m_recEncoder->addItem("Processor (x264)", "x264");
+    m_recEncoder->setCurrentIndex(std::max(0, m_recEncoder->findData(s.value("record/encoder", "auto").toString())));
+    m_recEncoder->setToolTip("Who compresses the video. A graphics card's encoder costs the game nearly nothing; x264 "
+                             "takes processor time but works on every PC. The game's log says which was taken and why.");
+    fr->addRow("Encoder:", m_recEncoder);
+    m_recScale = new QComboBox;
+    m_recScale->addItem("Automatic: enlarged to about 1440 lines by a graphics card, the game's own by the processor", 0);
+    m_recScale->addItem("The game's own size", 1);
+    for (int k = 2; k <= 4; k++) m_recScale->addItem(QString("%1×").arg(k), k);
+    m_recScale->setCurrentIndex(std::max(0, m_recScale->findData(s.value("record/scale", 0).toInt())));
+    m_recScale->setToolTip("H.264 keeps colour at half the resolution, which smears pixel art at the game's own size: "
+                           "enlarged by whole pixels first, it stays sharp. A graphics card's encoder does that for "
+                           "nothing; on the processor it takes several times the work, so Automatic keeps the game's "
+                           "own size there (most games are 480 lines or fewer). A size chosen here is used either way.");
+    fr->addRow("Size:", m_recScale);
+    auto recShown = [this] {
+        const bool h264 = m_recFormat->currentData().toString() == "h264";
+        m_recEncoder->setEnabled(h264);
+        m_recScale->setEnabled(h264);
+    };
+    connect(m_recFormat, &QComboBox::currentIndexChanged, this, recShown);
+    recShown();
+    v->addWidget(rec);
     auto *py = new QGroupBox("Konami Python games (pop'n music 9-14, DrumMania V and V2)");
     auto *fy = new QFormLayout(py);
     m_pyRenderer = new QComboBox;
@@ -1050,6 +1087,9 @@ void SettingsDialog::accept() {
     s.setValue("video/crtBeamGamma", m_beamGamma->value());
     s.setValue("video/crtBeamGain", m_beamGain->value());
     s.setValue("video/statsOverlay", m_statsOverlay->currentData().toString());
+    s.setValue("record/format", m_recFormat->currentData().toString());
+    s.setValue("record/encoder", m_recEncoder->currentData().toString());
+    s.setValue("record/scale", m_recScale->currentData().toInt());
     s.setValue("video/picture", m_picture->currentData().toString());
     s.setValue("video/pythonRenderer", m_pyRenderer->currentData().toString());
     for (const cfg::ShaderKey &k : cfg::shaderKeys()) {   // only what differs from the defaults

@@ -124,7 +124,15 @@ QString softwareHtml() {
          "</b> (GPL-3.0-or-later), a fork of " + link("https://github.com/PCSX2/pcsx2", "PCSX2") +
          ": the emulator inside the Konami Python core.</li>";
     h += "<li><b>" + link("https://ffmpeg.org", "FFmpeg") +
-         "</b> (LGPL-2.1-or-later): Twinkle's background video, when found at build time.</li>";
+         "</b> (LGPL-2.1-or-later; GPL-2.0-or-later as built with x264): Twinkle's background video and the "
+         "games' video recordings, when found at build time.</li>";
+    h += "<li><b>" + link("https://www.videolan.org/developers/x264.html", "x264") +
+         "</b> (GPL-2.0-or-later): H.264 recordings on the processor, inside the packages' FFmpeg.</li>";
+    h += "<li><b>" + link("https://github.com/FFmpeg/nv-codec-headers", "nv-codec-headers") + "</b> and <b>" +
+         link("https://github.com/GPUOpen-LibrariesAndSDKs/AMF", "AMD AMF") +
+         "</b> headers (MIT): H.264 recordings on NVIDIA and AMD graphics cards, with their drivers.</li>";
+    h += "<li><b>" + link("https://github.com/KhronosGroup/Vulkan-Headers", "Vulkan-Headers") +
+         "</b> (Apache-2.0 or MIT): H.264 recordings by Vulkan video (AMD and Intel cards), with their drivers.</li>";
     h += "<li><b>" + link("https://www.fluidsynth.org", "FluidSynth") +
          "</b> (LGPL-2.1-or-later): Keyboardmania's SoundFont stand-in for the XT446, when found at build time.</li>";
     h += "<li><b>" + link("https://wayland.freedesktop.org", "libwayland-client") + "</b> (MIT).</li>";

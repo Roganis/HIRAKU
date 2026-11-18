@@ -5,7 +5,7 @@
 # no build/ or dumps/ anyway).
 #
 # - a push of a tag v*: both packages, published as a GitHub release (a draft, to look over first),
-#   with the LGPL libraries' sources beside them, and hiraku-server's own Linux package, EXPERIMENTAL
+#   with the libraries' sources beside them (FFmpeg, SDL, x264), and hiraku-server's own Linux package, EXPERIMENTAL
 #   (hiraku-server-VERSION-linux-x86_64-experimental.tar.xz: the server job, below);
 # - a push to main or to a branch named ci/... (or a pull request): both packages as the run's
 #   artifacts, kept 14 days, and the unit tests (ctest; the Windows programs' under Wine; on
@@ -44,14 +44,14 @@ jobs:
         uses: actions/cache@v6
         with:
           path: ~/hiraku-deps
-          key: linux-deps-${{ hashFiles('tools/release-deps-linux.sh', 'tools/ffmpeg-min.sh') }}
+          key: linux-deps-${{ hashFiles('tools/release-deps-linux.sh', 'tools/ffmpeg-min.sh', 'tools/enc-deps.sh') }}
       - name: Libraries (SDL3, zstd, FFmpeg, Qt, Python, 7-Zip)
         run: tools/release-deps-linux.sh ~/hiraku-deps
       - name: Cache PCSX2 Reliquary's libraries
         uses: actions/cache@v6
         with:
           path: ~/hiraku-python/deps
-          key: python-deps-${{ hashFiles('tools/release-python-linux.sh') }}
+          key: python-deps-${{ hashFiles('tools/release-python-linux.sh', 'tools/enc-deps.sh') }}
       - name: The Konami Python core (PCSX2 Reliquary 1.9.4, hiraku-python)
         run: tools/release-python-linux.sh ~/hiraku-python ~/hiraku-deps
       - name: Build and package
@@ -72,8 +72,10 @@ jobs:
           cmake build/release-linux -DPython3_EXECUTABLE=$HOME/hiraku-deps/python/bin/python3 \
             "-DHK_TESTS_REQUIRED=ppc_semantics;picture_engine;host_alsa_lost;release_fetch;package_run_paths"
           HK_TESTS_NO_SKIP=1 xvfb-run -a -s "-screen 0 1280x1024x24" ctest --test-dir build/release-linux --output-on-failure
-      - name: The LGPL libraries' sources
-        run: cp ~/hiraku-deps/src/ffmpeg-*.tar.xz ~/hiraku-deps/src/SDL3-*.tar.gz dist/
+      # (FFmpeg's and SDL's, LGPL; x264's, GPL, built into the games' FFmpeg for their H.264 recordings:
+      # tools/enc-deps.sh. The Windows package's are the same versions)
+      - name: The libraries' sources
+        run: cp ~/hiraku-deps/src/ffmpeg-*.tar.xz ~/hiraku-deps/src/SDL3-*.tar.gz ~/hiraku-deps/src/x264-*.zip dist/
       - uses: actions/upload-artifact@v7
         with:
           retention-days: ${{ startsWith(github.ref, 'refs/tags/v') && 90 || 14 }}
@@ -194,7 +196,7 @@ jobs:
       - name: Build tools
         run: |
           pacman -Syu --noconfirm --needed base-devel git clang lld llvm mingw-w64-gcc qt6-base cmake ninja \
-            nasm python p7zip zip curl
+            nasm python p7zip zip unzip curl
       # (before the build is set up: tests/CMakeLists.txt gives the tests to Wine if it finds it; a
       # release's build has no tests, and Wine then tries its package: tools/smoke.sh)
       # (and a display that isn't one, for the one test where a game draws: tests/pc/test_selfgame.sh)
@@ -208,7 +210,7 @@ jobs:
         uses: actions/cache@v6
         with:
           path: out/win-deps
-          key: windows-deps-qt${{ steps.qt.outputs.version }}-${{ hashFiles('tools/release-deps-windows.sh', 'tools/win-deps.sh', 'tools/ffmpeg-min.sh', 'cmake/x86_64-w64-mingw32.cmake') }}
+          key: windows-deps-qt${{ steps.qt.outputs.version }}-${{ hashFiles('tools/release-deps-windows.sh', 'tools/win-deps.sh', 'tools/ffmpeg-min.sh', 'tools/enc-deps.sh', 'cmake/x86_64-w64-mingw32.cmake') }}
       - name: Libraries (SDL3, zlib, zstd, static Qt, Python, FFmpeg, 7-Zip)
         run: HK_QT_BUILD=$RUNNER_TEMP/qt tools/release-deps-windows.sh
       - uses: actions/download-artifact@v8

@@ -66,8 +66,16 @@ static const char COMMON_OPTIONS[] = R"HK(  --frames N        stop after N video
                     folder or none: a file named by the game and the time in it, or in
                     --record-folder's. With --window, F6 starts and stops it. host/record.h
   --record-folder DIR  where F6's recordings go (default: <saves' folder>/recordings, as --nvram's)
-  --record-format F ffv1 (the default) or h264 (.mp4, where this build's FFmpeg has an H.264 encoder
-                    that works on this PC)
+  --record-format F ffv1 (the default) or h264 (.mp4, H.264 and AAC: for sharing, about a sixth of
+                    the size; where this build's FFmpeg has an H.264 encoder)
+  --record-encoder E  h264's encoder: auto (the default: the graphics card's when one works here,
+                    else x264; x264 when no real time is kept), gpu (the card's, else x264), x264,
+                    or an FFmpeg encoder's name (h264_vaapi, h264_mf...: that one only)
+  --record-scale N  h264: the picture enlarged N times, whole pixels (sharp after H.264's colour
+                    halving); auto (the default): the most within 1920x1440 with a graphics card's
+                    encoder, 1 (the game's own size) with the processor's. ffv1 is always 1
+  --convert-recording IN [OUT]  a lossless recording (.mkv, and its -2, -3... parts) to H.264 MP4
+                    (OUT, default IN's name .mp4), with --record-encoder and --record-scale, then exit
   --digest FILE     write one line per frame: frame number, a hash of the picture and a running
                     hash of all sound so far (tools/regress.py checks runs are bit-identical with it)
   --debug-every N   print the CPU state every N frames
@@ -380,6 +388,8 @@ int main(int argc, char **argv) {
     double menu_picture_at = 0;
     bool record_at_start = false;   // --record: host/record.h
     std::string record_path, record_folder, record_format = "ffv1";
+    std::string record_encoder = "auto", convert_in, convert_out;   // --record-encoder, --convert-recording
+    int record_scale = 0;   // --record-scale (0: auto)
     for (int k = 1; k < argc; k++) {
         std::string a = argv[k];
         // one dash is two, as spice2x writes its options (-url, -p, -card0: shell/eaoptions.h)
@@ -402,6 +412,9 @@ int main(int argc, char **argv) {
         else if (a == "--record") record_at_start = true, record_path = (k + 1 < argc && argv[k + 1][0] != '-') ? val() : "";
         else if (a == "--record-folder") record_folder = val();
         else if (a == "--record-format") record_format = val();
+        else if (a == "--record-encoder") record_encoder = val();
+        else if (a == "--record-scale") { const std::string v = val(); record_scale = v == "auto" ? 0 : std::max(1, std::stoi(v)); }
+        else if (a == "--convert-recording") convert_in = val(), convert_out = (k + 1 < argc && argv[k + 1][0] != '-') ? val() : "";
         else if (a == "--digest") digest_path = val();
         else if (a == "--script") script_path = val();
         else if (a == "--bindings") bindings = val();
@@ -465,6 +478,19 @@ int main(int argc, char **argv) {
 #else
     setvbuf(stdout, nullptr, _IOLBF, 0);
 #endif
+    if (!convert_in.empty()) {   // --convert-recording (host/record.h): no game runs; "convert: N %" lines for the launcher
+        host::record::Capture::Setup cs;
+        cs.encoder = record_encoder, cs.scale = record_scale;
+        int said = -1;
+        std::string line, error;
+        printf("convert: %s to %s\n", convert_in.c_str(), host::record::converted_name(convert_in, convert_out).c_str());
+        const bool ok = host::record::convert(convert_in, convert_out, cs, [&](double f) {
+            if (const int pc = (int)(f * 100); pc != said) printf("convert: %d %%\n", said = pc);
+        }, line, error);
+        if (!ok) fprintf(stderr, "convert: %s\n", error.c_str());
+        else printf("%s\n", line.c_str());
+        return ok ? 0 : 1;
+    }
     // the mod API (host/mods.h): what the shell offers besides the core's (actions: a window's
     // keys and controllers), and --mod-api's answer
 #ifdef HK_WITH_SDL
@@ -703,6 +729,8 @@ int main(int argc, char **argv) {
     // vertical blank, where it has one), else the frame hook's; finished in report() at any way out
     host::record::Capture::Setup record_setup;
     record_setup.format = record_format;
+    record_setup.encoder = record_encoder;
+    record_setup.scale = record_scale;
     record_setup.audio_rate = machine.audio_rate();
     record_setup.native_rate = machine.native_rate();
     record_setup.aspect = machine.display_aspect();

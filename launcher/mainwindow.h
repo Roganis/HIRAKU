@@ -74,6 +74,7 @@ private:
     void exitReport(const QString &title, int code, QProcess::ExitStatus st);   // why a game stopped, and its log
     void controls(const QString &family);   // the Controls dialog, which can end by starting a game to try them
     void log(const QString &text);
+    void convertRecordings();   // File > Convert recordings for sharing (recording.h)
 
     QList<Game> m_games;
     QTreeWidget *m_list;

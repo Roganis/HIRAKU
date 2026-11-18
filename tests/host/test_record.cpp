@@ -3,7 +3,11 @@
 // back with the same FFmpeg libraries: the frames' count, size, rate, shape and times, every pixel
 // (FFV1 is lossless), the sound's every sample (as --wav has it), a smaller picture scaled into the
 // file and a larger one starting the next, frames left out when the encoder is behind (with the
-// times kept), a run the same file twice, a machine whose frame times vary.
+// times kept), a run the same file twice, a machine whose frame times vary. H.264, where the FFmpeg
+// has x264: frames, times, the enlarged size, the sound's length, a quality floor (PSNR of the
+// brightness against the pictures put in), the same file twice; a graphics card's encoder where one
+// works here (HK_RECORD_NO_GPU=1: not tried); which encoder is taken, with made-up ones; a lossless
+// recording converted (frames and times kept, its parts each to a file).
 //
 //   test_record DIR     DIR: a folder to write the files in. Exit 0 when all hold, 77 (skipped) when
 //                       the FFmpeg linked has no FFV1, FLAC, Matroska or file writing
@@ -14,6 +18,7 @@
 #include <fstream>
 #include <iterator>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "host/record.h"
@@ -68,6 +73,7 @@ struct Decoded {
     AVRational rate{0, 1}, sar{0, 1}, vtb{0, 1};
     std::vector<int64_t> pts;                 // the frames' times, in vtb
     std::vector<std::vector<uint32_t>> frames;
+    std::vector<std::vector<uint8_t>> luma;   // H.264's: each frame's brightness plane (keep_luma)
     std::vector<int16_t> pcm;                 // interleaved stereo (16-bit sound: FLAC's)
     int64_t samples = 0;                      // the sound's length, each channel
     int audio_rate = 0;
@@ -75,7 +81,7 @@ struct Decoded {
     std::string vcodec, acodec;
 };
 
-bool decode(const std::string &path, Decoded &out) {
+bool decode(const std::string &path, Decoded &out, bool keep_luma = false) {
     AVFormatContext *fmt = nullptr;
     if (avformat_open_input(&fmt, path.c_str(), nullptr, nullptr) < 0) return false;
     if (avformat_find_stream_info(fmt, nullptr) < 0) return false;
@@ -105,9 +111,14 @@ bool decode(const std::string &path, Decoded &out) {
     AVFrame *f = av_frame_alloc();
     auto drain = [&](int which) {
         while (avcodec_receive_frame(dec[which], f) >= 0) {
-            if (which == 0 && f->format != AV_PIX_FMT_BGR0 && f->format != AV_PIX_FMT_0RGB32) {   // (H.264's: times only)
+            if (which == 0 && f->format != AV_PIX_FMT_BGR0 && f->format != AV_PIX_FMT_0RGB32) {   // (H.264's: times, brightness)
                 out.pts.push_back(f->pts);
                 out.frames.emplace_back();
+                if (keep_luma) {
+                    std::vector<uint8_t> y((size_t)f->width * f->height);
+                    for (int r = 0; r < f->height; r++) memcpy(y.data() + (size_t)r * f->width, f->data[0] + (size_t)r * f->linesize[0], (size_t)f->width);
+                    out.luma.push_back(std::move(y));
+                }
             } else if (which == 0) {
                 out.pts.push_back(f->pts);
                 std::vector<uint32_t> px((size_t)f->width * f->height);
@@ -316,28 +327,249 @@ void behind(const std::string &dir) {
            (unsigned long long)r.stats.dropped, (double)d.pcm.size() / 2 / 44100);
 }
 
-// --record-format h264, where this build's FFmpeg has an encoder that opens here: MP4, H.264, AAC
+// H.264's brightness of a 0x00RRGGBB pixel, as the recorder converts it (BT.601, limited range)
+int luma_of(uint32_t c) { return 16 + ((66 * (int)((c >> 16) & 255) + 129 * (int)((c >> 8) & 255) + 25 * (int)(c & 255) + 128) >> 8); }
+
+// PSNR (dB) of the decoded brightness against the pictures put in, each enlarged to the file's size
+// by the recorder's nearest pixels
+double psnr(const Decoded &d, const std::vector<std::vector<uint32_t>> &pics, int w, int h) {
+    double se = 0;
+    uint64_t n = 0;
+    for (size_t k = 0; k < d.luma.size() && k < pics.size(); k++)
+        for (int y = 0; y < d.h; y++)
+            for (int x = 0; x < d.w; x++) {
+                const uint32_t c = pics[k][(size_t)((int64_t)y * h / d.h) * w + (size_t)((int64_t)x * w / d.w)];
+                const double e = (double)d.luma[k][(size_t)y * d.w + x] - luma_of(c);
+                se += e * e, n++;
+            }
+    return n && se > 0 ? 10 * std::log10(255.0 * 255.0 / (se / (double)n)) : n ? 99 : 0;
+}
+
+bool has_x264() { return hk::host::record::formats().find("libx264") != std::string::npos; }
+
+// --record-format h264 with x264: MP4, H.264, AAC; the size enlarged (1x and the most within
+// 1920x1440), the frames and their times, a quality floor, the same file twice
 void h264(const std::string &dir) {
-    if (hk::host::record::formats().find("h264") == std::string::npos) {
-        printf("h264: no H.264 encoder here, not tried\n");
+    if (!has_x264()) {
+        printf("h264: no x264 in this FFmpeg, not tried\n");
         return;
     }
     const std::string path = dir + "/h264.mp4";
     Capture::Setup s;
     s.format = "h264";
+    s.encoder = "auto";   // (waiting: x264, always)
+    s.scale = 1;
     s.wait = true;
     const Run r = record(path, 122, 60.0, 44100, s, 321, 239);   // (odd sizes: 4:2:0 wants even ones)
     printf("%s\n", r.line.c_str());
     CHECK(r.stats.frames == 120 && r.stats.parts == 1);
+    CHECK(r.stats.encoder == "libx264");
     Decoded d;
-    CHECK(decode(path, d));
+    CHECK(decode(path, d, true));
     CHECK(d.vcodec == "h264" && d.acodec == "aac");
     CHECK(d.w == 322 && d.h == 240);
     CHECK(d.rate.den > 0 && std::fabs(av_q2d(d.rate) - 60) < 1e-4);
     CHECK(d.frames.size() == 120);
+    bool times = d.pts.size() == 120;
+    for (size_t k = 0; times && k < d.pts.size(); k++)
+        times = std::llabs(d.pts[k] * d.vtb.num * 1000 / d.vtb.den - (int64_t)std::llround(k * 1000.0 / 60)) <= 1;
+    CHECK(times);
     CHECK(std::fabs(d.duration - 2.0) < 0.05);
     CHECK(std::llabs(d.samples - 88200) <= 2048);   // (AAC's priming and last frame)
-    printf("h264: %zu frames %dx%d, %.3f s, sound %lld samples\n", d.frames.size(), d.w, d.h, d.duration, (long long)d.samples);
+    const double q1 = psnr(d, r.pics, 321, 239);
+    CHECK(q1 >= 38);
+    printf("h264: %zu frames %dx%d, %.3f s, sound %lld samples, brightness PSNR %.1f dB, %zu bytes\n", d.frames.size(), d.w, d.h, d.duration,
+           (long long)d.samples, q1, read_all(path).size());
+    // the same run again: the same file
+    const std::string again = dir + "/h264-again.mp4";
+    record(again, 122, 60.0, 44100, s, 321, 239);
+    CHECK(read_all(path) == read_all(again));
+
+    // auto with x264: the game's own size
+    const std::string own = dir + "/h264-own.mp4";
+    s.scale = 0;
+    record(own, 12, 60.0, 44100, s, 320, 240);
+    Decoded dn;
+    CHECK(decode(own, dn));
+    CHECK(dn.w == 320 && dn.h == 240 && dn.frames.size() == 10);
+
+    // enlarged as asked: 320x240 six times (1920x1440), the shape kept
+    const std::string big = dir + "/h264-big.mp4";
+    s.scale = 6;
+    s.aspect = 4.0 / 3.0;
+    const Run b = record(big, 32, 60.0, 44100, s, 320, 240);
+    printf("%s\n", b.line.c_str());
+    Decoded db;
+    CHECK(decode(big, db, true));
+    CHECK(db.w == 1920 && db.h == 1440 && db.frames.size() == 30);
+    CHECK(db.sar.num == 0 || db.sar.num == db.sar.den);
+    const double q6 = psnr(db, b.pics, 320, 240);
+    CHECK(q6 >= 38);
+    printf("h264 6x: %zu frames %dx%d, brightness PSNR %.1f dB, %zu bytes\n", db.frames.size(), db.w, db.h, q6, read_all(big).size());
+}
+
+// a graphics card's H.264 encoder, where one opens here: frames, times, a lower quality floor
+void gpu(const std::string &dir) {
+    if (const char *e = getenv("HK_RECORD_NO_GPU"); e && *e == '1') {
+        printf("gpu: not tried (HK_RECORD_NO_GPU)\n");
+        return;
+    }
+    const std::string path = dir + "/gpu.mp4";
+    Capture::Setup s;
+    s.format = "h264";
+    s.encoder = "gpu";
+    s.scale = 0;   // (auto: a card's enlarges, to 1920x1440 here)
+    s.wait = true;
+    Capture c;
+    std::string err;
+    if (!c.setup(s, err)) {
+        printf("gpu: %s: not tried\n", err.c_str());
+        return;
+    }
+    const Run r = record(path, 62, 60.0, 48000, s, 320, 240);
+    printf("%s\n", r.line.c_str());
+    if (r.stats.encoder.empty() || r.stats.encoder == "libx264" || r.stats.encoder == "h264_mf") {
+        printf("gpu: no graphics card's encoder works here (%s taken)\n", r.stats.encoder.empty() ? "none" : r.stats.encoder.c_str());
+        return;
+    }
+    Decoded d;
+    CHECK(decode(path, d, true));
+    CHECK(d.vcodec == "h264" && d.w == 1920 && d.h == 1440);
+    CHECK(d.frames.size() == 60);
+    bool times = d.pts.size() == 60;
+    for (size_t k = 0; times && k < d.pts.size(); k++)
+        times = std::llabs(d.pts[k] * d.vtb.num * 1000 / d.vtb.den - (int64_t)std::llround(k * 1000.0 / 60)) <= 1;
+    CHECK(times);
+    const double q = psnr(d, r.pics, 320, 240);
+    CHECK(q >= 30);
+    printf("gpu: %s: %zu frames %dx%d, brightness PSNR %.1f dB, %zu bytes\n", r.stats.encoder.c_str(), d.frames.size(), d.w, d.h, q,
+           read_all(path).size());
+}
+
+// Windows' own encoder, Media Foundation with Microsoft's software H.264 one (--record-encoder
+// h264_mf), where this build has it and it opens: frames, times, a quality floor
+void mf(const std::string &dir) {
+    if (hk::host::record::formats().find("h264_mf") == std::string::npos) return;
+    const std::string path = dir + "/mf.mp4";
+    Capture::Setup s;
+    s.format = "h264";
+    s.encoder = "h264_mf";
+    s.scale = 2;
+    s.wait = true;
+    const Run r = record(path, 62, 60.0, 48000, s, 320, 240);
+    printf("%s\n", r.line.c_str());
+    if (r.stats.encoder != "h264_mf") {
+        printf("mf: Media Foundation's H.264 encoder doesn't work here: not tried\n");
+        return;
+    }
+    Decoded d;
+    CHECK(decode(path, d, true));
+    CHECK(d.vcodec == "h264" && d.w == 640 && d.h == 480);
+    CHECK(d.frames.size() == 60);
+    bool times = d.pts.size() == 60;
+    for (size_t k = 0; times && k < d.pts.size(); k++)
+        times = std::llabs(d.pts[k] * d.vtb.num * 1000 / d.vtb.den - (int64_t)std::llround(k * 1000.0 / 60)) <= 1;
+    CHECK(times);
+    const double q = psnr(d, r.pics, 320, 240);
+    CHECK(q >= 30);
+    printf("mf: %zu frames %dx%d, brightness PSNR %.1f dB, %zu bytes\n", d.frames.size(), d.w, d.h, q, read_all(path).size());
+}
+
+// which encoder is taken, with made-up ones that open or don't; the enlarging's factor
+void choice() {
+    using hk::host::record::choose_h264;
+    using hk::host::record::scale_for;
+    auto only = [](std::vector<std::string> here) {
+        return [here](const std::string &n) {
+            for (const std::string &h : here)
+                if (h == n) return std::string();
+            return std::string("not here");
+        };
+    };
+    std::string why;
+    CHECK(choose_h264("auto", false, only({"libx264", "h264_vaapi"}), why) == "h264_vaapi");
+    CHECK(why.find("h264_nvenc: not here") != std::string::npos && why.find("libx264") == std::string::npos);
+    CHECK(choose_h264("auto", true, only({"libx264", "h264_vaapi"}), why) == "libx264");   // no real time kept: x264
+    CHECK(why.empty());
+    CHECK(choose_h264("gpu", true, only({"libx264", "h264_amf"}), why) == "h264_amf");   // asked for a card's
+    CHECK(choose_h264("x264", false, only({"libx264", "h264_nvenc"}), why) == "libx264");
+    CHECK(choose_h264("gpu", false, only({"libx264"}), why) == "libx264");   // no card's works: x264
+    CHECK(choose_h264("auto", false, only({"h264_mf/hw", "h264_mf"}), why) == "h264_mf/hw");
+    CHECK(choose_h264("auto", false, only({"h264_mf"}), why) == "h264_mf");   // Windows' software one, last
+    CHECK(choose_h264("x264", false, only({"h264_qsv"}), why) == "h264_qsv");   // no x264: a card's
+    CHECK(choose_h264("auto", false, only({}), why).empty() && !why.empty());
+    CHECK(choose_h264("h264_vaapi", false, only({"libx264"}), why).empty());   // by name: that one only
+    CHECK(choose_h264("h264_vaapi", false, only({"h264_vaapi"}), why) == "h264_vaapi");
+    // auto: a card's encoder enlarges to the most within 1920x1440, the processor's keeps the game's size
+    CHECK(scale_for("h264", 0, 320, 240, "h264_vaapi") == 6);
+    CHECK(scale_for("h264", 0, 640, 480, "h264_nvenc") == 3);
+    CHECK(scale_for("h264", 0, 512, 448, "h264_mf/hw") == 3);
+    CHECK(scale_for("h264", 0, 2000, 1500, "h264_amf") == 1);
+    CHECK(scale_for("h264", 0, 320, 240, "libx264") == 1);
+    CHECK(scale_for("h264", 0, 320, 240, "h264_mf") == 1);   // (Microsoft's, in software)
+    // a number given: that, whichever encoder
+    CHECK(scale_for("h264", 1, 320, 240, "h264_vaapi") == 1);
+    CHECK(scale_for("h264", 3, 320, 240, "libx264") == 3);
+    CHECK(scale_for("h264", 50, 320, 240, "libx264") == 8);
+    CHECK(scale_for("h264", 8, 640, 480, "h264_vaapi") == 6);   // (within H.264's 4096)
+    CHECK(scale_for("ffv1", 0, 320, 240, "h264_vaapi") == 1 && scale_for("ffv1", 3, 320, 240, "libx264") == 1);
+    // the choice and the size together: the first that works, then its size (pretend encoders)
+    for (const auto &[here, size] : std::vector<std::pair<std::vector<std::string>, int>>{{{"libx264", "h264_vaapi"}, 6}, {{"libx264"}, 1}, {{"h264_mf"}, 1}}) {
+        const std::string e = choose_h264("auto", false, only(here), why);
+        CHECK(scale_for("h264", 0, 320, 240, e) == size);
+    }
+    CHECK(hk::host::record::converted_name("a/b.c/rec-1.mkv", "") == "a/b.c/rec-1.mp4");
+    CHECK(hk::host::record::converted_name("rec", "") == "rec.mp4");
+    CHECK(hk::host::record::converted_name("rec.mkv", "x/out.mp4") == "x/out.mp4");
+}
+
+// a lossless recording (basic's, sizes' two parts) to H.264 afterwards: every frame at its time,
+// enlarged, the sound, the shape; each part to a file of its own
+void converted(const std::string &dir) {
+    if (!has_x264()) {
+        printf("convert: no x264 in this FFmpeg, not tried\n");
+        return;
+    }
+    Capture::Setup s;
+    s.encoder = "x264";
+    s.scale = 2;
+    std::string line, err;
+    double last = -1;
+    bool rising = true;
+    const bool ok = hk::host::record::convert(dir + "/basic.mkv", "", s, [&](double f) { rising = rising && f >= last; last = f; }, line, err);
+    CHECK(ok);
+    printf("%s%s\n", line.c_str(), err.c_str());
+    CHECK(rising && last == 1.0);
+    Decoded a, b;
+    CHECK(decode(dir + "/basic.mkv", a));
+    CHECK(decode(dir + "/basic.mp4", b));
+    CHECK(b.vcodec == "h264" && b.acodec == "aac");
+    CHECK(b.w == 640 && b.h == 480);
+    CHECK(b.frames.size() == a.frames.size() && a.frames.size() == 180);
+    bool times = a.pts.size() == b.pts.size();
+    for (size_t k = 0; times && k < a.pts.size(); k++)
+        times = std::llabs(a.pts[k] * a.vtb.num * 1000 / a.vtb.den - b.pts[k] * b.vtb.num * 1000 / b.vtb.den) <= 1;
+    CHECK(times);
+    CHECK(std::fabs(av_q2d(b.rate) - av_q2d(a.rate)) < 1e-3);
+    CHECK(std::llabs(b.samples - a.samples) <= 2048);
+    CHECK(b.audio_rate == 48000);
+    printf("convert: %zu frames %dx%d at %.3f fps, sound %lld samples (the lossless one's %lld)\n", b.frames.size(), b.w, b.h, av_q2d(b.rate),
+           (long long)b.samples, (long long)a.samples);
+
+    // a recording in two parts: two files, each part's frames, the shape kept (512x480 on 4:3: 5:4)
+    s.scale = 1;
+    CHECK(hk::host::record::convert(dir + "/sizes.mkv", dir + "/sizes-h264.mp4", s, nullptr, line, err));
+    printf("%s%s\n", line.c_str(), err.c_str());
+    Decoded p1, p2;
+    CHECK(decode(dir + "/sizes-h264.mp4", p1));
+    CHECK(decode(dir + "/sizes-h264-2.mp4", p2));
+    CHECK(p1.w == 512 && p1.h == 480 && p1.frames.size() == 28);
+    CHECK(p2.w == 640 && p2.h == 480 && p2.frames.size() == 50);
+    CHECK(p1.sar.num * 4 == p1.sar.den * 5);
+    // not a recording: said
+    CHECK(!hk::host::record::convert(dir + "/h264.mp4", dir + "/x.mp4", s, nullptr, line, err) && !err.empty());
+    printf("convert of an MP4: %s\n", err.c_str());
+    CHECK(!hk::host::record::convert(dir + "/none.mkv", "", s, nullptr, line, err));
 }
 
 // frame times that vary (a PC game's): the core's rate, and frames sooner than it left out
@@ -388,7 +620,11 @@ int main(int argc, char **argv) {
     sizes(dir);
     behind(dir);
     uneven(dir);
+    choice();
     h264(dir);
+    gpu(dir);
+    mf(dir);
+    converted(dir);
     // a file's name: the game's, the time, and a number when one is there already
     const std::string a = hk::host::record::file_name(dir, "game", "ffv1");
     CHECK(a.size() > dir.size() + 20 && a.compare(a.size() - 4, 4, ".mkv") == 0);

@@ -12,9 +12,10 @@
 #   - its libraries built by PCSX2's own script (.github/workflows/scripts/linux/
 #     build-dependencies-qt.sh in the source), less what HIRAKU doesn't use: its Qt and
 #     KDDockWidgets (PCSX2's own interface is off), its SDL (HIRAKU's, from LINUX_DEPS: the core
-#     draws in HIRAKU's window) and its FFmpeg (its shared libraries with FFV1, FLAC, Matroska and
-#     file writing only: HIRAKU's recorder links them, runtime/host/record.h, so the package carries
-#     them, and PCSX2's own video capture, which loads them at run time, finds the same);
+#     draws in HIRAKU's window) and its FFmpeg (its shared libraries with what HIRAKU's recorder
+#     writes and reads, runtime/host/record.h: FFV1, FLAC, Matroska, and H.264 by x264 or a graphics
+#     card's NVENC, AMF or Vulkan video with AAC in MP4, tools/enc-deps.sh, as tools/ffmpeg-min.sh has them; the
+#     package carries them, and PCSX2's own video capture, which loads them at run time, finds the same);
 #   - hiraku-python (--game ID: any Python game), with Reliquary's resources/ beside it.
 # WORK/pcsx2-reliquary/build/bin/hiraku-python is then packaged by tools/release.sh linux.
 # The build tools: tools/release-setup-ubuntu.sh python.
@@ -60,9 +61,13 @@ if [ ! -f "$deps/.done" ]; then
   cmake --install "$t/vk" > /dev/null
   curl -fL --retry 3 -o "$t/ffmpeg.tar.xz" "https://ffmpeg.org/releases/ffmpeg-$FFMPEG.tar.xz"
   tar -xf "$t/ffmpeg.tar.xz" -C "$t"
-  (cd "$t/ffmpeg-$FFMPEG" && ./configure --prefix="$deps" --disable-all --disable-autodetect --disable-static --enable-shared \
+  # x264 (static, position-independent: inside libavcodec.so) and the cards' encoders' headers
+  HK_JOBS=$jobs "$root/tools/enc-deps.sh" "$deps"
+  (cd "$t/ffmpeg-$FFMPEG" && PKG_CONFIG_PATH=$deps/lib/pkgconfig ./configure --prefix="$deps" --disable-all --disable-autodetect --disable-static --enable-shared \
      --enable-avcodec --enable-avformat --enable-avutil --enable-swresample --enable-swscale --disable-x86asm \
-     --enable-encoder=ffv1,flac --enable-muxer=matroska --enable-protocol=file > /dev/null &&
+     --enable-gpl --enable-libx264 --enable-ffnvcodec --enable-nvenc --enable-amf --enable-vulkan --extra-cflags="-I$deps/include" \
+     --pkg-config-flags=--static --enable-encoder=ffv1,flac,libx264,aac,h264_nvenc,h264_amf,h264_vulkan \
+     --enable-decoder=ffv1,flac --enable-demuxer=matroska --enable-muxer=matroska,mp4 --enable-protocol=file > /dev/null &&
    make -j"$jobs" > /dev/null && make install > /dev/null)
   rm -rf "$t"
   touch "$deps/.done"

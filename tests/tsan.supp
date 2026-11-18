@@ -38,7 +38,9 @@ thread:QThread::start
 # worker in a frame and another in the next show as a race, both sides in libavcodec's threads.
 # runtime/host/record.cpp only hands the encoder a frame and waits for its packets, on one thread.
 race:libavcodec
-# ... and the test's H.264 file where the FFmpeg linked has libx264 (a distribution's; a release's
-# has none): x264's own frame threads (threadpool.c) hand over its contexts in the same unseen way
-# (x264_8_encoder_encode's thread_sync_context and slice_write's cabac_context_init, both in libx264)
+# ... and the test's H.264 files where the FFmpeg linked has libx264 (a distribution's shared one;
+# a release's static, tools/enc-deps.sh, where the frames are x264's functions in the test itself):
+# x264's own frame threads (threadpool.c) hand over its contexts in the same unseen way
+# (x264_8_encoder_encode's thread_sync_context and slice_write's cabac_context_init, both in x264)
 race:libx264
+race:x264_

@@ -3,7 +3,8 @@
 # What a Windows release is built against (PLAN.md section 28, R-1), downloaded and built into
 # out/win-deps (cmake/x86_64-w64-mingw32.cmake's folder): tools/win-deps.sh's SDL3, zlib, zstd,
 # static qtbase and embeddable Python, plus what makes adding and playing games need nothing
-# installed: FFmpeg's MPEG-1/2 decoding (tools/ffmpeg-min.sh, Twinkle's background video) and
+# installed: FFmpeg (tools/ffmpeg-min.sh: Twinkle's background video, the games' video recordings
+# with x264 and the graphics cards' encoders, tools/enc-deps.sh) and
 # 7-Zip's 7zr.exe for .7z sets (tools/mameset.py looks in the package's bin/ first).
 #
 #   tools/release-deps-windows.sh

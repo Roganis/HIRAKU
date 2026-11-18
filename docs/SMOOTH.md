@@ -380,6 +380,33 @@ third came up checking them. All three in `tests/gcu/test_gcu_between.cpp` and
   to a pixel; its demo play's notes, pop'n music 3 and beatmania III's attract are the
   same, bit for bit.
 
+A later report (THE FINAL's song select, 120 Hz, scrolling fast through songs and folders: folder
+pictures and titles sliding against their rows, the list's top row and its border shaking, slices
+of the next row along its edge) was the list's rows themselves. The list is rows of 40 drawn edge to
+edge (a background copy and a strip copy each), the top one cut off by the game at row 0 (shorter,
+from further down its picture: no look-alike, so never paired) and, as it scrolls, a row just come
+in (unpaired too). The rest went on along the scroll's line, up to 10 pixels from where the game
+drew them, over those two that stood still: in every picture, the frame's own included. The list
+goes 8, 0, 16, 16 rows a frame, so it tears again and again.
+- Rows edge to edge (the same columns, one's bottom the next one's top, each at least twice as wide
+  as tall; or the same turned) are one surface, a list: moved along it unlike each other, none of
+  it moves, nor what's drawn through them, nor a row lying over one of them (the cursor's: the row
+  under it drawn again into a strip of its own and copied over it), and they stay still 8 frames
+  after (`HK_BETWEEN_TILES=0`: as before).
+- Rows only, and all of the surface rows: a word's letters side by side, some kept and the others
+  carried on, went apart; and beatmania III's backgrounds are strips side by side (4, 128 and 508
+  by 480, scrolling sideways, the 4 at the wrap unpaired): the two narrow ones kept still opened a
+  seam where they met the wide one, still moving. Such a surface moves as before.
+- The trade: while THE FINAL's list scrolls it keeps the game's own steps, as at 60 Hz (the cursor's
+  arrow and the rest of the screen still have their in-between pictures); nothing tears.
+`tests/gcu/test_gcu_between.cpp` has such a list. The rule changed little else: pop'n music 8's and
+beatmania III's key flashes (a button squashed 1 or 2 pixels, drawn as two rows) and beatmania III
+6th's stage banner as it opens and closes now keep the game's own pictures for those frames.
+A change to ScrollGuess was tried too (an object's very look-alike at its very place taken as
+standing still, never a jump off its track) and dropped: the list didn't need it, and objects that
+slid in and stopped (THE FINAL's ranking screen) went on along their line for 3 frames, over each
+other.
+
 Not covered:
 - Keyboardmania (two GCUs, one a monitor): no in-between pictures.
 - A game drawing a frame over two vsyncs (30 frames a second) moves its objects per two vsyncs,

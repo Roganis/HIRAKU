@@ -113,6 +113,10 @@ private:
         Frame frame[4];
         int w = 0, h = 0;
     } m_composed;
+    // tiles kept still (draw_between): each object of the frame, the frames since it last was (by its
+    // pairing), and the frame before's
+    std::vector<uint8_t> m_tile_age, m_tile_age_before;
+    uint64_t m_tile_mark = ~0ull;
     bool row_out(int y) const { return m_clip && !m_clip_row[(uint32_t)y & (m_clip_row.size() - 1)]; }
 
     std::unique_ptr<uint32_t[]> m_vram;

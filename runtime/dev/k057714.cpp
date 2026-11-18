@@ -13,6 +13,8 @@
 #include <cmath>
 #include <cstdlib>
 #include <cstring>
+#include <tuple>
+#include <utility>
 #if defined(__SSE2__)
 #include <emmintrin.h>
 #elif defined(__ARM_NEON)
@@ -857,8 +859,107 @@ bool K057714::draw_between(uint32_t *out, int width, int height, double t) {
             int q = (int)std::lround((r - lo) * 16), whole = (int)lo;
             if (q == 16) whole++, q = 0;
             (axis ? pl.oy : pl.ox) = whole;
-            if (q) pl.axis = axis, pl.q = q, frac = true;
+            if (q) pl.axis = axis, pl.q = q;
         }
+    }
+    // Rows edge to edge (the same columns, one's bottom the next one's top, each at least twice as
+    // wide as tall; or the same turned: side by side) are one surface, a list: moved along it unlike
+    // each other, it tears. Then none of it moves. beatmania III's song list: rows of 40, the top
+    // one cut off by the game (shorter, from further down its picture: never paired) and a row just
+    // come in (unpaired); the rest, carried on the scroll's line, went over them and left a slice of
+    // the rows before: the list's top row and its border shook, and titles and folder pictures slid
+    // against their rows (HK_BETWEEN_TILES=0: as before). (Rows only: a word's letters side by side,
+    // some kept still and the others carried on, went apart)
+    static const bool tiles = !std::getenv("HK_BETWEEN_TILES") || std::strcmp(std::getenv("HK_BETWEEN_TILES"), "0") != 0;
+    if (tiles) {
+        struct Tile { int a0, a1, b0, b1; size_t k; bool row = true; };   // along the stack (a), across (b)
+        // (along the stack only: two side by side that only move up or down unlike each other don't
+        // tear, a stack of rows does)
+        auto along = [&](size_t k, int dir) {
+            const Place &p = places[k];
+            return std::make_pair(dir ? p.ox : p.oy, p.axis == (dir ? 0 : 1) ? p.q : 0);
+        };
+        std::vector<Tile> ts;
+        std::vector<uint8_t> held(cmds.size(), 0);   // 1: still from before, 2: torn, 3: in a copy kept still
+        // and they stay still a few frames once they were: beatmania III's list goes 8, 0, 16, 16 rows
+        // a frame and tears one frame in a few; carried on the others, it stepped back each time
+        constexpr int KEEP = 8;
+        if (m_tile_mark != id) {
+            if (id == m_tile_mark + 1) m_tile_age_before.swap(m_tile_age);
+            else m_tile_age_before.clear();
+            m_tile_mark = id;
+            m_tile_age.assign(cmds.size(), 255);
+            for (size_t k = 0; k < cmds.size(); k++)
+                if (const int f = paired[k] >= 0 && !ahead ? cands[(size_t)paired[k]].from : -1; f >= 0 && (size_t)f < m_tile_age_before.size())
+                    m_tile_age[k] = (uint8_t)std::min(254, m_tile_age_before[(size_t)f] + 1);
+        }
+        for (size_t k = 0; k < cmds.size() && k < m_tile_age.size(); k++)
+            if (m_tile_age[k] < KEEP) places[k] = Place{}, held[k] = 1;
+        std::vector<Tile> rows;   // all of them, on the screen (a: down, b: across)
+        for (bool again = true; again;) {
+            again = false;
+            rows.clear();
+            for (int dir = 0; dir < 2; dir++) {   // 0: stacked down the screen; 1: side by side
+                ts.clear();
+                for (size_t k = 0; k < cmds.size(); k++) {
+                    const Cmd &c = shown.cmds[k];
+                    if (((c[0] >> 29) & 7) != 5) continue;
+                    const int xs = (c[2] >> 10) & 0xfff, ys = (c[3] >> 10) & 0xfff;
+                    if (!xs || !ys || (xs & 0x800) || (ys & 0x800)) continue;
+                    const int x = (int)(c[1] & 0x3ff), y = (int)((c[1] >> 10) & 0x3fff) + ((c[0] & 0x10000000) ? 0x10000 : 0);   // (relative ones apart)
+                    const int w = int((c[2] & 0x1ff) + 1) * 64 / xs, h = int((c[3] & 0x3ff) + 1) * 64 / ys;
+                    const bool row = dir ? h >= 2 * w : w >= 2 * h;
+                    ts.push_back(dir ? Tile{x, x + w, y, y + h, k, row} : Tile{y, y + h, x, x + w, k, row});
+                    if (row) rows.push_back(Tile{y, y + h, x, x + w, k});
+                }
+                std::sort(ts.begin(), ts.end(), [](const Tile &p, const Tile &q) {
+                    return std::tie(p.b0, p.b1, p.a0, p.k) < std::tie(q.b0, q.b1, q.a0, q.k);
+                });
+                // each run edge to edge, a list only if all of it is rows: a surface going on in a piece
+                // that isn't one is a picture in strips (beatmania III's backgrounds: 4, 128 and 508 by
+                // 480 side by side, scrolling sideways, the 4 at the wrap unpaired; the first two kept
+                // still opened a seam where they met the third, still moving)
+                for (size_t i = 0; i < ts.size();) {
+                    size_t e = i + 1;
+                    bool differ = false, kept = held[ts[i].k] != 0, list = ts[i].row;
+                    for (; e < ts.size() && ts[e].b0 == ts[i].b0 && ts[e].b1 == ts[i].b1 && ts[e].a0 == ts[e - 1].a1; e++)
+                        differ |= along(ts[e].k, dir) != along(ts[i].k, dir), kept |= held[ts[e].k] != 0, list &= ts[e].row;
+                    if (list && differ) {
+                        for (size_t j = i; j < e; j++) places[ts[j].k] = Place{}, held[ts[j].k] = 2;
+                        again = true;
+                    } else if (list && kept) {   // (all of it kept: what's drawn through any of them too)
+                        for (size_t j = i; j < e; j++)
+                            if (!held[ts[j].k]) held[ts[j].k] = 1;
+                    }
+                    i = e;
+                }
+            }
+            // a row lying over a kept one (at least half of it) is kept with it: beatmania III's cursor,
+            // the row under it drawn again into a strip of its own and copied over it, its title
+            // going with the list (16, 8, 0 rows a frame) while the list stood still
+            for (const Tile &p : rows)
+                if (!held[p.k])
+                    for (const Tile &q : rows)
+                        if (held[q.k] && q.k != p.k) {
+                            const int ov = std::max(0, std::min(p.a1, q.a1) - std::max(p.a0, q.a0)) * std::max(0, std::min(p.b1, q.b1) - std::max(p.b0, q.b0));
+                            if (2 * ov >= (p.a1 - p.a0) * (p.b1 - p.b0)) {
+                                places[p.k] = Place{}, held[p.k] = 1, again = true;
+                                break;
+                            }
+                        }
+        }
+        // and what's drawn through a copy kept still stays with it: it was moved in its strip by its
+        // move less the copy's, the folder pictures' and the titles' a few pixels (their own pairing,
+        // not the rows'): they slid in their rows (a copy comes after what it copies)
+        for (size_t k = cmds.size(); k-- > 0;)
+            if (const int j = here[k].via; here[k].copied && j > (int)k && held[(size_t)j]) places[k] = Place{}, held[k] = 3;
+        for (size_t k = 0; k < cmds.size() && k < m_tile_age.size(); k++)   // (torn this frame: from now)
+            if (held[k] == 2) m_tile_age[k] = 0;
+    }
+    for (size_t k = 0; k < cmds.size(); k++) {
+        if (((cmds[k][0] >> 29) & 7) != 5) continue;
+        const Place &pl = places[k];
+        if (pl.axis >= 0) frac = true;
         if (put(k, cmds[k], pl.ox, pl.oy)) moved = true;
     }
     std::vector<Cmd> further;   // each object a fraction on, a pixel further

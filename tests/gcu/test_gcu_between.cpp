@@ -12,6 +12,10 @@
 // the note, a block drawn into a strip of VRAM off the screen and copied onto the screen by an object
 // that moves 2 rows a frame, as its song list's titles are: the block goes with the copy, not twice
 // as far (it was moved in the strip too).
+// On the right, a list as beatmania III's song list scrolls: rows of 8, one picture, 2 rows a frame,
+// the top one cut off by the game (from row 0, shorter, from further down its picture) and the
+// others edge to edge under it. One surface: all of it goes the same way or none of it (the rows
+// were carried on, the cut-off one stood still: they went over it, and the list's top shook).
 #include <cstdint>
 #include <cstdio>
 #include <vector>
@@ -20,7 +24,7 @@
 
 namespace {
 
-constexpr int W = 64, H = 64;
+constexpr int W = 96, H = 64;
 constexpr uint32_t TEX_Y = 3000, BUF_Y[2] = {1024, 1536}, STRIP_X = 512, STRIP_Y = 4000;
 
 void cmd(hk::K057714 &g, uint32_t c0, uint32_t c1, uint32_t c2, uint32_t c3) {
@@ -63,9 +67,11 @@ int main() {
     fill_vram(g, 72, TEX_Y, 4, 4, 0x83e0);        // the copied block: green
     for (int i = 0; i < 32; i += 2)               // the gauge's picture: another colour each 2 columns
         fill_vram(g, 256 + (uint32_t)i, TEX_Y, 2, 4, (uint16_t)(0x8000 | (i * 2) << 10 | (31 - i)));
+    fill_vram(g, 320, TEX_Y, 32, 1, 0xffff);      // the list's row: a white border, then blue
+    fill_vram(g, 320, TEX_Y + 1, 32, 7, 0x801f);
 
     std::vector<uint32_t> frame(W * H), between(W * H);
-    int checked = 0, strip_wrong = 0, stack_wrong = 0, note_moved = 0, gauge_wrong = 0, copy_checked = 0, copy_wrong = 0;
+    int checked = 0, list_wrong = 0, strip_wrong = 0, stack_wrong = 0, note_moved = 0, gauge_wrong = 0, copy_checked = 0, copy_wrong = 0;
     for (int n = 0; n < 40; n++) {
         // the vblank: the frame drawn last goes on show
         g.vblank(true);
@@ -83,6 +89,8 @@ int main() {
                     for (int x = 40; x < 44; x++) note_moved += frame[y * W + x] != between[y * W + x];
                 for (int y = 56; y < 60; y++)
                     for (int x = 0; x < 32; x++) gauge_wrong += frame[y * W + x] != between[y * W + x];
+                for (int y = 0; y < H; y++)
+                    for (int x = 64; x < 96; x++) list_wrong += frame[y * W + x] != between[y * W + x];
                 // the copy (drawn at 2 (n - 1) % 40, the frame on show) a row on, the block with it
                 if (const int cy = 2 * (n - 1) % 40; cy >= 4 && cy <= 30) {
                     copy_checked++;
@@ -104,15 +112,19 @@ int main() {
             object(g, 192 + 16 * i + (n & 1) * 8, 48, 4 + 16 * i + (n & 1) * 8, 16, 6, true);
         const int cut = (n * 2) % 12;   // the gauge: 32 wide less `cut` on its left
         object(g, 256 + (uint32_t)cut, cut, 56, 32 - cut, 4, false);
+        // the list: its rows from s on, the one above it cut off at row 0
+        const int s = 2 * n % 8;
+        if (s) cmd(g, 0xb0000000u | (TEX_Y + 8 - (uint32_t)s) << 10 | 320u, 64u, 64u << 10 | 31u, 64u << 10 | (uint32_t)(s - 1));
+        for (int y = s; y < H; y += 8) object(g, 320, 64, y, 32, 8, false);
         // the strip off the screen: cleared black, the block in it, and copied onto the screen
         cmd(g, 0xa0000000u | TEX_Y << 10, STRIP_Y << 10 | STRIP_X, 64u << 10 | 7u, 64u << 10 | 7u);
         cmd(g, 0xa0000000u | TEX_Y << 10 | 72u, (STRIP_Y + 2) << 10 | (STRIP_X + 2), 64u << 10 | 3u, 64u << 10 | 3u);
         cmd(g, 0xb0000000u | STRIP_Y << 10 | STRIP_X, (uint32_t)(2 * n % 40) << 10 | 32u, 64u << 10 | 7u, 64u << 10 | 7u);
     }
-    printf("test_gcu_between: %d in-between pictures, %d strip pixels, %d stack pixels and %d gauge pixels not as the frame has "
+    printf("test_gcu_between: %d in-between pictures, %d list pixels, %d strip pixels, %d stack pixels and %d gauge pixels not as the frame has "
            "them, %d note pixels moved; %d copies checked, %d of their pixels not a row on\n",
-           checked, strip_wrong, stack_wrong, gauge_wrong, note_moved, copy_checked, copy_wrong);
-    return checked > 20 && strip_wrong == 0 && stack_wrong == 0 && gauge_wrong == 0 && note_moved > 0 && copy_checked > 10 &&
+           checked, list_wrong, strip_wrong, stack_wrong, gauge_wrong, note_moved, copy_checked, copy_wrong);
+    return checked > 20 && list_wrong == 0 && strip_wrong == 0 && stack_wrong == 0 && gauge_wrong == 0 && note_moved > 0 && copy_checked > 10 &&
                    copy_wrong == 0
                ? 0
                : 1;

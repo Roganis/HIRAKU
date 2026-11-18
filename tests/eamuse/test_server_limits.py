@@ -292,7 +292,9 @@ try:
 
     leaks = [t for t in seen for p in PINS if re.search(r'(?<![0-9A-Za-z])' + p + r'(?![0-9A-Za-z])', t)]
     check(not leaks, f'no PIN in any of {len(seen)} answers')
-    check(not any(p in s.said() for p in PINS), "... nor in serve's output")
+    # (as whole numbers: a port or a time in the output may hold a PIN's four digits by chance)
+    said = s.said()
+    check(not any(re.search(r'(?<![0-9A-Za-z])' + p + r'(?![0-9A-Za-z])', said) for p in PINS), "... nor in serve's output")
     s.stop()
 finally:
     shutil.rmtree(T, ignore_errors=True)

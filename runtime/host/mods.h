@@ -68,4 +68,35 @@ std::vector<TextPatch> text_patches();   // the core takes them (frame() then le
 // None and *why empty: not there; *why says why it can't go in (several places, no room)
 std::vector<MemoryPatch> find_text(const TextPatch &t, const uint8_t *mem, size_t n, uint32_t base, std::string *why);
 
+// ---- The mod API (docs/MODS.md, "Hooks, settings and actions") -------------------------------
+// A mod saying `api = 1` may have [[hook]]s (run on the program's instructions, Core::mod_hook),
+// [[setting]]s (kept per mod and game in the user's folder) and [[action]]s (a binding that moves a
+// setting), and say what it needs (`requires`) and which program it was made for (`program`).
+constexpr int API = 1;
+// What a mod may need (requires = [...]): the core's and this build's (Core::mod_capabilities), the
+// shell's ("settings"), and what main() offers (offer(): "actions" where the build has a window)
+std::vector<std::string> capabilities();
+void offer(const std::string &capability);
+// --mod-api's text: the version, the capabilities, the registers, the byte order, the program
+std::string api_text(const std::string &root, const std::string &game);
+// --mod-setting NAME=VALUE (or MOD/NAME=VALUE, MOD the mod's folder's name): this run's value,
+// not saved (scripts, tests). Before load(), which refuses a name no mod has
+void override_setting(const std::string &spec);
+// load() refused a mod that needs what this build hasn't and another program of the core's has
+// (Core::mod_other_program): that program, beside this one, is run in this one's place, with
+// --game <game> and the same arguments (execv: nothing returns). False: it can't be (none is
+// needed, no such program here, or Windows, where the message says which program to start)
+bool hand_over(int argc, char **argv, const std::string &game);
+// The actions' bindings (a bindings file's spelling, host/input.h), each action's number its place
+std::vector<std::string> action_bindings();
+// An action's binding pressed (repeat: a key held down) or let go: what it changed, as lines to show
+// for a moment (the mod's name, the setting and its value); {} when nothing changed
+std::vector<std::string> action(size_t id, bool down, bool repeat = false);
+std::string action_name(size_t id);   // "mod: action", for the log
+// The settings now ("folder/name", value), the counters ("folder/name", count)
+std::vector<std::pair<std::string, int64_t>> settings();
+std::vector<std::pair<std::string, uint64_t>> counters();
+void report();   // the counters and settings, in the log (at exit)
+void clear();    // every mod forgotten (the tests; a core's hooks stay)
+
 }  // namespace hk::mods

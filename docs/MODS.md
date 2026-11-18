@@ -10,6 +10,7 @@ What a mod can do is the same on every board, because it works on the parts HIRA
 |---|---|---|
 | **memory** (`[[patch]]`) | code and data in the game's RAM | bytes at an address, put there whenever the bytes the mod expects are there (so a patch waits for code loaded later, and comes back if it's loaded again) |
 | **media** (`[[bytes]]`, `[[file]]`) | anything the game reads from its discs or disks | the bytes it reads at an offset, or a whole file (by its path on an ISO 9660 disc, or on a Konami Python 1 disk), served from the mod's own files |
+| **instructions** (`[[hook]]`, the mod API) | a register or word of RAM just before an instruction runs | a fixed change (by a number or a setting the player moves with a key), or a count; Firebeat for now (below) |
 
 What it changes is the game's business: which file holds the song list, which function draws the
 notes. A mod for one game carries that knowledge; the layers don't need any.
@@ -241,6 +242,113 @@ from = "files/0.gzz"            # the file as the game uses it (tools/popnfs.py 
 Numbers are decimal or `0x` hex. A mod is checked when it's loaded: an unknown key, a `game` other
 than the one being started, a patch whose `original` and `replace` differ in length, or a
 missing `from` file stops the game with a message saying which.
+
+## Hooks, settings and actions (the mod API)
+
+A patch changes the game's code; a hook leaves it as it is and does one small thing just before an
+instruction runs, every time it runs: a register or a word of RAM set, raised or lowered, by a
+number or by a setting the player moves with a key while playing, or a count kept. That's enough
+for a timing mod (the times the game judges presses by, shifted by a setting in milliseconds),
+without a HIRAKU of one's own.
+
+```toml
+name = "Judging shift"
+game = "bm3final"
+api = 1                                  # the mod API this mod is written for (it's 1)
+requires = ["hook", "settings", "actions"]   # what it uses: checked against what this HIRAKU has
+program = "1b5bd916011107a82f5324558f60c1cbb144c0e3"   # (optional) the program it was made for
+
+[[setting]]                     # a number the player sets, kept from one game to the next
+name = "shift"                  # letters, digits, _ and -
+label = "Judging (ms)"          # shown when it changes
+min = -100
+max = 100
+default = 0
+step = 1                        # what an action moves it by (default 1)
+
+[[action]]                      # a key or button of the player's that moves a setting
+name = "later"
+binding = "key:Keypad 8"        # a bindings file's spelling: key:..., joy0:button3, joy[NAME]:hat0 up...
+setting = "shift"
+do = "up"                       # "up" or "down" by its step (held: again and again), or "toggle"
+                                # (from min to max and back)
+
+[[hook]]                        # before the instruction at `at` runs:
+at = 0x80012340                 # the program's own address (as a disassembler shows it)
+sub = "r3"                      # set = / add = / sub = a register by the machine's own name,
+                                # or memory: an address, with size = 1, 2 or 4 (bytes, default 4)
+value = "setting:shift"         # a whole number, or a setting's value
+# scale = 0.06                  # the value times this, rounded (milliseconds to 60ths of a second)
+
+[[hook]]
+at = 0x80012400
+count = "best"                  # or: a counter (said in the log at the end)
+when = "r3"                     # (optional) only while this register (or memory: an address and
+min = 10                        # when_size) is from min to max, signed; either may be left out
+max = 10
+```
+
+The rules, which stay as they are for every HIRAKU with mod API 1 (a later one only adds keys,
+tables and capabilities; one that changes a rule is API 2, and a HIRAKU says which it has):
+
+- **A hook runs before its instruction**, each time that instruction runs, whichever way the code
+  runs: translated ahead of time or interpreted (a function a `[[patch]]` changed, code the
+  analysis didn't find, `--interp-only`). The instruction then runs on what the hook left. Hooks
+  at one address run in the mods' order (the first mod's first), then in their order in the file.
+  A hook's change to a register or to RAM is the game's from then on; a hook doesn't change code
+  (a patch does).
+- **Registers by the machine's own names**: Firebeat (PowerPC 403) `r0`-`r31`, `cr`, `xer`,
+  `lr`, `ctr`. Values are 32 bits; `add`/`sub` wrap; `when` compares signed (a memory word by its
+  size).
+- **Memory in the machine's own order**: big-endian on Firebeat, as `[[patch]]`'s bytes. An
+  address is the program's (Firebeat's 0x80000000 and up).
+- **Settings live in the saves' folder**: `<saves>/mod-settings/<game>/<mod folder>.txt` (see
+  *Where mods live*), lines of `name=value`, and each action's binding as
+  `action.<name>=key:...`, which the player may change there while the game isn't running (the
+  file is written when a setting changes, as saves are). A value outside min..max is taken as the
+  nearest end. A changed setting shows for two seconds in a box over the game (its mod, its label
+  and value) and in the log. `--mod-setting NAME=VALUE` (`MOD/NAME=VALUE`, MOD the mod's folder's
+  name, where two mods have the name) sets one for a run without keeping it: scripts and tests.
+- **An action never takes one of the game's controls**: where the game has the same key or button,
+  the game keeps it and the log says so once.
+- **Checked at start, refused with a message**: `api` above this HIRAKU's ("this mod is for mod
+  API 2, this HIRAKU's is 1"); a capability in `requires` that this core or build hasn't ("this
+  mod needs hook; this core/build has none (it has: settings, actions)"); a `[[hook]]`,
+  `[[setting]]` or `[[action]]` in a mod without `api = 1`, or not listed in its `requires`
+  (`hook`, `settings`, `actions`); a program other than `program`'s ("this mod is for the program
+  whose SHA-1 is ...; this run's (...) is ..."); a register the machine hasn't; and a hook at an
+  address in none of the program's functions (it would never run).
+- `program` is the SHA-1 of the whole program image the run loads (`dumps/<game>/program.bin` on
+  Firebeat, or `--image`), the same as `games/<game>/game.toml`'s `[program] sha1` and
+  `sha1sum`'s.
+
+`--mod-api` (any game's program) prints the API version, the capabilities, the registers, the
+byte order and the program's SHA-1, and exits:
+
+```
+$ hiraku-firebeat --game bm3final --mod-api
+mod API 1
+capabilities: hook settings actions
+registers: r0 r1 ... r31 cr xer lr ctr
+memory: big-endian
+program: 1b5bd916011107a82f5324558f60c1cbb144c0e3 (.../dumps/bm3final/program.bin)
+```
+
+Which programs have what: `settings` every one; `actions` every one with a window (all of a
+release's); `hook` only `hiraku-firebeat`, the executor (PLAN.md section 27), which builds the
+program's functions at start and puts a hook's step in before its instruction. A Firebeat game's
+own binary (`hiraku-bm3final`, built from source with the game's code compiled in) has no hooks:
+given a mod that needs them, it starts `hiraku-firebeat` from its own folder in its place, with
+`--game` and the same options (on Windows, where a release has only `hiraku-firebeat` anyway, it
+says which program to start). A game whose run passes a hook runs as it would without it, frame
+for frame, when the hook changes nothing (a setting at 0): no cycle moves; the executor only stops
+remembering the runs of an exception's handler that pass one (each run runs its hooks). With no
+mod nothing is added: no step, no check on the way.
+
+Not there yet (later versions of the API): hooks on the other cores (DJ Main, System 573, Twinkle,
+the Konami Python and PC games), hooks that do more than one fixed thing (several conditions, a
+value worked out from two registers), drawing over the game's picture or beside it, the game's
+inputs as events, and scripts.
 
 ## High frame rates (`[[rate]]`)
 

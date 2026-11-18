@@ -21,6 +21,7 @@
 #include "ppc/spec.h"
 #include "exec_names.h"
 #include "exec_steps.h"
+#include "hooks.h"
 #include "runtime.h"
 
 namespace hk::exec {
@@ -146,6 +147,17 @@ struct Builder {
         if (labels.count(a)) {
             flush();
             label_at[a] = (uint32_t)out.steps.size();
+        }
+        // a mod's hooks there (core/hooks.h): a step of their own before the instruction's, where
+        // a jump to it lands too. No cycles flushed for it: the charges stay where they were (one
+        // folded into the probe is charged when it's reached, as it would be at the instruction)
+        if (const uint32_t h = hooks::slot(a); h != ~0u) {
+            Step s;
+            s.k = K_probe;
+            s.a = a;
+            s.y.b = h;
+            add(s);
+            hooks::placed(h);
         }
         {
             uint32_t prev = 0;
@@ -388,6 +400,7 @@ std::string prepare() {
     g_entry.clear();
     g_loaded = false;
     if (!g_plain[K_tick]) run(nullptr, nullptr);   // (the handlers' addresses)
+    hooks::loaded(false);
     spec::find_return_up(g_p);
     // every function, and each secondary entry as its own copy of the body (as the recompiler
     // emits it), then the calls pointed at their callees
@@ -410,6 +423,10 @@ std::string prepare() {
     // each step's handler in run(), now that its kind and its cycles are settled
     for (auto &code : g_codes)
         for (Step &s : code->steps) s.h = s.tick ? g_ticked[s.k] : g_plain[s.k];
+    // a hook whose instruction is in none of the functions would never run (its mod is wrong, or
+    // for another program): refused, as the program's functions are
+    hooks::loaded(true);
+    if (std::string e = hooks::unplaced(); !e.empty()) return "mods: " + e;
     g_loaded = true;
     return "";
 }

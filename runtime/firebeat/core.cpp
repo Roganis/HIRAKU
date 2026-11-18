@@ -20,6 +20,7 @@
 #include "shell/kvfile.h"
 #include "host/notice.h"
 #include "../core/exec.h"
+#include "../core/hooks.h"
 #include "ppc/analyze.h"   // the executor's functions, and any build's for code a mod changes
 #include "ppc/spec.h"
 #include "../core/runtime.h"
@@ -151,7 +152,8 @@ public:
             }
         }
         if (!err.empty()) {
-            fprintf(stderr, "%s's functions: %s\n", o.game.c_str(), err.c_str());
+            if (err.rfind("mods: ", 0) == 0) fprintf(stderr, "%s\n", err.c_str());   // (a mod's hook: core/hooks.h)
+            else fprintf(stderr, "%s's functions: %s\n", o.game.c_str(), err.c_str());
             return false;
         }
 #endif
@@ -303,6 +305,42 @@ public:
         if (!prog) return;
         const uint32_t va = p - lo + load_;   // the program's addresses, as its functions have them
         hk::patch_functions(*prog, va, va + len);
+    }
+    // The mod API (docs/MODS.md, "Hooks, settings and actions"). Hooks need the executor: its steps
+    // are built at start, with a probe before a hooked instruction (core/hooks.h); a recompiled
+    // game's binary has its code compiled already, so it hands a hook mod's run to hiraku-firebeat
+    std::vector<std::string> mod_capabilities() const override {
+#ifdef HK_EXECUTOR
+        return {"hook"};
+#else
+        return {};
+#endif
+    }
+    std::vector<std::string> mod_registers() const override {
+        std::vector<std::string> r;
+        for (int k = 0; k < 32; k++) r.push_back("r" + std::to_string(k));
+        r.insert(r.end(), {"cr", "xer", "lr", "ctr"});   // (hk_ctx's words in that order: core/hooks.h)
+        return r;
+    }
+    bool mod_big_endian() const override { return true; }
+    bool mod_hook(uint32_t at, ModHook fn, void *ctx, const std::string &label, std::string &err) override {
+#ifdef HK_EXECUTOR
+        return hooks::add(at, fn, ctx, label, err);
+#else
+        (void)at, (void)fn, (void)ctx, (void)label;
+        err = "this game's own binary has its code compiled: hooks are hiraku-firebeat's";
+        return false;
+#endif
+    }
+    std::string mod_program_file(const std::string &root, const std::string &game) const override {
+        return image_.empty() ? root + "/dumps/" + game + "/program.bin" : image_;
+    }
+    std::string mod_other_program() const override {
+#ifdef HK_EXECUTOR
+        return {};
+#else
+        return "hiraku-firebeat";
+#endif
     }
     int screens() const override { return fb::screens(); }
     // Keyboardmania: two 4:3 monitors turned upright (MAME ROT270), side by side: 3:2

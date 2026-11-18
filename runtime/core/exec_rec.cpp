@@ -46,6 +46,7 @@ void hk_mtmsr(hk_ctx *c, uint32_t v);
 
 #include "exec_names.h"
 #include "exec_steps.h"
+#include "hooks.h"
 #include "runtime.h"
 
 namespace hk::exec {

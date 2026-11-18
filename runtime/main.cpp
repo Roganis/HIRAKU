@@ -142,6 +142,8 @@ static const char COMMON_OPTIONS[] = R"HK(  --frames N        stop after N video
                     --fullscreen (F11 toggles the window with the keyboard)
   --mod FOLDER      a mod (docs/MODS.md: the folder's mod.toml), several in order: patches
                     to the game's memory, replaced bytes or files on its media
+  --mod-setting NAME=VALUE  a mod's [[setting]] for this run (not kept); MOD/NAME where two have it
+  --mod-api         the mod API this program has (its version, capabilities, registers), and exit
   --fast-boot       with --window, the game's start-up as fast as the machine can go (no sound,
                     its pictures with a box over them) until its ready point (games/<id>/game.toml
                     boot_seconds: the machine's seconds to its title or attract), or until a
@@ -352,6 +354,7 @@ int main(int argc, char **argv) {
     int window_scale = 0;
     std::string wav_path, digest_path, script_path, bindings, nvram_dir, lights_file, lights_socket;
     bool fullscreen = false;
+    bool mod_api = false;   // --mod-api
     std::string picture_mode = "off";
     std::vector<std::string> picture_config, shader_keys;
     std::vector<std::string> macro_specs;
@@ -430,6 +433,8 @@ int main(int argc, char **argv) {
         else if (a == "--fast-boot") fast_boot = true;
         else if (a == "--fast-boot-seconds") fast_boot = true, fast_boot_seconds = std::stod(val());
         else if (a == "--mod") mod_dirs.push_back(val());
+        else if (a == "--mod-setting") mods::override_setting(val());
+        else if (a == "--mod-api") mod_api = true;
         else if (a == "--game-menu") game_menu = val() != "off";
         else if (a == "--game-menu-hold") game_menu_hold = std::stod(val());
         else if (a == "--game-menu-key") game_menu_key = val();
@@ -460,6 +465,15 @@ int main(int argc, char **argv) {
 #else
     setvbuf(stdout, nullptr, _IOLBF, 0);
 #endif
+    // the mod API (host/mods.h): what the shell offers besides the core's (actions: a window's
+    // keys and controllers), and --mod-api's answer
+#ifdef HK_WITH_SDL
+    mods::offer("actions");
+#endif
+    if (mod_api) {
+        printf("%s", mods::api_text(opt.root, game).c_str());
+        return 0;
+    }
     mkdirs(out);
     opt.out = out;
 
@@ -506,6 +520,7 @@ int main(int argc, char **argv) {
         std::string err;
         if (!mods::load(mod_dirs, game, opt.root, err)) {
             fprintf(stderr, "mods: %s\n", err.c_str());
+            mods::hand_over(argc, argv, game);   // (a hook mod and a recompiled game: hiraku-firebeat, if it's here)
             return 2;
         }
         for (const std::string &m : mods::describe()) fprintf(stderr, "mods: %s\n", m.c_str());
@@ -552,6 +567,7 @@ int main(int argc, char **argv) {
                    (double)between_ticks * prof::ns_per_tick() / 1e6 / (double)between_n,
                    (double)between_max * prof::ns_per_tick() / 1e6, (unsigned long long)between_hash);
         machine.report();
+        mods::report();
         close_wav();
         // (the file finished, and any F6 ended still being finished: every way out comes here)
         if (const std::string line = capture.stop(); !line.empty()) printf("%s\n", line.c_str());

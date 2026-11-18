@@ -1,0 +1,55 @@
+# A sample of the mod API (docs/MODS.md, "Hooks, settings and actions"), for test_mod_api's made-up
+# machine (game "test"): the addresses are made up, no game's. A timing mod has this shape: a setting
+# in milliseconds, keys that move it, hooks that take it off the times the game judges a press by,
+# and counters of the judgments.
+name = "Sample timing shift"
+version = "0.1"
+game = "test"
+api = 1
+requires = ["hook", "settings", "actions"]
+
+[[setting]]
+name = "shift"
+label = "Judging (ms)"
+min = -100
+max = 100
+default = 0
+step = 1
+
+[[action]]
+name = "later"
+label = "Judging later"
+binding = "key:Keypad 8"
+setting = "shift"
+do = "up"
+
+[[action]]
+name = "earlier"
+label = "Judging earlier"
+binding = "key:Keypad 2"
+setting = "shift"
+do = "down"
+
+[[hook]]                # the judging function's entry: the press's time (r3) earlier by the setting
+at = 0x1000
+sub = "r3"
+value = "setting:shift"
+
+[[hook]]                # where a missed note is told: the same time (in r1)
+at = 0x1040
+sub = "r1"
+value = "setting:shift"
+
+[[hook]]                # each judgment: r2 its kind, 2 to 9 all but the best
+at = 0x2000
+count = "not-best"
+when = "r2"
+min = 2
+max = 9
+
+[[hook]]
+at = 0x2000
+count = "best"
+when = "r2"
+min = 10
+max = 10

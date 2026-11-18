@@ -18,6 +18,8 @@
 #include "../shell/cabinet.h"
 #include "axisturn.h"
 #include "menukey.h"
+#include "mods.h"
+#include "notice.h"
 #include "warp.h"
 
 namespace hk::host {
@@ -324,6 +326,50 @@ std::chrono::steady_clock::time_point input_time() {
     return g_event_time != std::chrono::steady_clock::time_point{} ? g_event_time : std::chrono::steady_clock::now();
 }
 
+namespace {
+// Whether one of the game's controls is bound to the key, button, hat or axis this event is from
+bool game_bound(const SDL_Event &e) {
+    for (const auto &[name, list] : g_bind)
+        for (const Binding &b : list) {
+            if ((e.type == SDL_EVENT_KEY_DOWN || e.type == SDL_EVENT_KEY_UP) && b.src == Src::key && b.key == e.key.key) return true;
+            if ((e.type == SDL_EVENT_JOYSTICK_BUTTON_DOWN || e.type == SDL_EVENT_JOYSTICK_BUTTON_UP) && b.src == Src::button &&
+                from(b, e.jbutton.which) && e.jbutton.button == b.index)
+                return true;
+            if (e.type == SDL_EVENT_JOYSTICK_HAT_MOTION && b.src == Src::hat && from(b, e.jhat.which) && e.jhat.hat == b.index) return true;
+            if (e.type == SDL_EVENT_JOYSTICK_AXIS_MOTION && (b.src == Src::axis || b.src == Src::axis_neg || b.src == Src::axis_pos) &&
+                from(b, e.jaxis.which) && e.jaxis.axis == b.index)
+                return true;
+        }
+    return false;
+}
+
+// A mod's action (host/mods.h) whose binding this event is: done, and what it changed shown for a
+// moment. Not where one of the game's controls has the same key or button: the game keeps it (said
+// once). True: the event was an action's
+bool mod_action(const SDL_Event &e) {
+    static const std::vector<std::string> bindings = mods::action_bindings();   // (loaded before the window opens)
+    if (bindings.empty()) return false;
+    static std::vector<char> held(bindings.size()), left(bindings.size());
+    const bool key = e.type == SDL_EVENT_KEY_DOWN || e.type == SDL_EVENT_KEY_UP;
+    bool any = false;
+    for (size_t k = 0; k < bindings.size(); k++) {
+        const int r = input_binding_event(bindings[k], e);
+        if (!r) continue;
+        if (game_bound(e)) {
+            if (!left[k]) fprintf(stderr, "mods: %s: %s is one of the game's controls: left to the game\n", mods::action_name(k).c_str(), bindings[k].c_str());
+            left[k] = 1;
+            continue;
+        }
+        any = true;
+        const bool repeat = r > 0 && (key ? e.key.repeat : held[k]);
+        held[k] = r > 0;
+        if (repeat && !key) continue;   // (a controller's axis or hat held: once)
+        if (const std::vector<std::string> lines = mods::action(k, r > 0, repeat); !lines.empty()) notice::hint(lines, 2);
+    }
+    return any;
+}
+}  // namespace
+
 void input_event(const SDL_Event &e) {
     // SDL's event times are its own clock's (SDL_GetTicksNS), taken from the system's input event
     // where it has one: on the steady clock, as long ago as that. One from the future, or older than a
@@ -376,6 +422,7 @@ void input_event(const SDL_Event &e) {
                     e.type == SDL_EVENT_JOYSTICK_BUTTON_DOWN ? "down" : "up");
     }
     if (e.type == SDL_EVENT_JOYSTICK_BUTTON_DOWN && button_rests(e)) return;
+    if (mod_action(e)) return;   // a mod's actions (host/mods.h): not on the game's controls
     if (e.type == SDL_EVENT_JOYSTICK_BUTTON_UP && button_rests(e)) {   // let go: pressed from now on
         g_button_rest.erase({joy_index(e.jbutton.which), (int)e.jbutton.button});
         return;

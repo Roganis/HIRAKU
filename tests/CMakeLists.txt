@@ -458,6 +458,11 @@ add_test(NAME mods_text COMMAND test_find_text)
 add_executable(test_patch_order mods/test_patch_order.cpp)
 target_link_libraries(test_patch_order PRIVATE hiraku_shell)
 add_test(NAME mods_patch_order COMMAND test_patch_order)
+# ... and the mod API's tables (api, requires, program, [[hook]], [[setting]], [[action]]) on a
+# made-up machine, with the sample mod under tests/mods/sample-hook
+add_executable(test_mod_api mods/test_mod_api.cpp)
+target_link_libraries(test_mod_api PRIVATE hiraku_shell)
+add_test(NAME mods_api COMMAND test_mod_api ${CMAKE_CURRENT_BINARY_DIR}/mod-api-test ${CMAKE_CURRENT_SOURCE_DIR}/mods/sample-hook)
 # tools/ingest.py (Python 3.11 or later: tomllib): a Konami Python game waiting for its BIOS and keys,
 # finished when they're dropped
 if(Python3_Interpreter_FOUND AND Python3_VERSION VERSION_GREATER_EQUAL 3.11)
@@ -539,6 +544,13 @@ add_test(NAME gcu_between COMMAND test_gcu_between)
 add_executable(test_exec_names core/test_exec_names.cpp)
 target_link_libraries(test_exec_names PRIVATE hiraku_rt)
 add_test(NAME exec_names COMMAND test_exec_names)
+# A mod's hooks on a made-up program (runtime/core/hooks.h): before their instruction in the
+# executor and the interpreter, and never skipped by a remembered run (twice: HK_EXEC_MEMO=check)
+add_executable(test_exec_hook core/test_exec_hook.cpp ${CMAKE_SOURCE_DIR}/runtime/core/no_table.c)
+target_link_libraries(test_exec_hook PRIVATE hiraku_rt)
+add_test(NAME exec_hook COMMAND test_exec_hook ${CMAKE_CURRENT_BINARY_DIR}/exec-hook-test)
+add_test(NAME exec_hook_memo_check COMMAND test_exec_hook ${CMAKE_CURRENT_BINARY_DIR}/exec-hook-test-check)
+set_tests_properties(exec_hook_memo_check PROPERTIES ENVIRONMENT "HK_EXEC_MEMO=check")
 
 # The PlayStation cores' waiting loops (runtime/sys573/idle.cpp): for how many turns a comparison
 # keeps its result, against every turn worked out

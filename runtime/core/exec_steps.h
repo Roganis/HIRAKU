@@ -57,6 +57,7 @@ enum K : uint16_t {
     K_mfctr,
     K_mtlr,
     K_mtctr,
+    K_probe,      // a mod's hooks (core/hooks.h) before the instruction at a: hooks::run(c, b)
     K_op = 64,    // kind(op, shape)
 };
 

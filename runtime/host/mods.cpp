@@ -2,9 +2,13 @@
 #include "host/mods.h"
 
 #include <algorithm>
+#include <atomic>
 #include <cctype>
+#include <cerrno>
+#include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <deque>
 #include <filesystem>
 #include <fstream>
 #include <set>
@@ -16,12 +20,18 @@
 #include <windows.h>
 #else
 #include <iconv.h>
+#include <unistd.h>
 #endif
 
 #include "host/png.h"
 #include "host/pythondisk.h"
 #include "shell/core.h"
+#include "shell/kvfile.h"
 #include "shell/overlay.h"
+#include "shell/saves.h"
+#include "shell/sha1.h"
+#include "shell/sys.h"
+#include "shell/userdir.h"
 
 namespace hk::mods {
 
@@ -62,7 +72,7 @@ std::vector<Table> parse(const std::string &text, const std::string &file) {
             out.push_back(t);
             continue;
         }
-        if (line[0] == '[') fail("only [[patch]], [[text]], [[bytes]], [[file]] and [[rate]] tables");
+        if (line[0] == '[') fail("only [[patch]], [[text]], [[bytes]], [[file]], [[rate]], [[hook]], [[setting]] and [[action]] tables");
         const size_t eq = line.find('=');
         if (eq == std::string::npos) fail("expected key = value");
         std::string key = line.substr(0, eq), val = line.substr(eq + 1);
@@ -177,6 +187,115 @@ std::vector<Text> g_texts;
 std::vector<Rate> g_rates;
 std::vector<Mod> g_mods;
 std::map<std::string, std::string> g_folder_files;   // a folder medium's file -> the mod's (folder_files())
+
+// ---- the mod API's state (docs/MODS.md, "Hooks, settings and actions") ----------------------
+struct Setting {
+    std::string mod, folder, name, label;   // the mod's name, its folder's name; the setting's
+    int64_t min = 0, max = 0, dflt = 0, step = 1;
+    std::atomic<int64_t> value{0};          // (hooks read it on the machine's thread, actions set it)
+};
+struct Action {
+    std::string mod, name, label, binding;
+    Setting *setting = nullptr;
+    enum class Do { up, down, toggle } what = Do::up;
+};
+struct Counter {
+    std::string mod, folder, name;
+    std::atomic<uint64_t> n{0};
+};
+// where a hook reads or writes: a register (by the core's numbering) or `size` bytes of RAM
+struct Place {
+    int reg = -1;
+    uint32_t addr = 0;
+    int size = 4;
+};
+struct Hook {
+    std::string mod, where;
+    uint32_t at = 0;
+    enum class Op { set, add, sub, count } op = Op::set;
+    Place target;
+    int64_t imm = 0;
+    Setting *setting = nullptr;   // the operand: a setting's value, else imm
+    double scale = 1;
+    bool when = false;            // only while `when_at` is in [min, max] (signed)
+    Place when_at;
+    int64_t min = INT64_MIN, max = INT64_MAX;
+    Counter *counter = nullptr;
+    bool missed = false;          // its RAM wasn't there once (said once)
+};
+// (deques: hooks and actions point into them, and the core holds the hooks)
+std::deque<Setting> g_settings;
+std::deque<Action> g_actions;
+std::deque<Counter> g_counters;
+std::deque<Hook> g_hooks;
+std::vector<std::string> g_offered;                       // offer(): the shell's own capabilities
+std::vector<std::pair<std::string, std::string>> g_overrides;   // --mod-setting: name (or folder/name), value
+std::string g_hand_over;                                  // the program to hand the run to (hand_over())
+bool g_big_endian = false;                                // core().mem()'s byte order (cached at load)
+std::string g_settings_dir;                               // <user data>/mod-settings/<game>
+
+uint32_t read_place(const Place &p, const uint32_t *regs, Hook &h, bool &ok) {
+    ok = true;
+    if (p.reg >= 0) return regs[p.reg];
+    const uint8_t *m = core().mem(p.addr, (uint32_t)p.size);
+    if (!m) {
+        if (!h.missed) fprintf(stderr, "mods: %s: a hook's memory at 0x%08x isn't there (%s)\n", h.mod.c_str(), p.addr, h.where.c_str());
+        h.missed = true;
+        ok = false;
+        return 0;
+    }
+    uint32_t v = 0;
+    for (int i = 0; i < p.size; i++) v |= (uint32_t)m[i] << (8 * (g_big_endian ? p.size - 1 - i : i));
+    return v;
+}
+int64_t signed_of(uint32_t v, int size) {
+    return size == 1 ? (int64_t)(int8_t)v : size == 2 ? (int64_t)(int16_t)v : (int64_t)(int32_t)v;
+}
+
+// A [[hook]], run before its instruction (Core::mod_hook)
+void run_hook(void *ctx, uint32_t *regs) {
+    Hook &h = *static_cast<Hook *>(ctx);
+    bool ok;
+    if (h.when) {
+        const int64_t v = signed_of(read_place(h.when_at, regs, h, ok), h.when_at.reg >= 0 ? 4 : h.when_at.size);
+        if (!ok || v < h.min || v > h.max) return;
+    }
+    if (h.op == Hook::Op::count) {
+        h.counter->n.fetch_add(1, std::memory_order_relaxed);
+        return;
+    }
+    int64_t operand = h.setting ? h.setting->value.load(std::memory_order_relaxed) : h.imm;
+    if (h.scale != 1) operand = std::llround((double)operand * h.scale);
+    const uint32_t now = read_place(h.target, regs, h, ok);
+    if (!ok) return;
+    const uint32_t v = h.op == Hook::Op::set ? (uint32_t)operand : h.op == Hook::Op::add ? now + (uint32_t)operand : now - (uint32_t)operand;
+    if (h.target.reg >= 0) {
+        regs[h.target.reg] = v;
+        return;
+    }
+    auto *m = const_cast<uint8_t *>(core().mem(h.target.addr, (uint32_t)h.target.size));
+    for (int i = 0; i < h.target.size; i++) m[i] = (uint8_t)(v >> (8 * (g_big_endian ? h.target.size - 1 - i : i)));
+}
+
+// a mod's settings file: <user data>/mod-settings/<game>/<the mod's folder's name>.txt, key=value
+// lines (shell/kvfile.h): each setting's value, each action's binding as action.<name>
+std::string settings_file(const std::string &folder) { return g_settings_dir + "/" + folder + ".txt"; }
+
+void save_settings(const std::string &folder) {
+    std::string text = "# HIRAKU: a mod's settings and its actions' bindings (docs/MODS.md). Edit while the game isn't running\n";
+    for (const Setting &s : g_settings)
+        if (s.folder == folder) text += s.name + "=" + std::to_string(s.value.load()) + "\n";
+    for (const Action &a : g_actions)
+        if (a.setting && a.setting->folder == folder) text += "action." + a.name + "=" + a.binding + "\n";
+    std::error_code ec;
+    std::filesystem::create_directories(std::filesystem::path(std::u8string(g_settings_dir.begin(), g_settings_dir.end())), ec);
+    saves::writer().write(g_settings_dir, {{folder + ".txt", text}});
+}
+
+std::string shown(const Setting &s) {
+    const int64_t v = s.value.load();
+    return (s.min < 0 && v > 0 ? "+" : "") + std::to_string(v);
+}
 
 std::string read_file(const std::string &path) {
     std::ifstream f(path, std::ios::binary);
@@ -432,6 +551,9 @@ bool load(const std::vector<std::string> &dirs, const std::string &game, const s
     try {
         const auto medium_paths = media(root, game);
         std::map<std::string, std::unique_ptr<pythondisk::Files>> python_disks;   // [[file]]s on Konami Python disks
+        g_big_endian = core().mod_big_endian();
+        g_settings_dir = user_data_dir(root) + "/mod-settings/" + game;
+        std::vector<std::vector<Hook>> mod_hooks;   // each mod's [[hook]]s, last mod first (put in at the end)
         // The first mod in the list wins where two change the same thing, as with ifs_layeredfs: a
         // later range, file or patch wins, so the list is laid on from its last mod to its first
         for (auto d = dirs.rbegin(); d != dirs.rend(); ++d) {
@@ -443,7 +565,19 @@ bool load(const std::vector<std::string> &dirs, const std::string &game, const s
             // no mod.toml: a folder of files laid over the game's (below), named after the folder
             const std::vector<Table> tables = text.empty() ? std::vector<Table>(1) : parse(text, file);
             Mod mod{dir, utf8(fs_path(dir).filename()), ""};
+            const std::string folder = mod.name;
             std::set<std::string> named;   // the files its tables name (not laid over the game's)
+            // the mod API's (docs/MODS.md, "Hooks, settings and actions"): what the mod says of
+            // itself, and its tables, put in once the whole file is read
+            int api = 0;
+            std::vector<std::string> needs;
+            bool needs_given = false;
+            std::string program;
+            std::map<std::string, std::string> used;   // capability -> the first table of it ("[[hook]]")
+            struct PendingHook { Hook h; std::string setting, count; };
+            struct PendingAction { Action a; std::string setting, where; };
+            std::vector<PendingHook> hooks;
+            std::vector<PendingAction> actions;
             for (const Table &t : tables) {
                 const std::string where = file + (t.line ? ":" + std::to_string(t.line) : std::string());
                 auto fail = [&](const std::string &why) { throw std::runtime_error(where + ": " + why); };
@@ -465,6 +599,47 @@ bool load(const std::vector<std::string> &dirs, const std::string &game, const s
                     const uint64_t r = std::strtoull(v.c_str(), &end, 0);
                     if (v.empty() || *end) fail(std::string("'") + k + "' isn't a number");
                     return r;
+                };
+                auto inum = [&](const char *k) -> int64_t {   // a signed number
+                    auto it = t.values.find(k);
+                    if (it == t.values.end()) fail(std::string("'") + k + "' is missing");
+                    if (t.is_string.at(k)) fail(std::string("'") + k + "' is a number (no quotes)");
+                    std::string v;
+                    for (char c : it->second) if (c != '_') v += c;
+                    char *end = nullptr;
+                    errno = 0;
+                    const long long r = std::strtoll(v.c_str(), &end, 0);
+                    if (v.empty() || *end || errno) fail(std::string("'") + k + "' isn't a whole number");
+                    return r;
+                };
+                auto ident = [&](const char *k) {   // a name: letters, digits, _ and -
+                    const std::string s = str(k, true);
+                    if (s.empty() || !std::all_of(s.begin(), s.end(), [](char c) { return std::isalnum((unsigned char)c) || c == '_' || c == '-'; }))
+                        fail(std::string("'") + k + "' is a name of letters, digits, _ and - (\"" + s + "\")");
+                    return s;
+                };
+                // a register by the machine's own name ("r3"), or memory: an address and its size
+                auto place = [&](const char *k, const char *size_key) {
+                    Place p;
+                    if (t.is_string.at(k)) {
+                        const std::string name = t.values.at(k);
+                        const std::vector<std::string> regs = core().mod_registers();
+                        for (size_t i = 0; i < regs.size(); i++)
+                            if (regs[i] == name) p.reg = (int)i;
+                        if (p.reg < 0) {
+                            std::string all;
+                            for (const std::string &r : regs) all += (all.empty() ? "" : " ") + r;
+                            fail("no register '" + name + "' on this machine" + (all.empty() ? std::string(" (its core names none)") : " (" + all + ")"));
+                        }
+                        if (t.values.count(size_key)) fail(std::string("'") + size_key + "' is for memory, not a register");
+                        return p;
+                    }
+                    p.addr = (uint32_t)num(k);
+                    if (t.values.count(size_key)) {
+                        p.size = (int)inum(size_key);
+                        if (p.size != 1 && p.size != 2 && p.size != 4) fail(std::string("'") + size_key + "' is 1, 2 or 4 (bytes)");
+                    }
+                    return p;
                 };
                 auto real = [&](const char *k) -> double {
                     auto it = t.values.find(k);
@@ -509,10 +684,118 @@ bool load(const std::vector<std::string> &dirs, const std::string &game, const s
                 };
                 if (t.kind.empty()) {
                     if (text.empty()) continue;
-                    known({"name", "version", "game", "author", "description"});
+                    known({"name", "version", "game", "author", "description", "api", "requires", "program"});
                     mod.name = str("name", true);
                     mod.version = str("version", false);
                     if (const std::string g = str("game", true); g != game) fail("this mod is for " + g + ", not " + game);
+                    if (t.values.count("api")) {
+                        api = (int)inum("api");
+                        if (api > API) fail("this mod is for mod API " + std::to_string(api) + ", this HIRAKU's is " + std::to_string(API) + " (a newer HIRAKU's?)");
+                        if (api < 1) fail("'api' is 1");
+                    }
+                    if (t.values.count("requires")) {   // ["hook", "settings"]: strings in a list, on one line
+                        if (!api) fail("'requires' is the mod API's: api = 1 goes with it");
+                        if (t.is_string.at("requires")) fail("'requires' is a list: [\"hook\", \"settings\"]");
+                        std::string v = t.values.at("requires");
+                        if (v.size() < 2 || v.front() != '[' || v.back() != ']') fail("'requires' is a list on one line: [\"hook\", \"settings\"]");
+                        v = v.substr(1, v.size() - 2);
+                        for (size_t at = 0;;) {
+                            at = v.find_first_not_of(" \t,", at);
+                            if (at == std::string::npos) break;
+                            const size_t close = v[at] == '"' ? v.find('"', at + 1) : std::string::npos;
+                            if (close == std::string::npos) fail("'requires' is a list of names in quotes: [\"hook\", \"settings\"]");
+                            needs.push_back(v.substr(at + 1, close - at - 1));
+                            at = close + 1;
+                        }
+                        needs_given = true;
+                    }
+                    if (t.values.count("program")) {   // the SHA-1 of the program it was made for
+                        if (!api) fail("'program' is the mod API's: api = 1 goes with it");
+                        program = str("program", true);
+                        std::transform(program.begin(), program.end(), program.begin(), [](unsigned char c) { return (char)std::tolower(c); });
+                        if (program.size() != 40 || !std::all_of(program.begin(), program.end(), [](unsigned char c) { return std::isxdigit(c); }))
+                            fail("'program' is a SHA-1: 40 hex digits (the program image's, as games/" + game + "/game.toml's [program] sha1)");
+                    }
+                } else if (t.kind == "setting") {
+                    used.try_emplace("settings", "[[setting]]");
+                    known({"name", "label", "min", "max", "default", "step"});
+                    const std::string name = ident("name");
+                    for (const Setting &s : g_settings)
+                        if (s.folder == folder && s.name == name) fail("a second setting '" + name + "'");
+                    Setting &s = g_settings.emplace_back();
+                    s.mod = mod.name, s.folder = folder, s.name = name;
+                    s.label = str("label", false);
+                    if (s.label.empty()) s.label = name;
+                    s.min = inum("min"), s.max = inum("max"), s.dflt = inum("default");
+                    s.step = t.values.count("step") ? inum("step") : 1;
+                    if (s.min > s.max) fail("'min' is above 'max'");
+                    if (s.dflt < s.min || s.dflt > s.max) fail("'default' is from 'min' to 'max'");
+                    if (s.step <= 0) fail("'step' is 1 or more");
+                    s.value = s.dflt;
+                } else if (t.kind == "action") {
+                    used.try_emplace("actions", "[[action]]");
+                    known({"name", "label", "binding", "setting", "do"});
+                    PendingAction p;
+                    p.a.mod = mod.name;
+                    p.a.name = ident("name");
+                    for (const PendingAction &q : actions)
+                        if (q.a.name == p.a.name) fail("a second action '" + p.a.name + "'");
+                    p.a.label = str("label", false);
+                    p.a.binding = str("binding", true);
+                    const std::string d = str("do", true);
+                    if (d == "up") p.a.what = Action::Do::up;
+                    else if (d == "down") p.a.what = Action::Do::down;
+                    else if (d == "toggle") p.a.what = Action::Do::toggle;
+                    else fail("'do' is \"up\", \"down\" (the setting by its step) or \"toggle\" (from its min to its max and back)");
+                    p.setting = str("setting", true);
+                    p.where = where;
+                    actions.push_back(std::move(p));
+                } else if (t.kind == "hook") {
+                    used.try_emplace("hook", "[[hook]]");
+                    known({"at", "set", "add", "sub", "count", "value", "size", "scale", "when", "when_size", "min", "max"});
+                    PendingHook p;
+                    Hook &h = p.h;
+                    h.mod = mod.name;
+                    h.where = where;
+                    h.at = (uint32_t)num("at");
+                    const char *does = nullptr;
+                    for (const char *k : {"set", "add", "sub", "count"})
+                        if (t.values.count(k)) {
+                            if (does) fail("a hook does one thing: set, add, sub or count");
+                            does = k;
+                        }
+                    if (!does) fail("a hook does one thing: set, add, sub (a register or memory, by a value) or count");
+                    if (!strcmp(does, "count")) {
+                        h.op = Hook::Op::count;
+                        p.count = ident("count");
+                        for (const char *k : {"value", "scale", "size"})
+                            if (t.values.count(k)) fail(std::string("'") + k + "' isn't a counter's");
+                    } else {
+                        h.op = !strcmp(does, "set") ? Hook::Op::set : !strcmp(does, "add") ? Hook::Op::add : Hook::Op::sub;
+                        h.target = place(does, "size");
+                        if (!t.values.count("value")) fail("'value' is missing (a number, or \"setting:NAME\")");
+                        if (t.is_string.at("value")) {
+                            const std::string v = t.values.at("value");
+                            if (v.rfind("setting:", 0) != 0 || v.size() == 8) fail("'value' is a number, or \"setting:NAME\" (one of the mod's [[setting]]s)");
+                            p.setting = v.substr(8);
+                        } else {
+                            h.imm = inum("value");
+                        }
+                        if (t.values.count("scale")) {
+                            h.scale = real("scale");
+                            if (!std::isfinite(h.scale)) fail("'scale' is a number");
+                        }
+                    }
+                    if (t.values.count("when")) {
+                        h.when = true;
+                        h.when_at = place("when", "when_size");
+                        if (!t.values.count("min") && !t.values.count("max")) fail("'when' goes with 'min', 'max' or both");
+                        if (t.values.count("min")) h.min = inum("min");
+                        if (t.values.count("max")) h.max = inum("max");
+                    } else if (t.values.count("min") || t.values.count("max") || t.values.count("when_size")) {
+                        fail("'min', 'max' and 'when_size' go with 'when'");
+                    }
+                    hooks.push_back(std::move(p));
                 } else if (t.kind == "patch") {
                     known({"address", "module", "original", "replace", "once", "while_rate", "between_ticks"});
                     Patch p;
@@ -613,6 +896,88 @@ bool load(const std::vector<std::string> &dirs, const std::string &game, const s
                     fail("unknown table [[" + t.kind + "]]");
                 }
             }
+            // the mod API: what the mod needs, against what this build has; the program it's for
+            auto fail = [&](const std::string &why) { throw std::runtime_error(file + ": " + why); };
+            if (!used.empty() && !api)
+                fail(used.begin()->second + " is the mod API's: the mod says api = 1 at its top (and requires = [\"" + used.begin()->first + "\"])");
+            for (const auto &[cap, table] : used)
+                if (std::find(needs.begin(), needs.end(), cap) == needs.end())
+                    fail("this mod has " + table + " but its 'requires' doesn't list \"" + cap + "\"" + (needs_given ? "" : " (it has no 'requires')"));
+            {
+                const std::vector<std::string> have = capabilities();
+                std::string missing, all;
+                for (const std::string &n : needs)
+                    if (std::find(have.begin(), have.end(), n) == have.end()) missing += (missing.empty() ? "" : ", ") + n;
+                for (const std::string &h : have) all += (all.empty() ? "" : ", ") + h;
+                if (!missing.empty()) {
+                    std::string why = "this mod needs " + missing + "; this core/build has none (it has: " + (all.empty() ? "nothing of the mod API" : all) + ")";
+                    if (const std::string other = core().mod_other_program(); !other.empty()) {
+                        why += ". " + other + " has it: start that one, with --game " + game;
+                        g_hand_over = other;
+                    }
+                    fail(why);
+                }
+            }
+            if (!program.empty()) {
+                const std::string path = core().mod_program_file(root, game);
+                if (path.empty()) fail("this machine's core doesn't say which program it runs, so 'program' can't be checked");
+                std::ifstream f(fs_path(path), std::ios::binary);
+                if (!f) fail("can't read the program " + path + " ('program')");
+                Sha1 sha;
+                char buf[65536];
+                while (f.read(buf, sizeof buf) || f.gcount()) sha.add(buf, (size_t)f.gcount());
+                const std::string have = sha.hex();
+                if (have != program) fail("this mod is for the program whose SHA-1 is " + program + "; this run's (" + path + ") is " + have);
+            }
+            // its hooks' and actions' settings and counters, by name
+            auto setting_of = [&](const std::string &name, const std::string &where) -> Setting * {
+                for (Setting &s : g_settings)
+                    if (s.folder == folder && s.name == name) return &s;
+                throw std::runtime_error(where + ": no [[setting]] '" + name + "' in this mod");
+            };
+            mod_hooks.emplace_back();
+            for (PendingHook &p : hooks) {
+                if (!p.setting.empty()) p.h.setting = setting_of(p.setting, p.h.where);
+                if (!p.count.empty()) {
+                    for (Counter &c : g_counters)
+                        if (c.folder == folder && c.name == p.count) p.h.counter = &c;
+                    if (!p.h.counter) {
+                        Counter &c = g_counters.emplace_back();
+                        c.mod = mod.name, c.folder = folder, c.name = p.count;
+                        p.h.counter = &c;
+                    }
+                }
+                mod_hooks.back().push_back(std::move(p.h));
+            }
+            for (PendingAction &p : actions) {
+                p.a.setting = setting_of(p.setting, p.where);
+                if (p.a.label.empty()) p.a.label = p.a.name;
+                g_actions.push_back(std::move(p.a));
+            }
+            // its settings as last kept (<user data>/mod-settings/<game>/<folder>.txt), and the
+            // actions' bindings as the player changed them there
+            if (used.count("settings") || used.count("actions")) {
+                const std::string kept = settings_file(folder);
+                const auto kv = read_kv(kept);
+                for (Setting &s : g_settings) {
+                    if (s.folder != folder) continue;
+                    auto it = kv.find(s.name);
+                    const char *from = "the mod's default";
+                    if (it != kv.end()) {
+                        char *end = nullptr;
+                        const long long v = std::strtoll(it->second.c_str(), &end, 10);
+                        if (!it->second.empty() && !*end) {
+                            s.value = std::clamp<int64_t>(v, s.min, s.max);
+                            from = "kept";
+                        }
+                    }
+                    fprintf(stderr, "mods: %s: %s = %s (%s)\n", mod.name.c_str(), s.name.c_str(), shown(s).c_str(), from);
+                }
+                for (Action &a : g_actions)
+                    if (a.setting && a.setting->folder == folder)
+                        if (auto it = kv.find("action." + a.name); it != kv.end() && !it->second.empty()) a.binding = it->second;
+                if (!kv.empty()) fprintf(stderr, "mods: %s: settings from %s\n", mod.name.c_str(), kept.c_str());
+            }
             lay_files(dir, mod.name, named, medium_paths, python_disks);
             g_mods.insert(g_mods.begin(), mod);   // in the list's order
             // ... and its memory patches before those of the mods after it: patches go in in their
@@ -633,6 +998,28 @@ bool load(const std::vector<std::string> &dirs, const std::string &game, const s
                 }
             }
         for (auto &d : python_disks) d.second->finish();
+        // the hooks, in the list's order (its first mod's first): several at one instruction run so
+        if (!mod_hooks.empty())
+            for (auto m = mod_hooks.rbegin(); m != mod_hooks.rend(); ++m)
+                for (Hook &h : *m) {
+                    Hook &kept = g_hooks.emplace_back(std::move(h));
+                    std::string why;
+                    if (!core().mod_hook(kept.at, run_hook, &kept, kept.where, why)) throw std::runtime_error(kept.where + ": " + why);
+                }
+        // --mod-setting: this run's values
+        for (const auto &[name, value] : g_overrides) {
+            Setting *found = nullptr;
+            int n = 0;
+            for (Setting &s : g_settings)
+                if (s.name == name || s.folder + "/" + s.name == name) found = &s, n++;
+            if (!n) throw std::runtime_error("--mod-setting " + name + ": no mod here has a setting of that name");
+            if (n > 1) throw std::runtime_error("--mod-setting " + name + ": two mods have one: give it as FOLDER/" + name);
+            char *end = nullptr;
+            const long long v = std::strtoll(value.c_str(), &end, 0);
+            if (value.empty() || *end) throw std::runtime_error("--mod-setting " + name + "=" + value + ": a whole number");
+            found->value = std::clamp<int64_t>(v, found->min, found->max);
+            fprintf(stderr, "mods: %s: %s = %s (--mod-setting, this run's)\n", found->mod.c_str(), found->name.c_str(), shown(*found).c_str());
+        }
     } catch (const std::exception &e) {
         err = e.what();
         return false;
@@ -821,6 +1208,138 @@ std::vector<std::string> describe() {
     std::vector<std::string> d;
     for (const Mod &m : g_mods) d.push_back(m.name + (m.version.empty() ? "" : " " + m.version) + " (" + m.dir + ")");
     return d;
+}
+
+// ---- the mod API ----------------------------------------------------------------------------
+
+std::vector<std::string> capabilities() {
+    std::vector<std::string> c = core().mod_capabilities();
+    c.push_back("settings");   // (the shell's: settings files, read by hooks)
+    for (const std::string &o : g_offered)
+        if (std::find(c.begin(), c.end(), o) == c.end()) c.push_back(o);
+    return c;
+}
+
+void offer(const std::string &capability) {
+    if (std::find(g_offered.begin(), g_offered.end(), capability) == g_offered.end()) g_offered.push_back(capability);
+}
+
+std::string api_text(const std::string &root, const std::string &game) {
+    std::string s = "mod API " + std::to_string(API) + "\ncapabilities:";
+    for (const std::string &c : capabilities()) s += " " + c;
+    std::string regs;
+    for (const std::string &r : core().mod_registers()) regs += " " + r;
+    s += "\nregisters:" + (regs.empty() ? std::string(" none") : regs);
+    s += std::string("\nmemory: ") + (core().mod_big_endian() ? "big-endian" : "little-endian");
+    const std::string path = core().mod_program_file(root, game);
+    if (!path.empty()) {
+        std::ifstream f(fs_path(path), std::ios::binary);
+        if (f) {
+            Sha1 sha;
+            char buf[65536];
+            while (f.read(buf, sizeof buf) || f.gcount()) sha.add(buf, (size_t)f.gcount());
+            s += "\nprogram: " + sha.hex() + " (" + path + ")";
+        } else {
+            s += "\nprogram: " + path + " (not there)";
+        }
+    }
+    if (const std::string other = core().mod_other_program(); !other.empty()) s += "\nanother program of this core's: " + other;
+    return s + "\n";
+}
+
+void override_setting(const std::string &spec) {
+    const size_t eq = spec.find('=');
+    g_overrides.emplace_back(spec.substr(0, eq), eq == std::string::npos ? std::string() : spec.substr(eq + 1));
+}
+
+bool hand_over(int argc, char **argv, const std::string &game) {
+    if (g_hand_over.empty()) return false;
+#ifdef _WIN32
+    (void)argc, (void)argv, (void)game;
+    return false;
+#else
+    const std::string exe = sys::exe_path();
+    if (exe.empty()) return false;
+    const std::string path = exe.substr(0, exe.rfind('/') + 1) + g_hand_over;
+    if (access(path.c_str(), X_OK) != 0) return false;
+    std::vector<std::string> args = {path};
+    bool has_game = false;
+    for (int k = 1; k < argc; k++) has_game |= !strcmp(argv[k], "--game") || !strcmp(argv[k], "-game");
+    if (!has_game) args.insert(args.end(), {"--game", game});
+    for (int k = 1; k < argc; k++) args.push_back(argv[k]);
+    std::vector<char *> a;
+    for (std::string &s : args) a.push_back(s.data());
+    a.push_back(nullptr);
+    fprintf(stderr, "mods: the run goes on in %s\n", path.c_str());
+    fflush(stdout);
+    fflush(stderr);
+    execv(path.c_str(), a.data());
+    fprintf(stderr, "mods: %s couldn't be started: %s\n", path.c_str(), strerror(errno));
+    return false;
+#endif
+}
+
+std::vector<std::string> action_bindings() {
+    std::vector<std::string> b;
+    for (const Action &a : g_actions) b.push_back(a.binding);
+    return b;
+}
+
+std::string action_name(size_t id) { return id < g_actions.size() ? g_actions[id].mod + ": " + g_actions[id].name : std::string(); }
+
+std::vector<std::string> action(size_t id, bool down, bool repeat) {
+    if (id >= g_actions.size() || !down) return {};
+    const Action &a = g_actions[id];
+    Setting &s = *a.setting;
+    const int64_t was = s.value.load();
+    int64_t v = was;
+    switch (a.what) {
+    case Action::Do::up: v = std::min(s.max, was + s.step); break;
+    case Action::Do::down: v = std::max(s.min, was - s.step); break;
+    case Action::Do::toggle:
+        if (repeat) return {};
+        v = was == s.min ? s.max : s.min;
+        break;
+    }
+    if (v != was) {
+        s.value = v;
+        save_settings(s.folder);
+        fprintf(stderr, "mods: %s: %s = %s (%s)\n", s.mod.c_str(), s.name.c_str(), shown(s).c_str(), a.name.c_str());
+    }
+    // (said even when it's at its end: the player sees where it is)
+    return {s.mod, s.label + ": " + shown(s)};
+}
+
+std::vector<std::pair<std::string, int64_t>> settings() {
+    std::vector<std::pair<std::string, int64_t>> out;
+    for (const Setting &s : g_settings) out.emplace_back(s.folder + "/" + s.name, s.value.load());
+    return out;
+}
+
+std::vector<std::pair<std::string, uint64_t>> counters() {
+    std::vector<std::pair<std::string, uint64_t>> out;
+    for (const Counter &c : g_counters) out.emplace_back(c.folder + "/" + c.name, c.n.load());
+    return out;
+}
+
+void report() {
+    for (const Counter &c : g_counters)
+        fprintf(stderr, "mods: %s: count %s = %llu\n", c.mod.c_str(), c.name.c_str(), (unsigned long long)c.n.load());
+    for (const Setting &s : g_settings) fprintf(stderr, "mods: %s: %s = %s at the end\n", s.mod.c_str(), s.name.c_str(), shown(s).c_str());
+}
+
+void clear() {
+    g_patches.clear();
+    g_texts.clear();
+    g_rates.clear();
+    g_mods.clear();
+    g_folder_files.clear();
+    g_actions.clear();
+    g_counters.clear();
+    g_settings.clear();
+    g_overrides.clear();
+    g_hand_over.clear();
+    // (g_hooks: the core may still hold them; kept)
 }
 
 }  // namespace hk::mods

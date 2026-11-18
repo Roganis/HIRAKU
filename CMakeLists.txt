@@ -548,6 +548,7 @@ add_library(hiraku_rt STATIC
   runtime/core/glue.cpp
   runtime/core/exec.cpp
   runtime/core/exec_rec.cpp
+  runtime/core/hooks.cpp
   runtime/dev/k057714.cpp
   runtime/dev/rtc65271.cpp
   runtime/dev/flash29f016a.cpp

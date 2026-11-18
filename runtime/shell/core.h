@@ -172,6 +172,26 @@ public:
     // Where an analog input is now (an IIDX effector slider's 0-15), as the game reads it; -1 if
     // the core doesn't say. Keys that step a slider start from there (runtime/host/input.cpp).
     virtual int input_position(const std::string &name) const { (void)name; return -1; }
+    // The mod API (docs/MODS.md, "Hooks, settings and actions"; host/mods.h reads the mods and asks
+    // through these). What this core and this build offer mods ("hook": hooks on the program's
+    // instructions); the shell adds its own (settings, actions)
+    virtual std::vector<std::string> mod_capabilities() const { return {}; }
+    // the registers by the machine's own names: a hook's regs[k] is the one named k-th
+    virtual std::vector<std::string> mod_registers() const { return {}; }
+    virtual bool mod_big_endian() const { return false; }   // mem()'s byte order (DJ Main, Firebeat: big)
+    // fn(ctx, regs) before the instruction at `at` runs, each time, wherever it runs; before init().
+    // false, with why in err, when it can't be (label: the mod's file and line, for a message)
+    using ModHook = void (*)(void *ctx, uint32_t *regs);
+    virtual bool mod_hook(uint32_t at, ModHook fn, void *ctx, const std::string &label, std::string &err) {
+        (void)at, (void)fn, (void)ctx, (void)label;
+        err = "this machine's core has no hooks";
+        return false;
+    }
+    // the file of the program this run loads, whose SHA-1 a mod's `program` names ("" none)
+    virtual std::string mod_program_file(const std::string &root, const std::string &game) const { (void)root, (void)game; return {}; }
+    // another program of this core's that has what this build lacks ("" none): a recompiled
+    // Firebeat game's own binary says hiraku-firebeat (the executor, which has hooks)
+    virtual std::string mod_other_program() const { return {}; }
 
     // A brief line for the player (a System 573 memory card put in or taken out), which the shell
     // shows for a few seconds where the game has a window (host/notice.h): it asks once a frame, on

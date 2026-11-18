@@ -43,7 +43,7 @@ void HK_RUN(hk_ctx *c, const Code *k) {
         HK_REG(K_set_lr, set_lr), HK_REG(K_bclrl, bclrl), HK_REG(K_ret, ret), HK_REG(K_ret_if, ret_if);
         HK_REG(K_bcctrl, bcctrl), HK_REG(K_table, table), HK_REG(K_jump_ctr, jump_ctr), HK_REG(K_sc, sc);
         HK_REG(K_rfi, rfi), HK_REG(K_rfci, rfci), HK_REG(K_unimpl, unimpl);
-        HK_REG(K_gop, gop), HK_REG(K_br, br), HK_REG(K_brp, brp);
+        HK_REG(K_gop, gop), HK_REG(K_br, br), HK_REG(K_brp, brp), HK_REG(K_probe, probe);
 #ifdef HK_RUN_FAST
         HK_REG(K_bc_true, bc_true), HK_REG(K_bc_false, bc_false), HK_REG(K_bc_dnz, bc_dnz);
         HK_REG(K_br_true, br_true), HK_REG(K_br_false, br_false), HK_REG(K_br_dnz, br_dnz);
@@ -205,6 +205,10 @@ void HK_RUN(hk_ctx *c, const Code *k) {
         HK_STEP();
     HK_E(poll)
         HK_POLL_AT(st->a);
+        HK_STEP();
+    HK_E(probe)   // a mod's hooks: not a run that can be remembered (each run of it runs them)
+        HK_RUN_OUTSIDE();
+        hooks::run(c, st->y.b);
         HK_STEP();
     HK_E(go)
         HK_AT(st->a);

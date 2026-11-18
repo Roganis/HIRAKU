@@ -12,6 +12,7 @@
 #include "../../src/ppc/cycles.h"
 #include "../../src/ppc/decode.h"
 #include "cpu403.h"
+#include "hooks.h"
 #include "runtime.h"
 #include "sched.h"
 
@@ -163,6 +164,9 @@ bool interp_step(hk_ctx *c) {
         return false;               // no instruction executed (and pc may be unchanged)
     }
     const uint32_t pc = c->pc;
+    // a mod's hooks (core/hooks.h), before the instruction as in the executor: here, past the
+    // interrupt above (which leaves this instruction for later, its hooks with it)
+    if (__builtin_expect(hooks::g_any, 0)) hooks::run_at(c, pc);
     const Insn i = decode(fetch(c, pc), pc);
     // time: what MAME charges this instruction (src/ppc/cycles.h)
     {

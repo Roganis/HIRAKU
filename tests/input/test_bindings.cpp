@@ -5,7 +5,9 @@
 // bindings (the game menu's plain gamepad) presses nothing. IIDX's effector sliders stepped by
 // keys: a press a step from where the slider is, held more after a moment, kept within 0-15. A
 // turntable on an axis: a wrap of the axis is a turn (1024 counts), a step of an 8-bit controller's
-// one of the game's (4 counts), across the wrap too, and what's under a count isn't lost.
+// one of the game's (4 counts), each across the wrap too (255 to 0, a single unit of SDL's), either
+// way and at another speed, and what's under a count isn't lost. A 16-bit axis is read as before,
+// once a value of its isn't one an 8-bit axis gives (host/axisturn.h).
 //
 //   test_bindings      exit 0 when all hold (0 with a note where SDL has no joysticks to make up)
 #include <cstdio>
@@ -17,6 +19,7 @@
 
 #include <SDL3/SDL.h>
 
+#include "host/axisturn.h"
 #include "host/input.h"
 #include "shell/core.h"
 
@@ -60,7 +63,7 @@ SDL_JoystickID plug() {
     SDL_VirtualJoystickDesc d;
     SDL_INIT_INTERFACE(&d);
     d.type = SDL_JOYSTICK_TYPE_GAMEPAD;
-    d.naxes = 2, d.nbuttons = 4, d.nhats = 1;
+    d.naxes = 4, d.nbuttons = 4, d.nhats = 1;
     d.name = "HIRAKU test pad";
     return SDL_AttachVirtualJoystick(&d);
 }
@@ -105,7 +108,7 @@ int main() {
                            "P1 Button 2 = key:X, joy0:axis1+\n"
                            "P1 Button 3 = joy0:button2\n"
                            "P1 Button 4 = joy0:axis-1+, joy0:button-3\n"   // (refused: no such axis or button)
-                           "P1 Turntable = joy0:axis0\n"
+                           "P1 Turntable = joy0:axis0, joy0:axis2*0.75\n"
                            "P2 Turntable = joy0:axis1*0.3\n"
                            "Volume 2 Up = key:U\n"
                            "Volume 2 Down = key:J\n";
@@ -225,6 +228,7 @@ int main() {
             SDL_UpdateJoysticks();
             hk::host::input_update(1);
         };
+        SDL_SetJoystickVirtualAxis(js, 2, -32768);   // (P1's second axis stays at an 8-bit step meanwhile)
         at(0);   // (from where the tests before left it: a whole number of counts away)
         g_machine.turned[0] = g_machine.turned[1] = 0;
         at(1);
@@ -235,7 +239,72 @@ int main() {
         for (int k = 1; k <= 256; k++) at(k);
         check(g_machine.turned[0] == 1024, "a whole wrap of the axis, past its end: one turn (1024 counts)");
         check(g_machine.turned[1] >= 306 && g_machine.turned[1] <= 308, "at x0.3: 0.3 of a turn, nothing lost under a count");
+
+        // slowly through the wrap, a step a poll: each one 4 counts, the one from 255 to 0 too
+        bool each = true;
+        at(250);
+        for (int k = 251; k <= 260; k++) {
+            const int was = g_machine.turned[0];
+            at(k);
+            each &= g_machine.turned[0] - was == 4;
+        }
+        check(each, "a step a poll through the wrap (254, 255, 0, 1): 4 counts each");
+        each = true;
+        for (int k = 259; k >= 250; k--) {
+            const int was = g_machine.turned[0];
+            at(k);
+            each &= g_machine.turned[0] - was == -4;
+        }
+        check(each, "... and back through it (1, 0, 255, 254): -4 each");
+        // at x0.75 (P1's second axis): 3 counts a step, across the wrap as anywhere
+        g_machine.turned[0] = 0;
+        each = true;
+        for (int k = 250; k <= 262; k++) {
+            const int was = g_machine.turned[0];
+            SDL_SetJoystickVirtualAxis(js, 2, (Sint16)(-32768 + (k & 255) * 257));
+            SDL_UpdateJoysticks();
+            hk::host::input_update(1);
+            each &= g_machine.turned[0] - was == (k == 250 ? -18 : 3);   // (first from 0 to 250: 6 steps back)
+        }
+        check(each, "at x0.75: 3 counts a step, through the wrap too");
         SDL_CloseJoystick(js);
+    }
+
+    // the reading itself (host/axisturn.h): 65536ths of a turn
+    {
+        hk::host::AxisTurn t;
+        check(t.turn(-32768 + 254 * 257) == 0, "the first value: where the axis is, no movement");
+        check(t.turn(-32768 + 255 * 257) == 256 && t.turn(-32768) == 256 && t.turn(-32768 + 257) == 256,
+              "8-bit: 254, 255, 0, 1: a 256th of a turn each");
+        check(t.turn(-32768) == -256 && t.turn(32767) == -256, "... and back");
+        int sum = 0;
+        for (int k = 1; k <= 512; k++) sum += t.turn((Sint16)(-32768 + ((255 + k) & 255) * 257));
+        check(sum == 2 * 65536, "two whole 8-bit turns: two turns exactly");
+
+        // a 16-bit axis, its first value not an 8-bit one: as before (the difference, wrapped)
+        auto before = [](int from, int to) {
+            int d = to - from;
+            if (d > 32768) d -= 65536;
+            if (d < -32768) d += 65536;
+            return d;
+        };
+        const int wide[] = {1000, 1500, 30000, -30000, -32768, 32767, 32000, -100, 12850 - 32768, -32768 + 257 * 3, 5};
+        hk::host::AxisTurn w;
+        bool same = w.turn((Sint16)wide[0]) == 0;
+        for (size_t k = 1; k < std::size(wide); k++) same &= w.turn((Sint16)wide[k]) == before(wide[k - 1], wide[k]);
+        check(same, "16-bit: each movement as before, across its wrap too, values of 257 steps among them");
+
+        // ... and one whose first values happen to be 8-bit ones: read as 8-bit until the first that
+        // isn't (the same scale within 0.4 %), then as before, with no jump at the change
+        hk::host::AxisTurn e;
+        const int early[] = {-32768 + 257 * 10, -32768 + 257 * 12, -32768 + 257 * 11};
+        bool ok = e.turn((Sint16)early[0]) == 0;
+        ok &= e.turn((Sint16)early[1]) == 512 && e.turn((Sint16)early[2]) == -256;
+        const int later[] = {-32768 + 257 * 11 + 100, 0, 32767, -32768, -32000};
+        int from = early[2];
+        for (int v : later) ok &= e.turn((Sint16)v) == before(from, v), from = v;
+        ok &= e.turn((Sint16)(-32768 + 257 * 20)) == before(from, -32768 + 257 * 20);   // (16 bits for good)
+        check(ok, "16-bit, its first values 8-bit ones: as 8-bit until then, as before after, no jump");
     }
 
     std::remove(file.c_str());

@@ -16,6 +16,7 @@
 
 #include "../shell/core.h"
 #include "../shell/cabinet.h"
+#include "axisturn.h"
 #include "menukey.h"
 #include "warp.h"
 
@@ -41,8 +42,7 @@ std::map<std::string, int> g_held;                    // input name -> number of
 std::vector<SDL_Joystick *> g_joys;
 std::vector<std::string> g_joy_dev;                   // each one's name as bindings give it ("" once unplugged)
 std::vector<std::string> g_joy_was;                   // ... and the name an unplugged one had (its slot is its again)
-int16_t g_axis_last[16][16];
-bool g_axis_seen[16][16];
+AxisTurn g_axis_turn[16][16];                         // each axis's turning, read as a turntable's (axisturn.h)
 bool g_left[16];                                      // left out of the bindings (input_joystick_leave)
 std::set<std::string> g_file_devs;                    // the controllers the bindings file names, by name
 std::set<int> g_file_joys;                            // ... and by number
@@ -251,7 +251,7 @@ void add_joystick(SDL_Joystick *j) {
         memset(g_rest_neg[slot], 0, sizeof g_rest_neg[slot]);
         memset(g_rest_pos[slot], 0, sizeof g_rest_pos[slot]);
         memset(g_hat_rest[slot], 0, sizeof g_hat_rest[slot]);
-        memset(g_axis_seen[slot], 0, sizeof g_axis_seen[slot]);
+        for (AxisTurn &t : g_axis_turn[slot]) t = {};
         std::erase_if(g_button_rest, [slot](const std::pair<int, int> &b) { return b.first == slot; });
     }
     fprintf(stderr, "input: joy%d = joy[%s] (%d buttons, %d axes)\n", slot, dev.c_str(), SDL_GetNumJoystickButtons(j),
@@ -522,19 +522,18 @@ void input_update(double ms) {
         for (auto &b : g_bind[base]) {
             int j = bound_joy(b);
             if (b.src != Src::axis || j < 0 || j >= (int)g_joys.size() || !g_joys[j] || j >= 16 || b.index >= 16 || g_left[j]) continue;
-            int16_t a = SDL_GetJoystickAxis(g_joys[j], b.index);
-            if (g_axis_seen[j][b.index]) {
-                int d = (int)a - g_axis_last[j][b.index];
-                if (d > 32768) d -= 65536;
-                if (d < -32768) d += 65536;
+            // (an 8-bit axis by its steps, 255 to 0 one of them: axisturn.h. Not before the axis has said
+            // where it is: SDL gives 0 until a controller's first report, which is no 8-bit value (the
+            // axis taken for 16 bits for good) and made the first report a turn from the middle)
+            Sint16 first;
+            if (!SDL_GetJoystickAxisInitialState(g_joys[j], b.index, &first)) continue;
+            if (const int d = g_axis_turn[j][b.index].turn(SDL_GetJoystickAxis(g_joys[j], b.index))) {
                 double &f = g_tt_frac[p][j][b.index];
                 f += d * g_tt_scale * b.scale;
                 const int whole = (int)std::trunc(f);
                 f -= whole;
                 if (whole) core().turntable_add(p, whole);
             }
-            g_axis_last[j][b.index] = a;
-            g_axis_seen[j][b.index] = true;
         }
     }
 }

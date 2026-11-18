@@ -3,6 +3,7 @@
 
 #include "theme.h"
 #include "../third_party/mdi/icons.h"
+#include "host/axisturn.h"
 
 #include <QApplication>
 #include <QCheckBox>
@@ -80,7 +81,8 @@ bool isPadNumber(const QString &pad) {
 }  // namespace
 
 // An analog control's axis turning as the game will see it (its speed and direction applied):
-// 1024 runtime counts, 65536 axis units (a wrap) at speed 1, make a turn (runtime/host/input.cpp)
+// 1024 runtime counts, a wrap of the axis at speed 1, make a turn (runtime/host/input.cpp), an
+// 8-bit axis read by its steps as the game's controls read it (runtime/host/axisturn.h)
 class TurntableMeter : public QWidget {
 public:
     explicit TurntableMeter(std::function<QString()> binding, QWidget *parent = nullptr)
@@ -113,19 +115,14 @@ private:
         QString b = m_binding();
         QString here = QString("joy%1:axis%2").arg(j).arg(a);
         if (b.isEmpty() || canonicalBinding(b) != here) return;
-        if (m_last.contains(here)) {
-            int d = v - m_last[here];
-            if (d > 32768) d -= 65536;
-            if (d < -32768) d += 65536;
-            m_angle = std::fmod(m_angle + d / 65536.0 * 360.0 * axisScale(b), 360.0);
-        }
-        m_last[here] = v;
+        const int d = m_turn[here].turn((int16_t)v);
+        m_angle = std::fmod(m_angle + d / 65536.0 * 360.0 * axisScale(b), 360.0);
         m_lit = true;
         m_fade.start(250);
         update();
     }
     std::function<QString()> m_binding;   // the axis binding shown ("" = none plugged in)
-    QHash<QString, int> m_last;
+    QHash<QString, hk::host::AxisTurn> m_turn;
     double m_angle = 0;
     bool m_lit = false;
     QTimer m_fade;

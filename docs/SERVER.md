@@ -136,9 +136,17 @@ stays a port of its own (8080 here), forwarded as it is.
 
 ## The API
 
+For an app's developer: the guide [SERVER-API.md](SERVER-API.md), and the API's description in
+OpenAPI 3.1, [openapi.yaml](openapi.yaml) (its JSON twin [openapi.json](openapi.json)), which a
+running server serves too: `GET /api/v1/openapi.yaml` and `GET /api/v1/openapi.json`, found as the
+web pages are (beside the program, `../share/doc/hiraku-server` beside it, the checkout's `docs/`;
+on Windows, put `openapi.yaml` and `openapi.json` beside the .exe). The test `eamuse_openapi` keeps
+the description to the code.
+
 Everything is under `/api/v1/`, JSON in and out (`application/json; charset=utf-8`). An error is
 `{"error": "code", "message": "plain words"}` with its HTTP status: 400 bad input, 401 not logged in,
-403 not allowed, 404, 409 conflict, 413 a body over 64 KiB, 429 slow down (`Retry-After`). A card
+403 not allowed, 404 (also a method a path hasn't), 409 conflict, 413 a body over 64 KiB, 429 slow
+down (`Retry-After`), 500 the server failed, 503 a database a newer hiraku-server wrote. A card
 link refused for its PIN says how many wrong PINs are left before the card is locked (`tries_left`,
 also in the message); one refused because the card is locked has `"error": "card_locked"`,
 `"locked": true`, `tries_left` 0.
@@ -165,18 +173,20 @@ has `clear` (the game's own number, `null`: none) and `clear_name`, the mark as 
 meaning isn't known. pop'n's better medals are "Cleared" too (which medal is which isn't known). The System 573 games keep a score for a cleared stage only: a failed one has
 `score: null` and its mark. A score of 0 is in its player's stats, not among the best scores.
 
-**How often:** log-in 10 tries a minute an address and a name, sign-up 5 an hour an address, card
-links 20 an hour an account, anything else 600 a minute a session or token.
+**How often:** log-in 10 tries a minute an address and a name (a reset code counts among the
+address's), sign-up 5 an hour an address, card links 20 an hour an account, anything else 600 a
+minute a session or token (or an address, for calls with no log-in).
 
 | Method | Path | Who | What |
 |---|---|---|---|
 | GET | /health | anyone | `{ok, version, uptime}`; 503 when the database doesn't answer |
 | GET | /server | anyone | the server's name, sign-up mode, games (id, title, has_names, shows) |
+| GET | /openapi.yaml, /openapi.json | anyone | this API's description (OpenAPI 3.1; 404 when not installed) |
 | POST | /signup | anyone | `{name, password[, invite]}` |
 | POST | /login | anyone | `{name, password}`: the cookie, `csrf`, `must_change_password` |
-| POST | /reset | anyone | `{code, password}`: a reset code from an admin |
+| POST | /reset | anyone | `{code, password[, name]}`: a reset code from an admin |
 | POST | /logout | user | ends the session |
-| GET | /me | user | name, role, hide_stats, how signed in |
+| GET | /me | user | name, role, disabled, hide_stats, must_change_password, created, how signed in (`auth`; a session's `csrf`, a token's `scope`) |
 | POST | /me/password | user (log-in) | `{old_password, password}` |
 | PUT | /me/hide_stats | user | `{hide_stats: true}` hides one's stats from other players |
 | GET, POST | /me/tokens | user (log-in) | list; make `{label, scope: "read"\|"write"}` (the token once) |

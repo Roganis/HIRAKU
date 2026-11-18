@@ -21,6 +21,8 @@
 | [../PLAN.md](../PLAN.md) | Where each board stands, the plans, and a section per piece of work |
 | [PLAN-HISTORY.md](PLAN-HISTORY.md) | The plan's full history up to 2026-11-14 (not kept up to date) |
 | [EAMUSE3.md](EAMUSE3.md) | e-AMUSEMENT's protocol, each game's calls and records |
+| [SERVER.md](SERVER.md) | hiraku-server, the hosted e-AMUSEMENT server: running it, accounts, arcades, the API, backups (experimental) |
+| [SERVER-API.md](SERVER-API.md), [openapi.yaml](openapi.yaml) | hiraku-server's JSON API for an app's developer: the guide, and its OpenAPI 3.1 description |
 | [SMOOTH.md](SMOOTH.md) | How smooth motion, the high frame rates and the CRT beam work on each board, and how to check a game |
 | [RECOMP.md](RECOMP.md) | How the Firebeat recompiler works |
 | [KERNEL.md](KERNEL.md) | The Firebeat games' own kernel |

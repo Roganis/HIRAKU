@@ -28,6 +28,7 @@ tar -xJf "$archive" -C "$work" || { echo "smoke-server: cannot unpack $archive";
 p=$work/hiraku-server
 srv=$p/bin/hiraku-server
 for f in bin/hiraku-server share/hiraku-server/web/index.html share/doc/hiraku-server/SERVER.md share/doc/hiraku-server/LICENSE \
+         share/doc/hiraku-server/SERVER-API.md share/doc/hiraku-server/openapi.yaml share/doc/hiraku-server/openapi.json \
          share/doc/hiraku-server/third_party/httplib/LICENSE share/doc/hiraku-server/third_party/nlohmann/LICENSE.MIT \
          share/doc/hiraku-server/third_party/SQLITE.txt deploy/hiraku-server.service deploy/hiraku-server-backup.service \
          deploy/hiraku-server-backup.timer deploy/server.conf.example deploy/Caddyfile.example deploy/Dockerfile README.txt; do
@@ -42,7 +43,7 @@ if [ -n "$rel" ]; then
 else
   [ ! -e "$p/VERSION" ] && ok "no VERSION in a package without a release's number" || bad "VERSION in a package whose name has no number: $(head -1 "$p/VERSION")"
 fi
-names=$(cd "$p" && find . \( -name names -o -name '*.json' \) | head -3)
+names=$(cd "$p" && find . \( -name names -o \( -name '*.json' ! -path ./share/doc/hiraku-server/openapi.json \) \) | head -3)
 [ -z "$names" ] && ok "no song names in the package (no names folder, no .json pack)" || bad "the package holds $names"
 
 # a first version, and said so wherever someone meets it (docs/SERVER.md, "Experimental")
@@ -88,6 +89,7 @@ print(r.status, body.replace('\n', ' ')[:4000])
 PY
 }
 out=$(http_get /); [[ $out == "200 "*"<html"* || $out == "200 "*"<!doctype"* || $out == "200 "*"<!DOCTYPE"* ]] && ok "the home page answers (200, HTML)" || bad "GET /: $out"
+out=$(http_get /api/v1/openapi.yaml); [[ $out == "200 "*"openapi: \"3.1.0\""* ]] && ok "/api/v1/openapi.yaml answers (the package's description)" || bad "GET /api/v1/openapi.yaml: ${out:0:200}"
 out=$(http_get /api/v1/server); [[ $out == "200 {"*'"signup"'* ]] && ok "/api/v1/server answers (signup: $(echo "$out" | grep -o "\"signup\":\"[a-z]*\"" | cut -d\" -f4))" || bad "GET /api/v1/server: $out"
 
 out=$(python3 "$root/tests/eamuse/test_transcripts.py" "$srv" 2>&1); st=$?

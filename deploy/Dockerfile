@@ -38,7 +38,7 @@ RUN apt-get update \
  && mkdir -p /data && chown hiraku-server:hiraku-server /data && chmod 0750 /data
 COPY --from=build /build/hiraku-server /opt/hiraku-server/bin/hiraku-server
 COPY --from=build /src/web /opt/hiraku-server/share/hiraku-server/web
-COPY --from=build /src/docs/SERVER.md /src/LICENSE /opt/hiraku-server/share/doc/hiraku-server/
+COPY --from=build /src/docs/SERVER.md /src/docs/SERVER-API.md /src/docs/openapi.yaml /src/docs/openapi.json /src/LICENSE /opt/hiraku-server/share/doc/hiraku-server/
 USER hiraku-server
 WORKDIR /data
 VOLUME /data

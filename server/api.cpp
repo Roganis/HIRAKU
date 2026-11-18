@@ -473,6 +473,26 @@ std::string find_web() {
     return "";
 }
 
+// The API's own description (docs/openapi.yaml and its JSON twin, docs/SERVER-API.md): the folder
+// holding openapi.yaml among, as the web pages' are found: beside the program (Windows), the
+// package's ../share/doc/hiraku-server, the checkout's docs/ when the program is in a build tree;
+// "" none (its route answers 404)
+std::string find_openapi() {
+    namespace fs = std::filesystem;
+    std::error_code ec;
+    const std::string exe = hk::sys::exe_path();
+    if (exe.empty()) return "";
+    const fs::path dir = fs::path(exe).parent_path();
+    std::vector<fs::path> tries{dir, dir / ".." / "share" / "doc" / "hiraku-server"};
+    std::ifstream cache(dir / "CMakeCache.txt");
+    const std::string home = "CMAKE_HOME_DIRECTORY:INTERNAL=";
+    for (std::string line; std::getline(cache, line);)
+        if (line.rfind(home, 0) == 0) tries.push_back(fs::path(line.substr(home.size())) / "docs");
+    for (const fs::path &t : tries)
+        if (fs::is_regular_file(t / "openapi.yaml", ec)) return fs::weakly_canonical(t, ec).string();
+    return "";
+}
+
 }  // namespace
 
 int ApiOptions::option(int argc, char **argv, int &i) {
@@ -514,6 +534,7 @@ struct Api::Impl {
     const std::chrono::steady_clock::time_point started = std::chrono::steady_clock::now();
 
     Names names;   // the song names' packs (names.h): the API's only
+    std::string openapi = find_openapi();   // the folder of the API's description ("": none found)
 
     Impl(const std::string &file, ea::Store &store, const ApiOptions &opt)
         : acc(file, store), o(opt), names(opt.names.empty() ? names_beside(file) : opt.names, opt.quiet) {}
@@ -665,6 +686,18 @@ void Api::Impl::routes() {
         const auto up = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now() - started).count();
         answer(res, {{"ok", ok}, {"version", hk::sys::build_id()}, {"uptime", (long long)up}}, ok ? 200 : 503);
     });
+    // the API's description, as the file is (OpenAPI 3.1: docs/openapi.yaml, its JSON twin)
+    auto description = [this](const char *file, const char *type) {
+        return [this, file, type](Caller &, const Request &, In &, Response &res) {
+            std::string body;
+            if (openapi.empty() || !web_file(openapi, file, body))
+                return fail(res, 404, "not_found", std::string("the API's description isn't installed beside the server (docs/") + file + ")");
+            res.status = 200;
+            res.set_content(std::move(body), type);
+        };
+    };
+    route("GET", "/openapi.yaml", anyone, description("openapi.yaml", "application/yaml; charset=utf-8"));
+    route("GET", "/openapi.json", anyone, description("openapi.json", JSON_TYPE));
     route("GET", "/server", anyone, [this](Caller &, const Request &, In &, Response &res) {
         const auto mode = acc.sign_up_mode();
         json games = json::array();

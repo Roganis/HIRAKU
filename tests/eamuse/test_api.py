@@ -14,6 +14,7 @@ names, cards, PINs and players; key_client is a cabinet's side.
 import http.client, json, os, re, shutil, socket, subprocess, sys, tempfile, time
 
 SERVER, CLIENT = sys.argv[1], sys.argv[2]
+RECORD = os.environ.get('HK_API_RECORD')   # a file: every call and its answer, a JSON line each (test_openapi.py)
 T = tempfile.mkdtemp(prefix='hk-api-')
 DB = os.path.join(T, 'server.db')
 failed = 0
@@ -82,6 +83,10 @@ def api(method, path, body=None, who=None, csrf=True, raw=None, xff=None, makes=
     hdrs = {k.lower(): v for k, v in r.getheaders()}
     c.close()
     seen.append((text.decode('utf-8', errors='strict'), set(makes)))
+    if RECORD:   # (test_openapi.py checks each answer against docs/openapi.yaml)
+        with open(RECORD, 'a', encoding='utf-8') as f:
+            f.write(json.dumps({'method': method, 'path': path, 'status': r.status, 'type': hdrs.get('content-type', ''),
+                                'body': text.decode('utf-8', errors='replace')}) + '\n')
     try:
         return r.status, json.loads(text), hdrs
     except ValueError:

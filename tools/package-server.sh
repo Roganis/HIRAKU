@@ -15,7 +15,8 @@
 # hiraku-server/:
 #   bin/hiraku-server             stripped; linked to the system's SQLite 3 (libsqlite3.so.0)
 #   share/hiraku-server/web/      the web pages (the program looks there: ../share/hiraku-server/web)
-#   share/doc/hiraku-server/      docs/SERVER.md, the licence, the bundled headers' licences
+#   share/doc/hiraku-server/      docs/SERVER.md, the API's guide and description (SERVER-API.md, openapi.yaml
+#                                 and .json: the program serves them), the licence, the bundled headers' licences
 #   deploy/                       the systemd units, the config and Caddy examples, the Dockerfile
 #   README.txt
 #   VERSION                       the release's number (as the desktop packages'; none without HK_VERSION)
@@ -43,7 +44,7 @@ copy_tracked_as "$root" "$d/share/hiraku-server/web" web
 # (never a song names' pack: they are the owner's own, docs/SERVER.md "Song names")
 if [ -n "$(find "$d" \( -name names -o -name '*.json' \) | head -1)" ]; then echo "package-server: a names folder or .json file in the package" >&2; exit 1; fi
 doc=$d/share/doc/hiraku-server
-cp "$root/docs/SERVER.md" "$root/LICENSE" "$doc/"
+cp "$root/docs/SERVER.md" "$root/docs/SERVER-API.md" "$root/docs/openapi.yaml" "$root/docs/openapi.json" "$root/LICENSE" "$doc/"
 for lib in httplib nlohmann; do
   mkdir -p "$doc/third_party/$lib"
   cp "$root/third_party/$lib"/LICENSE* "$root/third_party/$lib/README.md" "$doc/third_party/$lib/"

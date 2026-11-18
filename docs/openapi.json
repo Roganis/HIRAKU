@@ -1,0 +1,5098 @@
+{
+ "openapi": "3.1.0",
+ "info": {
+  "title": "hiraku-server API",
+  "version": "1",
+  "summary": "Accounts, cards, players' scores, arcades and machines of a HIRAKU e-AMUSEMENT server.",
+  "description": "The JSON API of hiraku-server, HIRAKU's e-AMUSEMENT server for many cabinets (docs/SERVER.md).\nThe cabinets themselves don't use it: they speak the games' own protocol on another port. This\nAPI is for people: the server's own web pages, apps and scripts.\n\n**Experimental.** hiraku-server is a first version. `/api/v1` and its answers may change\nbetween HIRAKU versions while it is experimental; nothing promises compatibility yet. The\nserver's build is in `GET /health` (`version`).\n\nEverything is JSON (`application/json; charset=utf-8`) in and out, under `/api/v1`. An error is\nalways `{\"error\": CODE, \"message\": TEXT}` with its HTTP status (schema `Error`). Times are whole\nseconds since 1970-01-01 UTC; `null` where something never happened.\n\nWho calls: a **session** (`POST /login` sets the `hk_session` cookie and answers a CSRF value,\nwhich every change made with the cookie sends back in `X-HK-CSRF`), or a **personal token**\n(`POST /me/tokens`, sent as `Authorization: Bearer hkt_...`; a `read` token changes nothing).\nEach operation's role is in its description and in `x-hiraku-role`\n(`anyone`, `user`, `operator`, `admin`; roles stack: an admin is an operator, an operator a user).\n`x-hiraku-session-only: true`: not with a personal token. `x-hiraku-while-must-change: true`:\nallowed to an account that must change its password first (every other operation answers 403\n`must_change_password` to it).\n\nThe server sends no CORS headers and answers `OPTIONS` with 404: a page on another origin\ncan't call it from a browser (docs/SERVER-API.md, \"Apps on another origin\").\n",
+  "license": {
+   "name": "GPL-3.0-or-later",
+   "identifier": "GPL-3.0-or-later"
+  }
+ },
+ "servers": [
+  {
+   "url": "https://games.example.org/api/v1",
+   "description": "A server behind its reverse proxy (TLS). Every path below is under /api/v1."
+  },
+  {
+   "url": "http://127.0.0.1:8081/api/v1",
+   "description": "serve's own API port (plain HTTP, this computer only; --api ADDRESS:PORT)"
+  }
+ ],
+ "tags": [
+  {
+   "name": "public",
+   "description": "No log-in needed."
+  },
+  {
+   "name": "account",
+   "description": "The caller's own account, sessions and tokens."
+  },
+  {
+   "name": "cards",
+   "description": "The caller's cards, linked by a PIN a game keeps."
+  },
+  {
+   "name": "scores",
+   "description": "Players' stats, games, song names and best scores."
+  },
+  {
+   "name": "arcades",
+   "description": "An operator's arcades and their settings (an admin's are all of them)."
+  },
+  {
+   "name": "machines",
+   "description": "The cabinets of the arcades, each with its PCBID and key."
+  },
+  {
+   "name": "users",
+   "description": "An admin's accounts."
+  },
+  {
+   "name": "server",
+   "description": "An admin's server configuration, invitations, settings, song name packs, audit log."
+  },
+  {
+   "name": "admin-cards",
+   "description": "An admin's view of any card."
+  }
+ ],
+ "paths": {
+  "/health": {
+   "get": {
+    "operationId": "getHealth",
+    "tags": [
+     "public"
+    ],
+    "summary": "Whether the server and its database answer",
+    "description": "Role: anyone. For monitors and containers' health checks.",
+    "x-hiraku-role": "anyone",
+    "security": [],
+    "responses": {
+     "200": {
+      "description": "The database answers.",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Health"
+        },
+        "example": {
+         "ok": true,
+         "version": "hiraku-server 0123abc 2026-11-18",
+         "uptime": 3600
+        }
+       }
+      }
+     },
+     "503": {
+      "description": "The database doesn't answer a query.",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Health"
+        },
+        "example": {
+         "ok": false,
+         "version": "hiraku-server 0123abc 2026-11-18",
+         "uptime": 3600
+        }
+       }
+      }
+     },
+     "429": {
+      "$ref": "#/components/responses/TooManyRequests"
+     }
+    }
+   }
+  },
+  "/server": {
+   "get": {
+    "operationId": "getServer",
+    "tags": [
+     "public"
+    ],
+    "summary": "The server's name, sign-up mode and games",
+    "description": "Role: anyone. What a sign-in page needs before anyone logs in.",
+    "x-hiraku-role": "anyone",
+    "security": [],
+    "responses": {
+     "200": {
+      "description": "The server.",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ServerInfo"
+        },
+        "example": {
+         "name": "Example Games",
+         "signup": "open",
+         "games": [
+          {
+           "id": "iidx13",
+           "title": "beatmania IIDX 13 DistorteD",
+           "has_names": false,
+           "shows": {
+            "plays": true,
+            "song_plays": true,
+            "clear": true
+           }
+          }
+         ]
+        }
+       }
+      }
+     },
+     "429": {
+      "$ref": "#/components/responses/TooManyRequests"
+     }
+    }
+   }
+  },
+  "/openapi.yaml": {
+   "get": {
+    "operationId": "getOpenApiYaml",
+    "tags": [
+     "public"
+    ],
+    "summary": "This description, as YAML",
+    "description": "Role: anyone. The file docs/openapi.yaml as installed beside the server.",
+    "x-hiraku-role": "anyone",
+    "security": [],
+    "responses": {
+     "200": {
+      "description": "The OpenAPI document.",
+      "content": {
+       "application/yaml": {
+        "schema": {
+         "type": "string"
+        }
+       }
+      }
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "429": {
+      "$ref": "#/components/responses/TooManyRequests"
+     }
+    }
+   }
+  },
+  "/openapi.json": {
+   "get": {
+    "operationId": "getOpenApiJson",
+    "tags": [
+     "public"
+    ],
+    "summary": "This description, as JSON",
+    "description": "Role: anyone. The file docs/openapi.json (the YAML's twin) as installed beside the server.",
+    "x-hiraku-role": "anyone",
+    "security": [],
+    "responses": {
+     "200": {
+      "description": "The OpenAPI document.",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object"
+        }
+       }
+      }
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "429": {
+      "$ref": "#/components/responses/TooManyRequests"
+     }
+    }
+   }
+  },
+  "/signup": {
+   "post": {
+    "operationId": "signUp",
+    "tags": [
+     "public"
+    ],
+    "summary": "Make an account",
+    "description": "Role: anyone, as the server's sign-up mode says (`GET /server`'s `signup`): `open`, `invite`\n(an invitation's code in `invite`) or `closed`. The new account is a player. It doesn't log\nin: call `POST /login` next. At most 5 sign-ups an hour from one address (429).\n",
+    "x-hiraku-role": "anyone",
+    "security": [],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/SignUpRequest"
+       },
+       "example": {
+        "name": "alex",
+        "password": "a-long-made-up-password"
+       }
+      }
+     }
+    },
+    "responses": {
+     "201": {
+      "description": "Made.",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/SignUpResult"
+        },
+        "example": {
+         "name": "alex"
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "403": {
+      "$ref": "#/components/responses/Forbidden"
+     },
+     "409": {
+      "$ref": "#/components/responses/Conflict"
+     },
+     "413": {
+      "$ref": "#/components/responses/PayloadTooLarge"
+     },
+     "429": {
+      "$ref": "#/components/responses/TooManyRequests"
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "503": {
+      "$ref": "#/components/responses/ReadOnly"
+     }
+    }
+   }
+  },
+  "/login": {
+   "post": {
+    "operationId": "logIn",
+    "tags": [
+     "public"
+    ],
+    "summary": "Log in (a session)",
+    "description": "Role: anyone. Sets the session cookie `hk_session` (HttpOnly, SameSite=Strict, Path=/,\nMax-Age 30 days, Secure unless serve runs with `--api-insecure-cookies`) and answers the\nsession's CSRF value: send it as `X-HK-CSRF` with every change made with the cookie. A\nsession lasts 30 days from its last use. At most 10 tries a minute from one address and 10\nfor one name (429). A wrong name and a wrong password answer the same.\n",
+    "x-hiraku-role": "anyone",
+    "security": [],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/LoginRequest"
+       },
+       "example": {
+        "name": "alex",
+        "password": "a-long-made-up-password"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Logged in.",
+      "headers": {
+       "Set-Cookie": {
+        "description": "`hk_session=hks_...; Path=/; Max-Age=2592000; HttpOnly; SameSite=Strict; Secure`",
+        "schema": {
+         "type": "string"
+        }
+       }
+      },
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/LoginResult"
+        },
+        "example": {
+         "user": {
+          "name": "alex",
+          "role": "player",
+          "disabled": false,
+          "hide_stats": false,
+          "must_change_password": false,
+          "created": 1763452800
+         },
+         "csrf": "0f1e2d3c4b5a69788796a5b4c3d2e1f00f1e2d3c4b5a69788796a5b4c3d2e1f0",
+         "must_change_password": false
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "403": {
+      "$ref": "#/components/responses/Forbidden"
+     },
+     "413": {
+      "$ref": "#/components/responses/PayloadTooLarge"
+     },
+     "429": {
+      "$ref": "#/components/responses/TooManyRequests"
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "503": {
+      "$ref": "#/components/responses/ReadOnly"
+     }
+    }
+   }
+  },
+  "/reset": {
+   "post": {
+    "operationId": "useResetCode",
+    "tags": [
+     "public"
+    ],
+    "summary": "Set a new password with a reset code",
+    "description": "Role: anyone. The code is one an admin made (`POST /users/{name}/reset`), good once, for a\nday. `name`, when given, must be the code's user. Counts against log-in's 10 tries a minute\nfrom one address.\n",
+    "x-hiraku-role": "anyone",
+    "security": [],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/ResetRequest"
+       },
+       "example": {
+        "code": "00112233445566778899aabbccddeeff",
+        "password": "another-made-up-password"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "$ref": "#/components/responses/Ok"
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "403": {
+      "$ref": "#/components/responses/Forbidden"
+     },
+     "413": {
+      "$ref": "#/components/responses/PayloadTooLarge"
+     },
+     "429": {
+      "$ref": "#/components/responses/TooManyRequests"
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "503": {
+      "$ref": "#/components/responses/ReadOnly"
+     }
+    }
+   }
+  },
+  "/logout": {
+   "post": {
+    "operationId": "logOut",
+    "tags": [
+     "account"
+    ],
+    "summary": "End the session",
+    "description": "Role: user. Ends the session and clears the cookie. With a personal token it answers\n`{\"ok\": true}` and changes nothing (the token stays: revoke it with\n`DELETE /me/tokens/{id}`); a `read` token is refused (403).\n",
+    "x-hiraku-role": "user",
+    "x-hiraku-while-must-change": true,
+    "security": [
+     {
+      "sessionCookie": [],
+      "csrfHeader": []
+     },
+     {
+      "bearerToken": []
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Ended.",
+      "headers": {
+       "Set-Cookie": {
+        "description": "`hk_session=; Path=/; Max-Age=0; HttpOnly; SameSite=Strict; Secure`",
+        "schema": {
+         "type": "string"
+        }
+       }
+      },
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Ok"
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "403": {
+      "$ref": "#/components/responses/Forbidden"
+     },
+     "413": {
+      "$ref": "#/components/responses/PayloadTooLarge"
+     },
+     "429": {
+      "$ref": "#/components/responses/TooManyRequests"
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     }
+    }
+   }
+  },
+  "/me": {
+   "get": {
+    "operationId": "getMe",
+    "tags": [
+     "account"
+    ],
+    "summary": "Who is calling",
+    "description": "Role: user (also while the password must be changed). With a session it gives the session's\nCSRF value again (`csrf`: a page loaded again finds it here); with a token, the token's\n`scope`.\n",
+    "x-hiraku-role": "user",
+    "x-hiraku-while-must-change": true,
+    "security": [
+     {
+      "sessionCookie": []
+     },
+     {
+      "bearerToken": []
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "The account.",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Me"
+        },
+        "example": {
+         "name": "alex",
+         "role": "player",
+         "disabled": false,
+         "hide_stats": false,
+         "must_change_password": false,
+         "created": 1763452800,
+         "auth": "token",
+         "scope": "read"
+        }
+       }
+      }
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "429": {
+      "$ref": "#/components/responses/TooManyRequests"
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     }
+    }
+   }
+  },
+  "/me/password": {
+   "post": {
+    "operationId": "changePassword",
+    "tags": [
+     "account"
+    ],
+    "summary": "Change one's own password",
+    "description": "Role: user, with a session only (not a token), also while the password must be changed. A\nwrong `old_password` answers 403 `wrong_password`. Other sessions and tokens of the account\ngo on.\n",
+    "x-hiraku-role": "user",
+    "x-hiraku-session-only": true,
+    "x-hiraku-while-must-change": true,
+    "security": [
+     {
+      "sessionCookie": [],
+      "csrfHeader": []
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/PasswordChange"
+       },
+       "example": {
+        "old_password": "a-long-made-up-password",
+        "password": "another-made-up-password"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "$ref": "#/components/responses/Ok"
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "403": {
+      "$ref": "#/components/responses/Forbidden"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "413": {
+      "$ref": "#/components/responses/PayloadTooLarge"
+     },
+     "429": {
+      "$ref": "#/components/responses/TooManyRequests"
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "503": {
+      "$ref": "#/components/responses/ReadOnly"
+     }
+    }
+   }
+  },
+  "/me/hide_stats": {
+   "put": {
+    "operationId": "setHideStats",
+    "tags": [
+     "account"
+    ],
+    "summary": "Hide or show one's stats to other players",
+    "description": "Role: user. Hidden stats are left out of `GET /players`, `GET /players/{name}/stats` (403 `stats_hidden`) and the best scores; admins still see them.",
+    "x-hiraku-role": "user",
+    "security": [
+     {
+      "sessionCookie": [],
+      "csrfHeader": []
+     },
+     {
+      "bearerToken": []
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/HideStats"
+       },
+       "example": {
+        "hide_stats": true
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Set.",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HideStats"
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "403": {
+      "$ref": "#/components/responses/Forbidden"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "413": {
+      "$ref": "#/components/responses/PayloadTooLarge"
+     },
+     "429": {
+      "$ref": "#/components/responses/TooManyRequests"
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "503": {
+      "$ref": "#/components/responses/ReadOnly"
+     }
+    }
+   }
+  },
+  "/me/tokens": {
+   "get": {
+    "operationId": "listTokens",
+    "tags": [
+     "account"
+    ],
+    "summary": "One's personal tokens (never their text)",
+    "description": "Role: user, with a session only.",
+    "x-hiraku-role": "user",
+    "x-hiraku-session-only": true,
+    "security": [
+     {
+      "sessionCookie": []
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "The tokens, oldest first.",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/TokenList"
+        },
+        "example": {
+         "tokens": [
+          {
+           "id": 3,
+           "label": "phone",
+           "scope": "read",
+           "created": 1763452800,
+           "last_used": null
+          }
+         ]
+        }
+       }
+      }
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "403": {
+      "$ref": "#/components/responses/Forbidden"
+     },
+     "429": {
+      "$ref": "#/components/responses/TooManyRequests"
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     }
+    }
+   },
+   "post": {
+    "operationId": "createToken",
+    "tags": [
+     "account"
+    ],
+    "summary": "Make a personal token (its text shown once)",
+    "description": "Role: user, with a session only. The answer is the only time the token's text is given:\nkeep it. 50 tokens an account at most (409). A token lasts until it is revoked, its account\ndisabled or removed.\n",
+    "x-hiraku-role": "user",
+    "x-hiraku-session-only": true,
+    "security": [
+     {
+      "sessionCookie": [],
+      "csrfHeader": []
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/NewTokenRequest"
+       },
+       "example": {
+        "label": "phone",
+        "scope": "read"
+       }
+      }
+     }
+    },
+    "responses": {
+     "201": {
+      "description": "Made.",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/NewToken"
+        },
+        "example": {
+         "id": 3,
+         "label": "phone",
+         "scope": "read",
+         "token": "hkt_00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff"
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "403": {
+      "$ref": "#/components/responses/Forbidden"
+     },
+     "409": {
+      "$ref": "#/components/responses/Conflict"
+     },
+     "413": {
+      "$ref": "#/components/responses/PayloadTooLarge"
+     },
+     "429": {
+      "$ref": "#/components/responses/TooManyRequests"
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "503": {
+      "$ref": "#/components/responses/ReadOnly"
+     }
+    }
+   }
+  },
+  "/me/tokens/{id}": {
+   "parameters": [
+    {
+     "$ref": "#/components/parameters/TokenId"
+    }
+   ],
+   "delete": {
+    "operationId": "revokeToken",
+    "tags": [
+     "account"
+    ],
+    "summary": "Revoke one of one's tokens",
+    "description": "Role: user, with a session only. The token stops at once. Another account's token, or an id that isn't a number: 404.",
+    "x-hiraku-role": "user",
+    "x-hiraku-session-only": true,
+    "security": [
+     {
+      "sessionCookie": [],
+      "csrfHeader": []
+     }
+    ],
+    "responses": {
+     "200": {
+      "$ref": "#/components/responses/Ok"
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "403": {
+      "$ref": "#/components/responses/Forbidden"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "413": {
+      "$ref": "#/components/responses/PayloadTooLarge"
+     },
+     "429": {
+      "$ref": "#/components/responses/TooManyRequests"
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "503": {
+      "$ref": "#/components/responses/ReadOnly"
+     }
+    }
+   }
+  },
+  "/me/cards": {
+   "get": {
+    "operationId": "listMyCards",
+    "tags": [
+     "cards"
+    ],
+    "summary": "The cards linked to one's account",
+    "description": "Role: user. Card numbers as the server keeps them (upper case), first linked first.",
+    "x-hiraku-role": "user",
+    "security": [
+     {
+      "sessionCookie": []
+     },
+     {
+      "bearerToken": []
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "The cards.",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/CardList"
+        },
+        "example": {
+         "cards": [
+          {
+           "card": "E0040000000000A1",
+           "linked": 1763452800
+          }
+         ]
+        }
+       }
+      }
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "403": {
+      "$ref": "#/components/responses/Forbidden"
+     },
+     "429": {
+      "$ref": "#/components/responses/TooManyRequests"
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     }
+    }
+   },
+   "post": {
+    "operationId": "linkCard",
+    "tags": [
+     "cards"
+    ],
+    "summary": "Link a card by its PIN",
+    "description": "Role: user. The card must have played on this server (404 if not) and be no one's (409).\n`pin` is the card's PIN as any of its games keeps it. A wrong PIN answers 403 `wrong_pin`\nwith `tries_left`; the fifth wrong PIN in a row locks the card for linking (403\n`card_locked`, `locked: true`, `tries_left: 0`) until an admin unlocks it. 20 tries an hour\nan account, successful ones included (429). The answer's `card` is the number as sent.\n",
+    "x-hiraku-role": "user",
+    "security": [
+     {
+      "sessionCookie": [],
+      "csrfHeader": []
+     },
+     {
+      "bearerToken": []
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/LinkCardRequest"
+       },
+       "example": {
+        "card": "E0040000000000A1",
+        "pin": "1234"
+       }
+      }
+     }
+    },
+    "responses": {
+     "201": {
+      "description": "Linked.",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/LinkCardResult"
+        },
+        "example": {
+         "card": "E0040000000000A1"
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "403": {
+      "description": "Refused: `wrong_pin` (with `tries_left`), `card_locked` (with `locked` and `tries_left`\n0), or any 403 of `Forbidden` (csrf, read_only_token, must_change_password).\n",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        },
+        "examples": {
+         "wrongPin": {
+          "value": {
+           "error": "wrong_pin",
+           "message": "wrong PIN (or the card has none kept): 3 tries left before the card is locked for linking",
+           "tries_left": 3
+          }
+         },
+         "locked": {
+          "value": {
+           "error": "card_locked",
+           "message": "wrong PIN: the card is now locked for linking (an admin unlocks it)",
+           "tries_left": 0,
+           "locked": true
+          }
+         }
+        }
+       }
+      }
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "409": {
+      "$ref": "#/components/responses/Conflict"
+     },
+     "413": {
+      "$ref": "#/components/responses/PayloadTooLarge"
+     },
+     "429": {
+      "$ref": "#/components/responses/TooManyRequests"
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "503": {
+      "$ref": "#/components/responses/ReadOnly"
+     }
+    }
+   }
+  },
+  "/me/cards/{card}": {
+   "parameters": [
+    {
+     "$ref": "#/components/parameters/Card"
+    }
+   ],
+   "delete": {
+    "operationId": "unlinkMyCard",
+    "tags": [
+     "cards"
+    ],
+    "summary": "Unlink one of one's cards",
+    "description": "Role: user. The card's players and scores stay on the server; the card can be linked again. Not one of the account's cards: 404.",
+    "x-hiraku-role": "user",
+    "security": [
+     {
+      "sessionCookie": [],
+      "csrfHeader": []
+     },
+     {
+      "bearerToken": []
+     }
+    ],
+    "responses": {
+     "200": {
+      "$ref": "#/components/responses/Ok"
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "403": {
+      "$ref": "#/components/responses/Forbidden"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "413": {
+      "$ref": "#/components/responses/PayloadTooLarge"
+     },
+     "429": {
+      "$ref": "#/components/responses/TooManyRequests"
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "503": {
+      "$ref": "#/components/responses/ReadOnly"
+     }
+    }
+   }
+  },
+  "/me/stats": {
+   "get": {
+    "operationId": "getMyStats",
+    "tags": [
+     "scores"
+    ],
+    "summary": "One's own players and scores, every linked card's games",
+    "description": "Role: user. Each stat carries its `card` (one's own).",
+    "x-hiraku-role": "user",
+    "security": [
+     {
+      "sessionCookie": []
+     },
+     {
+      "bearerToken": []
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "The stats.",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Stats"
+        },
+        "example": {
+         "name": "alex",
+         "stats": [
+          {
+           "game": "iidx13",
+           "title": "beatmania IIDX 13 DistorteD",
+           "shows": {
+            "plays": true,
+            "song_plays": true,
+            "clear": true
+           },
+           "plays": 12,
+           "card": "E0040000000000A1",
+           "player": "ALEX",
+           "scores": [
+            {
+             "song": 1001,
+             "chart": 1,
+             "score": 1500,
+             "plays": 2,
+             "clear": 4,
+             "clear_name": "Hard clear"
+            }
+           ]
+          }
+         ]
+        }
+       }
+      }
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "403": {
+      "$ref": "#/components/responses/Forbidden"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "429": {
+      "$ref": "#/components/responses/TooManyRequests"
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     }
+    }
+   }
+  },
+  "/players": {
+   "get": {
+    "operationId": "listPlayers",
+    "tags": [
+     "scores"
+    ],
+    "summary": "The accounts whose stats show",
+    "description": "Role: user. Accounts with at least one card linked, not disabled, not hiding their stats; by name, any case.",
+    "x-hiraku-role": "user",
+    "security": [
+     {
+      "sessionCookie": []
+     },
+     {
+      "bearerToken": []
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "The players.",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/PlayerList"
+        },
+        "example": {
+         "players": [
+          {
+           "name": "alex"
+          },
+          {
+           "name": "sam"
+          }
+         ]
+        }
+       }
+      }
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "403": {
+      "$ref": "#/components/responses/Forbidden"
+     },
+     "429": {
+      "$ref": "#/components/responses/TooManyRequests"
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     }
+    }
+   }
+  },
+  "/players/{name}/stats": {
+   "parameters": [
+    {
+     "$ref": "#/components/parameters/UserName"
+    }
+   ],
+   "get": {
+    "operationId": "getPlayerStats",
+    "tags": [
+     "scores"
+    ],
+    "summary": "An account's players and scores",
+    "description": "Role: user. Never the card numbers (no `card`), except to the account itself and to admins.\nStats hidden by their owner: 403 `stats_hidden` (admins see them). `name` in the answer is\nthe name as sent in the path.\n",
+    "x-hiraku-role": "user",
+    "security": [
+     {
+      "sessionCookie": []
+     },
+     {
+      "bearerToken": []
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "The stats.",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Stats"
+        }
+       }
+      }
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "403": {
+      "$ref": "#/components/responses/Forbidden"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "429": {
+      "$ref": "#/components/responses/TooManyRequests"
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     }
+    }
+   }
+  },
+  "/games": {
+   "get": {
+    "operationId": "listGames",
+    "tags": [
+     "scores"
+    ],
+    "summary": "The games the server lists",
+    "description": "Role: user. `scores`: whether the server reads the game's scores (its stats and best scores).",
+    "x-hiraku-role": "user",
+    "security": [
+     {
+      "sessionCookie": []
+     },
+     {
+      "bearerToken": []
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "The games.",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/GameList"
+        },
+        "example": {
+         "games": [
+          {
+           "id": "popn12",
+           "title": "pop'n music 12 Iroha",
+           "scores": true,
+           "has_names": false,
+           "shows": {
+            "plays": false,
+            "song_plays": false,
+            "clear": true
+           }
+          }
+         ]
+        }
+       }
+      }
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "403": {
+      "$ref": "#/components/responses/Forbidden"
+     },
+     "429": {
+      "$ref": "#/components/responses/TooManyRequests"
+     }
+    }
+   }
+  },
+  "/games/{id}/songs": {
+   "parameters": [
+    {
+     "$ref": "#/components/parameters/GameId"
+    }
+   ],
+   "get": {
+    "operationId": "getGameSongs",
+    "tags": [
+     "scores"
+    ],
+    "summary": "The game's song and chart names, from the server's names pack",
+    "description": "Role: user. Songs by the game's own song number (a score's `song`), charts by number. Empty\nobjects when the server has no names pack for the game (docs/SERVER.md, \"Song names\").\nTexts are cut at 200 characters.\n",
+    "x-hiraku-role": "user",
+    "security": [
+     {
+      "sessionCookie": []
+     },
+     {
+      "bearerToken": []
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "The names.",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/SongNames"
+        },
+        "example": {
+         "game": "popn12",
+         "songs": {
+          "5": {
+           "title": "Made-up Song",
+           "artist": "Made-up Artist",
+           "genre": "Made-up Genre"
+          },
+          "20": {
+           "title": "Another Made-up Song"
+          }
+         },
+         "charts": {
+          "0": "Normal",
+          "1": "Hyper"
+         }
+        }
+       }
+      }
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "403": {
+      "$ref": "#/components/responses/Forbidden"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "429": {
+      "$ref": "#/components/responses/TooManyRequests"
+     }
+    }
+   }
+  },
+  "/games/{id}/top": {
+   "parameters": [
+    {
+     "$ref": "#/components/parameters/GameId"
+    }
+   ],
+   "get": {
+    "operationId": "getTopScores",
+    "tags": [
+     "scores"
+    ],
+    "summary": "A game's best scores",
+    "description": "Role: user. Best first, scores above 0 only, among players whose stats show (a card linked\nto no account counts, by the game's player name). No card numbers. A game whose scores the\nserver doesn't read: 404. No paging: `limit` rows at most.\n",
+    "x-hiraku-role": "user",
+    "security": [
+     {
+      "sessionCookie": []
+     },
+     {
+      "bearerToken": []
+     }
+    ],
+    "parameters": [
+     {
+      "name": "song",
+      "in": "query",
+      "description": "Only this song (the game's number).",
+      "schema": {
+       "type": "integer",
+       "minimum": 0,
+       "maximum": 1000000000
+      }
+     },
+     {
+      "name": "chart",
+      "in": "query",
+      "description": "Only this chart (the game's number).",
+      "schema": {
+       "type": "integer",
+       "minimum": 0,
+       "maximum": 1000000000
+      }
+     },
+     {
+      "name": "limit",
+      "in": "query",
+      "description": "Rows at most.",
+      "schema": {
+       "type": "integer",
+       "minimum": 1,
+       "maximum": 100,
+       "default": 20
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "The best scores.",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/TopScores"
+        },
+        "example": {
+         "game": "iidx13",
+         "title": "beatmania IIDX 13 DistorteD",
+         "shows": {
+          "plays": true,
+          "song_plays": true,
+          "clear": true
+         },
+         "scores": [
+          {
+           "rank": 1,
+           "user": "sam",
+           "player": "SAM",
+           "song": 1001,
+           "chart": 1,
+           "score": 1700,
+           "clear": 4,
+           "clear_name": "Hard clear"
+          },
+          {
+           "rank": 2,
+           "user": null,
+           "player": "",
+           "player_hex": "81ff",
+           "song": 1001,
+           "chart": 1,
+           "score": 1600,
+           "clear": 2,
+           "clear_name": "Easy clear"
+          }
+         ]
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "403": {
+      "$ref": "#/components/responses/Forbidden"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "429": {
+      "$ref": "#/components/responses/TooManyRequests"
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     }
+    }
+   }
+  },
+  "/arcades": {
+   "get": {
+    "operationId": "listArcades",
+    "tags": [
+     "arcades"
+    ],
+    "summary": "One's arcades (an admin's are all)",
+    "description": "Role: operator.",
+    "x-hiraku-role": "operator",
+    "security": [
+     {
+      "sessionCookie": []
+     },
+     {
+      "bearerToken": []
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "The arcades, by id.",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ArcadeList"
+        },
+        "example": {
+         "arcades": [
+          {
+           "id": 1,
+           "name": "Example Arcade",
+           "prefecture": 13,
+           "owner": "robin"
+          }
+         ]
+        }
+       }
+      }
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "403": {
+      "$ref": "#/components/responses/Forbidden"
+     },
+     "429": {
+      "$ref": "#/components/responses/TooManyRequests"
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     }
+    }
+   },
+   "post": {
+    "operationId": "createArcade",
+    "tags": [
+     "arcades"
+    ],
+    "summary": "Add an arcade",
+    "description": "Role: operator. The arcade is the caller's; `owner` gives it to another operator (an\nadmin's only; an operator may name itself). The games see the arcade's name and\nprefecture.\n",
+    "x-hiraku-role": "operator",
+    "security": [
+     {
+      "sessionCookie": [],
+      "csrfHeader": []
+     },
+     {
+      "bearerToken": []
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/NewArcade"
+       },
+       "example": {
+        "name": "Example Arcade",
+        "prefecture": 13
+       }
+      }
+     }
+    },
+    "responses": {
+     "201": {
+      "description": "Added.",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Arcade"
+        },
+        "example": {
+         "id": 1,
+         "name": "Example Arcade",
+         "prefecture": 13,
+         "owner": "robin"
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "403": {
+      "$ref": "#/components/responses/Forbidden"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "413": {
+      "$ref": "#/components/responses/PayloadTooLarge"
+     },
+     "429": {
+      "$ref": "#/components/responses/TooManyRequests"
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "503": {
+      "$ref": "#/components/responses/ReadOnly"
+     }
+    }
+   }
+  },
+  "/arcades/{id}": {
+   "parameters": [
+    {
+     "$ref": "#/components/parameters/ArcadeId"
+    }
+   ],
+   "get": {
+    "operationId": "getArcade",
+    "tags": [
+     "arcades"
+    ],
+    "summary": "One arcade",
+    "description": "Role: operator. Another operator's arcade, or an id that isn't a number: 404.",
+    "x-hiraku-role": "operator",
+    "security": [
+     {
+      "sessionCookie": []
+     },
+     {
+      "bearerToken": []
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "The arcade.",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Arcade"
+        }
+       }
+      }
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "403": {
+      "$ref": "#/components/responses/Forbidden"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "429": {
+      "$ref": "#/components/responses/TooManyRequests"
+     }
+    }
+   },
+   "put": {
+    "operationId": "updateArcade",
+    "tags": [
+     "arcades"
+    ],
+    "summary": "Rename an arcade or change its prefecture",
+    "description": "Role: operator. Each field given is changed in turn (name, then prefecture); a refusal\nstops there, and what was changed before it stays. Answers the arcade as it is now.\n",
+    "x-hiraku-role": "operator",
+    "security": [
+     {
+      "sessionCookie": [],
+      "csrfHeader": []
+     },
+     {
+      "bearerToken": []
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/ArcadeChange"
+       },
+       "example": {
+        "name": "Example Arcade 2",
+        "prefecture": 27
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Changed.",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Arcade"
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "403": {
+      "$ref": "#/components/responses/Forbidden"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "413": {
+      "$ref": "#/components/responses/PayloadTooLarge"
+     },
+     "429": {
+      "$ref": "#/components/responses/TooManyRequests"
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "503": {
+      "$ref": "#/components/responses/ReadOnly"
+     }
+    }
+   },
+   "delete": {
+    "operationId": "deleteArcade",
+    "tags": [
+     "arcades"
+    ],
+    "summary": "Remove an arcade, its machines and settings with it",
+    "description": "Role: operator. Its machines' keys stop at once.",
+    "x-hiraku-role": "operator",
+    "security": [
+     {
+      "sessionCookie": [],
+      "csrfHeader": []
+     },
+     {
+      "bearerToken": []
+     }
+    ],
+    "responses": {
+     "200": {
+      "$ref": "#/components/responses/Ok"
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "403": {
+      "$ref": "#/components/responses/Forbidden"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "413": {
+      "$ref": "#/components/responses/PayloadTooLarge"
+     },
+     "429": {
+      "$ref": "#/components/responses/TooManyRequests"
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "503": {
+      "$ref": "#/components/responses/ReadOnly"
+     }
+    }
+   }
+  },
+  "/arcades/{id}/machines": {
+   "parameters": [
+    {
+     "$ref": "#/components/parameters/ArcadeId"
+    }
+   ],
+   "get": {
+    "operationId": "listArcadeMachines",
+    "tags": [
+     "machines"
+    ],
+    "summary": "An arcade's machines",
+    "description": "Role: operator. By name, then PCBID.",
+    "x-hiraku-role": "operator",
+    "security": [
+     {
+      "sessionCookie": []
+     },
+     {
+      "bearerToken": []
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "The machines.",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/MachineList"
+        }
+       }
+      }
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "403": {
+      "$ref": "#/components/responses/Forbidden"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "429": {
+      "$ref": "#/components/responses/TooManyRequests"
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     }
+    }
+   },
+   "post": {
+    "operationId": "createMachine",
+    "tags": [
+     "machines"
+    ],
+    "summary": "Add a machine (its key shown once)",
+    "description": "Role: operator. The server picks the PCBID (20 hex digits) and makes the machine's key,\n`hk2.PCBID.SECRET`: the answer is the only time it is given. The cabinet is started with it\n(`-eakey`, or the launcher's Server key).\n",
+    "x-hiraku-role": "operator",
+    "security": [
+     {
+      "sessionCookie": [],
+      "csrfHeader": []
+     },
+     {
+      "bearerToken": []
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/NewMachineRequest"
+       },
+       "example": {
+        "name": "Front left"
+       }
+      }
+     }
+    },
+    "responses": {
+     "201": {
+      "description": "Added.",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/NewMachine"
+        },
+        "example": {
+         "pcbid": "0120A1B2C3D4E5F60718",
+         "arcade": 1,
+         "name": "Front left",
+         "enabled": true,
+         "has_key": true,
+         "key": "hk2.0120A1B2C3D4E5F60718.made-up-secret"
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "403": {
+      "$ref": "#/components/responses/Forbidden"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "413": {
+      "$ref": "#/components/responses/PayloadTooLarge"
+     },
+     "429": {
+      "$ref": "#/components/responses/TooManyRequests"
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "503": {
+      "$ref": "#/components/responses/ReadOnly"
+     }
+    }
+   }
+  },
+  "/machines": {
+   "get": {
+    "operationId": "listMachines",
+    "tags": [
+     "machines"
+    ],
+    "summary": "Every machine one may see",
+    "description": "Role: operator (an admin's: all). By arcade, name, PCBID.",
+    "x-hiraku-role": "operator",
+    "security": [
+     {
+      "sessionCookie": []
+     },
+     {
+      "bearerToken": []
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "The machines.",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/MachineList"
+        },
+        "example": {
+         "machines": [
+          {
+           "pcbid": "0120A1B2C3D4E5F60718",
+           "arcade": 1,
+           "name": "Front left",
+           "enabled": true,
+           "has_key": true,
+           "last_seen": 1763456400
+          }
+         ]
+        }
+       }
+      }
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "403": {
+      "$ref": "#/components/responses/Forbidden"
+     },
+     "429": {
+      "$ref": "#/components/responses/TooManyRequests"
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     }
+    }
+   }
+  },
+  "/machines/{pcbid}": {
+   "parameters": [
+    {
+     "$ref": "#/components/parameters/Pcbid"
+    }
+   ],
+   "get": {
+    "operationId": "getMachine",
+    "tags": [
+     "machines"
+    ],
+    "summary": "One machine (never its key)",
+    "description": "Role: operator. Another operator's machine: 404.",
+    "x-hiraku-role": "operator",
+    "security": [
+     {
+      "sessionCookie": []
+     },
+     {
+      "bearerToken": []
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "The machine.",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Machine"
+        }
+       }
+      }
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "403": {
+      "$ref": "#/components/responses/Forbidden"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "429": {
+      "$ref": "#/components/responses/TooManyRequests"
+     }
+    }
+   },
+   "put": {
+    "operationId": "updateMachine",
+    "tags": [
+     "machines"
+    ],
+    "summary": "Rename, enable or disable a machine",
+    "description": "Role: operator. A disabled machine's calls are refused at once. Each field given is changed\nin turn (name, then enabled); a refusal stops there, what was changed before it stays.\n",
+    "x-hiraku-role": "operator",
+    "security": [
+     {
+      "sessionCookie": [],
+      "csrfHeader": []
+     },
+     {
+      "bearerToken": []
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/MachineChange"
+       },
+       "example": {
+        "enabled": false
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Changed.",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Machine"
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "403": {
+      "$ref": "#/components/responses/Forbidden"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "413": {
+      "$ref": "#/components/responses/PayloadTooLarge"
+     },
+     "429": {
+      "$ref": "#/components/responses/TooManyRequests"
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "503": {
+      "$ref": "#/components/responses/ReadOnly"
+     }
+    }
+   },
+   "delete": {
+    "operationId": "deleteMachine",
+    "tags": [
+     "machines"
+    ],
+    "summary": "Remove a machine and its key",
+    "description": "Role: operator.",
+    "x-hiraku-role": "operator",
+    "security": [
+     {
+      "sessionCookie": [],
+      "csrfHeader": []
+     },
+     {
+      "bearerToken": []
+     }
+    ],
+    "responses": {
+     "200": {
+      "$ref": "#/components/responses/Ok"
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "403": {
+      "$ref": "#/components/responses/Forbidden"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "413": {
+      "$ref": "#/components/responses/PayloadTooLarge"
+     },
+     "429": {
+      "$ref": "#/components/responses/TooManyRequests"
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "503": {
+      "$ref": "#/components/responses/ReadOnly"
+     }
+    }
+   }
+  },
+  "/machines/{pcbid}/key": {
+   "parameters": [
+    {
+     "$ref": "#/components/parameters/Pcbid"
+    }
+   ],
+   "post": {
+    "operationId": "newMachineKey",
+    "tags": [
+     "machines"
+    ],
+    "summary": "A new key for a machine (shown once); the old one stops",
+    "description": "Role: operator. No body.",
+    "x-hiraku-role": "operator",
+    "security": [
+     {
+      "sessionCookie": [],
+      "csrfHeader": []
+     },
+     {
+      "bearerToken": []
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "The new key, once.",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/MachineKey"
+        },
+        "example": {
+         "pcbid": "0120A1B2C3D4E5F60718",
+         "key": "hk2.0120A1B2C3D4E5F60718.another-made-up-secret"
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "403": {
+      "$ref": "#/components/responses/Forbidden"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "413": {
+      "$ref": "#/components/responses/PayloadTooLarge"
+     },
+     "429": {
+      "$ref": "#/components/responses/TooManyRequests"
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "503": {
+      "$ref": "#/components/responses/ReadOnly"
+     }
+    }
+   }
+  },
+  "/arcades/{id}/settings": {
+   "parameters": [
+    {
+     "$ref": "#/components/parameters/ArcadeId"
+    }
+   ],
+   "get": {
+    "operationId": "getArcadeSettings",
+    "tags": [
+     "arcades"
+    ],
+    "summary": "Each game's settings for the arcade's machines",
+    "description": "Role: operator. For each setting: the arcade's own `value` (null: none, the server's\napplies), the server's `server_value` (null: none, the default applies), the `default`, and\nfor a form its `label`, `help`, `kind` and, for a number, `min` and `max`. Values are text.\n",
+    "x-hiraku-role": "operator",
+    "security": [
+     {
+      "sessionCookie": []
+     },
+     {
+      "bearerToken": []
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "The settings.",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ArcadeSettings"
+        },
+        "example": {
+         "arcade": 1,
+         "games": [
+          {
+           "id": "popn14",
+           "title": "pop'n music 14 FEVER!",
+           "settings": [
+            {
+             "name": "net_event",
+             "default": "0",
+             "label": "Event",
+             "help": "Which event the machines run.",
+             "kind": "number",
+             "min": 0,
+             "max": 4,
+             "value": "3",
+             "server_value": null
+            }
+           ]
+          }
+         ]
+        }
+       }
+      }
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "403": {
+      "$ref": "#/components/responses/Forbidden"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "429": {
+      "$ref": "#/components/responses/TooManyRequests"
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     }
+    }
+   },
+   "put": {
+    "operationId": "setArcadeSettings",
+    "tags": [
+     "arcades"
+    ],
+    "summary": "Set some of the arcade's settings",
+    "description": "Role: operator. Each item is set in turn; the first refused stops there (what was set before\nit stays) and is the answer. `value` null or missing clears the arcade's own value.\nAnswers every setting as `GET` does.\n",
+    "x-hiraku-role": "operator",
+    "security": [
+     {
+      "sessionCookie": [],
+      "csrfHeader": []
+     },
+     {
+      "bearerToken": []
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/SettingsChange"
+       },
+       "example": {
+        "settings": [
+         {
+          "game": "popn14",
+          "name": "net_event",
+          "value": 3
+         }
+        ]
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Set.",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ArcadeSettings"
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "403": {
+      "$ref": "#/components/responses/Forbidden"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "413": {
+      "$ref": "#/components/responses/PayloadTooLarge"
+     },
+     "429": {
+      "$ref": "#/components/responses/TooManyRequests"
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "503": {
+      "$ref": "#/components/responses/ReadOnly"
+     }
+    }
+   }
+  },
+  "/users": {
+   "get": {
+    "operationId": "listUsers",
+    "tags": [
+     "users"
+    ],
+    "summary": "Every account",
+    "description": "Role: admin. In the order they were made. No paging.",
+    "x-hiraku-role": "admin",
+    "security": [
+     {
+      "sessionCookie": []
+     },
+     {
+      "bearerToken": []
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "The accounts.",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/UserList"
+        }
+       }
+      }
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "403": {
+      "$ref": "#/components/responses/Forbidden"
+     },
+     "429": {
+      "$ref": "#/components/responses/TooManyRequests"
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     }
+    }
+   }
+  },
+  "/users/{name}": {
+   "parameters": [
+    {
+     "$ref": "#/components/parameters/UserName"
+    }
+   ],
+   "get": {
+    "operationId": "getUser",
+    "tags": [
+     "users"
+    ],
+    "summary": "One account",
+    "description": "Role: admin.",
+    "x-hiraku-role": "admin",
+    "security": [
+     {
+      "sessionCookie": []
+     },
+     {
+      "bearerToken": []
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "The account.",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/User"
+        }
+       }
+      }
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "403": {
+      "$ref": "#/components/responses/Forbidden"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "429": {
+      "$ref": "#/components/responses/TooManyRequests"
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     }
+    }
+   },
+   "put": {
+    "operationId": "updateUser",
+    "tags": [
+     "users"
+    ],
+    "summary": "Change an account's role, whether it is disabled, whether its stats hide",
+    "description": "Role: admin. Each field given is changed in turn (role, disabled, hide_stats); a refusal\nstops there, what was changed before it stays. The last admin stays an enabled admin (409).\nA disabled account's sessions and tokens stop at once.\n",
+    "x-hiraku-role": "admin",
+    "security": [
+     {
+      "sessionCookie": [],
+      "csrfHeader": []
+     },
+     {
+      "bearerToken": []
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/UserChange"
+       },
+       "example": {
+        "role": "operator"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Changed.",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/User"
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "403": {
+      "$ref": "#/components/responses/Forbidden"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "409": {
+      "$ref": "#/components/responses/Conflict"
+     },
+     "413": {
+      "$ref": "#/components/responses/PayloadTooLarge"
+     },
+     "429": {
+      "$ref": "#/components/responses/TooManyRequests"
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "503": {
+      "$ref": "#/components/responses/ReadOnly"
+     }
+    }
+   },
+   "delete": {
+    "operationId": "deleteUser",
+    "tags": [
+     "users"
+    ],
+    "summary": "Remove an account",
+    "description": "Role: admin. Its cards are unlinked (their players and scores stay), its arcades become no one's; the last admin stays (409).",
+    "x-hiraku-role": "admin",
+    "security": [
+     {
+      "sessionCookie": [],
+      "csrfHeader": []
+     },
+     {
+      "bearerToken": []
+     }
+    ],
+    "responses": {
+     "200": {
+      "$ref": "#/components/responses/Ok"
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "403": {
+      "$ref": "#/components/responses/Forbidden"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "409": {
+      "$ref": "#/components/responses/Conflict"
+     },
+     "413": {
+      "$ref": "#/components/responses/PayloadTooLarge"
+     },
+     "429": {
+      "$ref": "#/components/responses/TooManyRequests"
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "503": {
+      "$ref": "#/components/responses/ReadOnly"
+     }
+    }
+   }
+  },
+  "/users/{name}/cards": {
+   "parameters": [
+    {
+     "$ref": "#/components/parameters/UserName"
+    }
+   ],
+   "get": {
+    "operationId": "listUserCards",
+    "tags": [
+     "users"
+    ],
+    "summary": "The cards linked to an account",
+    "description": "Role: admin.",
+    "x-hiraku-role": "admin",
+    "security": [
+     {
+      "sessionCookie": []
+     },
+     {
+      "bearerToken": []
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "The cards.",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/UserCards"
+        }
+       }
+      }
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "403": {
+      "$ref": "#/components/responses/Forbidden"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "429": {
+      "$ref": "#/components/responses/TooManyRequests"
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     }
+    }
+   }
+  },
+  "/users/{name}/reset": {
+   "parameters": [
+    {
+     "$ref": "#/components/parameters/UserName"
+    }
+   ],
+   "post": {
+    "operationId": "createResetCode",
+    "tags": [
+     "users"
+    ],
+    "summary": "A password reset code for an account (shown once, good for a day)",
+    "description": "Role: admin. A new code replaces the account's older one. The account's user sets a new password with it: `POST /reset`. No body.",
+    "x-hiraku-role": "admin",
+    "security": [
+     {
+      "sessionCookie": [],
+      "csrfHeader": []
+     },
+     {
+      "bearerToken": []
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "The code, once.",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ResetCode"
+        },
+        "example": {
+         "name": "alex",
+         "code": "00112233445566778899aabbccddeeff",
+         "hours": 24
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "403": {
+      "$ref": "#/components/responses/Forbidden"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "413": {
+      "$ref": "#/components/responses/PayloadTooLarge"
+     },
+     "429": {
+      "$ref": "#/components/responses/TooManyRequests"
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "503": {
+      "$ref": "#/components/responses/ReadOnly"
+     }
+    }
+   }
+  },
+  "/config": {
+   "get": {
+    "operationId": "getConfig",
+    "tags": [
+     "server"
+    ],
+    "summary": "The server's name, sign-up mode, and whether every game is listed",
+    "description": "Role: admin.",
+    "x-hiraku-role": "admin",
+    "security": [
+     {
+      "sessionCookie": []
+     },
+     {
+      "bearerToken": []
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "The configuration.",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Config"
+        },
+        "example": {
+         "name": "Example Games",
+         "signup": "invite",
+         "list_all_games": false
+        }
+       }
+      }
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "403": {
+      "$ref": "#/components/responses/Forbidden"
+     },
+     "429": {
+      "$ref": "#/components/responses/TooManyRequests"
+     }
+    }
+   },
+   "put": {
+    "operationId": "updateConfig",
+    "tags": [
+     "server"
+    ],
+    "summary": "Change the server's name, sign-up mode or game listing",
+    "description": "Role: admin. Each field given is changed in turn (name, signup, list_all_games); a refusal stops there.",
+    "x-hiraku-role": "admin",
+    "security": [
+     {
+      "sessionCookie": [],
+      "csrfHeader": []
+     },
+     {
+      "bearerToken": []
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/ConfigChange"
+       },
+       "example": {
+        "signup": "invite"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Changed.",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Config"
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "403": {
+      "$ref": "#/components/responses/Forbidden"
+     },
+     "413": {
+      "$ref": "#/components/responses/PayloadTooLarge"
+     },
+     "429": {
+      "$ref": "#/components/responses/TooManyRequests"
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "503": {
+      "$ref": "#/components/responses/ReadOnly"
+     }
+    }
+   }
+  },
+  "/config/invites": {
+   "post": {
+    "operationId": "createInvite",
+    "tags": [
+     "server"
+    ],
+    "summary": "An invitation code (shown once)",
+    "description": "Role: admin. For `uses` sign-ups (1 by default) within `days` days (7 by default). The body may be empty.",
+    "x-hiraku-role": "admin",
+    "security": [
+     {
+      "sessionCookie": [],
+      "csrfHeader": []
+     },
+     {
+      "bearerToken": []
+     }
+    ],
+    "requestBody": {
+     "required": false,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/InviteRequest"
+       },
+       "example": {
+        "uses": 5,
+        "days": 14
+       }
+      }
+     }
+    },
+    "responses": {
+     "201": {
+      "description": "The code, once.",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Invite"
+        },
+        "example": {
+         "code": "ffeeddccbbaa99887766554433221100",
+         "uses": 5,
+         "days": 14
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "403": {
+      "$ref": "#/components/responses/Forbidden"
+     },
+     "413": {
+      "$ref": "#/components/responses/PayloadTooLarge"
+     },
+     "429": {
+      "$ref": "#/components/responses/TooManyRequests"
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "503": {
+      "$ref": "#/components/responses/ReadOnly"
+     }
+    }
+   }
+  },
+  "/cards/{card}": {
+   "parameters": [
+    {
+     "$ref": "#/components/parameters/Card"
+    }
+   ],
+   "get": {
+    "operationId": "getCard",
+    "tags": [
+     "admin-cards"
+    ],
+    "summary": "A card as an admin sees it (never its PIN)",
+    "description": "Role: admin. A card the server doesn't know answers 200 with `known: false` (not 404).\n",
+    "x-hiraku-role": "admin",
+    "security": [
+     {
+      "sessionCookie": []
+     },
+     {
+      "bearerToken": []
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "The card.",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/CardInfo"
+        },
+        "example": {
+         "card": "E0040000000000A1",
+         "known": true,
+         "user": "alex",
+         "linked": 1763452800,
+         "locked": false,
+         "wrong_pins": 0,
+         "tries_left": 5,
+         "games": [
+          {
+           "id": "iidx13",
+           "title": "beatmania IIDX 13 DistorteD",
+           "player": "ALEX"
+          }
+         ]
+        }
+       }
+      }
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "403": {
+      "$ref": "#/components/responses/Forbidden"
+     },
+     "429": {
+      "$ref": "#/components/responses/TooManyRequests"
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     }
+    }
+   },
+   "delete": {
+    "operationId": "unlinkCard",
+    "tags": [
+     "admin-cards"
+    ],
+    "summary": "Unlink a card from its account",
+    "description": "Role: admin. A card linked to no account: 404.",
+    "x-hiraku-role": "admin",
+    "security": [
+     {
+      "sessionCookie": [],
+      "csrfHeader": []
+     },
+     {
+      "bearerToken": []
+     }
+    ],
+    "responses": {
+     "200": {
+      "$ref": "#/components/responses/Ok"
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "403": {
+      "$ref": "#/components/responses/Forbidden"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "413": {
+      "$ref": "#/components/responses/PayloadTooLarge"
+     },
+     "429": {
+      "$ref": "#/components/responses/TooManyRequests"
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "503": {
+      "$ref": "#/components/responses/ReadOnly"
+     }
+    }
+   }
+  },
+  "/cards/{card}/unlock": {
+   "parameters": [
+    {
+     "$ref": "#/components/parameters/Card"
+    }
+   ],
+   "post": {
+    "operationId": "unlockCard",
+    "tags": [
+     "admin-cards"
+    ],
+    "summary": "Unlock a card locked by wrong PINs",
+    "description": "Role: admin. No body. A card that isn't locked answers 403 `card_locked` (\"the card ... isn't locked\").",
+    "x-hiraku-role": "admin",
+    "security": [
+     {
+      "sessionCookie": [],
+      "csrfHeader": []
+     },
+     {
+      "bearerToken": []
+     }
+    ],
+    "responses": {
+     "200": {
+      "$ref": "#/components/responses/Ok"
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "403": {
+      "$ref": "#/components/responses/Forbidden"
+     },
+     "413": {
+      "$ref": "#/components/responses/PayloadTooLarge"
+     },
+     "429": {
+      "$ref": "#/components/responses/TooManyRequests"
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "503": {
+      "$ref": "#/components/responses/ReadOnly"
+     }
+    }
+   }
+  },
+  "/cards/{card}/pin": {
+   "parameters": [
+    {
+     "$ref": "#/components/parameters/Card"
+    }
+   ],
+   "put": {
+    "operationId": "setCardPin",
+    "tags": [
+     "admin-cards"
+    ],
+    "summary": "Set a card's PIN in every place the games keep it",
+    "description": "Role: admin. `changed` and `not_changed` name the games (plain words, for a person).\nDone in some places only: still 200, with `complete: false`. Done nowhere: the refusal\n(400 `bad_request` when nothing could be written).\n",
+    "x-hiraku-role": "admin",
+    "security": [
+     {
+      "sessionCookie": [],
+      "csrfHeader": []
+     },
+     {
+      "bearerToken": []
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/PinRequest"
+       },
+       "example": {
+        "pin": "4321"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Set (in the places `changed` says).",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/PinResult"
+        },
+        "example": {
+         "changed": [
+          "pop'n music 12"
+         ],
+         "not_changed": [
+          "pop'n music 10 (the PIN's place in its record isn't known)"
+         ],
+         "complete": true
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "403": {
+      "$ref": "#/components/responses/Forbidden"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "413": {
+      "$ref": "#/components/responses/PayloadTooLarge"
+     },
+     "429": {
+      "$ref": "#/components/responses/TooManyRequests"
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "503": {
+      "$ref": "#/components/responses/ReadOnly"
+     }
+    }
+   }
+  },
+  "/settings": {
+   "get": {
+    "operationId": "getServerSettings",
+    "tags": [
+     "server"
+    ],
+    "summary": "The server's own settings and every game's server-wide values",
+    "description": "Role: admin. `server`: the server's own settings; `games`: each game's, as for an arcade but without `server_value` (`value` is the server's).",
+    "x-hiraku-role": "admin",
+    "security": [
+     {
+      "sessionCookie": []
+     },
+     {
+      "bearerToken": []
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "The settings.",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ServerSettings"
+        }
+       }
+      }
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "403": {
+      "$ref": "#/components/responses/Forbidden"
+     },
+     "429": {
+      "$ref": "#/components/responses/TooManyRequests"
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     }
+    }
+   },
+   "put": {
+    "operationId": "setServerSettings",
+    "tags": [
+     "server"
+    ],
+    "summary": "Set server-wide values",
+    "description": "Role: admin. As `PUT /arcades/{id}/settings`; `game: \"server\"` names the server's own\nsettings. Answers every setting as `GET` does.\n",
+    "x-hiraku-role": "admin",
+    "security": [
+     {
+      "sessionCookie": [],
+      "csrfHeader": []
+     },
+     {
+      "bearerToken": []
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/SettingsChange"
+       },
+       "example": {
+        "settings": [
+         {
+          "game": "popn14",
+          "name": "net_event",
+          "value": "1"
+         }
+        ]
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Set.",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ServerSettings"
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "403": {
+      "$ref": "#/components/responses/Forbidden"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "413": {
+      "$ref": "#/components/responses/PayloadTooLarge"
+     },
+     "429": {
+      "$ref": "#/components/responses/TooManyRequests"
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     },
+     "503": {
+      "$ref": "#/components/responses/ReadOnly"
+     }
+    }
+   }
+  },
+  "/names": {
+   "get": {
+    "operationId": "getNamePacks",
+    "tags": [
+     "server"
+    ],
+    "summary": "The song names' packs loaded and refused",
+    "description": "Role: admin. `set`: a names folder is configured. Files by name only, never a path.",
+    "x-hiraku-role": "admin",
+    "security": [
+     {
+      "sessionCookie": []
+     },
+     {
+      "bearerToken": []
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "The packs.",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/NamePacks"
+        },
+        "example": {
+         "set": true,
+         "packs": [
+          {
+           "game": "popn12",
+           "title": "pop'n music 12 Iroha",
+           "file": "popn12.json",
+           "songs": 2,
+           "charts": 2,
+           "time": 1763452800
+          }
+         ],
+         "refused": [
+          {
+           "file": "other.json",
+           "why": "not a names pack (format 1)"
+          }
+         ]
+        }
+       }
+      }
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "403": {
+      "$ref": "#/components/responses/Forbidden"
+     },
+     "429": {
+      "$ref": "#/components/responses/TooManyRequests"
+     }
+    }
+   }
+  },
+  "/audit": {
+   "get": {
+    "operationId": "listAudit",
+    "tags": [
+     "server"
+    ],
+    "summary": "The last actions (who, when, what)",
+    "description": "Role: admin. The newest `limit` lines, oldest of them first. Never a password, PIN or code in them.",
+    "x-hiraku-role": "admin",
+    "security": [
+     {
+      "sessionCookie": []
+     },
+     {
+      "bearerToken": []
+     }
+    ],
+    "parameters": [
+     {
+      "name": "limit",
+      "in": "query",
+      "description": "Lines at most.",
+      "schema": {
+       "type": "integer",
+       "minimum": 1,
+       "maximum": 10000,
+       "default": 100
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "The lines.",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Audit"
+        },
+        "example": {
+         "audit": [
+          {
+           "id": 41,
+           "at": 1763452800,
+           "user": "alex",
+           "action": "card.link",
+           "detail": "E0040000000000A1"
+          }
+         ]
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/BadRequest"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthorized"
+     },
+     "403": {
+      "$ref": "#/components/responses/Forbidden"
+     },
+     "429": {
+      "$ref": "#/components/responses/TooManyRequests"
+     },
+     "500": {
+      "$ref": "#/components/responses/ServerError"
+     }
+    }
+   }
+  }
+ },
+ "components": {
+  "securitySchemes": {
+   "sessionCookie": {
+    "type": "apiKey",
+    "in": "cookie",
+    "name": "hk_session",
+    "description": "A log-in's session, set by `POST /login` (`hks_` and 64 hex digits; HttpOnly,\nSameSite=Strict, Secure). Lasts 30 days from its last use; ends at `POST /logout`, or at\nonce when the account is disabled or removed.\n"
+   },
+   "csrfHeader": {
+    "type": "apiKey",
+    "in": "header",
+    "name": "X-HK-CSRF",
+    "description": "The session's CSRF value (`csrf` of `POST /login` and of `GET /me`): needed with the cookie\non every request that isn't a GET to an operation that needs a log-in, else 403 `csrf`.\n"
+   },
+   "bearerToken": {
+    "type": "http",
+    "scheme": "bearer",
+    "bearerFormat": "hkt_ and 64 hex digits",
+    "description": "A personal token (`POST /me/tokens`), sent as `Authorization: Bearer hkt_...`. Scope `read`:\nGET only (anything else 403 `read_only_token`); `write`: everything a session may, except the\nsession-only operations. No CSRF value. A wrong or revoked token is 401 on every operation\nthat needs a log-in (a public one goes on as if no one were logged in).\n"
+   }
+  },
+  "parameters": {
+   "Card": {
+    "name": "card",
+    "in": "path",
+    "required": true,
+    "description": "A card number as the games send it (16 characters, any case; URL-encode it).",
+    "schema": {
+     "type": "string",
+     "example": "E0040000000000A1"
+    }
+   },
+   "UserName": {
+    "name": "name",
+    "in": "path",
+    "required": true,
+    "description": "An account's name (any case).",
+    "schema": {
+     "$ref": "#/components/schemas/UserName"
+    }
+   },
+   "ArcadeId": {
+    "name": "id",
+    "in": "path",
+    "required": true,
+    "description": "An arcade's id. Anything but a whole number from 1 answers 404.",
+    "schema": {
+     "type": "integer",
+     "minimum": 1,
+     "maximum": 1000000000
+    }
+   },
+   "TokenId": {
+    "name": "id",
+    "in": "path",
+    "required": true,
+    "description": "A token's id. Anything but a whole number from 1 answers 404.",
+    "schema": {
+     "type": "integer",
+     "minimum": 1,
+     "maximum": 1000000000
+    }
+   },
+   "Pcbid": {
+    "name": "pcbid",
+    "in": "path",
+    "required": true,
+    "description": "A machine's PCBID (any case).",
+    "schema": {
+     "$ref": "#/components/schemas/Pcbid"
+    }
+   },
+   "GameId": {
+    "name": "id",
+    "in": "path",
+    "required": true,
+    "description": "A game's id, as `GET /games` lists it (exact case).",
+    "schema": {
+     "type": "string",
+     "example": "iidx13"
+    }
+   }
+  },
+  "headers": {
+   "Retry-After": {
+    "description": "Seconds until the limit lets the caller in again.",
+    "schema": {
+     "type": "integer",
+     "minimum": 1
+    }
+   }
+  },
+  "responses": {
+   "Ok": {
+    "description": "Done.",
+    "content": {
+     "application/json": {
+      "schema": {
+       "$ref": "#/components/schemas/Ok"
+      },
+      "example": {
+       "ok": true
+      }
+     }
+    }
+   },
+   "BadRequest": {
+    "description": "`bad_json`: the body isn't a JSON object (checked before anything else, on every request\nbut a GET); `bad_request`: a field missing, of the wrong type, out of range, or a value that\nisn't one (a name's or password's shape, a setting's value...); the message says which.\n",
+    "content": {
+     "application/json": {
+      "schema": {
+       "$ref": "#/components/schemas/Error"
+      },
+      "example": {
+       "error": "bad_request",
+       "message": "\"password\" is needed"
+      }
+     }
+    }
+   },
+   "Unauthorized": {
+    "description": "`not_signed_in`: no session or token where one is needed, or one that isn't (ended, revoked,\nits account disabled); `wrong_password` (`POST /login` only).\n",
+    "content": {
+     "application/json": {
+      "schema": {
+       "$ref": "#/components/schemas/Error"
+      },
+      "example": {
+       "error": "not_signed_in",
+       "message": "log in first"
+      }
+     }
+    }
+   },
+   "Forbidden": {
+    "description": "In the order the server checks them: `session_only` (a token where a log-in is needed),\n`must_change_password`, `read_only_token`, `csrf`, `not_allowed` (the role isn't enough, or\nnot this account's); then the operation's own: `wrong_password` (an old password),\n`disabled`, `stats_hidden`, `signup_refused`, `bad_code`, `card_locked`, `wrong_pin`.\n",
+    "content": {
+     "application/json": {
+      "schema": {
+       "$ref": "#/components/schemas/Error"
+      },
+      "example": {
+       "error": "csrf",
+       "message": "a change needs the log-in's CSRF value in X-HK-CSRF"
+      }
+     }
+    }
+   },
+   "NotFound": {
+    "description": "`not_found`: no such thing (or one the caller may not see: another operator's arcade or machine), or no such path in the API.",
+    "content": {
+     "application/json": {
+      "schema": {
+       "$ref": "#/components/schemas/Error"
+      },
+      "example": {
+       "error": "not_found",
+       "message": "no arcade 7"
+      }
+     }
+    }
+   },
+   "Conflict": {
+    "description": "`conflict`: taken already, another's, the last admin, or a limit on how many reached (50 tokens).",
+    "content": {
+     "application/json": {
+      "schema": {
+       "$ref": "#/components/schemas/Error"
+      },
+      "example": {
+       "error": "conflict",
+       "message": "the name alex is taken"
+      }
+     }
+    }
+   },
+   "PayloadTooLarge": {
+    "description": "`too_large`: a body over 64 KiB.",
+    "content": {
+     "application/json": {
+      "schema": {
+       "$ref": "#/components/schemas/Error"
+      },
+      "example": {
+       "error": "too_large",
+       "message": "the body is 64 KiB at most"
+      }
+     }
+    }
+   },
+   "TooManyRequests": {
+    "description": "`slow_down`: too many calls. 600 a minute a session or token (or an address, when no one is\nlogged in); log-in and reset 10 a minute an address, log-in 10 a minute a name; sign-up 5\nan hour an address; card links 20 an hour an account.\n",
+    "headers": {
+     "Retry-After": {
+      "$ref": "#/components/headers/Retry-After"
+     }
+    },
+    "content": {
+     "application/json": {
+      "schema": {
+       "$ref": "#/components/schemas/Error"
+      },
+      "example": {
+       "error": "slow_down",
+       "message": "too many tries: again in 42 s"
+      }
+     }
+    }
+   },
+   "ServerError": {
+    "description": "`server_error`: the database or the system failed.",
+    "content": {
+     "application/json": {
+      "schema": {
+       "$ref": "#/components/schemas/Error"
+      },
+      "example": {
+       "error": "server_error",
+       "message": "the server could not answer that"
+      }
+     }
+    }
+   },
+   "ReadOnly": {
+    "description": "`read_only`: the database was written by a newer hiraku-server; this one changes nothing in it.",
+    "content": {
+     "application/json": {
+      "schema": {
+       "$ref": "#/components/schemas/Error"
+      },
+      "example": {
+       "error": "read_only",
+       "message": "the database is a newer HIRAKU's: nothing is changed"
+      }
+     }
+    }
+   }
+  },
+  "schemas": {
+   "Time": {
+    "description": "Seconds since 1970-01-01 UTC.",
+    "type": "integer",
+    "example": 1763452800
+   },
+   "TimeOrNull": {
+    "description": "Seconds since 1970-01-01 UTC; null when it never happened.",
+    "type": [
+     "integer",
+     "null"
+    ]
+   },
+   "UserName": {
+    "description": "1 to 32 letters, digits, '.', '_' or '-', not beginning with '-' or '.'; unique in any case.",
+    "type": "string",
+    "minLength": 1,
+    "maxLength": 32,
+    "pattern": "^[A-Za-z0-9_][A-Za-z0-9._-]*$",
+    "example": "alex"
+   },
+   "Password": {
+    "description": "8 to 256 bytes, one line.",
+    "type": "string",
+    "minLength": 8,
+    "maxLength": 256
+   },
+   "Label": {
+    "description": "1 to 64 bytes of one line, no control characters (an arcade's, a machine's, a token's, the server's name).",
+    "type": "string",
+    "minLength": 1,
+    "maxLength": 64
+   },
+   "Pcbid": {
+    "description": "A machine's PCBID, 20 hex digits.",
+    "type": "string",
+    "example": "0120A1B2C3D4E5F60718"
+   },
+   "Role": {
+    "type": "string",
+    "enum": [
+     "player",
+     "operator",
+     "admin"
+    ]
+   },
+   "Scope": {
+    "type": "string",
+    "enum": [
+     "read",
+     "write"
+    ]
+   },
+   "Error": {
+    "description": "Every error's answer. `message` is for a person; act on `error`.",
+    "type": "object",
+    "required": [
+     "error",
+     "message"
+    ],
+    "additionalProperties": false,
+    "properties": {
+     "error": {
+      "type": "string",
+      "enum": [
+       "bad_json",
+       "bad_request",
+       "not_signed_in",
+       "wrong_password",
+       "session_only",
+       "must_change_password",
+       "read_only_token",
+       "csrf",
+       "not_allowed",
+       "disabled",
+       "stats_hidden",
+       "signup_refused",
+       "bad_code",
+       "card_locked",
+       "wrong_pin",
+       "not_found",
+       "conflict",
+       "too_large",
+       "no_such_method",
+       "slow_down",
+       "server_error",
+       "read_only"
+      ]
+     },
+     "message": {
+      "type": "string"
+     },
+     "tries_left": {
+      "description": "A refused card link (`wrong_pin`, `card_locked`) only. Wrong PINs left before the card is locked for linking.",
+      "type": "integer",
+      "minimum": 0
+     },
+     "locked": {
+      "description": "`card_locked` of a card link only: always true.",
+      "const": true
+     }
+    }
+   },
+   "Ok": {
+    "type": "object",
+    "required": [
+     "ok"
+    ],
+    "additionalProperties": false,
+    "properties": {
+     "ok": {
+      "const": true
+     }
+    }
+   },
+   "Shows": {
+    "description": "What a game's rows can ever hold (the game's, not one player's): `plays` a player's count\nof plays, `song_plays` a chart's own count, `clear` a clear mark with a word for it. A page\nleaves out a column that can only be empty.\n",
+    "type": "object",
+    "required": [
+     "plays",
+     "song_plays",
+     "clear"
+    ],
+    "additionalProperties": false,
+    "properties": {
+     "plays": {
+      "type": "boolean"
+     },
+     "song_plays": {
+      "type": "boolean"
+     },
+     "clear": {
+      "type": "boolean"
+     }
+    }
+   },
+   "Health": {
+    "type": "object",
+    "required": [
+     "ok",
+     "version",
+     "uptime"
+    ],
+    "additionalProperties": false,
+    "properties": {
+     "ok": {
+      "type": "boolean"
+     },
+     "version": {
+      "type": "string",
+      "description": "The server's build (as `hiraku-server --version`)."
+     },
+     "uptime": {
+      "type": "integer",
+      "description": "Seconds since the API started."
+     }
+    }
+   },
+   "ServerInfo": {
+    "type": "object",
+    "required": [
+     "name",
+     "signup",
+     "games"
+    ],
+    "additionalProperties": false,
+    "properties": {
+     "name": {
+      "type": "string",
+      "description": "The server's name for people (\"HIRAKU\" until an admin names it)."
+     },
+     "signup": {
+      "type": "string",
+      "enum": [
+       "open",
+       "invite",
+       "closed"
+      ]
+     },
+     "games": {
+      "type": "array",
+      "items": {
+       "type": "object",
+       "required": [
+        "id",
+        "title",
+        "has_names",
+        "shows"
+       ],
+       "additionalProperties": false,
+       "properties": {
+        "id": {
+         "type": "string"
+        },
+        "title": {
+         "type": "string"
+        },
+        "has_names": {
+         "type": "boolean",
+         "description": "The server has a names pack for it (`GET /games/{id}/songs`)."
+        },
+        "shows": {
+         "$ref": "#/components/schemas/Shows"
+        }
+       }
+      }
+     }
+    }
+   },
+   "SignUpRequest": {
+    "type": "object",
+    "required": [
+     "name",
+     "password"
+    ],
+    "properties": {
+     "name": {
+      "$ref": "#/components/schemas/UserName"
+     },
+     "password": {
+      "$ref": "#/components/schemas/Password"
+     },
+     "invite": {
+      "type": "string",
+      "description": "An invitation's code, when sign-up is by invitation."
+     }
+    }
+   },
+   "SignUpResult": {
+    "type": "object",
+    "required": [
+     "name"
+    ],
+    "additionalProperties": false,
+    "properties": {
+     "name": {
+      "type": "string"
+     }
+    }
+   },
+   "LoginRequest": {
+    "type": "object",
+    "required": [
+     "name",
+     "password"
+    ],
+    "properties": {
+     "name": {
+      "type": "string"
+     },
+     "password": {
+      "type": "string"
+     }
+    }
+   },
+   "User": {
+    "type": "object",
+    "required": [
+     "name",
+     "role",
+     "disabled",
+     "hide_stats",
+     "must_change_password",
+     "created"
+    ],
+    "additionalProperties": false,
+    "properties": {
+     "name": {
+      "type": "string"
+     },
+     "role": {
+      "$ref": "#/components/schemas/Role"
+     },
+     "disabled": {
+      "type": "boolean"
+     },
+     "hide_stats": {
+      "type": "boolean"
+     },
+     "must_change_password": {
+      "type": "boolean",
+      "description": "Every operation but a few answers 403 `must_change_password` until it is changed."
+     },
+     "created": {
+      "$ref": "#/components/schemas/Time"
+     }
+    }
+   },
+   "LoginResult": {
+    "type": "object",
+    "required": [
+     "user",
+     "csrf",
+     "must_change_password"
+    ],
+    "additionalProperties": false,
+    "properties": {
+     "user": {
+      "$ref": "#/components/schemas/User"
+     },
+     "csrf": {
+      "type": "string",
+      "description": "The session's CSRF value (64 hex digits): send it as X-HK-CSRF with every change."
+     },
+     "must_change_password": {
+      "type": "boolean"
+     }
+    }
+   },
+   "Me": {
+    "type": "object",
+    "required": [
+     "name",
+     "role",
+     "disabled",
+     "hide_stats",
+     "must_change_password",
+     "created",
+     "auth"
+    ],
+    "additionalProperties": false,
+    "properties": {
+     "name": {
+      "type": "string"
+     },
+     "role": {
+      "$ref": "#/components/schemas/Role"
+     },
+     "disabled": {
+      "type": "boolean"
+     },
+     "hide_stats": {
+      "type": "boolean"
+     },
+     "must_change_password": {
+      "type": "boolean"
+     },
+     "created": {
+      "$ref": "#/components/schemas/Time"
+     },
+     "auth": {
+      "type": "string",
+      "enum": [
+       "session",
+       "token"
+      ]
+     },
+     "csrf": {
+      "type": "string",
+      "description": "With a session only: its CSRF value."
+     },
+     "scope": {
+      "$ref": "#/components/schemas/Scope"
+     }
+    }
+   },
+   "ResetRequest": {
+    "type": "object",
+    "required": [
+     "code",
+     "password"
+    ],
+    "properties": {
+     "code": {
+      "type": "string"
+     },
+     "password": {
+      "$ref": "#/components/schemas/Password"
+     },
+     "name": {
+      "type": "string",
+      "description": "Optional: the code's user."
+     }
+    }
+   },
+   "PasswordChange": {
+    "type": "object",
+    "required": [
+     "old_password",
+     "password"
+    ],
+    "properties": {
+     "old_password": {
+      "type": "string"
+     },
+     "password": {
+      "$ref": "#/components/schemas/Password"
+     }
+    }
+   },
+   "HideStats": {
+    "type": "object",
+    "required": [
+     "hide_stats"
+    ],
+    "additionalProperties": false,
+    "properties": {
+     "hide_stats": {
+      "type": "boolean"
+     }
+    }
+   },
+   "Token": {
+    "type": "object",
+    "required": [
+     "id",
+     "label",
+     "scope",
+     "created",
+     "last_used"
+    ],
+    "additionalProperties": false,
+    "properties": {
+     "id": {
+      "type": "integer"
+     },
+     "label": {
+      "type": "string"
+     },
+     "scope": {
+      "$ref": "#/components/schemas/Scope"
+     },
+     "created": {
+      "$ref": "#/components/schemas/Time"
+     },
+     "last_used": {
+      "$ref": "#/components/schemas/TimeOrNull",
+      "description": "Noted once an hour at most."
+     }
+    }
+   },
+   "TokenList": {
+    "type": "object",
+    "required": [
+     "tokens"
+    ],
+    "additionalProperties": false,
+    "properties": {
+     "tokens": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/Token"
+      }
+     }
+    }
+   },
+   "NewTokenRequest": {
+    "type": "object",
+    "required": [
+     "label",
+     "scope"
+    ],
+    "properties": {
+     "label": {
+      "$ref": "#/components/schemas/Label"
+     },
+     "scope": {
+      "$ref": "#/components/schemas/Scope"
+     }
+    }
+   },
+   "NewToken": {
+    "type": "object",
+    "required": [
+     "id",
+     "label",
+     "scope",
+     "token"
+    ],
+    "additionalProperties": false,
+    "properties": {
+     "id": {
+      "type": "integer"
+     },
+     "label": {
+      "type": "string"
+     },
+     "scope": {
+      "$ref": "#/components/schemas/Scope"
+     },
+     "token": {
+      "type": "string",
+      "description": "The token's text, given this once only: `hkt_` and 64 hex digits."
+     }
+    }
+   },
+   "LinkedCard": {
+    "type": "object",
+    "required": [
+     "card",
+     "linked"
+    ],
+    "additionalProperties": false,
+    "properties": {
+     "card": {
+      "type": "string"
+     },
+     "linked": {
+      "$ref": "#/components/schemas/Time"
+     }
+    }
+   },
+   "CardList": {
+    "type": "object",
+    "required": [
+     "cards"
+    ],
+    "additionalProperties": false,
+    "properties": {
+     "cards": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/LinkedCard"
+      }
+     }
+    }
+   },
+   "UserCards": {
+    "type": "object",
+    "required": [
+     "name",
+     "cards"
+    ],
+    "additionalProperties": false,
+    "properties": {
+     "name": {
+      "type": "string"
+     },
+     "cards": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/LinkedCard"
+      }
+     }
+    }
+   },
+   "LinkCardRequest": {
+    "type": "object",
+    "required": [
+     "card",
+     "pin"
+    ],
+    "properties": {
+     "card": {
+      "type": "string"
+     },
+     "pin": {
+      "type": "string",
+      "description": "As any of the card's games keeps it (usually four digits)."
+     }
+    }
+   },
+   "LinkCardResult": {
+    "type": "object",
+    "required": [
+     "card"
+    ],
+    "additionalProperties": false,
+    "properties": {
+     "card": {
+      "type": "string"
+     }
+    }
+   },
+   "ScoreRow": {
+    "description": "One chart's record in a player's stats, in the game's own numbers.",
+    "type": "object",
+    "required": [
+     "song",
+     "chart",
+     "score",
+     "plays",
+     "clear",
+     "clear_name"
+    ],
+    "additionalProperties": false,
+    "properties": {
+     "song": {
+      "type": "integer",
+      "description": "The game's song number."
+     },
+     "chart": {
+      "type": "integer",
+      "description": "The game's chart number."
+     },
+     "score": {
+      "type": [
+       "integer",
+       "null"
+      ],
+      "description": "null: none kept (a failed stage of a System 573 game). A score of 0 is kept here, never among the best scores."
+     },
+     "plays": {
+      "type": [
+       "integer",
+       "null"
+      ],
+      "description": "The chart's count of plays; null: the game keeps none."
+     },
+     "clear": {
+      "type": [
+       "integer",
+       "null"
+      ],
+      "description": "The game's own clear mark; null: none."
+     },
+     "clear_name": {
+      "type": [
+       "string",
+       "null"
+      ],
+      "description": "The mark as a short word (\"Cleared\", \"Failed\", \"Full combo\"...); null: none, or its meaning isn't known."
+     }
+    }
+   },
+   "GameStat": {
+    "description": "One card's player in one game.",
+    "type": "object",
+    "required": [
+     "game",
+     "title",
+     "shows",
+     "plays",
+     "player",
+     "scores"
+    ],
+    "additionalProperties": false,
+    "properties": {
+     "game": {
+      "type": "string"
+     },
+     "title": {
+      "type": "string"
+     },
+     "shows": {
+      "$ref": "#/components/schemas/Shows"
+     },
+     "plays": {
+      "type": [
+       "integer",
+       "null"
+      ],
+      "description": "The player's count of plays; null: not kept."
+     },
+     "card": {
+      "type": "string",
+      "description": "The card's number: to its own account and to admins only."
+     },
+     "player": {
+      "type": "string",
+      "description": "The game's player name, as UTF-8; \"\" when it can't be made text (then `player_hex`)."
+     },
+     "player_hex": {
+      "type": "string",
+      "description": "The name's bytes as the game keeps them, in hex, when `player` is \"\" for that reason."
+     },
+     "scores": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/ScoreRow"
+      }
+     }
+    }
+   },
+   "Stats": {
+    "type": "object",
+    "required": [
+     "name",
+     "stats"
+    ],
+    "additionalProperties": false,
+    "properties": {
+     "name": {
+      "type": "string"
+     },
+     "stats": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/GameStat"
+      }
+     }
+    }
+   },
+   "PlayerList": {
+    "type": "object",
+    "required": [
+     "players"
+    ],
+    "additionalProperties": false,
+    "properties": {
+     "players": {
+      "type": "array",
+      "items": {
+       "type": "object",
+       "required": [
+        "name"
+       ],
+       "additionalProperties": false,
+       "properties": {
+        "name": {
+         "type": "string"
+        }
+       }
+      }
+     }
+    }
+   },
+   "GameList": {
+    "type": "object",
+    "required": [
+     "games"
+    ],
+    "additionalProperties": false,
+    "properties": {
+     "games": {
+      "type": "array",
+      "items": {
+       "type": "object",
+       "required": [
+        "id",
+        "title",
+        "scores",
+        "has_names",
+        "shows"
+       ],
+       "additionalProperties": false,
+       "properties": {
+        "id": {
+         "type": "string"
+        },
+        "title": {
+         "type": "string"
+        },
+        "scores": {
+         "type": "boolean",
+         "description": "The server reads its scores (stats, best scores)."
+        },
+        "has_names": {
+         "type": "boolean"
+        },
+        "shows": {
+         "$ref": "#/components/schemas/Shows"
+        }
+       }
+      }
+     }
+    }
+   },
+   "SongNames": {
+    "type": "object",
+    "required": [
+     "game",
+     "songs",
+     "charts"
+    ],
+    "additionalProperties": false,
+    "properties": {
+     "game": {
+      "type": "string"
+     },
+     "songs": {
+      "description": "By the game's song number, as text.",
+      "type": "object",
+      "additionalProperties": {
+       "type": "object",
+       "required": [
+        "title"
+       ],
+       "additionalProperties": false,
+       "properties": {
+        "title": {
+         "type": "string"
+        },
+        "artist": {
+         "type": "string"
+        },
+        "genre": {
+         "type": "string"
+        }
+       }
+      }
+     },
+     "charts": {
+      "description": "Chart names by chart number, as text.",
+      "type": "object",
+      "additionalProperties": {
+       "type": "string"
+      }
+     }
+    }
+   },
+   "TopScore": {
+    "type": "object",
+    "required": [
+     "rank",
+     "user",
+     "player",
+     "song",
+     "chart",
+     "score",
+     "clear",
+     "clear_name"
+    ],
+    "additionalProperties": false,
+    "properties": {
+     "rank": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "1 for the best; equal scores get the next rank each."
+     },
+     "user": {
+      "type": [
+       "string",
+       "null"
+      ],
+      "description": "The account the card is linked to; null: none."
+     },
+     "player": {
+      "type": "string"
+     },
+     "player_hex": {
+      "type": "string"
+     },
+     "song": {
+      "type": "integer"
+     },
+     "chart": {
+      "type": "integer"
+     },
+     "score": {
+      "type": "integer",
+      "minimum": 1
+     },
+     "clear": {
+      "type": [
+       "integer",
+       "null"
+      ]
+     },
+     "clear_name": {
+      "type": [
+       "string",
+       "null"
+      ]
+     }
+    }
+   },
+   "TopScores": {
+    "type": "object",
+    "required": [
+     "game",
+     "title",
+     "shows",
+     "scores"
+    ],
+    "additionalProperties": false,
+    "properties": {
+     "game": {
+      "type": "string"
+     },
+     "title": {
+      "type": "string"
+     },
+     "shows": {
+      "$ref": "#/components/schemas/Shows"
+     },
+     "scores": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/TopScore"
+      }
+     }
+    }
+   },
+   "Prefecture": {
+    "description": "Japan's prefecture number (JIS X 0401), 1 to 47; 13 is Tokyo. The games show it.",
+    "type": "integer",
+    "minimum": 1,
+    "maximum": 47
+   },
+   "Arcade": {
+    "type": "object",
+    "required": [
+     "id",
+     "name",
+     "prefecture",
+     "owner"
+    ],
+    "additionalProperties": false,
+    "properties": {
+     "id": {
+      "type": "integer"
+     },
+     "name": {
+      "type": "string"
+     },
+     "prefecture": {
+      "$ref": "#/components/schemas/Prefecture"
+     },
+     "owner": {
+      "type": [
+       "string",
+       "null"
+      ],
+      "description": "The operator's name; null: no one's (its owner's account was removed: the admins')."
+     }
+    }
+   },
+   "ArcadeList": {
+    "type": "object",
+    "required": [
+     "arcades"
+    ],
+    "additionalProperties": false,
+    "properties": {
+     "arcades": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/Arcade"
+      }
+     }
+    }
+   },
+   "NewArcade": {
+    "type": "object",
+    "required": [
+     "name",
+     "prefecture"
+    ],
+    "properties": {
+     "name": {
+      "$ref": "#/components/schemas/Label"
+     },
+     "prefecture": {
+      "$ref": "#/components/schemas/Prefecture"
+     },
+     "owner": {
+      "type": "string",
+      "description": "Another operator's name (an admin's only)."
+     }
+    }
+   },
+   "ArcadeChange": {
+    "type": "object",
+    "properties": {
+     "name": {
+      "$ref": "#/components/schemas/Label"
+     },
+     "prefecture": {
+      "$ref": "#/components/schemas/Prefecture"
+     }
+    }
+   },
+   "Machine": {
+    "type": "object",
+    "required": [
+     "pcbid",
+     "arcade",
+     "name",
+     "enabled",
+     "has_key",
+     "last_seen"
+    ],
+    "additionalProperties": false,
+    "properties": {
+     "pcbid": {
+      "$ref": "#/components/schemas/Pcbid"
+     },
+     "arcade": {
+      "type": "integer"
+     },
+     "name": {
+      "type": "string"
+     },
+     "enabled": {
+      "type": "boolean"
+     },
+     "has_key": {
+      "type": "boolean"
+     },
+     "last_seen": {
+      "$ref": "#/components/schemas/TimeOrNull",
+      "description": "Its last call (noted once a minute at most); null: never."
+     }
+    }
+   },
+   "MachineList": {
+    "type": "object",
+    "required": [
+     "machines"
+    ],
+    "additionalProperties": false,
+    "properties": {
+     "machines": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/Machine"
+      }
+     }
+    }
+   },
+   "NewMachineRequest": {
+    "type": "object",
+    "required": [
+     "name"
+    ],
+    "properties": {
+     "name": {
+      "$ref": "#/components/schemas/Label"
+     }
+    }
+   },
+   "NewMachine": {
+    "type": "object",
+    "required": [
+     "pcbid",
+     "arcade",
+     "name",
+     "enabled",
+     "has_key",
+     "key"
+    ],
+    "additionalProperties": false,
+    "properties": {
+     "pcbid": {
+      "$ref": "#/components/schemas/Pcbid"
+     },
+     "arcade": {
+      "type": "integer"
+     },
+     "name": {
+      "type": "string"
+     },
+     "enabled": {
+      "const": true
+     },
+     "has_key": {
+      "const": true
+     },
+     "key": {
+      "type": "string",
+      "description": "`hk2.PCBID.SECRET`, given this once only."
+     }
+    }
+   },
+   "MachineChange": {
+    "type": "object",
+    "properties": {
+     "name": {
+      "$ref": "#/components/schemas/Label"
+     },
+     "enabled": {
+      "type": "boolean"
+     }
+    }
+   },
+   "MachineKey": {
+    "type": "object",
+    "required": [
+     "pcbid",
+     "key"
+    ],
+    "additionalProperties": false,
+    "properties": {
+     "pcbid": {
+      "$ref": "#/components/schemas/Pcbid"
+     },
+     "key": {
+      "type": "string"
+     }
+    }
+   },
+   "Setting": {
+    "description": "One setting, with what a form needs.",
+    "type": "object",
+    "required": [
+     "name",
+     "default",
+     "value"
+    ],
+    "additionalProperties": false,
+    "properties": {
+     "name": {
+      "type": "string"
+     },
+     "default": {
+      "type": "string"
+     },
+     "label": {
+      "type": "string"
+     },
+     "help": {
+      "type": "string"
+     },
+     "kind": {
+      "type": "string",
+      "enum": [
+       "number",
+       "text"
+      ]
+     },
+     "min": {
+      "type": "integer"
+     },
+     "max": {
+      "type": "integer"
+     },
+     "value": {
+      "type": [
+       "string",
+       "null"
+      ],
+      "description": "The arcade's own value (or the server's, where there is no arcade); null: none."
+     },
+     "server_value": {
+      "type": [
+       "string",
+       "null"
+      ],
+      "description": "An arcade's answer only: the server's value; null: none."
+     }
+    }
+   },
+   "GameSettings": {
+    "type": "object",
+    "required": [
+     "id",
+     "title",
+     "settings"
+    ],
+    "additionalProperties": false,
+    "properties": {
+     "id": {
+      "type": "string"
+     },
+     "title": {
+      "type": "string"
+     },
+     "settings": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/Setting"
+      }
+     }
+    }
+   },
+   "ArcadeSettings": {
+    "type": "object",
+    "required": [
+     "arcade",
+     "games"
+    ],
+    "additionalProperties": false,
+    "properties": {
+     "arcade": {
+      "type": "integer"
+     },
+     "games": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/GameSettings"
+      }
+     }
+    }
+   },
+   "ServerSettings": {
+    "type": "object",
+    "required": [
+     "server",
+     "games"
+    ],
+    "additionalProperties": false,
+    "properties": {
+     "server": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/Setting"
+      }
+     },
+     "games": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/GameSettings"
+      }
+     }
+    }
+   },
+   "SettingsChange": {
+    "type": "object",
+    "required": [
+     "settings"
+    ],
+    "properties": {
+     "settings": {
+      "type": "array",
+      "items": {
+       "type": "object",
+       "required": [
+        "game",
+        "name"
+       ],
+       "properties": {
+        "game": {
+         "type": "string",
+         "description": "A game's id, or \"server\" (PUT /settings only)."
+        },
+        "name": {
+         "type": "string"
+        },
+        "value": {
+         "type": [
+          "string",
+          "integer",
+          "null"
+         ],
+         "description": "null or missing: clear it."
+        }
+       }
+      }
+     }
+    }
+   },
+   "UserList": {
+    "type": "object",
+    "required": [
+     "users"
+    ],
+    "additionalProperties": false,
+    "properties": {
+     "users": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/User"
+      }
+     }
+    }
+   },
+   "UserChange": {
+    "type": "object",
+    "properties": {
+     "role": {
+      "$ref": "#/components/schemas/Role"
+     },
+     "disabled": {
+      "type": "boolean"
+     },
+     "hide_stats": {
+      "type": "boolean"
+     }
+    }
+   },
+   "ResetCode": {
+    "type": "object",
+    "required": [
+     "name",
+     "code",
+     "hours"
+    ],
+    "additionalProperties": false,
+    "properties": {
+     "name": {
+      "type": "string"
+     },
+     "code": {
+      "type": "string",
+      "description": "32 hex digits, given this once only."
+     },
+     "hours": {
+      "const": 24
+     }
+    }
+   },
+   "Config": {
+    "type": "object",
+    "required": [
+     "name",
+     "signup",
+     "list_all_games"
+    ],
+    "additionalProperties": false,
+    "properties": {
+     "name": {
+      "type": "string"
+     },
+     "signup": {
+      "type": "string",
+      "enum": [
+       "open",
+       "invite",
+       "closed"
+      ]
+     },
+     "list_all_games": {
+      "type": "boolean",
+      "description": "The games' rows the server marks unlisted are listed too."
+     }
+    }
+   },
+   "ConfigChange": {
+    "type": "object",
+    "properties": {
+     "name": {
+      "$ref": "#/components/schemas/Label"
+     },
+     "signup": {
+      "type": "string",
+      "enum": [
+       "open",
+       "invite",
+       "closed"
+      ]
+     },
+     "list_all_games": {
+      "type": "boolean"
+     }
+    }
+   },
+   "InviteRequest": {
+    "type": "object",
+    "properties": {
+     "uses": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 10000,
+      "default": 1
+     },
+     "days": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 365,
+      "default": 7
+     }
+    }
+   },
+   "Invite": {
+    "type": "object",
+    "required": [
+     "code",
+     "uses",
+     "days"
+    ],
+    "additionalProperties": false,
+    "properties": {
+     "code": {
+      "type": "string",
+      "description": "32 hex digits, given this once only."
+     },
+     "uses": {
+      "type": "integer"
+     },
+     "days": {
+      "type": "integer"
+     }
+    }
+   },
+   "CardInfo": {
+    "type": "object",
+    "required": [
+     "card",
+     "known",
+     "user",
+     "linked",
+     "locked",
+     "wrong_pins",
+     "tries_left",
+     "games"
+    ],
+    "additionalProperties": false,
+    "properties": {
+     "card": {
+      "type": "string",
+      "description": "As the server keeps it when known, else as asked."
+     },
+     "known": {
+      "type": "boolean",
+      "description": "A game has a player on it."
+     },
+     "user": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "linked": {
+      "$ref": "#/components/schemas/TimeOrNull"
+     },
+     "locked": {
+      "type": "boolean"
+     },
+     "wrong_pins": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Wrong PINs since the last link or unlock."
+     },
+     "tries_left": {
+      "type": "integer",
+      "minimum": 0
+     },
+     "games": {
+      "type": "array",
+      "items": {
+       "type": "object",
+       "required": [
+        "id",
+        "title",
+        "player"
+       ],
+       "additionalProperties": false,
+       "properties": {
+        "id": {
+         "type": "string"
+        },
+        "title": {
+         "type": "string"
+        },
+        "player": {
+         "type": "string"
+        },
+        "player_hex": {
+         "type": "string"
+        }
+       }
+      }
+     }
+    }
+   },
+   "PinRequest": {
+    "type": "object",
+    "required": [
+     "pin"
+    ],
+    "properties": {
+     "pin": {
+      "type": "string",
+      "pattern": "^[0-9]{4}$"
+     }
+    }
+   },
+   "PinResult": {
+    "type": "object",
+    "required": [
+     "changed",
+     "not_changed",
+     "complete"
+    ],
+    "additionalProperties": false,
+    "properties": {
+     "changed": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "not_changed": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      }
+     },
+     "complete": {
+      "type": "boolean"
+     }
+    }
+   },
+   "NamePacks": {
+    "type": "object",
+    "required": [
+     "set",
+     "packs",
+     "refused"
+    ],
+    "additionalProperties": false,
+    "properties": {
+     "set": {
+      "type": "boolean"
+     },
+     "packs": {
+      "type": "array",
+      "items": {
+       "type": "object",
+       "required": [
+        "game",
+        "title",
+        "file",
+        "songs",
+        "charts",
+        "time"
+       ],
+       "additionalProperties": false,
+       "properties": {
+        "game": {
+         "type": "string"
+        },
+        "title": {
+         "type": "string"
+        },
+        "file": {
+         "type": "string"
+        },
+        "songs": {
+         "type": "integer"
+        },
+        "charts": {
+         "type": "integer"
+        },
+        "time": {
+         "$ref": "#/components/schemas/Time"
+        }
+       }
+      }
+     },
+     "refused": {
+      "type": "array",
+      "items": {
+       "type": "object",
+       "required": [
+        "file",
+        "why"
+       ],
+       "additionalProperties": false,
+       "properties": {
+        "file": {
+         "type": "string"
+        },
+        "why": {
+         "type": "string"
+        }
+       }
+      }
+     }
+    }
+   },
+   "Audit": {
+    "type": "object",
+    "required": [
+     "audit"
+    ],
+    "additionalProperties": false,
+    "properties": {
+     "audit": {
+      "type": "array",
+      "items": {
+       "type": "object",
+       "required": [
+        "id",
+        "at",
+        "user",
+        "action",
+        "detail"
+       ],
+       "additionalProperties": false,
+       "properties": {
+        "id": {
+         "type": "integer"
+        },
+        "at": {
+         "$ref": "#/components/schemas/Time"
+        },
+        "user": {
+         "type": "string"
+        },
+        "action": {
+         "type": "string",
+         "example": "card.link"
+        },
+        "detail": {
+         "type": "string"
+        }
+       }
+      }
+     }
+    }
+   }
+  }
+ }
+}

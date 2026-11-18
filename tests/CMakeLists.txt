@@ -290,6 +290,11 @@ if(SQLite3_FOUND AND Python3_FOUND AND NOT CMAKE_CROSSCOMPILING)   # (hiraku-ser
   add_test(NAME eamuse_api COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/eamuse/test_api.py
            $<TARGET_FILE:hiraku-server> $<TARGET_FILE:key_client>)
   set_tests_properties(eamuse_api PROPERTIES TIMEOUT 180)
+  # ... and its description (docs/openapi.yaml, docs/SERVER-API.md): the routes, roles, the JSON twin,
+  # every answer of a walk through each operation and of test_api.py against the schemas
+  add_test(NAME eamuse_openapi COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/eamuse/test_openapi.py
+           $<TARGET_FILE:hiraku-server> $<TARGET_FILE:key_client> ${CMAKE_SOURCE_DIR})
+  set_tests_properties(eamuse_openapi PROPERTIES TIMEOUT 300)
   # ... and its web pages (web/) on the API's port: types, security headers, paths refused, the files' text
   add_test(NAME eamuse_web COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/eamuse/test_web.py
            $<TARGET_FILE:hiraku-server> ${CMAKE_SOURCE_DIR}/web)

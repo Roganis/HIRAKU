@@ -29,6 +29,7 @@ if [ "${1:-}" = thread ]; then
   default=$root/out/tsan
 fi
 build=${1:-$default}
+mkdir -p "$build" && build=$(cd "$build" && pwd)   # (the suppressions' files are named by it, from each test's own folder)
 deps=${2:-}
 args=(-G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo "$which" -DHK_GAME_BINARIES=OFF -DHK_TESTS=ON
       -DCMAKE_C_COMPILER="${CC:-clang}" -DCMAKE_CXX_COMPILER="${CXX:-clang++}")
@@ -46,5 +47,24 @@ cmake --build "$build" -j "${HK_JOBS:-$(nproc)}"
 export ASAN_OPTIONS=${ASAN_OPTIONS:-detect_leaks=1} UBSAN_OPTIONS=${UBSAN_OPTIONS:-print_stacktrace=1}
 export LSAN_OPTIONS=${LSAN_OPTIONS:-suppressions=$root/tests/lsan.supp}   # (what a library keeps to the end)
 # (ThreadSanitizer: a report ends the test; a lock's second order is shown with both stacks)
+if [ "$which" = -DHK_SANITIZE_THREAD=ON ] && [ -z "${TSAN_OPTIONS:-}" ]; then
+  # tests/tsan.supp's Qt lines (a whole library each: Qt's frames have no names without its
+  # debug files) only for the tests that paint big enough for Qt's paint threads; the rest
+  # without them
+  paint='^(launcher_theme|launcher_game_cards)$'
+  awk '/^# ==== Only for/ { exit } { print }' "$root/tests/tsan.supp" > "$build/tsan-base.supp"
+  section() {   # the base lines and the section whose marker begins "# ==== Only for $1"
+    cat "$build/tsan-base.supp"
+    awk -v m="# ==== Only for $1" 'index($0, m) == 1 { on = 1; next } /^# ==== Only for/ { on = 0 } on' "$root/tests/tsan.supp"
+  }
+  section "the tests that paint" > "$build/tsan-paint.supp"
+  opts="second_deadlock_stack=1 history_size=4"
+  rc=0
+  TSAN_OPTIONS="suppressions=$build/tsan-base.supp $opts" \
+    ctest --test-dir "$build" --output-on-failure --timeout 600 -E "$paint" || rc=$?
+  TSAN_OPTIONS="suppressions=$build/tsan-paint.supp $opts" \
+    ctest --test-dir "$build" --output-on-failure --timeout 600 -R "$paint" || rc=$?
+  exit $rc
+fi
 export TSAN_OPTIONS=${TSAN_OPTIONS:-suppressions=$root/tests/tsan.supp second_deadlock_stack=1 history_size=4}
 ctest --test-dir "$build" --output-on-failure --timeout 600

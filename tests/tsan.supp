@@ -11,11 +11,21 @@ race:libgallium
 # that uses it here
 deadlock:libdbus
 
-# Qt's raster painter: a big antialiased fill (QPainter on a QImage or QPixmap: the launcher's
-# switches, tests/launcher/test_theme) is split over Qt's own pool of paint threads, whose
-# allocations ThreadSanitizer sees but not the locks Qt hands the work over and back with (each
-# side's last frame inside libQt6Core or libQt6Gui), and whose threads, idle, are joined only
-# after the test has ended
+# ==== Only for the tests that paint (tools/sanitize.sh: $paint); the other tests stop above ====
+# Qt's raster painter: a big fill (QPainter on a QImage or QPixmap: the launcher's switches and
+# game cards, tests/launcher/test_theme and test_gamecards) is split over Qt's own pool of paint
+# threads (qdrawhelper.cpp blend_color_argb and handleSpans, QThreadPool and its QRunnables). The
+# pool hands the work over and back with QMutex and QSemaphore, on Linux bare futexes that
+# ThreadSanitizer can't see: the runnables' new and delete, the pool's list of its threads
+# (QArrayData) and the picture's pixels (memcpy) show as races. Seen with Arch's Qt debug files
+# (2026-11-18): every report's both sides are in QThreadPoolThread::run, QThreadPoolPrivate,
+# QRunnable's QGenericRunnable or qdrawhelper.cpp, and no HIRAKU code runs off the main thread in
+# these two tests. Those names can't be the lines: without debug files (this PC's CachyOS Qt, the
+# runner's Qt Company Qt) those frames have no name, only their library, so the lines name the
+# library; what keeps them narrow is that only those two tests read them.
 race:libQt6Core
 race:libQt6Gui
-thread:libQt6Core
+# The pool, a global, joins its idle threads only after main has returned: a thread leak, and a
+# race on a QWaitCondition's destruction (the latter matched above). QThread::start is exported
+# (named with or without debug files); HIRAKU starts no QThread of its own.
+thread:QThread::start

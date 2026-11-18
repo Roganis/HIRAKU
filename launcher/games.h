@@ -15,6 +15,7 @@ struct Game {
     double titleSeconds = 0;             // title_seconds: the machine's seconds to its title screen (the game menu's picture)
     QString firstBoot;                   // what a new cabinet needs in test mode
     bool installCassette = false;        // System 573: first boots with an install cassette (ddr3mj)
+    bool memoryCards = false;            // System 573: the memory card reader ([board] memory_card_reader)
     double installSeconds = 0;           // fast start-up on a start that installs (game.toml install_seconds)
     bool hidden = false;                 // the AVS2 PC games ([pc] loader = "pc64", "pc32"): listed once unlocked
     QString loader;                      // [pc] loader: "pc64", "pc32", or none

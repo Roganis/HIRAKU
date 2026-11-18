@@ -29,12 +29,14 @@
 #include "sys573/cardunit.h"
 #include "sys573/rental.h"
 #include "sys573/mcal.h"
+#include "sys573/memcard.h"
 #include "sys573/eagfdm.h"
 #include "sys573/npu.h"
 #include "imagedev/cdromimg.h"
 #include "k573cass.h"
 #include "k573dio.h"
 #include "k573mcr.h"
+#include "bus/psx/memcard.h"
 #include "k573msu.h"
 #include "sound/tc9446f.h"
 #include "cpu/psx/sio_uart.h"
@@ -104,6 +106,7 @@ SessionLink g_link;   // the session cable to another cabinet's process (link.h)
 Eamuse g_eamuse;      // the network unit's network and e-AMUSEMENT server (eagfdm.h), with the unit
 CardUnit g_cards;     // the e-AMUSEMENT card units (cardunit.h), with the network unit
 RentalUnit g_rental;  // Mambo a GoGo's e-Amusement rental unit (rental.h)
+MemoryCards g_memcards;   // the memory card reader's cards (memcard.h), when given
 
 // MAME's ioport output field: the write callback runs when its bits change
 // (dynamic_field::write), with the active-low inversion of the field's default.
@@ -551,7 +554,13 @@ void sys573_state::jvs_input_w(offs_t, u16 data, u16) {
             for (int i = 1; i < command_size; i++) fprintf(stderr, " %02x", m_jvs_input_buffer[i]);
             fprintf(stderr, "\n");
         }
+        // HIRAKU, departure from MAME (memcard.h): the reader's first write to a card since it went
+        // in (76 75: buffer address, then the card's port in bit 7) doesn't reach the card
+        const bool card_write = g_memcards.any_given() && command_size >= 12 && m_jvs_input_buffer[3] == 0x76 &&
+                                m_jvs_input_buffer[4] == 0x75;
+        if (card_write) g_memcards.before_reader_write(m_jvs_input_buffer[8] >> 7);
         m_sys573_jvs_host->send_packet(m_jvs_input_buffer + 1, command_size - 2);   // no checksum
+        if (card_write) g_memcards.after_reader_write();
         m_jvs_input_idx_w = 0;
         m_jvs_input_idx_r = 0;
         m_jvs_input_buffer[0] = 0;
@@ -970,6 +979,7 @@ bool init(const Config &cfg) {
             return false;
     }
     g_cards.configure(cfg.card_readers, cfg.nvram_dir);
+    g_memcards.configure(cfg.memcard1, cfg.memcard2);
     hk_psx_sio1_uart = cfg.msu || !cfg.session_join.empty() || !cfg.session_host.empty() || cfg.card_readers > 0 || cfg.rental;
     if (!cfg.session_host.empty() || !cfg.session_join.empty()) {
         const bool host = !cfg.session_host.empty();
@@ -984,6 +994,7 @@ bool init(const Config &cfg) {
     st.cfg = cfg;
     st.m_screen->m_hk_frame = [](screen_device &screen) {
         g.frames++;
+        if (g_memcards.any_given()) g_memcards.tick(g.machine->time().as_double());
         // HK_MSU_TRACE=1: where the multi-session unit's CPU is, every 300 frames
         static const bool msu_trace = getenv("HK_MSU_TRACE") != nullptr;
         if (msu_trace && g.frames % 300 == 0)
@@ -1015,6 +1026,18 @@ bool init(const Config &cfg) {
     };
     m.start();
     g_link.attach(m);
+    if (g_memcards.any_given() && !cfg.memory_card_reader) {
+        fprintf(stderr, "board: --memcard: %s has no memory card reader (MAME's set has none fitted)\n", cfg.game.c_str());
+        g_memcards.configure("", "");
+    }
+    if (g_memcards.any_given()) {   // the cards given go in their slots at power-on
+        auto slot = [&st](const char *tag) -> device_memcard_image_interface * { return st.subdevice<psxcard_device>(tag); };
+        std::string why;
+        if (!g_memcards.attach(slot("k573mcr:port1:card"), slot("k573mcr:port2:card"), why)) {
+            fprintf(stderr, "--memcard: %s\n", why.c_str());
+            return false;
+        }
+    }
     if (g_cards.fitted()) {
         auto *sio1 = st.m_maincpu->subdevice<psxsio1_uart_device>("sio1");
         g_cards.attach(m, [sio1](int b) { sio1->write_rxd(b); });
@@ -1225,12 +1248,14 @@ const u32 *render_between(double t, int &w, int &h) {
 
 void save_nvram() {
     if (g.machine) g.machine->nvram_save();
+    if (g.machine) g_memcards.keep(true, g.machine->time().as_double());
     g_cards.save();
     mips::finish();
 }
 
 void save_nvram_now() {
     if (g.machine) g.machine->nvram_save_now();
+    if (g.machine) g_memcards.keep(false, g.machine->time().as_double());   // (a card the game is writing waits)
 }
 
 double seconds() { return g.machine ? g.machine->m_basetime.as_double() : 0.0; }
@@ -1239,8 +1264,15 @@ const std::string &family() { return g.cfg.family; }
 
 bool card_read(int player, const std::string &number) { return g_cards.fitted() && g_cards.card_read(player, number); }
 
+std::string memcard_toggle(int slot) { return g_memcards.toggle(slot); }
+void set_memcard_said(std::function<void(const std::string &)> said) { g_memcards.said = std::move(said); }
+
 bool set_input(const std::string &name, int value) {
     if (g_cards.set_input(name, value)) return true;   // the card units' slots and 10-keys
+    if (name == "Memory Card 1" || name == "Memory Card 2") {   // the memory card reader's slots: out or in at a press
+        if (value) g_memcards.toggle(name.back() - '1');
+        return true;
+    }
     sys573_state &st = *g.state;
     auto bit = [&](u32 &port, u32 mask) { if (value) port &= ~mask; else port |= mask; return true; };   // active low
     static const std::map<std::string, std::pair<int, u32>> names = {

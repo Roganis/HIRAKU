@@ -171,6 +171,11 @@ public:
     // the core doesn't say. Keys that step a slider start from there (runtime/host/input.cpp).
     virtual int input_position(const std::string &name) const { (void)name; return -1; }
 
+    // A brief line for the player (a System 573 memory card put in or taken out), which the shell
+    // shows for a few seconds where the game has a window (host/notice.h): it asks once a frame, on
+    // the frame hook's thread, until it gets "". Nothing by default
+    virtual std::string take_notice() { return {}; }
+
     // New virtual functions go here, after the others: cores are also built in separate trees (the
     // Python core's), and one built against an older copy of this class keeps the ones it knows in
     // their places rather than a shifted table.

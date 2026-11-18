@@ -102,6 +102,13 @@ songs, modes) for you; **Unlocks** lists each code and where to type it.
 beatmania III can share it). Have it in before pressing Start; **Insert** takes it out and puts it
 in, but not while FD LOADING or FD WRITING shows.
 
+**Memory cards (System 573: DDR 2ndMIX Link Ver. to EXTREME, GuitarFreaks 2ndMIX Link Kit to
+4thMIX):** the cabinet's reader takes PlayStation memory cards, with the home version's link and
+edit data; DDR 5thMIX, DDRMAX and DDRMAX2 keep a player's best scores in its link file. Right-click the game > **Memory cards** gives each of its two slots one (the game's
+own `memcard1.mcr` / `memcard2.mcr`, or a raw 128 KiB card image of yours, which the game reads
+and writes in place); from a terminal, `--memcard1 FILE`, `--memcard2 FILE`. **Insert** and
+**Delete** take card 1 or 2 out and put it in (GuitarFreaks: **Home** and **End**).
+
 **Saves** are in `user/data/<game>/` in a release package (`~/.local/share/hiraku/<game>/` in a
 checkout), written when you quit and, on Firebeat, System 573 and Twinkle, every 15 seconds when
 they changed.

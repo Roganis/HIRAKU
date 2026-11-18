@@ -8,7 +8,9 @@
 #include <ctime>
 #include <fstream>
 #include <map>
+#include <mutex>
 #include <string>
+#include <vector>
 
 #include "eamuse/access.h"
 #include "shell/kvfile.h"
@@ -36,6 +38,8 @@ public:
         if (name == "--boot-cd") { boot_cd_ = true; return true; }
         if (name == "--rental") { rental_ = 1; return true; }
         if (name == "--master-calendar") { master_calendar_ = std::stoi(value()); return true; }
+        if (name == "--memcard1" || name == "--memcard") { memcard_[0] = value(); return true; }
+        if (name == "--memcard2") { memcard_[1] = value(); return true; }
         if (name == "--eamuse") { eamuse_ = value(); return true; }
         if (name == "--eakey") { eakey_ = value(); return true; }   // (as the other cores: shell/eaoptions.h)
         if (name == "--p" || name == "--pcbid") {   // (-p, as the other cores take it: shell/eaoptions.h)
@@ -79,7 +83,12 @@ public:
                "  --rental          fit the e-Amusement rental unit on SIO1 (Mambo a GoGo's rental version,\n"
                "                    mamboagga; MAME has none: ERROR 198). Only its presence: no rental billing\n"
                "  --master-calendar AREA  fit Konami's Master Calendar (a factory JVS device) with its area switch\n"
-               "                    (0 JA, 1 UA, 2 EA, 4 AA, 5 KA, 7 JR...): the boot program's factory set-up\n";
+               "                    (0 JA, 1 UA, 2 EA, 4 AA, 5 KA, 7 JR...): the boot program's factory set-up\n"
+               "  --memcard1 FILE   the memory card reader (DDR 2ndMIX Link Ver. to EXTREME, GuitarFreaks 2ndMIX\n"
+               "  --memcard2 FILE   Link Kit to 4thMIX): a PlayStation memory card in slot 1 or 2, a raw 128 KiB\n"
+               "                    image (.mcr) the game reads and writes in place (a file that isn't there is\n"
+               "                    made, a formatted card). \"default\": memcard1.mcr / memcard2.mcr in the\n"
+               "                    game's save folder. The Memory Card 1 / 2 controls take a card out and put it in\n";
     }
 
     bool init(const Options &o) override {
@@ -163,6 +172,18 @@ public:
         // the e-Amusement rental unit (rental.h), opt-in: MAME has none
         cfg.rental = rental_ == 1;
         cfg.master_calendar = master_calendar_;
+        for (int k = 0; k < 2; k++) {   // the memory cards (memcard.h)
+            std::string &f = memcard_[k];
+            if (f == "default") {   // the game's own card, beside its saved memories
+                if (o.nvram_dir.empty()) {
+                    fprintf(stderr, "--memcard%d default: the card is kept in the game's save folder, and this run has none (--nvram DIR, or a file)\n", k + 1);
+                    return false;
+                }
+                f = o.nvram_dir + "/memcard" + std::to_string(k + 1) + ".mcr";
+            }
+        }
+        cfg.memcard1 = memcard_[0];
+        cfg.memcard2 = memcard_[1];
         cfg.rtc_time = rtc_ >= 0 ? rtc_ : (int64_t)time(nullptr);
         if (mame_mix_) cfg.mix_gain = 1.0f;
         cfg.fine_sound = fine_sound_;
@@ -178,6 +199,10 @@ public:
             cfg.cassette_slot = cassette_slot_;
         }
         if (!k573::init(cfg)) return false;
+        k573::set_memcard_said([this](const std::string &words) {   // (on screen: take_notice)
+            std::lock_guard<std::mutex> l(notices_m_);
+            notices_.push_back(words);
+        });
         printf("hiraku %s: System 573, MAME's PS1 interpreted\n", o.game.c_str());
         return true;
     }
@@ -215,6 +240,13 @@ public:
     const std::vector<uint8_t> &lamp_state() const override { return k573::lamp_state(); }
     uint64_t lamp_changes() const override { return k573::lamp_changes(); }
 
+    std::string take_notice() override {
+        std::lock_guard<std::mutex> l(notices_m_);
+        if (notices_.empty()) return {};
+        std::string w = std::move(notices_.front());
+        notices_.erase(notices_.begin());
+        return w;
+    }
 private:
     std::function<void()> on_fatal_;
     long long rtc_ = -1;
@@ -231,6 +263,9 @@ private:
     bool boot_cd_ = false;
     int rental_ = 0;             // --rental
     int master_calendar_ = -1;   // --master-calendar AREA
+    std::string memcard_[2];     // --memcard1, --memcard2
+    std::mutex notices_m_;       // a memory card's toggle's words, for the window (take_notice)
+    std::vector<std::string> notices_;
 };
 
 }  // namespace

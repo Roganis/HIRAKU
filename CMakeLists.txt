@@ -819,7 +819,7 @@ target_compile_options(hiraku_mame573 PRIVATE -w ${HK_573_OPT_LIST})
 target_link_libraries(hiraku_mame573 PUBLIC hk_softfloat3)
 
 add_library(hiraku_sys573 STATIC runtime/sys573/board.cpp runtime/sys573/core.cpp runtime/sys573/mips.cpp runtime/sys573/mipsjit.cpp runtime/sys573/idle.cpp runtime/sys573/npu.cpp runtime/sys573/link.cpp
-  runtime/sys573/cardunit.cpp runtime/sys573/rental.cpp runtime/sys573/mcal.cpp)
+  runtime/sys573/cardunit.cpp runtime/sys573/rental.cpp runtime/sys573/mcal.cpp runtime/sys573/memcard.cpp)
 target_include_directories(hiraku_sys573 PUBLIC runtime)
 target_link_libraries(hiraku_sys573 PUBLIC hiraku_mame573 hiraku_cabinet hiraku_eamuse hiraku_jit)
 hk_stencils(r3000 hiraku_sys573)

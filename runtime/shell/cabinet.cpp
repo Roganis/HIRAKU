@@ -114,6 +114,13 @@ std::vector<Control> make_kbm() {
     return c;
 }
 
+// The System 573's memory card reader (runtime/sys573/memcard.h): a press takes slot N's
+// PlayStation memory card out, or puts it in (only when the game was given one: --memcard1/2)
+void add_memory_cards(std::vector<Control> &c, const char *key1, const char *key2) {
+    c.push_back({"Memory Card 1", "Memory card 1 (take out / put in)", "Cabinet", false, key1});
+    c.push_back({"Memory Card 2", "Memory card 2 (take out / put in)", "Cabinet", false, key2});
+}
+
 // Dance Dance Revolution (System 573, MAME ksys573.cpp "ddr"): four panels per player on the
 // GN845-PWB(B) stage, and the base panel's Start and buttons. A dance pad usually sends its
 // arrows as buttons 0-3.
@@ -132,6 +139,7 @@ std::vector<Control> make_ddr() {
     c.push_back({"Coin 1", "Coin", "Cabinet", false, "key:5, joy0:button8"});
     c.push_back({"Test", "Test", "Cabinet", false, "key:F2"});
     c.push_back({"Service", "Service", "Cabinet", false, "key:9"});
+    add_memory_cards(c, "key:Insert", "key:Delete");
     return c;
 }
 
@@ -150,6 +158,7 @@ std::vector<Control> make_ddrsolo() {
     c.push_back({"Coin 1", "Coin", "Cabinet", false, "key:5, joy0:button8"});
     c.push_back({"Test", "Test", "Cabinet", false, "key:F2"});
     c.push_back({"Service", "Service", "Cabinet", false, "key:9"});
+    add_memory_cards(c, "key:Insert", "key:Delete");
     return c;
 }
 
@@ -271,6 +280,7 @@ std::vector<Control> make_gtrf() {
     c.push_back({"Service", "Service", "Cabinet", false, "key:9"});
     add_card_unit(c, "", "Insert");   // one card unit per guitar
     add_card_unit(c, "P2 ", "Delete");
+    add_memory_cards(c, "key:Home", "key:End");   // (Insert and Delete: the card units')
     return c;
 }
 

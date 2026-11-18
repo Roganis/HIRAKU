@@ -1420,6 +1420,10 @@ QStringList MainWindow::arguments(const Game &g) const {
     else if (!cfg::nvramBase().isEmpty()) a << "--nvram" << cfg::nvramDir(g.id);
     // beatmania III's floppy disk (Game menu): the game's own in its save folder, or a chosen image
     if (QString f = s.value("floppy/" + g.id).toString(); g.family == "bm3" && !f.isEmpty()) a << "--floppy" << f;
+    // the System 573's memory card reader (Game menu): a PlayStation memory card in each slot
+    for (const char *slot : {"1", "2"})
+        if (QString f = s.value(QString("memcard%1/").arg(slot) + g.id).toString(); g.memoryCards && !f.isEmpty())
+            a << QString("--memcard%1").arg(slot) << f;
     if (installCassette(g)) a << "--cassette" << "install";
     if (installCd(g)) a << "--cd" << "install";
     // the network unit (Game menu): its data installed from its CD, or fitted, with the e-AMUSEMENT
@@ -1867,6 +1871,50 @@ void MainWindow::fillGameMenu(QMenu *menu, const Game &g) {
         floppy->addSeparator();
         floppy->addAction("In the game, Insert takes the disk out and puts it in (Controls)")->setEnabled(false);
     }
+    if (g.memoryCards) {   // the System 573's memory card reader (runtime/sys573/memcard.h): a player's PlayStation card
+        auto *cards = menu->addMenu(theme::icon(mdi::floppy), "Memory cards");
+        cards->setToolTipsVisible(true);
+        for (int slot = 1; slot <= 2; slot++) {
+            const QString key = QString("memcard%1/").arg(slot) + id, name = QString("memcard%1.mcr").arg(slot);
+            cards->addSection(QString("Slot %1").arg(slot));
+            auto *group = new QActionGroup(cards);
+            const QString now = cfg::settings().value(key).toString();
+            auto choice = [&](const QString &label, bool checked, const QString &tip, std::function<void()> chosen) {
+                auto *a = cards->addAction(label, this, std::move(chosen));
+                a->setCheckable(true);
+                a->setChecked(checked);
+                a->setToolTip(tip);
+                group->addAction(a);
+            };
+            choice("No card", now.isEmpty(), "The slot stays empty, as on a cabinet nobody brought a card to", [this, key] {
+                cfg::settings().remove(key);
+                gameChanged();
+            });
+            choice("The game's own card", now == "default",
+                   "A card kept in the game's save folder (" + name + "), made formatted and empty the first time",
+                   [this, key] {
+                       cfg::settings().setValue(key, "default");
+                       gameChanged();
+                   });
+            const bool file = !now.isEmpty() && now != "default";
+            choice(file ? "A card image: " + QFileInfo(now).fileName() + "…" : "A card image…", file,
+                   "A raw PlayStation memory card image of your own (128 KiB, .mcr), which the game reads and writes "
+                   "in place: the one a PlayStation emulator plays the home version with (made formatted if the file "
+                   "isn't there)",
+                   [this, key, now, file] {
+                       const QString f = QFileDialog::getSaveFileName(this, "A PlayStation memory card image (made if it isn't there)",
+                                                                      file ? now : QDir::homePath() + "/memory card.mcr",
+                                                                      "Memory card images (*.mcr *.mcd *.mc *.srm);;All files (*)",
+                                                                      nullptr, QFileDialog::DontConfirmOverwrite);
+                       if (!f.isEmpty()) cfg::settings().setValue(key, f);
+                       gameChanged();
+                   });
+        }
+        cards->addSeparator();
+        cards->addAction(g.family == "gtrf" ? "In the game, Home and End take card 1 or 2 out and put it in (Controls)"
+                                            : "In the game, Insert and Delete take card 1 or 2 out and put it in (Controls)")
+            ->setEnabled(false);
+    }
     if (g.installCassette) {
         auto *inst = menu->addAction("Boot once with the install cassette", this, [this, id](bool on) {
             if (on) cfg::settings().setValue("cassette/" + id, "install");
@@ -1947,6 +1995,9 @@ void MainWindow::fillGameMenu(QMenu *menu, const Game &g) {
                                            "\n\nThe next start is a first boot, as on a new cabinet." +
                                            (QFileInfo::exists(nv + "/floppy.img")
                                                 ? "\n\nThe game's own floppy disk (floppy.img, a player's name and scores) is in that folder and goes with it."
+                                                : "") +
+                                           (QFileInfo::exists(nv + "/memcard1.mcr") || QFileInfo::exists(nv + "/memcard2.mcr")
+                                                ? "\n\nThe game's own memory cards (memcard1.mcr, memcard2.mcr) are in that folder and go with it."
                                                 : ""));
         if (r != QMessageBox::Yes) return;
         if (!QFile::moveToTrash(nv)) QMessageBox::warning(this, title, "Could not move " + nv + " to the trash.");

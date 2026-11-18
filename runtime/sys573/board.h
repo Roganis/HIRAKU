@@ -53,6 +53,7 @@ struct Config {
     bool rental = false;                   // the e-Amusement rental unit on SIO1 (rental.h; mamboagga)
     bool boot_cd = false;                  // DIP 4 "Start Up Device": the CD-ROM drive (MAME's default: the flash)
     bool memory_card_reader = false;       // the JVS memory card reader (ddr3m)
+    std::string memcard1, memcard2;        // ... its slots' PlayStation memory cards, image files (memcard.h; "" = none)
     // The output's gain. MAME sums the SPU and the CD audio at 1.0 each and clips the sum at full
     // scale: DDR's mix peaks at 2.0 and crackles. The board mixes them in analog; 0.5 keeps MAME's
     // balance with no clipping. 1.0 (--mame-mix) is MAME's output, for comparing with its WAV.
@@ -91,6 +92,10 @@ uint64_t frame_count();
 const std::string &family();
 bool set_input(const std::string &name, int value);
 bool card_read(int player, const std::string &number);   // a real card reader's card (cardunit.h)
+// The memory card reader's slot (0, 1) as the "Memory Card N" control works it: the card out or in.
+// What happened, in a few words ("" without a card given for it); `said` hears each (a notice)
+std::string memcard_toggle(int slot);
+void set_memcard_said(std::function<void(const std::string &)> said);
 const std::vector<uint8_t> &lamp_state();
 uint64_t lamp_changes();
 std::string sound_report();                // the mix's peak and how much of it clips ("" without sound)

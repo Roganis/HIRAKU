@@ -767,6 +767,11 @@ int main(int argc, char **argv) {
         if (between_at_frame) between_draw(w, h);
         if (prof::g_sample_frame) prof::g_sample_frame(f);   // HK_PROFILE_FRAMES
         if (lights_log) lights_log(f);
+#ifdef HK_WITH_SDL
+        if (window_scale)   // the core's brief lines for the player (a memory card in or out), a few seconds each
+            for (std::string said = machine.take_notice(); !said.empty(); said = machine.take_notice())
+                host::notice::hint({said}, 3, host::ui::Icon::disk);
+#endif
         host::readers_frame([&](int p, const std::string &n) { return machine.card_read(p, n); },
                             [&](const std::string &name, int v) {
                                 host::menukey::input(name, v);   // (a 10-key's 5, 7 and 3, whatever the game has)

@@ -43,6 +43,9 @@ void readManifest(const QString &path, Game &g) {
         if (auto n = seconds.match(line); n.hasMatch() && section.isEmpty()) g.titleSeconds = n.captured(1).toDouble();
         static const QRegularExpression install(R"(^\s*install_seconds\s*=\s*([0-9.]+))");   // (fast start-up)
         if (auto n = install.match(line); n.hasMatch() && section.isEmpty()) g.installSeconds = n.captured(1).toDouble();
+        // (a yes, not a text in quotes: the System 573's memory card reader, for its Game menu)
+        static const QRegularExpression cards(R"(^\s*memory_card_reader\s*=\s*true\b)");
+        if (section == "board" && cards.match(line).hasMatch()) g.memoryCards = true;
         auto m = kv.match(line);
         if (!m.hasMatch()) continue;
         QString k = m.captured(1), v = m.captured(2);

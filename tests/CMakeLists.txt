@@ -543,6 +543,12 @@ add_executable(test_psx_spans sys573/test_psx_spans.cpp)
 target_include_directories(test_psx_spans PRIVATE ${CMAKE_SOURCE_DIR}/runtime)
 add_test(NAME psx_spans COMMAND test_psx_spans)
 
+# The System 573's memory card reader and its PlayStation memory cards (runtime/sys573/memcard.h):
+# the card's protocol bit by bit, the reader's JVS commands and the cards' files. No game needed
+add_executable(test_memcard sys573/test_memcard.cpp)
+target_link_libraries(test_memcard PRIVATE hiraku_sys573 hiraku_sys573_blocks hiraku_sys)
+add_test(NAME sys573_memory_cards COMMAND test_memcard ${CMAKE_CURRENT_BINARY_DIR}/memcard-test)
+
 # A waiting loop's turn judged from its bus cycles (runtime/dev/loop_turns.h) ...
 add_executable(test_loop_turns dev/test_loop_turns.cpp)
 target_include_directories(test_loop_turns PRIVATE ${CMAKE_SOURCE_DIR}/runtime)

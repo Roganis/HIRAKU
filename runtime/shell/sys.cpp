@@ -966,6 +966,34 @@ FileLock::FileLock(const std::string &path) {
 #endif
 }
 
+FileLock::FileLock(const std::string &path, Lock *result) {
+    *result = Lock::None;
+    if (path.empty()) return;
+#ifdef _WIN32
+    HANDLE h = CreateFileA(path.c_str(), GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_ALWAYS,
+                           FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (h == INVALID_HANDLE_VALUE) return;
+    OVERLAPPED at{};
+    if (!LockFileEx(h, LOCKFILE_EXCLUSIVE_LOCK | LOCKFILE_FAIL_IMMEDIATELY, 0, 1, 0, &at)) {
+        if (GetLastError() == ERROR_LOCK_VIOLATION) *result = Lock::Held;
+        CloseHandle(h);
+        return;
+    }
+    h_ = (intptr_t)h;
+#else
+    const int fd = open(path.c_str(), O_RDWR | O_CREAT | O_CLOEXEC, 0666);
+    if (fd < 0) return;
+    while (flock(fd, LOCK_EX | LOCK_NB) != 0) {
+        if (errno == EINTR) continue;
+        if (errno == EWOULDBLOCK) *result = Lock::Held;
+        close(fd);
+        return;
+    }
+    h_ = fd;
+#endif
+    *result = Lock::Taken;
+}
+
 FileLock::~FileLock() {
     if (h_ == -1) return;
 #ifdef _WIN32

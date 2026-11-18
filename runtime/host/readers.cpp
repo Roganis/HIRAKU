@@ -5,6 +5,7 @@
 #include "readers.h"
 
 #include "acio.h"
+#include "../shell/cardmedia.h"
 #include "../shell/sys.h"
 
 #ifndef _WIN32
@@ -531,8 +532,9 @@ void readers_frame(const std::function<bool(int, const std::string &)> &card,
         keys[1] = g_keys[1];
     }
     for (auto &[player, number] : cards)
-        if (card(player, number)) printf("card: %s held to player %d's reader\n", number.c_str(), player + 1);
-        else printf("card: %s held to player %d's reader, but this game has no card reader there\n", number.c_str(), player + 1);
+        // (its last four digits only: a card's number is the player's own, and a log goes round)
+        if (card(player, number)) printf("card: %s held to player %d's reader\n", cardmedia::shown(number).c_str(), player + 1);
+        else printf("card: %s held to player %d's reader, but this game has no card reader there\n", cardmedia::shown(number).c_str(), player + 1);
     for (int p = 0; p < 2; p++) {
         const uint16_t changed = keys[p] ^ g_applied[p];
         const std::string prefix = p ? "P2 " : "";

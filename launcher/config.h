@@ -33,6 +33,9 @@ QString modPath(const QString &game, const QString &mod);   // the player's, els
 QStringList modsOn(const QString &game);
 void setModsOn(const QString &game, const QStringList &mods);
 QString saveDir(const QString &game);
+// The e-AMUSEMENT cards' own floppy disks and memory cards (--card-media, runtime/shell/cardmedia.h):
+// a folder a card, <saves>/card-media/NUMBER, or with Settings' save folder <it>/<game>/cards/NUMBER
+QString cardMediaDir(const QString &game);
 // The last runs' logs (the launcher's log pane, a file a run: <yyyyMMdd-HHmmss>-<game>.log), beside
 // the saves: <data>/logs. The launcher keeps the newest kRunLogs.
 QString logsDir();

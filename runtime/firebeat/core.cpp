@@ -25,7 +25,9 @@
 #include "ppc/spec.h"
 #include "../core/runtime.h"
 #include "../core/sched.h"
+#include "../shell/cardmedia.h"
 #include "../shell/core.h"
+#include "../shell/eaoptions.h"
 #include "../shell/userdir.h"
 #include "../spu/spu.h"
 #include "board.h"
@@ -93,6 +95,12 @@ public:
         else if (a == "--synth-stand-in") synth_stand_in_ = true;
         else if (a == "--floppy") floppy_ = val();
         else if (a == "--mame-fdc") mame_fdc_ = true;
+        else if (a == "--card-media") card_media_ = true;
+        else if (a == "--card0" || a == "--card1") {   // (-card0: the test cards, shell/eaoptions.h)
+            std::string error;
+            ea_.option(a, val, &error);
+            if (!error.empty()) { fprintf(stderr, "%s\n", error.c_str()); exit(2); }
+        }
         else return false;
         return true;
     }
@@ -112,6 +120,10 @@ public:
                "                    in the game's save folder. The Floppy control (Insert) takes the disk out and puts it in\n"
                "  --mame-fdc        ... with the floppy controller's FIFO as MAME has it (the oracle's answers), not as the\n"
                "                    chip's data sheet: the games' reads then fail and are tried again about every second time\n"
+               "  --card-media      beatmania III: an e-AMUSEMENT card touched to a card reader puts that card's own\n"
+               "                    floppy disk in the drive (touched again: takes it out); the disks are kept in\n"
+               "                    card-media/NUMBER/floppy.img beside the game's save folder. Without a reader the\n"
+               "                    Floppy control presents -card0's card (card0.txt)\n"
                "  --synth-stand-in  Keyboardmania: play the MIDI through FluidSynth even when the XT446 ROMs are there\n"
                "  --soundfont FILE  ... with this SoundFont (implies --synth-stand-in)\n";
     }
@@ -178,6 +190,7 @@ public:
         }
         cfg.floppy = floppy_;
         cfg.mame_fdc = mame_fdc_;
+        if (card_media_ && !card_media_start(o, cfg.family)) return false;
 #ifdef HK_WITH_SDL
         fb::set_floppy_said([](const std::string &said) { hk::host::notice::hint({said}, 4, hk::host::ui::Icon::disk); });
 #endif
@@ -227,7 +240,12 @@ public:
     }
 
     const std::string &family() const override { return fb::family(); }
-    void set_frame_hook(FrameHook h) override { fb::set_frame_hook(std::move(h)); }
+    void set_frame_hook(FrameHook h) override {
+        fb::set_frame_hook([this, h = std::move(h)](uint64_t f, const uint32_t *rgb, int w, int hh) {
+            if (changer_) changer_->frame();   // (a card's disk waiting for the game to finish writing)
+            h(f, rgb, w, hh);
+        });
+    }
     bool set_present_hook(PresentHook h) override { fb::set_present_hook(std::move(h)); return true; }
     void frame_picture_unused() override { fb::frame_picture_unused(); }
     // Before init(): init routes it to the SPU or the board, before the BIOS time runs.
@@ -288,7 +306,26 @@ public:
     }
     uint64_t frame_count() const override { return fb::frame_count(); }
 
-    bool set_input(const std::string &name, int value) override { return fb::set_input(name, value); }
+    bool set_input(const std::string &name, int value) override {
+        if (changer_ && name == "Floppy") {   // --card-media without a reader: the test card presented
+            if (!value) return true;
+            if (ea_.card[0].empty()) say("Floppy disk: no card to present (-card0 NUMBER or card0.txt)");
+            else changer_->touch(0, ea_.card[0]);
+            return true;
+        }
+        return fb::set_input(name, value);
+    }
+    bool card_read(int player, const std::string &number) override {
+        if (!changer_) return false;
+        changer_->touch(player, number);
+        return true;
+    }
+    std::string take_notice() override {
+        if (notices_.empty()) return {};
+        std::string w = std::move(notices_.front());
+        notices_.erase(notices_.begin());
+        return w;
+    }
     void turntable_add(int player, int delta) override { fb::turntable_add(player, delta); }
     // Keyboardmania's XT446, rendered on a worker, adds its part at the frame's end (board.cpp
     // audio_release()); otherwise the sound comes every 2 ms of machine time
@@ -393,6 +430,42 @@ private:
     uint32_t load_ = HK_LOAD, entry_ = HK_ENTRY;   // the executor build's, from game.toml
     size_t program_bytes_ = 0;   // the program image's size (code_changed)
     bool synth_stand_in_ = false, mame_fdc_ = false;
+
+    // --card-media (shell/cardmedia.h): the disk in the drive is the last card's
+    bool card_media_start(const Options &o, const std::string &family) {
+        if (family != "bm3") {
+            fprintf(stderr, "--card-media: only beatmania III has a floppy drive (ignored)\n");
+            return true;
+        }
+        const std::string dir = cardmedia::folder(o.root, o.game, o.nvram_dir);
+        if (dir.empty()) {
+            fprintf(stderr, "--card-media: the cards' disks are kept beside the game's save folder, and this run has none (--nvram DIR)\n");
+            return false;
+        }
+        std::string error;
+        ea_.read_card_files(o.nvram_dir, &error);
+        if (!error.empty()) { fprintf(stderr, "%s\n", error.c_str()); return false; }
+        store_ = std::make_unique<cardmedia::FolderStore>(dir);
+        cardmedia::Changer::Medium m;
+        m.what = "Floppy disk", m.file = "floppy.img", m.slots = 1;
+        m.busy = [](int) { return fb::floppy_busy(); };
+        m.use = [](int, const std::string &number, const std::string &file, std::string &why) {
+            return fb::floppy_use(file, number.empty() ? "" : "card " + cardmedia::shown(number) + "'s disk", why);
+        };
+        m.say = [this](const std::string &s) { say(s); };
+        changer_ = std::make_unique<cardmedia::Changer>(*store_, std::move(m));
+        printf("card media: a card touched to a reader puts its own floppy disk in the drive\n");
+        return true;
+    }
+    void say(const std::string &s) {
+        printf("card media: %s\n", s.c_str());
+        notices_.push_back(s);
+    }
+    bool card_media_ = false;
+    EaOptions ea_;   // -card0 / -card1: the cards the Floppy control presents without a reader
+    std::unique_ptr<cardmedia::FolderStore> store_;
+    std::unique_ptr<cardmedia::Changer> changer_;
+    std::vector<std::string> notices_;
     double bios_seconds_ = 21.65;
     AudioSink sink_;
     hk_ctx ctx_{};

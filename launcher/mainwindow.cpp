@@ -121,6 +121,67 @@ QString exitReason(int code, QProcess::ExitStatus st) {
     return QString("it exited with code %1").arg(code);
 }
 
+// --card-media (runtime/shell/cardmedia.h), in the game's Floppy disk / Memory cards menu: each
+// e-AMUSEMENT card its own disk or memory card; and a card's image put to a card (a player's card
+// of the home version: a blank one is no use to DDR). A card's folder is made when it is first touched.
+void addCardMedia(QWidget *parent, QMenu *menu, const QString &id, const QString &what, const QString &file, qint64 bytes,
+                  const QString &filter, bool running, const std::function<void()> &changed) {
+    menu->addSection("e-AMUSEMENT cards");
+    auto *on = menu->addAction("Each e-AMUSEMENT card its own " + what);
+    on->setCheckable(true);
+    on->setChecked(cfg::settings().value("cardMedia/" + id).toBool());
+    on->setToolTip("A card touched to the card reader puts that card's own " + what + " in (touched again: takes it out; "
+                   "another card swaps it), made blank the first time. Without a reader, the keys present Settings' "
+                   "e-AMUSEMENT card numbers");
+    QObject::connect(on, &QAction::toggled, parent, [id, changed](bool v) {
+        if (v) cfg::settings().setValue("cardMedia/" + id, true);
+        else cfg::settings().remove("cardMedia/" + id);
+        changed();
+    });
+    const QString dir = cfg::cardMediaDir(id);
+    auto *cards = menu->addMenu("A card's " + what);
+    cards->setToolTipsVisible(true);
+    static const QRegularExpression number("^[0-9A-F]{16}$");
+    int listed = 0;
+    for (const QFileInfo &f : QDir(dir).entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Time)) {
+        const QString n = f.fileName();
+        if (!number.match(n).hasMatch()) continue;
+        const QString card = QString::fromUtf8("card \u2026") + n.right(4);   // (its last four digits only)
+        const QString target = f.filePath() + "/" + file;
+        auto *a = cards->addAction("Put an image to " + card + "…", parent, [=] {
+            if (running) {
+                QMessageBox::information(parent, "HIRAKU", "Close the game first: a card's " + what + " is the game's while it runs.");
+                return;
+            }
+            const QString from = QFileDialog::getOpenFileName(parent, "An image for " + card + "'s " + what, QDir::homePath(), filter);
+            if (from.isEmpty()) return;
+            if (QFileInfo(from).size() != bytes) {
+                QMessageBox::warning(parent, "HIRAKU", QFileInfo(from).fileName() + " is not a " + what + "'s image (" +
+                                                           QLocale().toString(bytes) + " bytes).");
+                return;
+            }
+            // (the card's one before it kept beside, by the time it was put aside)
+            if (QFileInfo::exists(target))
+                QFile::rename(target, target + ".before-" + QDateTime::currentDateTime().toString("yyyyMMdd-HHmmss"));
+            if (!QFile::copy(from, target)) {
+                QMessageBox::warning(parent, "HIRAKU", "Couldn't write " + target + ".");
+                return;
+            }
+            QFile(target).setPermissions(QFile(target).permissions() | QFileDevice::WriteOwner);
+            QMessageBox::information(parent, "HIRAKU", QFileInfo(from).fileName() + " is " + card + "'s " + what +
+                                                           " now: the next touch of that card puts it in.");
+        });
+        a->setToolTip(QString("Last used %1").arg(QLocale().toString(f.lastModified(), QLocale::ShortFormat)));
+        listed++;
+    }
+    if (!listed) cards->addAction("No card has been touched yet: touch yours in the game once")->setEnabled(false);
+    cards->addSeparator();
+    cards->addAction("Open the cards' folder", parent, [dir] {
+        QDir().mkpath(dir);
+        QDesktopServices::openUrl(QUrl::fromLocalFile(dir));
+    });
+}
+
 bool lightsFileUsed(const QString &path) {
     QFile f(path);
     if (!f.open(QIODevice::ReadOnly)) return false;
@@ -1436,6 +1497,13 @@ QStringList MainWindow::arguments(const Game &g) const {
     for (const char *slot : {"1", "2"})
         if (QString f = s.value(QString("memcard%1/").arg(slot) + g.id).toString(); g.memoryCards && !f.isEmpty())
             a << QString("--memcard%1").arg(slot) << f;
+    // each e-AMUSEMENT card its own disk or memory cards (Game menu; runtime/shell/cardmedia.h): without
+    // a card reader the Floppy / Memory Card keys present Settings' e-AMUSEMENT card numbers
+    if (s.value("cardMedia/" + g.id).toBool() && (g.family == "bm3" || g.memoryCards)) {
+        a << "--card-media";
+        for (int n = 0; n < 2; n++)
+            if (QString c = s.value(QString("eamuse/card%1").arg(n)).toString(); !c.isEmpty()) a << QString("-card%1").arg(n) << c;
+    }
     if (installCassette(g)) a << "--cassette" << "install";
     if (installCd(g)) a << "--cd" << "install";
     // the network unit (Game menu): its data installed from its CD, or fitted, with the e-AMUSEMENT
@@ -1882,6 +1950,8 @@ void MainWindow::fillGameMenu(QMenu *menu, const Game &g) {
                });
         floppy->addSeparator();
         floppy->addAction("In the game, Insert takes the disk out and puts it in (Controls)")->setEnabled(false);
+        addCardMedia(this, floppy, id, "floppy disk", "floppy.img", 1474560, "Disk images (*.img *.ima *.flp *.dsk);;All files (*)",
+                     !m_running.isEmpty(), [this] { gameChanged(); });
     }
     if (g.memoryCards) {   // the System 573's memory card reader (runtime/sys573/memcard.h): a player's PlayStation card
         auto *cards = menu->addMenu(theme::icon(mdi::floppy), "Memory cards");
@@ -1926,6 +1996,8 @@ void MainWindow::fillGameMenu(QMenu *menu, const Game &g) {
         cards->addAction(g.family == "gtrf" ? "In the game, Home and End take card 1 or 2 out and put it in (Controls)"
                                             : "In the game, Insert and Delete take card 1 or 2 out and put it in (Controls)")
             ->setEnabled(false);
+        addCardMedia(this, cards, id, "memory card", "memcard.mcr", 131072,
+                     "Memory card images (*.mcr *.mcd *.mc *.srm);;All files (*)", !m_running.isEmpty(), [this] { gameChanged(); });
     }
     if (g.installCassette) {
         auto *inst = menu->addAction("Boot once with the install cassette", this, [this, id](bool on) {

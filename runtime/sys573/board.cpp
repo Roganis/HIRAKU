@@ -980,6 +980,7 @@ bool init(const Config &cfg) {
     }
     g_cards.configure(cfg.card_readers, cfg.nvram_dir);
     g_memcards.configure(cfg.memcard1, cfg.memcard2);
+    g_memcards.by_card = cfg.card_media && cfg.memory_card_reader;
     hk_psx_sio1_uart = cfg.msu || !cfg.session_join.empty() || !cfg.session_host.empty() || cfg.card_readers > 0 || cfg.rental;
     if (!cfg.session_host.empty() || !cfg.session_join.empty()) {
         const bool host = !cfg.session_host.empty();
@@ -1266,6 +1267,10 @@ bool card_read(int player, const std::string &number) { return g_cards.fitted() 
 
 std::string memcard_toggle(int slot) { return g_memcards.toggle(slot); }
 void set_memcard_said(std::function<void(const std::string &)> said) { g_memcards.said = std::move(said); }
+bool memcard_use(int slot, const std::string &file, const std::string &label, std::string &why) {
+    return g_memcards.use(slot, file, label, why);
+}
+bool memcard_busy(int slot) { return g.machine && g_memcards.busy(slot, g.machine->time().as_double()); }
 
 bool set_input(const std::string &name, int value) {
     if (g_cards.set_input(name, value)) return true;   // the card units' slots and 10-keys

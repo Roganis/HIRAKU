@@ -137,6 +137,11 @@ QString saveDir(const QString &game) {
     return QFileInfo(nvramDir(game)).path() + "/" + name;
 }
 
+QString cardMediaDir(const QString &game) {
+    // (as the game finds it: beside the saves when its save folder is in its default place)
+    return nvramBase().isEmpty() ? QFileInfo(nvramDir(game)).path() + "/card-media" : saveDir(game) + "/cards";
+}
+
 QString controlsFile(const QString &family) { return controlsSetFile(controlsSet(family)); }
 QString controlsSetFile(const QString &set) { return configDir() + "/controls/" + set + ".txt"; }
 

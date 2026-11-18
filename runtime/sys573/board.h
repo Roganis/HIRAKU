@@ -54,6 +54,7 @@ struct Config {
     bool boot_cd = false;                  // DIP 4 "Start Up Device": the CD-ROM drive (MAME's default: the flash)
     bool memory_card_reader = false;       // the JVS memory card reader (ddr3m)
     std::string memcard1, memcard2;        // ... its slots' PlayStation memory cards, image files (memcard.h; "" = none)
+    bool card_media = false;               // ... its cards changed by IC cards (--card-media: memcard_use)
     // The output's gain. MAME sums the SPU and the CD audio at 1.0 each and clips the sum at full
     // scale: DDR's mix peaks at 2.0 and crackles. The board mixes them in analog; 0.5 keeps MAME's
     // balance with no clipping. 1.0 (--mame-mix) is MAME's output, for comparing with its WAV.
@@ -96,6 +97,10 @@ bool card_read(int player, const std::string &number);   // a real card reader's
 // What happened, in a few words ("" without a card given for it); `said` hears each (a notice)
 std::string memcard_toggle(int slot);
 void set_memcard_said(std::function<void(const std::string &)> said);
+// --card-media (shell/cardmedia.h): another card in the slot (0, 1), the one in it written back now
+// and taken out ("" = the slot left empty; label names it in messages). false (and why): not a card
+bool memcard_use(int slot, const std::string &file, const std::string &label, std::string &why);
+bool memcard_busy(int slot);   // the game wrote that slot's card in the last second
 const std::vector<uint8_t> &lamp_state();
 uint64_t lamp_changes();
 std::string sound_report();                // the mix's peak and how much of it clips ("" without sound)

@@ -54,6 +54,12 @@ uint64_t last_input_change();
 // "Floppy" input does when pressed. What happened, in a few words; "" without the drive or a file.
 std::string floppy_toggle();
 bool floppy_in();
+// The drive's disk while the game may be writing it (the motor on): a change waits (--card-media)
+bool floppy_busy();
+// Another disk in the drive (--card-media, shell/cardmedia.h): the one in it written back now and
+// taken out, then `file`'s put in ("" = the drive left empty); label names it in messages in place
+// of its file. false (and why): file isn't a disk's image
+bool floppy_use(const std::string &file, const std::string &label, std::string &why);
 // ... and told to `f` each time (the window's notice)
 void set_floppy_said(std::function<void(const std::string &)> f);
 void shutdown();                       // flush NVRAM and traces

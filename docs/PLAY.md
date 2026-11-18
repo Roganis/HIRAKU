@@ -110,6 +110,15 @@ own `memcard1.mcr` / `memcard2.mcr`, or a raw 128 KiB card image of yours, which
 and writes in place); from a terminal, `--memcard1 FILE`, `--memcard2 FILE`. **Insert** and
 **Delete** take card 1 or 2 out and put it in (GuitarFreaks: **Home** and **End**).
 
+**An e-AMUSEMENT card as the disk or memory card:** with a card reader and no floppies or memory
+cards, tick **Each e-AMUSEMENT card its own floppy disk** (or **memory card**) in that menu. A
+card touched to the reader then puts its own disk or memory card in (touched again: out; another
+card: swapped), kept for that card in `card-media/` beside the saves, for every game. A new card
+gets a blank one: fine for beatmania III, but DDR only uses a card with the home version's link
+file on it: put that image to the card with **A card's memory card** in the same menu (after the
+card has been touched once). Without a reader, **Insert** / **Delete** present the card numbers of
+Settings' e-AMUSEMENT page.
+
 **Saves** are in `user/data/<game>/` in a release package (`~/.local/share/hiraku/<game>/` in a
 checkout), written when you quit and, on Firebeat, System 573 and Twinkle, every 15 seconds when
 they changed.
@@ -180,7 +189,8 @@ shared ones; untick it to share again. Lamps on controller LEDs: [LIGHTS.md](LIG
 ### Card readers
 
 A real e-AMUSEMENT card reader can stand in for the cabinet's, with its 10-key: in pop'n music
-9–14, GuitarFreaks and DrumMania with their card units, and the PC games. Set it in **Settings >
+9–14, GuitarFreaks and DrumMania with their card units, and the PC games; in beatmania III and
+the memory card games a card is the player's disk or memory card (above). Set it in **Settings >
 e-AMUSEMENT > Card readers**; the first reader of a kind is player 1's, the second player 2's.
 
 - **Konami readers** (ICCA, ICCB, ICCC) on a USB-serial adapter: pick its `/dev/serial/by-id/...`

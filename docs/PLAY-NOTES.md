@@ -176,6 +176,9 @@ disk image of yours; from a terminal, `--floppy FILE` (`--floppy default`: the s
 - `--mame-fdc`: the floppy controller's FIFO as MAME has it, for comparing with MAME. The
   games' reads then fail and are tried again now and then, as they do in MAME (after ten tries a
   game says DISK ERROR); by default it is as the chip's data sheet has it, and they don't.
+- **An e-AMUSEMENT card as the disk** (`--card-media`; **Each e-AMUSEMENT card its own floppy
+  disk** in the Floppy disk menu): see "A card's own disk or memory card" under the System 573's
+  memory cards.
 
 **Codes, typed for you:** the button codes players typed on the cabinet (hidden songs, modes),
 for the games that have a `games/<id>/macros.txt`.
@@ -963,6 +966,38 @@ A dance pad is bound in the launcher's Controls (Dance Dance Revolution page): c
 - The test mode's MEMORY CARD OPTIONS > MEMORY CARD CHECK shows each slot (ENABLE with a card in), and its FILE LIST DISPLAY the card's files. In a credit, DDR EXTREME says it links with the card and, at the end, to take it out.
 - **What a game keeps on the card:** the home version's link file holds a table of scores, a few per song (one field for each arcade game that links with it), and the arcade game writes its own back at the end of a credit, once the card is in: the home 5thMIX's `link5to4` by DDR 5thMIX, its `link6to5` by DDRMAX and DDRMAX2 (and read by EXTREME). A game writes when one of its scores on the card is beaten (a song with no score of that game's yet counts): DDRMAX2 with a lower score writes nothing. The music select then shows the card's scores beside the songs.
 - The reader is MAME's (`k573mcr`): high level, with the cards as MAME's PlayStation cards. One departure: the reader's first write after a card goes in (the game's block of `ff`s to frame 63, sent when it first sees a card) never reaches the card, as on the real reader. MAME drops it only after power-on, so there a card taken out and put back had frame 63 overwritten.
+
+**A card's own disk or memory card** (`--card-media`, beatmania III and the memory card games; the
+tick box **Each e-AMUSEMENT card its own …** in the game's Floppy disk / Memory cards menu): for a
+cabinet with an e-AMUSEMENT card reader and no box of floppies or memory cards.
+- A card touched to the reader puts that card's own disk or memory card in. Touched again (after
+  the reader's 3 seconds of "still held"), it comes out; another card swaps it. Memory cards: reader
+  1 fills slot 1, reader 2 slot 2; with one reader a second card goes to slot 2 while slot 1 holds
+  another. The floppy takes either reader.
+- Each card has a folder, `card-media/NUMBER/` beside the saves (`~/.local/share/hiraku/card-media/`,
+  `user/data/card-media/` in a release package), shared by every game: `floppy.img` and
+  `memcard.mcr`. With Settings' own save folder, `<it>/<game>/cards/NUMBER/`; from a terminal with
+  `--nvram DIR`, `DIR/cards/NUMBER/`. A card new here gets a blank one (a formatted disk or card).
+- While the game writes (the floppy's motor on, or a memory card written in the last second) a
+  change waits and says so; it happens when the writing is over. What the game wrote goes back to
+  the card's file as before, and when the medium comes out or the game ends.
+- While a card's medium is in, its folder is locked (`lock.txt`): a second cabinet on the same
+  folder is told "the card is in use at another cabinet".
+- The screen and the log name a card by its last four digits only. There is no PIN: whoever has
+  the card has its disk.
+- Before any card is touched, the game's own `--floppy` / `--memcard` (if given) stays in.
+- Without a reader, **Insert** (floppy) and **Insert** / **Delete** (memory cards 1 / 2; GuitarFreaks
+  **Home** / **End**) present the test cards: `-card0` / `-card1`, or `card0.txt` / `card1.txt`, or Settings' e-AMUSEMENT card numbers
+  from the launcher.
+- **A blank card is no use to DDR** (checked 2026-11-18 with HIRAKU, a credit each, a blank card in
+  slot 1): DDR 5thMIX (three stages and the name entry), DDRMAX and DDRMAX2 (to "link ended, take
+  out the memory card") wrote nothing on it. They only write their scores into the link file the
+  home version made. GuitarFreaks 4thMIX (one credit) wrote nothing either. beatmania III is the
+  other way round: a blank formatted disk is all it needs. So a DDR player brings the image of
+  their own home-version card (an emulator's 128 KiB `.mcr`): touch the card in the game once, then
+  **A card's memory card > Put an image to card …1234** in the Memory cards menu (the card's old
+  file is kept beside it, `memcard.mcr.before-DATE`), or copy it as `memcard.mcr` into the card's
+  folder (**Open the cards' folder**) while the game isn't running.
 
 **Checked against MAME, clock for clock** (`oracle/scripts/ddr2m-boot.his`, `ddr2m-play.his`): the first boot and flash install, attract mode, and a game. That game is coins, mode and song select, and a song stepped through to CLEARED. Main RAM is identical on every frame, every snapshot is pixel-identical, and the sound matches MAME's recording (with `--mame-mix`). Both are regress cases.
 

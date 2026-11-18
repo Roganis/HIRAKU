@@ -777,6 +777,9 @@ uint64_t g_floppy_kept = 0;          // the disk's disk_writes() as its file has
 bool g_floppy_known = false;         // ... (false: nothing is known of the file)
 unsigned g_floppy_failed = 0;        // the writer's failed sets when last looked at
 std::function<void(const std::string &)> g_floppy_said;
+std::string g_floppy_label;          // the disk's name in messages ("": its file's): a card's (floppy_use)
+
+const std::string &floppy_name() { return g_floppy_label.empty() ? g_cfg.floppy : g_floppy_label; }
 
 std::pair<std::string, std::string> floppy_place() {   // the file's folder and its name there
     const std::string &f = g_cfg.floppy;
@@ -797,9 +800,9 @@ bool floppy_insert(bool at_power_on, std::string &why) {
         is_new = true;
         sys::make_dirs(floppy_place().first);
         on_file = sys::write_file(g_cfg.floppy, image.data(), image.size());
-        if (!on_file) fprintf(stderr, "floppy: cannot write %s: what the game saves on this disk may not be kept\n", g_cfg.floppy.c_str());
+        if (!on_file) fprintf(stderr, "floppy: cannot write %s: what the game saves on this disk may not be kept\n", floppy_name().c_str());
     } else if (!read_file(g_cfg.floppy, image) || image.size() != Fdc37c665::kDiskBytes) {
-        why = g_cfg.floppy + " is not a 1.44 MB disk's image (" + std::to_string(Fdc37c665::kDiskBytes) + " bytes of sectors)";
+        why = floppy_name() + " is not a 1.44 MB disk's image (" + std::to_string(Fdc37c665::kDiskBytes) + " bytes of sectors)";
         return false;
     } else {
         std::error_code ec;
@@ -810,7 +813,7 @@ bool floppy_insert(bool at_power_on, std::string &why) {
     g_floppy_kept = g_fdc->disk_writes(), g_floppy_known = on_file;
     // (the file's name on stderr: stdout's lines are a run's statistics, the same wherever its files are)
     printf("floppy: %s%s in the drive\n", is_new ? "a new blank disk" : "the disk", read_only ? ", write-protected," : "");
-    fprintf(stderr, "floppy: %s\n", g_cfg.floppy.c_str());
+    fprintf(stderr, "floppy: %s\n", floppy_name().c_str());
     return true;
 }
 
@@ -831,7 +834,7 @@ void floppy_keep(bool now_) {
     }
     if (!saves::write_set(dir, set)) {
         g_floppy_known = false;
-        fprintf(stderr, "floppy: cannot write %s: the disk as it was before is kept\n", g_cfg.floppy.c_str());
+        fprintf(stderr, "floppy: cannot write %s: the disk as it was before is kept\n", floppy_name().c_str());
     }
 }
 
@@ -1064,6 +1067,21 @@ std::string floppy_toggle() {
     return said;
 }
 bool floppy_in() { return g_fdc && g_fdc->has_disk(); }
+bool floppy_busy() { return g_fdc && g_fdc->has_disk() && g_fdc->motor_on(); }
+
+bool floppy_use(const std::string &file, const std::string &label, std::string &why) {
+    if (!g_fdc || g_cfg.family != "bm3") return why = "only beatmania III has a floppy drive", false;
+    if (g_fdc->has_disk()) {
+        floppy_keep(true);   // (now: the file may be another cabinet's as soon as this one lets go of it)
+        g_fdc->eject();
+    }
+    g_cfg.floppy = file;
+    g_floppy_label = label;
+    if (file.empty()) return true;
+    if (floppy_insert(false, why)) return true;
+    g_cfg.floppy.clear(), g_floppy_label.clear();
+    return false;
+}
 void set_floppy_said(std::function<void(const std::string &)> f) { g_floppy_said = std::move(f); }
 
 void note_input_change() { g_last_input = now(); }

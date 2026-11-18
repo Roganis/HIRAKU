@@ -395,6 +395,12 @@ add_executable(test_file_lock sys/test_file_lock.cpp)
 target_include_directories(test_file_lock PRIVATE ${CMAKE_SOURCE_DIR}/runtime)
 target_link_libraries(test_file_lock PRIVATE hiraku_sys)
 add_test(NAME folder_file_lock COMMAND test_file_lock)
+# An IC card as a player's floppy disk or memory card (runtime/shell/cardmedia.h, --card-media): its
+# folder, lock and blank disk; in, out and swap; a change waiting while the game writes; the slots
+add_executable(test_card_media sys/test_card_media.cpp)
+target_include_directories(test_card_media PRIVATE ${CMAKE_SOURCE_DIR}/runtime)
+target_link_libraries(test_card_media PRIVATE hiraku_rt hiraku_sys)
+add_test(NAME card_media COMMAND test_card_media)
 # Paths with letters outside ASCII through the plain-char file functions, arguments and environment
 # (on Windows: what cmake/windows/utf8.manifest is for)
 add_executable(test_utf8_paths sys/test_utf8_paths.cpp)

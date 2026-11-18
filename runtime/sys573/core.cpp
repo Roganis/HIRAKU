@@ -8,11 +8,13 @@
 #include <ctime>
 #include <fstream>
 #include <map>
+#include <memory>
 #include <mutex>
 #include <string>
 #include <vector>
 
 #include "eamuse/access.h"
+#include "shell/cardmedia.h"
 #include "shell/kvfile.h"
 #include "shell/core.h"
 #include "shell/eaoptions.h"
@@ -40,6 +42,13 @@ public:
         if (name == "--master-calendar") { master_calendar_ = std::stoi(value()); return true; }
         if (name == "--memcard1" || name == "--memcard") { memcard_[0] = value(); return true; }
         if (name == "--memcard2") { memcard_[1] = value(); return true; }
+        if (name == "--card-media") { card_media_ = true; return true; }
+        if (name == "--card0" || name == "--card1") {   // (-card0: the test cards, shell/eaoptions.h)
+            std::string error;
+            ea_.option(name, value, &error);
+            if (!error.empty()) { fprintf(stderr, "%s\n", error.c_str()); exit(2); }
+            return true;
+        }
         if (name == "--eamuse") { eamuse_ = value(); return true; }
         if (name == "--eakey") { eakey_ = value(); return true; }   // (as the other cores: shell/eaoptions.h)
         if (name == "--p" || name == "--pcbid") {   // (-p, as the other cores take it: shell/eaoptions.h)
@@ -88,7 +97,11 @@ public:
                "  --memcard2 FILE   Link Kit to 4thMIX): a PlayStation memory card in slot 1 or 2, a raw 128 KiB\n"
                "                    image (.mcr) the game reads and writes in place (a file that isn't there is\n"
                "                    made, a formatted card). \"default\": memcard1.mcr / memcard2.mcr in the\n"
-               "                    game's save folder. The Memory Card 1 / 2 controls take a card out and put it in\n";
+               "                    game's save folder. The Memory Card 1 / 2 controls take a card out and put it in\n"
+               "  --card-media      ... an e-AMUSEMENT card touched to a card reader puts that card's own memory card\n"
+               "                    in a slot (reader 1: slot 1, reader 2: slot 2; one reader: a second card to slot 2;\n"
+               "                    touched again: taken out), kept in card-media/NUMBER/memcard.mcr beside the save\n"
+               "                    folder. Without a reader the Memory Card 1 / 2 controls present -card0 / -card1\n";
     }
 
     bool init(const Options &o) override {
@@ -184,6 +197,15 @@ public:
         }
         cfg.memcard1 = memcard_[0];
         cfg.memcard2 = memcard_[1];
+        if (card_media_) {
+            if (!cfg.memory_card_reader || npu_) {   // (no game has both: the card units are the network unit's)
+                fprintf(stderr, "--card-media: %s has no memory card reader (ignored)\n", o.game.c_str());
+                card_media_ = false;
+            } else if (!card_media_start(o)) {
+                return false;
+            }
+            cfg.card_media = card_media_;
+        }
         cfg.rtc_time = rtc_ >= 0 ? rtc_ : (int64_t)time(nullptr);
         if (mame_mix_) cfg.mix_gain = 1.0f;
         cfg.fine_sound = fine_sound_;
@@ -208,7 +230,12 @@ public:
     }
 
     const std::string &family() const override { return k573::family(); }
-    void set_frame_hook(FrameHook h) override { k573::set_frame_hook(std::move(h)); }
+    void set_frame_hook(FrameHook h) override {
+        k573::set_frame_hook([this, h = std::move(h)](uint64_t f, const uint32_t *rgb, int w, int hh) {
+            if (changer_) changer_->frame();   // (a card's change waiting for the game to finish writing)
+            h(f, rgb, w, hh);
+        });
+    }
     bool set_present_hook(PresentHook h) override { k573::set_present_hook(std::move(h)); return true; }
     void set_audio_sink(AudioSink s) override { k573::set_audio_sink(std::move(s)); }
     void set_on_fatal(std::function<void()> f) override { on_fatal_ = std::move(f); }
@@ -233,8 +260,23 @@ public:
     const uint32_t *render_between(double t, int &w, int &h) override { return k573::render_between(t, w, h); }
     const uint8_t *mem(uint32_t addr, uint32_t len) const override { return k573::mem(addr, len); }
     uint64_t frame_count() const override { return k573::frame_count(); }
-    bool set_input(const std::string &name, int value) override { return k573::set_input(name, value); }
-    bool card_read(int player, const std::string &number) override { return k573::card_read(player, number); }
+    bool set_input(const std::string &name, int value) override {
+        if (changer_ && (name == "Memory Card 1" || name == "Memory Card 2")) {   // --card-media without a reader: a test card
+            const int k = name.back() - '1';
+            if (!value) return true;
+            if (ea_.card[k].empty()) say("Memory card " + std::to_string(k + 1) + ": no card to present (-card" + std::to_string(k) + " NUMBER or card" + std::to_string(k) + ".txt)");
+            else changer_->touch(k, ea_.card[k]);
+            return true;
+        }
+        return k573::set_input(name, value);
+    }
+    bool card_read(int player, const std::string &number) override {
+        if (changer_) {
+            changer_->touch(player, number);
+            return true;
+        }
+        return k573::card_read(player, number);
+    }
     int script_button_delay() const override { return 1; }   // MAME latches digital inputs a frame late
     void turntable_add(int, int) override {}
     const std::vector<uint8_t> &lamp_state() const override { return k573::lamp_state(); }
@@ -264,6 +306,38 @@ private:
     int rental_ = 0;             // --rental
     int master_calendar_ = -1;   // --master-calendar AREA
     std::string memcard_[2];     // --memcard1, --memcard2
+
+    // --card-media (shell/cardmedia.h): the memory cards in the slots are the last cards'
+    bool card_media_start(const Options &o) {
+        const std::string dir = cardmedia::folder(o.root, o.game, o.nvram_dir);
+        if (dir.empty()) {
+            fprintf(stderr, "--card-media: the cards' memory cards are kept beside the game's save folder, and this run has none (--nvram DIR)\n");
+            return false;
+        }
+        std::string error;
+        ea_.read_card_files(o.nvram_dir, &error);
+        if (!error.empty()) { fprintf(stderr, "%s\n", error.c_str()); return false; }
+        store_ = std::make_unique<cardmedia::FolderStore>(dir);
+        cardmedia::Changer::Medium m;
+        m.what = "Memory card", m.file = "memcard.mcr", m.slots = 2;
+        m.busy = [](int slot) { return k573::memcard_busy(slot); };
+        m.use = [](int slot, const std::string &number, const std::string &file, std::string &why) {
+            return k573::memcard_use(slot, file, number.empty() ? "" : "card " + cardmedia::shown(number) + "'s memory card", why);
+        };
+        m.say = [this](const std::string &s) { say(s); };
+        changer_ = std::make_unique<cardmedia::Changer>(*store_, std::move(m));
+        printf("card media: a card touched to a reader puts its own memory card in a slot\n");
+        return true;
+    }
+    void say(const std::string &s) {
+        printf("card media: %s\n", s.c_str());
+        std::lock_guard<std::mutex> l(notices_m_);
+        notices_.push_back(s);
+    }
+    bool card_media_ = false;
+    EaOptions ea_;   // -card0 / -card1: the cards the Memory Card keys present without a reader
+    std::unique_ptr<cardmedia::FolderStore> store_;
+    std::unique_ptr<cardmedia::Changer> changer_;
     std::mutex notices_m_;       // a memory card's toggle's words, for the window (take_notice)
     std::vector<std::string> notices_;
 };

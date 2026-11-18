@@ -24,6 +24,9 @@ std::pair<std::string, std::string> place(const std::string &f) {   // the file'
     return slash == std::string::npos ? std::make_pair(std::string("."), f) : std::make_pair(f.substr(0, slash), f.substr(slash + 1));
 }
 
+template <class S>
+const std::string &name_of(const S &s) { return s.label.empty() ? s.file : s.label; }
+
 bool read_whole(const std::string &path, std::vector<uint8_t> &out) {
     std::ifstream in(path, std::ios::binary);
     if (!in) return false;
@@ -95,16 +98,16 @@ bool MemoryCards::insert(int k, bool at_power_on, std::string &why) {
         sys::make_dirs(place(s.file).first);
         if (!sys::write_file(s.file, image.data(), image.size())) {
             s.read_only = true;
-            fprintf(stderr, "memory card %d: cannot write %s: what the game saves on this card is kept for this run only\n", k + 1, s.file.c_str());
+            fprintf(stderr, "memory card %d: cannot write %s: what the game saves on this card is kept for this run only\n", k + 1, name_of(s).c_str());
         }
     } else if (!read_whole(s.file, image) || image.size() != kMemoryCardBytes) {
-        why = s.file + " is not a PlayStation memory card's raw image (" + std::to_string(kMemoryCardBytes) + " bytes)";
+        why = name_of(s) + " is not a PlayStation memory card's raw image (" + std::to_string(kMemoryCardBytes) + " bytes)";
         return false;
     } else {
         std::error_code ec;
         const auto perms = std::filesystem::status(s.file, ec).permissions();
         s.read_only = !ec && (perms & std::filesystem::perms::owner_write) == std::filesystem::perms::none;
-        if (s.read_only) fprintf(stderr, "memory card %d: %s can't be written: what the game saves on this card is kept for this run only\n", k + 1, s.file.c_str());
+        if (s.read_only) fprintf(stderr, "memory card %d: %s can't be written: what the game saves on this card is kept for this run only\n", k + 1, name_of(s).c_str());
     }
     s.bytes = std::move(image);
     s.dev->hk_insert(&s.bytes);
@@ -114,7 +117,7 @@ bool MemoryCards::insert(int k, bool at_power_on, std::string &why) {
     s.failed = saves::writer().failed();
     // (the file's name on stderr: stdout's lines are a run's statistics, the same wherever its files are)
     printf("memory card %d: %s in the slot%s\n", k + 1, is_new ? "a new formatted card" : "the card", at_power_on ? " at power-on" : "");
-    fprintf(stderr, "memory card %d: %s\n", k + 1, s.file.c_str());
+    fprintf(stderr, "memory card %d: %s\n", k + 1, name_of(s).c_str());
     return true;
 }
 
@@ -139,7 +142,7 @@ void MemoryCards::keep_slot(Slot &s, bool now) {
     }
     if (!saves::write_set(dir, set)) {
         s.known = false;
-        fprintf(stderr, "memory card: cannot write %s: the card as it was before is kept\n", s.file.c_str());
+        fprintf(stderr, "memory card: cannot write %s: the card as it was before is kept\n", name_of(s).c_str());
     }
 }
 
@@ -170,6 +173,27 @@ std::string MemoryCards::toggle(int k) {
     printf("memory card %d: %s\n", k + 1, words.c_str());
     if (said) said(words);
     return words;
+}
+
+bool MemoryCards::use(int k, const std::string &file, const std::string &label, std::string &why) {
+    if (k < 0 || k > 1 || !slots_[k].dev) return why = "this game has no memory card reader", false;
+    Slot &s = slots_[k];
+    if (s.inserted) {
+        keep_slot(s, true);   // (now: the file may be another cabinet's as soon as this one lets go of it)
+        s.dev->hk_insert(nullptr);
+        s.inserted = false;
+    }
+    s.file = file, s.label = label;
+    if (file.empty()) return true;
+    if (insert(k, false, why)) return true;
+    s.file.clear(), s.label.clear();
+    return false;
+}
+
+bool MemoryCards::busy(int k, double seconds) const {
+    if (k < 0 || k > 1 || !slots_[k].inserted) return false;
+    const Slot &s = slots_[k];
+    return s.dev->hk_writes() != s.seen || seconds - s.changed_at < 1.0;
 }
 
 void MemoryCards::before_reader_write(int slot) {

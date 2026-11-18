@@ -80,6 +80,9 @@ Lock lock_file(const std::string &path);
 class FileLock {
 public:
     explicit FileLock(const std::string &path);
+    // ... without waiting: *result says Taken (held now), Held (someone else holds it: not held here)
+    // or None (the file can't be made, or this file system has no locks: not held)
+    FileLock(const std::string &path, Lock *result);
     ~FileLock();
     FileLock(const FileLock &) = delete;
     FileLock &operator=(const FileLock &) = delete;

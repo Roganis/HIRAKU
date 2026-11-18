@@ -50,7 +50,9 @@ public:
     // files[k]: slot k+1's card image ("" = no card in that slot)
     void configure(const std::string &slot1, const std::string &slot2);
     bool given(int slot) const { return slot >= 0 && slot < 2 && !slots_[slot].file.empty(); }
-    bool any_given() const { return given(0) || given(1); }
+    // (by_card: --card-media's cards come and go, shell/cardmedia.h: the reader is ready for them)
+    bool any_given() const { return given(0) || given(1) || by_card; }
+    bool by_card = false;
 
     // The reader's two card devices, once the machine is built; each given card goes in. false
     // (and why): a file isn't a card's image
@@ -63,6 +65,12 @@ public:
     // The "Memory Card N" control: takes the card out of slot N (0, 1) or puts it in. What happened,
     // in a few words; "" when that slot was given no card
     std::string toggle(int slot);
+    // Another card in slot N (--card-media): the one in it written back now and taken out, then
+    // `file`'s put in ("" = the slot left empty); label names it in messages in place of its file.
+    // false (and why): file isn't a card's image
+    bool use(int slot, const std::string &file, const std::string &label, std::string &why);
+    // The game wrote slot N's card in the last second (machine seconds now): a change waits
+    bool busy(int slot, double seconds) const;
     bool in(int slot) const;
     // The game's write command to slot N's card is about to run (board.cpp, the JVS packet): the
     // first since that card went in goes nowhere. after_reader_write() when it has run
@@ -73,6 +81,7 @@ public:
 private:
     struct Slot {
         std::string file;
+        std::string label;          // its name in messages ("": the file's)
         std::vector<uint8_t> bytes;
         device_memcard_image_interface *dev = nullptr;
         bool inserted = false;

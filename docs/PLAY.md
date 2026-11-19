@@ -224,6 +224,15 @@ SUBSYSTEM=="usb", ATTRS{idVendor}=="04b4", ATTRS{idProduct}=="8613", TAG+="uacce
 Then `sudo udevadm control --reload` and plug the board in again. Not yet checked on a board. An
 UltimatePopnController also works as a plain controller. More in [POPN-IO.md](POPN-IO.md).
 
+### Cabinet I/O: a System 573 cabinet
+
+A Dance Dance Revolution, GuitarFreaks, DrumMania, Dance Maniax or Mambo a GoGo cabinet with a
+[USB_2_573](https://github.com/Roganis/USB_2_573) board in its System 573's place: plug the board
+in and start a System 573 game. The cabinet's switches, its lights, coin counters and a DDR
+cabinet's stages are the game's, with nothing to bind (**Settings > Cabinet I/O > System 573
+cabinet board**, "When it is plugged in" by default). On Linux a udev rule lets you open the board.
+Not yet checked on a board or a cabinet. More in [USB573.md](USB573.md).
+
 Details: [PLAY-NOTES.md](PLAY-NOTES.md#controllers), [readers](PLAY-NOTES.md#card-readers),
 [BIO2](PLAY-NOTES.md#cabinet-io-beatmania-iidxs-bio2),
 [pop'n board](PLAY-NOTES.md#cabinet-io-popn-musics-usb-io-board)

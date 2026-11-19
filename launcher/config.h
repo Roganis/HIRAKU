@@ -71,6 +71,7 @@ QStringList families();                    // every family, in familySeries() or
 // game ignores the inputs it doesn't have (beatmania: IIDX's keys 6 and 7, III's foot pedal;
 // pop'n music: DJ Main's reset switch, Python's 10-key)
 bool isBeatmania(const QString &family);             // djbm, iidx, bm3
+bool isSystem573(const QString &family);             // ddr, ddrsolo, dmx, mambo, drmn, gtrf
 bool beatmaniaApart();                              // the three have a controls set each (else one, "beatmania")
 void setBeatmaniaApart(bool apart);                 // ... a new one started from the shared file
 QString controlsSet(const QString &family);          // djbm, iidx, bm3 -> beatmania; djpopn, pypopn -> popn

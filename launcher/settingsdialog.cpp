@@ -959,6 +959,17 @@ void SettingsDialog::cabinetPage(QVBoxLayout *v) {
                             "from its ezusb.dll (pop'n music 15 or later), and HIRAKU does the same from this file.");
 #endif
     fc->addRow("  its ezusb.dll:", withBrowse(m_popnioDll, false, this, "Choose an ezusb.dll", "ezusb.dll (ezusb*.dll);;All files (*)"));
+    m_usb573 = new QComboBox;
+    m_usb573->addItem("When it is plugged in", "present");
+    m_usb573->addItem("Always (waits for it while the game runs)", "auto");
+    m_usb573->addItem("Never", "off");
+    m_usb573->setCurrentIndex(std::max(0, m_usb573->findData(s.value("cabinet/usb573", "present").toString())));
+    m_usb573->setToolTip("--usb573: a System 573 cabinet (Dance Dance Revolution, GuitarFreaks, DrumMania, Dance Maniax, "
+                         "Mambo a GoGo) on a USB_2_573 board, which stands where the cabinet's System 573 stood: the "
+                         "cabinet's switches reach the game as its JAMMA harness has them, and the game drives the cabinet's "
+                         "lights, its coin counters and a DDR cabinet's stages. Nothing to bind. The game's log says how it "
+                         "goes, in its lines starting usb573 (docs/USB573.md).");
+    fc->addRow("System 573 cabinet board:", m_usb573);
     v->addWidget(cab);
     v->addWidget(lights);
 }
@@ -1142,6 +1153,7 @@ void SettingsDialog::accept() {
     s.setValue("cabinet/bio2", m_bio2->currentText().trimmed());
     s.setValue("cabinet/popnio", m_popnio->currentText().trimmed());
     s.setValue("cabinet/popnioDll", m_popnioDll->text().trimmed());
+    s.setValue("cabinet/usb573", m_usb573->currentData().toString());
     s.sync();
     QDialog::accept();
 }

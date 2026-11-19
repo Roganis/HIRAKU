@@ -279,6 +279,10 @@ public:
     }
     int script_button_delay() const override { return 1; }   // MAME latches digital inputs a frame late
     void turntable_add(int, int) override {}
+    // a real cabinet on the board's connectors (a USB_2_573 board: host/usb573.h)
+    bool wired_attach(bool on) override { k573::wired_attach(on); return true; }
+    void wired_inputs(uint32_t switches, const uint8_t *analog) override { k573::wired_inputs(switches, analog); }
+    void wired_outputs(std::vector<wired573::Output> &changes) override { k573::wired_outputs(changes); }
     const std::vector<uint8_t> &lamp_state() const override { return k573::lamp_state(); }
     uint64_t lamp_changes() const override { return k573::lamp_changes(); }
 

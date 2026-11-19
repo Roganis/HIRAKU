@@ -30,7 +30,7 @@ dumps: the repository never holds ROMs, programs, assets or code generated from 
 | Konami Python 1/2 | pop'n music 9–14, DrumMania V/V2 | play with e-AMUSEMENT and NET TAISEN; GuitarFreaks V2 open | §23 |
 | PC, 32-bit | pop'n music 15–18, `popn22.dll`; beatmania IIDX 9th style to EMPRESS | play under Wine with e-AMUSEMENT, several also on real Windows; pop'n 19–21 not started | §30, §33, §35, §36 |
 | PC, 64-bit | the 64-bit PC platform | plays under Wine, on one 4:3 screen too; songs back from the music data | §32, §34 |
-| Everything | mods, high frame rates, shaders, Windows, releases, cabinet hardware, fast start-up, overlay, game menu, tests, code made at run time | | §20, §25–§29, §31, §37–§45 |
+| Everything | mods, high frame rates, shaders, Windows, releases, cabinet hardware, fast start-up, overlay, game menu, tests, code made at run time, a 573 cabinet on a USB_2_573 board | | §20, §25–§29, §31, §37–§45, §47 |
 
 The biggest open pieces: pop'n music 19–21 (§30); GuitarFreaks V2 and its session (§23); a song
 added to pop'n 14 (M17, §5); the BI2X board's ACIO2 (§25); the e-AMUSEMENT calls still answered
@@ -1013,3 +1013,17 @@ Measured, release-like build, development PC, a stage: beatmania IIDX 8th style 
 - (build) a Defender check of the Windows package as a step of a release (the VM, or the release workflow's Windows runner with Defender's command-line scanner).
 - (owner) on the IIDX cabinet: a run of 0.11.1 itself against this for Twinkle; 7th MIX without display sync (58 frames a second, no empty queue); smooth motion with a short fixed queue (the breaks gone, and whether the picture a refresh later on a press is felt).
 
+## 47. A System 573 cabinet on a USB_2_573 board (2026-11-19)
+
+A real 573 cabinet with a PC in the 573's place: the USB_2_573 board (github.com/Roganis/USB_2_573; an RP2040, shift registers, optocouplers) stands on the cabinet's JAMMA harness and light plugs and is on USB as two HID interfaces, a gamepad and a raw one (64-byte reports, a thousand a second). `--usb573 auto|present|PATH` (`runtime/host/usb573.h`; the launcher gives `present` to the 573 families by default: Settings > Cabinet I/O); docs/USB573.md.
+
+- **No names in between.** `Core::wired_inputs` puts the cabinet's 26 switches on the bits of the 573's input registers they are wired to, beside the keyboard's (`sys573/board.cpp`: IN1's coins and Service, IN2, IN3; the ANALOG channels on the ADC). `Core::wired_outputs` gives every change of the pins the game drives: the analog board's latches bit by bit, the digital board's outputs (`dio_output_callback`, before each family's own), EXT-OUT, and the coin counters, which nothing read before (OUT0's bits 3 and 4). `sys573/wiredpins.h` has the registers' wiring from psx-spx; the test holds MAME's lamp numbers against the cabinets' wiring tables through it (DDR on both boards, DrumMania's two generations).
+- **A DDR cabinet's stage boards** take the game's clock and data edges (A4, A5; B4, B5) through the board, each in order with the game's own gap kept within 0.5–2 ms (the board's FIFO of timed entries), while the game goes on talking to the stage emulated here. A stage's panels are let go for the game until its real board has had the last edge for 0.1 s, and while the emulated one is in its dialogue. A board plugged in late gets the dialogue then.
+- **The game menu** takes the cabinet's switches by their controls' names (a table per family in `usb573.cpp`, read off `board.cpp`'s `set_input`).
+- The test (`ctest -R usb573_board`) runs the driver against the board's own firmware core, copied into `tests/usb573/firmware/`.
+
+**Open**
+- (owner) everything on hardware: no board is built yet. First the stage boards: whether a GN845-PWB(B) takes the dialogue at this pace with nobody reading its answers.
+- (build) the menu's lamps on the cabinet (they are names; the pins need each family's table the other way).
+- (build) the stage's per-sensor readout in test mode is the emulated board's (all four sensors of a pressed panel), not the real one's.
+- (owner) a product ID of the board's own from pid.codes (the test ID 1209:0001 until then).

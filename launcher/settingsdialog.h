@@ -68,4 +68,5 @@ private:
     QComboBox *m_bio2;                      // beatmania IIDX's BIO2 board (runtime/host/bio2.h)
     QComboBox *m_popnio;                    // pop'n music's USB I/O board (runtime/host/popnio.h)
     QLineEdit *m_popnioDll;                 // its ezusb.dll
+    QComboBox *m_usb573;                    // a System 573 cabinet's USB_2_573 board (runtime/host/usb573.h)
 };

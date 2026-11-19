@@ -1411,6 +1411,9 @@ static void cabinetArguments(QStringList &a, const QString &family) {
         a << "--popn-io" << b;   // the pop'n cabinet's buttons and lamps (runtime/host/popnio.h)
         if (QString f = s.value("cabinet/popnioDll").toString(); !f.isEmpty()) a << "--popn-io-dll" << f;
     }
+    // a System 573 cabinet's USB_2_573 board (runtime/host/usb573.h): by default, when one is plugged in
+    if (QString b = s.value("cabinet/usb573", "present").toString(); b != "off" && cfg::isSystem573(family))
+        a << "--usb573" << b;
 }
 
 QStringList MainWindow::arguments(const Game &g) const {

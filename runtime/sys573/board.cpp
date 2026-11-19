@@ -4,6 +4,7 @@
 // below follows ksys573_state and ddr_state; where it differs, a comment says so.
 #include "sys573/board.h"
 #include "sys573/mips.h"
+#include "sys573/wiredpins.h"
 
 #include "shell/cabinet.h"
 #include "shell/sys.h"
@@ -183,6 +184,15 @@ public:
     u32 m_in1_coins = 0x13000000; // coins and service 1, active low
     u8 m_analog[4] = {0, 0, 0, 0};
 
+    // A real cabinet on the board's connectors (board.h, wired_*): the pins its switches pull low,
+    // as masks of IN1, IN2 and IN3; its ANALOG channels; the outputs pin by pin (wired573's bits)
+    // and their changes since they were last asked for
+    bool m_wired = false;
+    u32 m_wired_in1 = 0, m_wired_in2 = 0, m_wired_in3 = 0;
+    u64 m_pins = 0;
+    std::vector<wired573::Output> m_pin_changes;
+    void set_pins(u64 mask, u64 bits);
+    void dio_output_callback(offs_t offset, u8 data);
     u64 m_outputs = 0;              // the I/O board's outputs, lit = 1, by output number; 32 + k: LAMPS bit k
     std::vector<u8> m_lamps;        // in cab::lamps(family) order
     u64 m_lamp_changes = 0;
@@ -201,7 +211,7 @@ public:
     u32 in0_r() { return 0xffffffff; }
     u32 in1_r();
     u16 port_in2_jvs_r(offs_t offset, u16 mem_mask);
-    u32 in3_r() { return m_in3; }
+    u32 in3_r() { return m_in3 & ~m_wired_in3; }
     void out0_w(offs_t, u32 data, u32 mem_mask) { port_write(m_out0, m_out0_fields, data, mem_mask); }
     u16 control_r(offs_t, u16) { return m_control; }
     void control_w(offs_t, u16 data, u16 mem_mask);
@@ -209,6 +219,7 @@ public:
     // MAME's LAMPS port: GuitarFreaks' lamps (gtrfrks_lamps_b4..b7, active low); Dance Maniax's
     // (dmx_lamps_b0..b5) and Mambo a GoGo's (mamboagg_lamps_b3..b5), active low, as lamps 32 + bit
     void lamps_w(offs_t, u32 data, u32 mem_mask) {
+        if (mem_mask & 0xff) set_pins(0xffull << 32, (u64)(data & 0xff) << 32);   // EXT-OUT's pins, whatever is wired to them
         if (cfg.family == "dmx" || cfg.family == "mambo") {
             const u32 used = cfg.family == "dmx" ? 0x3f : 0x38;
             for (int k = 0; k < 8; k++)
@@ -383,11 +394,9 @@ void sys573_state::device_add_mconfig(machine_config &config) {
         // k573d(): the digital I/O board; ddr3m(): DDR's outputs on it
         KONAMI_573_DIGITAL_IO_BOARD(config, m_k573dio, XTAL(19'660'800));
         // ddr3m(): DDR's outputs; drmn2m() to drmn10m(): DrumMania's
-        if (c.family == "drmn") m_k573dio->output_callback().set(*this, &sys573_state::drmn_output_callback);
-        else if (c.family == "ddrsolo") m_k573dio->output_callback().set(*this, &sys573_state::ddrsolo_output_callback);
-        else if (c.family == "dmx") m_k573dio->output_callback().set(*this, &sys573_state::dmx_output_callback);       // dmx()
-        else if (c.family == "mambo") m_k573dio->output_callback().set(*this, &sys573_state::mamboagg_output_callback);   // mamboagg()
-        else m_k573dio->output_callback().set(*this, &sys573_state::ddr_output_callback);
+        // (through dio_output_callback, which keeps the pins for a real cabinet and hands the output
+        // on: drmn_output_callback, ddrsolo_, dmx_ (dmx()), mamboagg_ (mamboagg()) or ddr_output_callback)
+        m_k573dio->output_callback().set(*this, &sys573_state::dio_output_callback);
         // ddrsbm(): Solo Bass Mix's own FPGA program, whose MP3 counter runs free from power-on (the
         // game syncs its playback to it; without, it waits at READY with the counter at 0)
         if (c.game == "ddrsbm") m_k573dio->set_ddrsbm_fpga(true);
@@ -438,6 +447,9 @@ void sys573_state::device_add_mconfig(machine_config &config) {
         {0x001, false, [this](int s) { m_adc->di_write(s); }},
         {0x002, false, [this](int s) { m_adc->cs_write(s); }},
         {0x004, false, [this](int s) { m_adc->clk_write(s); }},
+        // the coin counters' coils (psx-spx: bits 3 and 4 of 0x1f400000), for a real cabinet's
+        {0x008, false, [this](int s) { set_pins(wired573::OUT_COUNTER1, s ? wired573::OUT_COUNTER1 : 0); }},
+        {0x010, false, [this](int s) { set_pins(wired573::OUT_COUNTER2, s ? wired573::OUT_COUNTER2 : 0); }},
         {0x100, false, [this](int s) { h8_clk_w(s); }},
     };
     m_out1_fields = {
@@ -632,14 +644,20 @@ u32 sys573_state::in1_r() {
     v |= (u32)(m_cassette->read_line_secflash_sda() & 1) << 18;
     v |= (u32)(m_sys573_jvs_host->jvs_sense_r() & 1) << 19;
     v |= (u32)(jvs_rx_r() & 1) << 20;
-    v |= m_in1_coins;
+    v |= m_in1_coins & ~m_wired_in1;
     v |= (u32)(m_pccard_cd[0] & 1) << 26;
     v |= (u32)(m_pccard_cd[1] & 1) << 27;
     return v;
 }
 
 u16 sys573_state::port_in2_jvs_r(offs_t offset, u16) {
-    if (offset == 0) return (u16)((m_in2_buttons & ~0x0f0fu) | ((m_stage & m_stage_mask) & 0x0f0fu));
+    if (offset == 0) {
+        // a real DDR stage's lines carry its board's side of the dialogue while the game speaks to
+        // it, not the panels: the game gets the answers of the board emulated here, as without one
+        const bool speaking = m_stage_state[0].state || m_stage_state[1].state;
+        const u32 stage = speaking ? m_stage : m_stage & ~m_wired_in2;
+        return (u16)(((m_in2_buttons & ~m_wired_in2) & ~0x0f0fu) | ((stage & m_stage_mask) & 0x0f0fu));
+    }
     // 0x1f40000a: the JVS reply, two bytes at a time
     if (m_jvs_output_len_w <= 0) return 0;
     u16 data = m_jvs_output_buffer[m_jvs_output_idx_w] | (m_jvs_output_buffer[m_jvs_output_idx_w + 1] << 8);
@@ -729,6 +747,12 @@ double sys573_state::analogue_inputs_callback(u8 input) {
 u16 sys573_state::gx700pwbf_io_r(offs_t, u16) { return 0; }
 
 void sys573_state::gx700pwbf_io_w(offs_t offset, u16 data, u16) {
+    // the pins, for a real cabinet: a bank's latch bit by bit (wiredpins.h)
+    if (offset >= 0x40 && offset <= 0x4c && !(offset & 3)) {
+        u64 mask;
+        const u64 bits = pins::analog_bank((int)(offset - 0x40) / 4, (u8)data, mask);
+        set_pins(mask, bits);
+    }
     switch (offset) {
     case 0x40: gx700pwbf_output(0, data & 0xff); break;
     case 0x44: gx700pwbf_output(1, data & 0xff); break;
@@ -832,6 +856,27 @@ void sys573_state::dmx_output_callback(offs_t offset, u8 data) {
 // lamps (28 left, 29 right, 31 centre), lit at data 0
 void sys573_state::mamboagg_output_callback(offs_t offset, u8 data) {
     if ((offset >= 4 && offset <= 7) || offset == 28 || offset == 29 || offset == 31) set_lamp(offset, !data);
+}
+
+// The digital I/O board's outputs, for a real cabinet's pins (wiredpins.h) and then for the game's family
+void sys573_state::dio_output_callback(offs_t offset, u8 data) {
+    if (const u64 pin = pins::digital_pin(offset)) set_pins(pin, data ? 0 : pin);   // grounded at 0
+    if (cfg.family == "drmn") drmn_output_callback(offset, data);
+    else if (cfg.family == "ddrsolo") ddrsolo_output_callback(offset, data);
+    else if (cfg.family == "dmx") dmx_output_callback(offset, data);
+    else if (cfg.family == "mambo") mamboagg_output_callback(offset, data);
+    else ddr_output_callback(offset, data);
+}
+
+void sys573_state::set_pins(u64 mask, u64 bits) {
+    const u64 now = (m_pins & ~mask) | (bits & mask);
+    if (now == m_pins) return;
+    m_pins = now;
+    if (!m_wired) return;
+    // every change is kept, in order (a DDR stage's clock and data are a dialogue); if nobody
+    // takes them, the oldest go
+    if (m_pin_changes.size() >= 65536) m_pin_changes.erase(m_pin_changes.begin(), m_pin_changes.begin() + 32768);
+    m_pin_changes.push_back({m_pins, (u64)machine().time().as_ticks((u32)1000000)});
 }
 
 void sys573_state::set_lamp(offs_t offset, bool lit) {
@@ -1388,6 +1433,29 @@ bool set_input(const std::string &name, int value) {
     case 2: return bit(st.m_in3, it->second.second);
     default: return bit(st.m_in1_coins, it->second.second);
     }
+}
+
+void wired_attach(bool on) {
+    if (!g.state) return;
+    sys573_state &st = *g.state;
+    st.m_wired = on;
+    st.m_wired_in1 = st.m_wired_in2 = st.m_wired_in3 = 0;
+    st.m_pin_changes.clear();
+    if (on) st.m_pin_changes.push_back({st.m_pins, g.machine ? (u64)g.machine->time().as_ticks((u32)1000000) : 0});   // how they stand
+}
+
+void wired_inputs(uint32_t sw, const uint8_t *analog) {
+    sys573_state &st = *g.state;
+    if (!st.m_wired) return;
+    const pins::Inputs in = pins::inputs(sw);
+    st.m_wired_in1 = in.in1, st.m_wired_in2 = in.in2, st.m_wired_in3 = in.in3;
+    if (analog) memcpy(st.m_analog, analog, 4);
+}
+
+void wired_outputs(std::vector<wired573::Output> &changes) {
+    sys573_state &st = *g.state;
+    changes.insert(changes.end(), st.m_pin_changes.begin(), st.m_pin_changes.end());
+    st.m_pin_changes.clear();
 }
 
 const std::vector<uint8_t> &lamp_state() { return g.state->m_lamps; }

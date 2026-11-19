@@ -273,7 +273,7 @@ target_link_libraries(hiraku_cabinet PUBLIC hiraku_sys)
 # --- the shell: what every machine core shares (runtime/shell/core.h) --------------
 # Input scripts; the host front end below. Cores provide hk::core().
 add_library(hiraku_shell STATIC runtime/host/script.cpp runtime/host/macro.cpp runtime/host/mods.cpp runtime/host/pythondisk.cpp runtime/host/png.cpp
-            runtime/host/acio.cpp runtime/host/readers.cpp runtime/host/bio2.cpp runtime/host/popnio.cpp runtime/host/menukey.cpp runtime/host/menupic.cpp
+            runtime/host/acio.cpp runtime/host/readers.cpp runtime/host/bio2.cpp runtime/host/popnio.cpp runtime/host/usb573.cpp runtime/host/menukey.cpp runtime/host/menupic.cpp
             runtime/shell/uilook.cpp runtime/menu/font.cpp)   # (the launcher's look and fonts: the game menu's and a game's boxes)
 target_include_directories(hiraku_shell PUBLIC runtime)
 find_package(Threads REQUIRED)
@@ -616,7 +616,7 @@ if(SDL3_FOUND)
   add_library(hiraku_hidout STATIC runtime/host/hidout.cpp)
   target_link_libraries(hiraku_hidout PUBLIC SDL3::SDL3 hiraku_cabinet)
   add_library(hiraku_host STATIC runtime/host/window.cpp runtime/host/alsa.cpp runtime/host/effector.cpp runtime/host/notice.cpp runtime/host/warp.cpp runtime/host/lampview.cpp runtime/host/menuview.cpp runtime/host/uibox.cpp runtime/host/shaderview.cpp runtime/host/statsview.cpp runtime/host/sysload.cpp runtime/host/picture.cpp runtime/host/input.cpp runtime/host/lights.cpp
-              runtime/host/pacing.cpp)
+              runtime/host/pacing.cpp runtime/host/usb573_hid.cpp)
   target_include_directories(hiraku_host PUBLIC runtime)
   target_link_libraries(hiraku_host PUBLIC SDL3::SDL3 hiraku_shell hiraku_hidout)
   target_compile_definitions(hiraku_host PUBLIC HK_WITH_SDL=1)

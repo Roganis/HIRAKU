@@ -256,6 +256,10 @@ QList<QPair<QString, QStringList>> familySeries() {
 
 bool isBeatmania(const QString &family) { return family == "djbm" || family == "iidx" || family == "bm3"; }
 
+bool isSystem573(const QString &family) {
+    return family == "ddr" || family == "ddrsolo" || family == "dmx" || family == "mambo" || family == "drmn" || family == "gtrf";
+}
+
 bool beatmaniaApart() { return settings().value("controls/beatmaniaApart", false).toBool(); }
 
 // Each its own: a member without a file of its own starts from the shared one (and its controllers'

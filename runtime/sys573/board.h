@@ -14,6 +14,8 @@
 #include <string>
 #include <vector>
 
+#include "shell/wired573.h"
+
 namespace hk::k573 {
 
 struct Config {
@@ -101,6 +103,12 @@ void set_memcard_said(std::function<void(const std::string &)> said);
 // and taken out ("" = the slot left empty; label names it in messages). false (and why): not a card
 bool memcard_use(int slot, const std::string &file, const std::string &label, std::string &why);
 bool memcard_busy(int slot);   // the game wrote that slot's card in the last second
+// A real cabinet on the board's own connectors (shell/core.h's wired_*, shell/wired573.h): its
+// switches pull the JAMMA and EXT-IN pins low beside the keyboard's and controllers', and each
+// change of the I/O board's outputs, EXT-OUT and the coin counters is kept for it, in order.
+void wired_attach(bool on);
+void wired_inputs(uint32_t switches, const uint8_t *analog);
+void wired_outputs(std::vector<wired573::Output> &changes);
 const std::vector<uint8_t> &lamp_state();
 uint64_t lamp_changes();
 std::string sound_report();                // the mix's peak and how much of it clips ("" without sound)

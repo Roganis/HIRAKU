@@ -21,6 +21,7 @@
 #include "mods.h"
 #include "modscript.h"
 #include "notice.h"
+#include "usb573.h"
 #include "warp.h"
 
 namespace hk::host {
@@ -227,6 +228,13 @@ bool from(const Binding &b, SDL_JoystickID id) {
 // plugged back in (a cable knocked) it gets its slot and its name again, so joy<N> and joy[<name>]
 // bindings both work as before; another controller takes the lowest free slot, a new one otherwise
 void add_joystick(SDL_Joystick *j) {
+    // a System 573 cabinet's USB_2_573 board is also a gamepad, with the cabinet's switches as its
+    // buttons: while the board is driven as the cabinet (host/usb573.h), they aren't bound twice
+    if (usb573_owns(SDL_GetJoystickVendor(j), SDL_GetJoystickProduct(j), SDL_GetJoystickName(j))) {
+        fprintf(stderr, "input: %s is the cabinet's own board (--usb573): not a controller here\n", SDL_GetJoystickName(j));
+        SDL_CloseJoystick(j);
+        return;
+    }
     std::string name = cab::pad_name(SDL_GetJoystickName(j) ? SDL_GetJoystickName(j) : ""), dev;
     int slot = -1;
     for (size_t k = 0; k < g_joys.size() && slot < 0; k++)

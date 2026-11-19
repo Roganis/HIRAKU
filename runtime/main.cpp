@@ -41,6 +41,7 @@
 #include "shell/sys.h"
 #include "host/bio2.h"
 #include "host/popnio.h"
+#include "host/usb573.h"
 #include "host/readers.h"
 #ifdef HK_WITH_SDL
 #include "host/lights.h"
@@ -462,11 +463,12 @@ int main(int argc, char **argv) {
         else if (a == "--window") window_scale = (k + 1 < argc && argv[k + 1][0] != '-') ? std::stoi(val()) : 2;
         else if (a == "--help" || a == "-h") {
             printf("hiraku-%s [options]\n\nEvery core takes:\n%s\nThis core also takes:\n%s%s",
-                   game.c_str(), COMMON_OPTIONS, machine.options_help().c_str(), (host::readers_help() + host::bio2_help() + host::popnio_help()).c_str());
+                   game.c_str(), COMMON_OPTIONS, machine.options_help().c_str(), (host::readers_help() + host::bio2_help() + host::popnio_help() + host::usb573_help()).c_str());
             return 0;
         }
         else if (host::bio2_option(a, val)) {}
         else if (host::popnio_option(a, val)) {}
+        else if (host::usb573_option(a, val)) {}
         else if (std::string error; host::readers_option(a, val, &error)) {
             if (!error.empty()) { fprintf(stderr, "%s\n", error.c_str()); return 2; }
         }
@@ -688,6 +690,10 @@ int main(int argc, char **argv) {
         host::readers_start();
         host::bio2_start();
         host::popnio_start();
+#ifdef HK_WITH_SDL
+        host::usb573::use_link(host::usb573::system_link());   // a System 573 cabinet's USB_2_573 board (host/usb573.h)
+#endif
+        host::usb573_start(machine);
         // the way out to the game menu, from the cabinet's controls (not from the menu itself)
         host::menukey::set(game_menu && game != "menu", game_menu_hold);
 #ifdef HK_WITH_SDL
@@ -874,6 +880,7 @@ int main(int argc, char **argv) {
 #endif
         host::bio2_lamps(machine);
         host::popnio_lamps(machine);
+        host::usb573_lamps(machine);
 #ifdef HK_WITH_SDL
         if (window_scale && !(present_at_vblank_end ? host::window_next(machine.seconds())
                                                     : host::window_frame(rgb, w, h, machine.seconds()))) {
@@ -907,6 +914,7 @@ int main(int argc, char **argv) {
                             });
         host::bio2_frame(machine);
         host::popnio_frame(machine);
+        host::usb573_frame(machine);
         // 5, 7 and 3 held (host/menukey.h): the game ends as a closed window ends it, and says where to
         if (host::menukey::frame(host::menukey::now())) {
             printf("game menu: asked for from the cabinet's controls\n");

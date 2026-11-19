@@ -12,6 +12,7 @@
 | [EAMUSE.md](EAMUSE.md) | e-AMUSEMENT and NET TAISEN: turning it on, cards, one card for all, sharing a server between PCs, battles between cabinets |
 | [SONGS-BACK.md](SONGS-BACK.md) | Songs brought back from an Omnimix pack |
 | [POPN-IO.md](POPN-IO.md) | pop'n music's USB I/O board on a real cabinet |
+| [USB573.md](USB573.md) | A System 573 cabinet (DDR, GuitarFreaks, DrumMania...) on a USB_2_573 board: its switches, lights and stages |
 | [bindings-bm3.example](bindings-bm3.example) | An example controls file |
 
 ## For developers

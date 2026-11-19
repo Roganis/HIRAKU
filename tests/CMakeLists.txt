@@ -66,6 +66,12 @@ endif()
 add_executable(test_popnio popnio/test_popnio.cpp)
 target_link_libraries(test_popnio PRIVATE hiraku_shell)
 add_test(NAME popn_io_board COMMAND test_popnio)
+# A System 573 cabinet's USB_2_573 board (runtime/host/usb573.h) against the board's own firmware core
+# (usb573/firmware, copied from its repository) and a pretend machine; the 573's registers against its pins
+add_executable(test_usb573 usb573/test_usb573.cpp usb573/firmware/u573_core.c)
+target_include_directories(test_usb573 PRIVATE usb573/firmware)
+target_link_libraries(test_usb573 PRIVATE hiraku_shell)
+add_test(NAME usb573_board COMMAND test_usb573)
 # Windows: the same through hiraku-ezusb.exe and a pretend 32-bit ezusb.dll (under Wine here); all
 # three beside each other, where HIRAKU looks for the helper
 if(WIN32 AND TARGET hiraku-ezusb)

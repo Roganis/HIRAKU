@@ -16,6 +16,8 @@
 #include <string>
 #include <vector>
 
+#include "wired573.h"
+
 namespace hk {
 
 class Core {
@@ -136,6 +138,17 @@ public:
     // A real card reader read this card (16 hex digits, E004...): it is now `player`'s (0, 1) card,
     // put to the game's reader as the player would. false for a machine without that reader.
     virtual bool card_read(int /*player*/, const std::string & /*number*/) { return false; }
+    // A real cabinet on the machine's own connectors (a System 573's, through a USB_2_573 board:
+    // host/usb573.h, shell/wired573.h), with no input names or lamp tables in between: the switches
+    // go to the pins they are wired to, and every change of the outputs comes back in order.
+    // wired_attach(true): there is such a cabinet from now on (false: no longer, its switches all
+    // open); false from a machine without those connectors. wired_inputs: the switches as they are
+    // (wired573's bits) and the ANALOG port's four channels (0-255), nullptr without them.
+    // wired_outputs: the changes since it was last asked, oldest first (the first after attach
+    // says how the outputs stand).
+    virtual bool wired_attach(bool /*on*/) { return false; }
+    virtual void wired_inputs(uint32_t /*switches*/, const uint8_t * /*analog*/) {}
+    virtual void wired_outputs(std::vector<wired573::Output> & /*changes*/) {}
     // Move player's turntable by `delta` encoder counts (cores without one ignore it).
     virtual void turntable_add(int player, int delta) = 0;
     // Lamps as the game last drove them, in cab::lamps(family()) order (1 = lit),

@@ -125,6 +125,19 @@ const std::map<std::string, Family> &families() {
             f.hints = {{"Neck R / B", "choose a game"}, {"Neck G", "change shelf"}, {"Start or pick", "play"}};
             m["gtrf"] = f;
         }
+        // Step Champ: a player's red and blue choose, green changes shelf, a Start plays
+        {
+            Family f;
+            for (const char *p : {"P1", "P2", "P3"}) {
+                const std::string P = p;
+                f.rules.push_back({P + " Red", A::prev});
+                f.rules.push_back({P + " Blue", A::next});
+                f.rules.push_back({P + " Green", A::shelf_next});
+            }
+            for (const char *st : {"1 Player Start", "2 Players Start", "3 Players Start"}) f.rules.push_back({st, A::start});
+            f.hints = {{"Red / Blue", "choose a game"}, {"Green", "change shelf"}, {"Start", "play"}};
+            m["stepchmp"] = f;
+        }
         // Keyboardmania: the two lowest white keys choose (C and D), the black keys beside them
         // change shelf; the wheel chooses too (menu/core.cpp)
         {
@@ -205,6 +218,10 @@ std::string lamp_for(const std::string &family, const std::string &control) {
     } else if (family == "dmx") {
         if (start1) return "P1 Start Lamp";
         if (start2) return "P2 Start Lamp";
+    } else if (family == "stepchmp") {
+        if (start1) return "P1 Start Lamp";
+        if (start2) return "P2 Start Lamp";
+        if (control == "3 Players Start") return "P3 Start Lamp";
     } else if (family == "gtrf") {
         if (start1) return "Start Lamp P1";
         if (start2) return "Start Lamp P2";

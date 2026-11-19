@@ -4,6 +4,7 @@
 // below follows ksys573_state and ddr_state; where it differs, a comment says so.
 #include "sys573/board.h"
 #include "sys573/mips.h"
+#include "sys573/seriallamps.h"
 #include "sys573/wiredpins.h"
 
 #include "shell/cabinet.h"
@@ -191,7 +192,12 @@ public:
     u32 m_wired_in1 = 0, m_wired_in2 = 0, m_wired_in3 = 0;
     u64 m_pins = 0;
     std::vector<wired573::Output> m_pin_changes;
+    // Step Champ's lamps: the cassette's two 4094 shift registers on its d5-d7 (seriallamps.h)
+    SerialLamps m_serial_lamps;
+    void stepchmp_lamp_clock(int state);
     void set_pins(u64 mask, u64 bits);
+    void tag_stages();
+    bool m_stage_open[2] = {};   // a stage's board has been through a dialogue since power-on
     void dio_output_callback(offs_t offset, u8 data);
     u64 m_outputs = 0;              // the I/O board's outputs, lit = 1, by output number; 32 + k: LAMPS bit k
     std::vector<u8> m_lamps;        // in cab::lamps(family) order
@@ -273,8 +279,10 @@ void sys573_state::device_add_mconfig(machine_config &config) {
     const Config &c = *g_build;
     const bool digital = c.io_board == "digital";
     CXD8530CQ(config, m_maincpu, 67.7376_MHz_XTAL);
+    // (no I/O board: MAME's konami573_map alone, nothing at 0x1f640000)
     m_maincpu->set_addrmap(AS_PROGRAM, digital ? address_map_constructor(&sys573_state::konami573d_map, this)
-                                               : address_map_constructor(&sys573_state::konami573a_map, this));
+                                       : c.io_board == "none" ? address_map_constructor(&sys573_state::konami573_map, this)
+                                                              : address_map_constructor(&sys573_state::konami573a_map, this));
     m_maincpu->set_ram(m_ram);
     m_maincpu->subdevice<psxdma_device>("dma")->install_read_handler(5, psxdma_device::read_delegate(&sys573_state::cdrom_dma_read, this));
     m_maincpu->subdevice<psxdma_device>("dma")->install_write_handler(5, psxdma_device::write_delegate(&sys573_state::cdrom_dma_write, this));
@@ -283,9 +291,11 @@ void sys573_state::device_add_mconfig(machine_config &config) {
 
     ATA_INTERFACE(config, m_ata);
     m_ata->irq_handler().set(*this, &sys573_state::ata_interrupt);
-    m_ata->slot(0).option_add("cr589", CR589);
-    m_ata->slot(0).set_option_machine_config("cr589", [](device_t *) {});   // MAME: cdda routes, disc regions
-    m_ata->slot(0).set_default_option("cr589");
+    if (c.cdrom) {   // (konami573(config, no_cdrom): Step Champ's 573 has no drive)
+        m_ata->slot(0).option_add("cr589", CR589);
+        m_ata->slot(0).set_option_machine_config("cr589", [](device_t *) {});   // MAME: cdda routes, disc regions
+        m_ata->slot(0).set_default_option("cr589");
+    }
 
     KONAMI573_CASSETTE_SLOT(config, m_cassette);
     if (c.msu) {
@@ -457,10 +467,24 @@ void sys573_state::device_add_mconfig(machine_config &config) {
         {0x02, false, [this](int s) { m_cassette->write_line_d1(s); }},
         {0x04, false, [this](int s) { m_cassette->write_line_d2(s); }},
         {0x08, false, [this](int s) { m_cassette->write_line_d3(s); }},
-        {0x10, false, [this](int s) { m_cassette->write_line_d4(s); }},
-        {0x20, false, [this](int s) { m_cassette->write_line_d5(s); }},
-        {0x40, false, [this](int s) { m_cassette->write_line_d6(s); }},
+        // (d4-d7 also to a real cabinet's cartridge slot: what a cartridge has on them besides its chip)
+        {0x10, false, [this](int s) {
+            m_cassette->write_line_d4(s);
+            set_pins(wired573::out_cart(4), s ? wired573::out_cart(4) : 0);
+        }},
+        {0x20, false, [this](int s) {
+            m_cassette->write_line_d5(s);
+            set_pins(wired573::out_cart(5), s ? wired573::out_cart(5) : 0);
+            if (cfg.family == "stepchmp") stepchmp_lamp_clock(s);   // stepchmp_cassette_install: d5 clock, d6 reset, d7 data
+        }},
+        {0x40, false, [this](int s) {
+            m_cassette->write_line_d6(s);
+            set_pins(wired573::out_cart(6), s ? wired573::out_cart(6) : 0);
+            m_serial_lamps.reset(s);                                // serial_lamp_reset
+        }},
         {0x80, false, [this](int s) {
+            m_serial_lamps.set_data(s);                             // serial_lamp_data
+            set_pins(wired573::out_cart(7), s ? wired573::out_cart(7) : 0);
             m_cassette->write_line_d7(s);
             g_cards.select(s != 0);   // on the e-AMUSEMENT cabinets d7 also switches SIO1 to the card units (the fork's toggle_serial)
         }},
@@ -759,6 +783,7 @@ void sys573_state::gx700pwbf_io_w(offs_t offset, u16 data, u16) {
     case 0x48: gx700pwbf_output(2, data & 0xff); break;
     case 0x4c: gx700pwbf_output(3, data & 0xff); break;
     }
+    tag_stages();
 }
 
 void sys573_state::gx700pwbf_output(int offset, u8 data) {
@@ -802,6 +827,7 @@ void sys573_state::gn845pwbb_clk_w(int offset, int data) {
             st.bit = 0;
             st.state = 0;
             m_stage_mask = 0xffffffff;
+            m_stage_open[offset] = true;
         }
         break;
     }
@@ -866,6 +892,17 @@ void sys573_state::dio_output_callback(offs_t offset, u8 data) {
     else if (cfg.family == "dmx") dmx_output_callback(offset, data);
     else if (cfg.family == "mambo") mamboagg_output_callback(offset, data);
     else ddr_output_callback(offset, data);
+    tag_stages();
+}
+
+// Where the stages' boards stand after the change just kept (set_pins), for a real cabinet's:
+// said once the outputs' handlers have run, which is where a clock edge moves the dialogue on
+void sys573_state::tag_stages() {
+    if (!m_wired || m_pin_changes.empty()) return;
+    u8 t = 0;
+    for (int p = 0; p < 2; p++)
+        t |= (u8)((m_stage_state[p].state ? wired573::STAGE_BUSY << p : 0) | (m_stage_open[p] ? wired573::STAGE_OPEN << p : 0));
+    m_pin_changes.back().stage = t;
 }
 
 void sys573_state::set_pins(u64 mask, u64 bits) {
@@ -876,7 +913,18 @@ void sys573_state::set_pins(u64 mask, u64 bits) {
     // every change is kept, in order (a DDR stage's clock and data are a dialogue); if nobody
     // takes them, the oldest go
     if (m_pin_changes.size() >= 65536) m_pin_changes.erase(m_pin_changes.begin(), m_pin_changes.begin() + 32768);
-    m_pin_changes.push_back({m_pins, (u64)machine().time().as_ticks((u32)1000000)});
+    m_pin_changes.push_back({m_pins, (u64)machine().time().as_ticks((u32)1000000), 0});
+}
+
+// MAME's stepchmp_lamp_clock (ksys573.cpp): eight bits clocked into the cassette's shift
+// registers, the first the highest: bits 7-5 the three Start lamps, 3-1 the three halogens. Lamp
+// k is the word's bit k. For a real cabinet the word goes to A0-A7, which a plain 573 has nothing
+// on: its lamps hung on the cassette (docs/USB573.md).
+void sys573_state::stepchmp_lamp_clock(int state) {
+    int word;
+    if (!m_serial_lamps.clock(state, 8, word)) return;
+    for (int k = 0; k < 8; k++) set_lamp((offs_t)k, word >> k & 1);
+    set_pins(0xff, (u64)(word & 0xff));
 }
 
 void sys573_state::set_lamp(offs_t offset, bool lit) {
@@ -995,7 +1043,7 @@ bool init(const Config &cfg) {
         if (d.empty()) { fprintf(stderr, "cannot read %s\n", rom(p.substr(c + 1)).c_str()); return false; }
         m.add_region(":" + p.substr(0, c), std::move(d));
     }
-    cdrom_image_device::hk_set_path(":ata:0:cr589:image", cfg.cd);
+    if (cfg.cdrom) cdrom_image_device::hk_set_path(":ata:0:cr589:image", cfg.cd);
     if (cfg.msu) {
         cdrom_image_device::hk_set_path(":k573msu:ata_cdrom:0:cdrom:image", cfg.msu_cd);
         // the unit's TX3927 firmware: ROM_LOAD16_WORD_SWAP into a big-endian 32-bit region, so each
@@ -1348,6 +1396,11 @@ bool set_input(const std::string &name, int value) {
         {"P2 Button R", {1, 0x0010}}, {"P2 Button G", {1, 0x0020}}, {"P2 Button B", {1, 0x0040}},
         {"P2 Pick", {0, 0x004}}, {"P2 Wailing", {0, 0x008}},
         {"Service 1 (IN3)", {2, 0x100}},
+        // Step Champ (MAME's hyperbbc ports): three players' red, green and blue on IN2's buttons,
+        // the third player's on player 1's joystick bits with its Start
+        {"P1 Red", {1, 0x1000}}, {"P1 Green", {1, 0x2000}}, {"P1 Blue", {1, 0x4000}},
+        {"P2 Red", {1, 0x0010}}, {"P2 Green", {1, 0x0020}}, {"P2 Blue", {1, 0x0040}},
+        {"P3 Red", {0, 0x100}}, {"P3 Blue", {0, 0x200}}, {"3 Players Start", {0, 0x400}}, {"P3 Green", {0, 0x800}},
     };
     // the effect knobs: MAME's dials, a 2-bit position (not active low) on the stage bits
     if (name == "P1 Effect Knob" || name == "P2 Effect Knob") {
@@ -1441,7 +1494,10 @@ void wired_attach(bool on) {
     st.m_wired = on;
     st.m_wired_in1 = st.m_wired_in2 = st.m_wired_in3 = 0;
     st.m_pin_changes.clear();
-    if (on) st.m_pin_changes.push_back({st.m_pins, g.machine ? (u64)g.machine->time().as_ticks((u32)1000000) : 0});   // how they stand
+    if (on) {   // how they stand
+        st.m_pin_changes.push_back({st.m_pins, g.machine ? (u64)g.machine->time().as_ticks((u32)1000000) : 0, 0});
+        st.tag_stages();
+    }
 }
 
 void wired_inputs(uint32_t sw, const uint8_t *analog) {

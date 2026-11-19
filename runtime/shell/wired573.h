@@ -26,23 +26,36 @@ enum : uint32_t {
 };
 
 // Outputs: a 48-bit state. Bits 0-27 the I/O board's A0-A7, B0-B7, C0-C7, D0-D3, 1 = the output
-// sinks to its bank's common (what lights a lamp wired to it); bits 32-39 EXT-OUT's OUT0-OUT7,
-// the pin's level; bits 40 and 41 the coin counters' coils, 1 = pulled.
+// sinks to its bank's common (what lights a lamp wired to it); bits 28-31 the security cartridge
+// slot's D4-D7, the pin's level (what a cartridge has hung on them: Step Champ's lamp drivers, an
+// amplifier's control; D0-D3 are the cartridge's security chip and stay in the core); bits 32-39
+// EXT-OUT's OUT0-OUT7, the pin's level; bits 40 and 41 the coin counters' coils, 1 = pulled.
 constexpr uint64_t out_a(int n) { return 1ull << n; }
 constexpr uint64_t out_b(int n) { return 1ull << (8 + n); }
 constexpr uint64_t out_c(int n) { return 1ull << (16 + n); }
 constexpr uint64_t out_d(int n) { return 1ull << (24 + n); }
 constexpr uint64_t out_ext(int n) { return 1ull << (32 + n); }
+constexpr uint64_t out_cart(int d) { return 1ull << (28 + d - 4); }   // d: 4-7
 constexpr uint64_t OUT_COUNTER1 = 1ull << 40, OUT_COUNTER2 = 1ull << 41;
-constexpr uint64_t OUT_ALL = 0x03ff0fffffffull;
+constexpr uint64_t OUT_ALL = 0x03ffffffffffull;
+// The cartridge's lines carry serial words (a shift register's clock and data), so their edges
+// count one by one and in order, as a DDR stage's do
+constexpr uint64_t OUT_CART = 0xfull << 28;
 // A DDR cabinet's stage lines: data and clock to each stage's board (A4, A5; B4, B5). Their
-// edges are a serial dialogue, so they count one by one and in order, unlike a lamp's.
+// edges are a serial bus, so they count one by one and in order, unlike a lamp's.
 constexpr uint64_t OUT_STAGE1 = out_a(4) | out_a(5), OUT_STAGE2 = out_b(4) | out_b(5);
+
+// Where a DDR stage's board (GN845-PWB(B)) stands after a change, as the one emulated in the core
+// has it: STAGE_BUSY << p while stage p's is in a dialogue with the game (its lines then carry
+// its answers, not the panels); STAGE_OPEN << p once it has been through one since power-on (a
+// real one holds right and up until then)
+constexpr uint8_t STAGE_BUSY = 0x01, STAGE_OPEN = 0x10;
 
 // One change of the outputs, as the game made it
 struct Output {
     uint64_t state = 0;      // all the outputs after it
     uint64_t at_us = 0;      // the machine's time, microseconds since power-on
+    uint8_t stage = 0;       // STAGE_BUSY, STAGE_OPEN for each stage, after it
 };
 
 }  // namespace hk::wired573

@@ -129,6 +129,7 @@ public:
         get("install_id", cfg.install_id);
         get("digital_id", cfg.digital_id);
         get("io_board", cfg.io_board);
+        cfg.cdrom = machine["cdrom"] != "0";   // (a 573 with no drive: its game is all in the flash)
         get("pccard1", cfg.pccard1);
         get("pccard2", cfg.pccard2);
         get("cassette", cfg.cassette);

@@ -64,6 +64,10 @@
 #define U573_OUT_C(n) (UINT64_C(1) << (16 + (n))) /* C0-C7 */
 #define U573_OUT_D(n) (UINT64_C(1) << (24 + (n))) /* D0-D3 */
 #define U573_OUT_BANKS UINT64_C(0x0fffffff)
+/* Bits 28-31: the security cartridge slot's D4-D7, the pin's logic level (1 = 5 V). D0-D3 are
+ * left out on purpose: they are the cartridge's security chip, which a host must never write. */
+#define U573_OUT_CART(n) (UINT64_C(1) << (28 + (n) - 4)) /* n = 4-7 */
+#define U573_OUT_CART_ALL (UINT64_C(0xf) << 28)
 /* Bits 32-39: EXT-OUT's OUT0-OUT7, the pin's logic level (1 = 5 V) */
 #define U573_OUT_EXT(n) (UINT64_C(1) << (32 + (n)))
 #define U573_OUT_EXT_ALL (UINT64_C(0xff) << 32)
@@ -71,7 +75,7 @@
 #define U573_OUT_COUNTER1 (UINT64_C(1) << 40)
 #define U573_OUT_COUNTER2 (UINT64_C(1) << 41)
 #define U573_OUT_COUNTERS (U573_OUT_COUNTER1 | U573_OUT_COUNTER2)
-#define U573_OUT_ALL (U573_OUT_BANKS | U573_OUT_EXT_ALL | U573_OUT_COUNTERS)
+#define U573_OUT_ALL (U573_OUT_BANKS | U573_OUT_CART_ALL | U573_OUT_EXT_ALL | U573_OUT_COUNTERS)
 #define U573_OUT_BYTES 6
 
 /* ---- raw interface: input report (board to host), every millisecond ---------------------- */
@@ -132,7 +136,8 @@
 /* ---- gamepad interface (for anything that takes a plain HID gamepad) ---------------------- */
 /* Input, 8 bytes: buttons 1-26 are switch bits 0-25, then four 8-bit axes (X, Y, Z, Rx = CH0-3).
  * Output, 5 bytes: 38 one-bit lamps, in the order A0-A7, B0-B7, C0-C7, D0-D3, OUT0-OUT7, the two
- * coin counters. Ignored while a host talks to the raw interface. */
+ * coin counters (the cartridge slot's lines are the raw interface's alone). Ignored while a host
+ * talks to the raw interface. */
 #define U573_PAD_IN_SIZE 8
 #define U573_PAD_OUT_SIZE 5
 #define U573_PAD_LAMPS 38

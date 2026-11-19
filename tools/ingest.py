@@ -308,6 +308,9 @@ def ingest_sys573(args, hint: dict | None = None) -> int:
     for k in ("io_board", "cassette", "install_kind", "pccard1", "pccard2"):
         if board.get(k):
             machine[k] = board[k]
+    drive = board.get("cdrom", True)   # false: a 573 with no CD-ROM drive (Step Champ): nothing but its set
+    if not drive:
+        machine["cdrom"] = "0"
     if board.get("memory_card_reader"):
         machine["memory_card_reader"] = "1"
     if getattr(args, "cd", None):
@@ -323,10 +326,10 @@ def ingest_sys573(args, hint: dict | None = None) -> int:
     for k in ("install_cd", "install2_cd"):   # MAME's install discs (--cd install, install2)
         if getattr(args, k, None):
             machine[k] = media_path(getattr(args, k), outdir)
-    if not machine.get("cd"):
+    if drive and not machine.get("cd"):
         print(f"ERROR    no CD: add {game['cd']['chd']}.chd (or its .cue/.bin)")
         return 1
-    order = ["core", "family", *keys, "preload", "io_board", "cassette", "install_kind", "pccard1", "pccard2", "memory_card_reader", "cd", "msu", "msu_cd",
+    order = ["core", "family", *keys, "preload", "io_board", "cassette", "install_kind", "pccard1", "pccard2", "memory_card_reader", "cdrom", "cd", "msu", "msu_cd",
              "npu", "hdd_cd", "install_cd", "install2_cd"]
     if machine.get("msu") and not machine.get("msu_cd"):
         print(f"ERROR    no multi-session unit CD: add {game['cd'].get('msu_chd')}.chd")

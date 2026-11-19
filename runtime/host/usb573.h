@@ -10,9 +10,9 @@
 // controls where its cabinet has them, test mode's I/O check included. The other way, every change
 // the game makes to the I/O board's outputs, EXT-OUT and the coin counters (Core::wired_outputs)
 // goes to the board's pins in order: the lamps, and on a DDR cabinet the clock and data lines to
-// each stage's GN845-PWB(B) board, which gives the panels only once the game has spoken to it.
-// Those edges go out one by one, at the game's own pace kept between half a millisecond and two;
-// a stage's panels count as let go until its board has heard the game out (docs/USB573.md).
+// each stage's GN845-PWB(B) board, which gives the panels only once the game has been through a
+// dialogue with it. Those edges go out one by one, at the game's own pace; a stage's panels count
+// as let go until its board has had that dialogue, and during any later one (docs/USB573.md).
 //
 // The game menu (runtime/menu/) in such a cabinet is no 573: it gets the cabinet's switches by the
 // names its controls have, so the cabinet chooses its games too (its lamps stay dark there).
@@ -80,9 +80,10 @@ std::array<uint8_t, REPORT> keepalive_report();
 std::array<uint8_t, REPORT> reset_report();
 std::array<uint8_t, REPORT> config_report(uint16_t debounce_us, uint16_t failsafe_ms, uint16_t counter_ms);
 
-// The pace of a DDR stage's clock and data edges: the game's own, kept within these (microseconds)
-constexpr uint32_t STAGE_GAP_MIN = 500, STAGE_GAP_MAX = 2000;
-// A stage's panels count once its board has had the last of the game's edges for this long (seconds)
+// The pace of a DDR stage's clock and data edges: the game's own, no two closer than the first and
+// none held back longer than the second (microseconds)
+constexpr uint32_t STAGE_GAP_MIN = 500, STAGE_GAP_MAX = 20000;
+// A stage's panels count once its board has had the last edge of the game's dialogue for this long (seconds)
 constexpr double STAGE_SETTLE = 0.1;
 
 // The USB side (SDL's hidapi), replaceable for tests

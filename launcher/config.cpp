@@ -241,6 +241,7 @@ QString familyName(const QString &family) {
     if (family == "mambo") return "Mambo a GoGo (System 573)";
     if (family == "drmn") return "DrumMania (System 573)";
     if (family == "gtrf") return "GuitarFreaks (System 573)";
+    if (family == "stepchmp") return "Step Champ (System 573)";
     if (family == "pypopn") return "pop'n music (Konami Python)";
     if (family == "pcpopn") return "pop'n music (PC)";
     if (family == "pcpopnhc") return "pop'n music (PC, two screens)";
@@ -251,13 +252,14 @@ QString familyName(const QString &family) {
 QList<QPair<QString, QStringList>> familySeries() {
     return {{"beatmania", {"djbm", "iidx", "bm3"}},
             {"pop'n music", {"djpopn", "popn", "pypopn", "pcpopn", "pcpopnhc", "djpstage"}},
-            {"Other games", {"ddr", "ddrsolo", "dmx", "drmn", "gtrf", "kbm", "mambo", "ppp"}}};
+            {"Other games", {"ddr", "ddrsolo", "dmx", "drmn", "gtrf", "kbm", "mambo", "ppp", "stepchmp"}}};
 }
 
 bool isBeatmania(const QString &family) { return family == "djbm" || family == "iidx" || family == "bm3"; }
 
 bool isSystem573(const QString &family) {
-    return family == "ddr" || family == "ddrsolo" || family == "dmx" || family == "mambo" || family == "drmn" || family == "gtrf";
+    return family == "ddr" || family == "ddrsolo" || family == "dmx" || family == "mambo" || family == "drmn" || family == "gtrf" ||
+           family == "stepchmp";
 }
 
 bool beatmaniaApart() { return settings().value("controls/beatmaniaApart", false).toBool(); }
@@ -320,7 +322,7 @@ QList<QPair<QString, QStringList>> controlsSeries() { return controlsSeries(beat
 
 QList<QPair<QString, QStringList>> controlsSeries(bool apart) {
     const QStringList bm = apart ? QStringList{"djbm", "iidx", "bm3"} : QStringList{"beatmania"};
-    return {{"", bm + QStringList{"popn", "djpstage", "ddr", "ddrsolo", "dmx", "drmn", "gtrf", "kbm", "mambo", "ppp"}}};
+    return {{"", bm + QStringList{"popn", "djpstage", "ddr", "ddrsolo", "dmx", "drmn", "gtrf", "kbm", "mambo", "ppp", "stepchmp"}}};
 }
 
 void ControlsEdits::setApart(bool on, const std::function<Bindings(const QString &)> &read) {

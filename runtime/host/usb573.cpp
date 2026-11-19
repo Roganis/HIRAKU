@@ -87,7 +87,12 @@ using Clock = std::chrono::steady_clock;
 
 constexpr uint8_t PROTOCOL = 1;
 constexpr size_t BACKLOG = 32;        // this many output states waiting: the board is behind, lamps' states merge
-constexpr size_t PENDING_MAX = 16384; // ... and beyond this the oldest go (a board that is away for long)
+constexpr size_t PENDING_MAX = 16384; // ... and beyond this the oldest go
+// Without a board, what waits for one is the stages' dialogues and how the outputs stand: of the
+// changes since the last dialogue (lamps, a stage's bus clocked with nothing said) the first few
+// are kept (the dialogue's own last edges) and the latest (the bits a next dialogue starts from)
+constexpr size_t AWAY_HEAD = 16, AWAY_TAIL = 96;
+constexpr uint64_t PACED_FOR_US = 50000;   // the outputs keep the game's pace this long after a stage's edge
 
 std::string g_where;   // --usb573: "" not asked for
 int g_debounce_us = -1;
@@ -102,7 +107,8 @@ const bool g_log = getenv("HK_USB573_LOG") != nullptr;
 
 struct Pending {
     Entry e;
-    uint8_t stage = 0;   // bit p: the entry moves stage p's clock or data
+    bool ordered = false;   // an edge of a serial line (a stage's clock or data, the cartridge slot's): never merged away
+    bool busy = false;      // a stage's board is in a dialogue after it (wired573::STAGE_BUSY)
 };
 
 std::mutex g_mutex;
@@ -117,8 +123,16 @@ uint64_t g_taken = 0, g_done = 0;
 uint64_t g_state = 0;                // the outputs as the last entry leaves them
 bool g_stage_spoken = false;         // a stage edge has been queued
 uint64_t g_stage_at = 0;             // ... the machine's time of the last one
-uint64_t g_stage_entry[2] = {};      // the last entry to move stage p's lines (0: the game hasn't spoken to it)
-bool g_stage_heard[2] = {};          // ... is on the board's pins
+bool g_timed = false;                // an entry has been queued
+uint64_t g_entry_at = 0;             // ... the machine's time of the last one
+uint64_t g_since_stage = 0;          // the delays given since the last stage edge, microseconds
+// A stage's board gives its panels once it has been through a dialogue with the game (it holds
+// right and up until then) and is in none: by the entries, as the core's emulated board stood
+// after each (wired573::Output::stage)
+bool g_stage_busy[2] = {};           // the game is in a dialogue with stage p's (the last entry says)
+uint64_t g_stage_open[2] = {};       // the entry that ended stage p's first dialogue (0: none yet)
+uint64_t g_stage_end[2] = {};        // the entry that ended its last one
+bool g_stage_heard[2] = {};          // ... the board has them on its pins
 Clock::time_point g_stage_heard_at[2];
 // ---- the core's thread ----
 uint32_t g_last = 0;                 // the switches as the machine was last given them
@@ -142,7 +156,7 @@ void wait(std::chrono::milliseconds t) {
 // Under g_mutex: which stages' boards have the game's every edge
 void stages_heard(Clock::time_point now) {
     for (int p = 0; p < 2; p++) {
-        const bool heard = g_stage_entry[p] && g_done >= g_stage_entry[p];
+        const bool heard = g_stage_open[p] && !g_stage_busy[p] && g_done >= g_stage_open[p] && g_done >= g_stage_end[p];
         if (heard && !g_stage_heard[p]) g_stage_heard_at[p] = now;
         g_stage_heard[p] = heard;
     }
@@ -176,7 +190,7 @@ void session() {
         base = g_done = g_taken;
         g_connected = true;
         // what waited for a board goes to this one; with nothing waiting, how the outputs stand
-        if (g_pending.empty()) g_pending.push_back({{g_state, 0}, 0});
+        if (g_pending.empty()) g_pending.push_back({{g_state, 0}, false, false});
         stages_heard(Clock::now());
     }
     uint16_t last_applied = in.applied;
@@ -297,6 +311,10 @@ const std::vector<Named> *named_controls(const std::string &family) {
          {{P1_B1, "P1 Button R"}, {P1_B2, "P1 Button G"}, {P1_B3, "P1 Button B"}, {P1_UP, "P1 Pick"}, {P1_DOWN, "P1 Wailing"},
           {P2_B1, "P2 Button R"}, {P2_B2, "P2 Button G"}, {P2_B3, "P2 Button B"}, {P2_UP, "P2 Pick"}, {P2_DOWN, "P2 Wailing"},
           {P1_START, "1 Player Start"}, {P2_START, "2 Players Start"}}},
+        {"stepchmp",
+         {{P1_B1, "P1 Red"}, {P1_B2, "P1 Green"}, {P1_B3, "P1 Blue"}, {P2_B1, "P2 Red"}, {P2_B2, "P2 Green"}, {P2_B3, "P2 Blue"},
+          {P1_LEFT, "P3 Red"}, {P1_DOWN, "P3 Green"}, {P1_RIGHT, "P3 Blue"},
+          {P1_START, "1 Player Start"}, {P2_START, "2 Players Start"}, {P1_UP, "3 Players Start"}}},
     };
     const auto f = all.find(family);
     return f != all.end() ? &f->second : nullptr;
@@ -308,24 +326,48 @@ void queue(const wired573::Output &c) {
     uint8_t stage = 0;
     if (g_ddr) stage = (uint8_t)((diff & wired573::OUT_STAGE1 ? 1 : 0) | (diff & wired573::OUT_STAGE2 ? 2 : 0));
     Entry e{c.state, 0};
-    if (stage) {
-        // a stage's edges keep the game's own pace, within what its board surely follows
-        const uint64_t gap = g_stage_spoken && c.at_us > g_stage_at ? c.at_us - g_stage_at : 0;
-        e.delay_us = (uint32_t)std::clamp<uint64_t>(gap, STAGE_GAP_MIN, STAGE_GAP_MAX);
-        g_stage_spoken = true;
-        g_stage_at = c.at_us;
+    // A stage's bus keeps the game's own pace (a 573 takes some 200 ms over a message), and so does
+    // what changes among its edges: each entry the game's time after the one before it. No two of
+    // a stage's edges come closer than its board surely follows, and none waits longer than the limit.
+    if (stage || (g_stage_spoken && c.at_us - g_stage_at < PACED_FOR_US)) {
+        uint64_t gap = g_timed && c.at_us > g_entry_at ? std::min<uint64_t>(c.at_us - g_entry_at, STAGE_GAP_MAX) : 0;
+        if (stage && g_since_stage + gap < STAGE_GAP_MIN) gap = STAGE_GAP_MIN - g_since_stage;
+        g_since_stage = stage ? 0 : g_since_stage + gap;
+        e.delay_us = (uint32_t)gap;
+    } else {
+        g_since_stage = STAGE_GAP_MIN;   // (long after the last edge)
     }
+    if (stage) g_stage_spoken = true, g_stage_at = c.at_us;
+    g_timed = true;
+    g_entry_at = c.at_us;
     g_state = c.state;
-    // a lamp's state that waits gives way to a newer one when the board is behind, or away; a
-    // stage's edges never do
-    if (!stage && !g_pending.empty() && !g_pending.back().stage && (g_pending.size() >= BACKLOG || !g_connected)) {
+    const bool busy = g_ddr && (c.stage & (wired573::STAGE_BUSY | wired573::STAGE_BUSY << 1));
+    // a lamp's state that waits gives way to a newer one when the board is behind, or away; the
+    // edges of a serial line never do: a stage's, and the cartridge slot's (a shift register's
+    // clock and data, as Step Champ's lamps come)
+    const bool ordered = stage || (diff & wired573::OUT_CART);
+    if (!ordered && !g_pending.empty() && !g_pending.back().ordered && (g_pending.size() >= BACKLOG || !g_connected)) {
         g_pending.back().e.state = c.state;
-        return;
+        g_pending.back().busy = busy;
+    } else {
+        if (g_pending.size() >= PENDING_MAX) g_pending.pop_front(), g_taken++;
+        g_pending.push_back({e, ordered, busy});
+        if (!g_connected) {
+            // with no board: the changes since the last dialogue are thinned from their middle
+            size_t run = 0;
+            while (run < g_pending.size() && !g_pending[g_pending.size() - 1 - run].busy) run++;
+            if (run > AWAY_HEAD + AWAY_TAIL) g_pending.erase(g_pending.end() - (std::ptrdiff_t)(run - AWAY_HEAD));
+        }
     }
-    if (g_pending.size() >= PENDING_MAX) g_pending.pop_front(), g_taken++;
-    g_pending.push_back({e, stage});
-    for (int p = 0; p < 2; p++)
-        if (stage >> p & 1) g_stage_entry[p] = g_taken + g_pending.size(), g_stage_heard[p] = false;
+    if (!g_ddr) return;
+    const uint64_t n = g_taken + g_pending.size();   // this entry's number
+    for (int p = 0; p < 2; p++) {
+        const bool in_dialogue = c.stage & (wired573::STAGE_BUSY << p);
+        if (g_stage_busy[p] && !in_dialogue) g_stage_end[p] = n;
+        if (in_dialogue != g_stage_busy[p]) g_stage_heard[p] = false;
+        g_stage_busy[p] = in_dialogue;
+        if (!g_stage_open[p] && (c.stage & (wired573::STAGE_OPEN << p))) g_stage_open[p] = n;
+    }
 }
 
 }  // namespace
@@ -386,9 +428,9 @@ void usb573_start(hk::Core &core) {
         g_connected = false;
         g_switches = g_closed = g_last = 0;
         g_pending.clear();
-        g_taken = g_done = g_state = g_stage_at = 0;
-        g_stage_spoken = false;
-        for (int p = 0; p < 2; p++) g_stage_entry[p] = 0, g_stage_heard[p] = false;
+        g_taken = g_done = g_state = g_stage_at = g_entry_at = g_since_stage = 0;
+        g_stage_spoken = g_timed = false;
+        for (int p = 0; p < 2; p++) g_stage_open[p] = g_stage_end[p] = 0, g_stage_busy[p] = g_stage_heard[p] = false;
     }
     g_attached = true;
     g_running = true;
@@ -433,8 +475,8 @@ void usb573_frame(hk::Core &core) {
         for (int p = 0; p < 2; p++)
             panels[p] = g_stage_heard[p] && now - g_stage_heard_at[p] >= std::chrono::duration<double>(STAGE_SETTLE);
     }
-    // a DDR stage's lines are its panels only once its board has heard the game out; until then
-    // (and while more of the game's edges are on their way) they are that board's own signals
+    // a DDR stage's lines are its panels only once its board has been through the game's dialogue
+    // and is in none; until then they are that board's own signals
     if (g_ddr) {
         if (!panels[0]) sw &= ~(uint32_t)wired573::P1_STAGE;
         if (!panels[1]) sw &= ~(uint32_t)wired573::P2_STAGE;

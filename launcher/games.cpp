@@ -238,6 +238,7 @@ Shelf shelf(const Game &g) {
         {"ParaParaParadise", {"ppp"}},
         {"Dance Maniax", {"dmx"}},
         {"Mambo a GoGo", {"mambo"}},
+        {"Step Champ", {"stepchmp"}},
     };
     // the systems, by their first game's year
     static const QList<QPair<QString, QString>> systems = {
@@ -268,6 +269,7 @@ Look familyLook(const QString &family) {
            : family == "ddrsolo" ? Look{QColor(0x8a, 0x2b, 0xc8), "Solo"}
            : family == "dmx"  ? Look{QColor(0x1e, 0xa0, 0xb4), "DMX"}
            : family == "mambo" ? Look{QColor(0xe0, 0x8c, 0x1e), "Mambo"}
+           : family == "stepchmp" ? Look{QColor(0x2a, 0xa8, 0x5a), "Step"}
            : family == "drmn" ? Look{QColor(0xc8, 0x3a, 0x2b), "DM"}
            : family == "gtrf" ? Look{QColor(0x2b, 0x8a, 0xc8), "GF"}
            : family == "iidx" ? Look{QColor(0x18, 0x18, 0x20), "IIDX"}

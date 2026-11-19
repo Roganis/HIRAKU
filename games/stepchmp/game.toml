@@ -1,0 +1,18 @@
+# Step Champ (GQ930 VER. JA), Konami 1999: generated from MAME's ksys573.cpp (tools/gen573.py)
+id = "stepchmp"
+title = "Step Champ"
+family = "stepchmp"     # Step Champ cabinet: three players, three controls each (MAME: red, green, blue), a Start each
+mame = "stepchmp"       # MAME set name, used by the oracle
+core = "sys573"         # System 573 (runtime/sys573/, PLAN.md section 19); no I/O board
+
+[roms]
+bios = "700a01.22g"             # 573 BIOS
+h8 = "h8a01.bin"                # the H8's start-up response (JVS check)
+cassette_eeprom = "gq930ja.u1"  # the game cassette's X76F100
+cassette_id = "gq930ja.u6"      # ... and its DS2401 serial number
+preload = ["29f016a.27h:gq930ja.27h", "29f016a.27j:gq930ja.27j", "29f016a.27l:gq930ja.27l", "29f016a.27m:gq930ja.27m", "29f016a.31h:gq930ja.31h", "29f016a.31j:gq930ja.31j", "29f016a.31l:gq930ja.31l", "29f016a.31m:gq930ja.31m"]   # chips the set has filled: device:file (MAME's regions)
+
+[board]
+io_board = "none"               # a plain System 573: no I/O board
+cassette = "yi"                 # MAME's cassette variant: X76F100 + DS2401 (cassyi)
+cdrom = false                   # no CD-ROM drive: the game is all in the flash (MAME's konami573(config, true))

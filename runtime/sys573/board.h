@@ -38,7 +38,8 @@ struct Config {
     // stub (PLAN.md section 19); its CD (the songs' music), firmware and timekeeper
     bool msu = false;
     std::string msu_cd, msu_flash = "flash.20t", msu_rtc = "m48t58y.6t";
-    std::string io_board = "analog";       // analog (GX700-PWB(F)) | digital (GX894-PWB(B), MP3)
+    std::string io_board = "analog";       // analog (GX700-PWB(F)) | digital (GX894-PWB(B), MP3) | none (a plain 573)
+    bool cdrom = true;                     // the CR-589 drive; false: none fitted (MAME's konami573(config, true): Step Champ)
     std::string digital_id = "digital-id.bin";
     std::string cd;                        // the CD image (.cue or .iso)
     std::string pccard1;                   // "32mb": a Fujitsu 32 MiB flash card in slot 1 (GuitarFreaks)

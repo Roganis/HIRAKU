@@ -6,7 +6,7 @@
 
 Everything comes from tools/data/mame-bemani.json (tools/mameset.py --refresh with MAME's
 ksys573.cpp): which chip each ROM is (its region), the disks, and the machine config:
-- the I/O board: k573a, analog (GX700-PWB(F)); k573d, digital (GX894-PWB(B));
+- the I/O board: k573a, analog (GX700-PWB(F)); k573d, digital (GX894-PWB(B)); neither, a plain 573;
 - the cassettes: cassx/cassxi/cassy/cassyi/cassyyi/cassxzi/casszi;
 - PC Cards, the JVS memory card reader, the multi-session unit.
 The family follows MAME's input ports (ddr, gtrfrks, drmn). Prints the manifest; --write writes it
@@ -32,11 +32,19 @@ FAMILIES = {   # MAME input ports -> HIRAKU family, its cabinet comment
     "dmx": ("dmx", "Dance Maniax cabinet: per player four hand sensors (up, two down rows; left and right), Select L/R"),
     "mamboagg": ("mambo", "Mambo a GoGo cabinet: three congas (left, centre, right), three zones each"),
 }
+# ... or MAME's machine config, where the ports are another game's (Step Champ on hyperbbc's: its
+# lamps are its own, on the cassette's shift registers)
+CONFIG_FAMILIES = {
+    "stepchmp": ("stepchmp", "Step Champ cabinet: three players, three controls each (MAME: red, green, blue), a Start each"),
+}
+# MAME's konami573(config, true): a 573 with no CD-ROM drive, its game all in the flash
+NO_CDROM = {"stepchmp"}
 CHIPS = {"x": "X76F041", "xi": "X76F041", "y": "X76F100", "yi": "X76F100", "zi": "ZS01"}
 CASSETTE = {"x": "X76F041, no DS2401", "xi": "X76F041 + DS2401", "y": "X76F100, no DS2401",
             "yi": "X76F100 + DS2401", "zi": "ZS01 + DS2401"}
 BOARD = {"analog": "GX700-PWB(F): lamp and stage outputs; the music is CD audio",
-         "digital": "GX894-PWB(B): FPGA + MAS3507D MP3"}
+         "digital": "GX894-PWB(B): FPGA + MAS3507D MP3",
+         "none": "a plain System 573: no I/O board"}
 
 
 def q(v: str) -> str:
@@ -57,12 +65,13 @@ def generate(name: str, gid: str | None = None, title: str | None = None, family
     c = m.get("k573")
     if not c:
         sys.exit(f"{name}: no System 573 config (refresh tools/data with MAME's ksys573.cpp: tools/mameset.py --refresh)")
+    c = dict(c, io_board=c.get("io_board", "none"))
     if c["io_board"] not in BOARD:
         sys.exit(f"{name}: the {c['io_board']} I/O board isn't in HIRAKU")
-    fam = family or FAMILIES.get(c["inputs"], (None,))[0]
+    fam = family or CONFIG_FAMILIES.get(c["config"], FAMILIES.get(c["inputs"], (None,)))[0]
     if not fam:
         sys.exit(f"{name}: MAME's '{c['inputs']}' inputs have no HIRAKU family yet (--family)")
-    fam_comment = next((v[1] for v in FAMILIES.values() if v[0] == fam), "")
+    fam_comment = next((v[1] for v in list(FAMILIES.values()) + list(CONFIG_FAMILIES.values()) if v[0] == fam), "")
     gid = gid or name
     # the files, by MAME's region (the default BIOS: roms keep only it)
     regions = m.get("regions", {})
@@ -85,7 +94,8 @@ def generate(name: str, gid: str | None = None, title: str | None = None, family
            f'title = "{title or plain}"',
            line("family", q(fam), fam_comment, 24),
            line("mame", q(name), "MAME set name, used by the oracle", 24),
-           line("core", q("sys573"), f"System 573 (runtime/sys573/, PLAN.md section 19); {c['io_board']} I/O board", 24)]
+           line("core", q("sys573"), "System 573 (runtime/sys573/, PLAN.md section 19); "
+                + ("no I/O board" if c["io_board"] == "none" else f"{c['io_board']} I/O board"), 24)]
     if ieeprom:
         out.append('install_cassette = "yes"   # the launcher\'s first boot uses the install cassette (--cassette install)')
     if first_boot:
@@ -125,6 +135,9 @@ def generate(name: str, gid: str | None = None, title: str | None = None, family
         out.append(line("memory_card_reader", "true", "the JVS memory card reader"))
     if c.get("msu"):
         out.append(line("msu", "true", "the multi-session unit (GXA25)"))
+    if c["config"] in NO_CDROM:
+        out.append(line("cdrom", "false", "no CD-ROM drive: the game is all in the flash (MAME's konami573(config, true))"))
+        return "\n".join(out) + "\n"
     out += ["", "[cd]"]
     if "runtime" in disks:
         out.append(line("chd", q(disks["runtime"]), "the runtime CD", 24))

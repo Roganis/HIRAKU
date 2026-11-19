@@ -284,6 +284,26 @@ std::vector<Control> make_gtrf() {
     return c;
 }
 
+// Step Champ (System 573, MAME ksys573.cpp "stepchmp" on its hyperbbc ports): three players, each
+// with three controls MAME names red, green and blue as Hyper Bishi Bashi Champ's buttons, and a
+// Start. On the keyboard a player's three sit side by side: A S D, G H J, K L ;.
+std::vector<Control> make_stepchmp() {
+    std::vector<Control> c;
+    const char *colour[3] = {"Red", "Green", "Blue"};
+    const char *keys[3][3] = {{"A", "S", "D"}, {"G", "H", "J"}, {"K", "L", ";"}};
+    const char *start[3] = {"1 Player Start", "2 Players Start", "3 Players Start"};
+    for (int p = 0; p < 3; p++) {
+        const std::string P = "P" + std::to_string(p + 1), g = "Player " + std::to_string(p + 1), j = "joy" + std::to_string(p);
+        for (int k = 0; k < 3; k++)
+            c.push_back({P + " " + colour[k], colour[k], g, false, std::string("key:") + keys[p][k] + ", " + j + ":button" + std::to_string(k)});
+        c.push_back({start[p], "Start", g, false, "key:" + std::to_string(p + 1) + ", " + j + ":button9"});
+    }
+    c.push_back({"Coin 1", "Coin", "Cabinet", false, "key:5, joy0:button8"});
+    c.push_back({"Test", "Test", "Cabinet", false, "key:F2"});
+    c.push_back({"Service", "Service", "Cabinet", false, "key:9"});
+    return c;
+}
+
 // The board's status LEDs (lamp_output_w, active low): every family has them.
 void add_status(std::vector<Lamp> &l) {
     for (int k = 0; k < 8; k++) l.push_back({"Status LED " + std::to_string(k + 1), "Board (diagnostic)", 0, k, true});
@@ -553,6 +573,15 @@ std::vector<Lamp> make_drmn_lamps() {
     };
 }
 
+// Step Champ: the cassette's shift register word as MAME's stepchmp_lamp_clock reads it (reg 0,
+// bit = the word's bit): the three Start lamps and the three halogens
+std::vector<Lamp> make_stepchmp_lamps() {
+    return {
+        {"P1 Start Lamp", "Panel", 0, 7}, {"P2 Start Lamp", "Panel", 0, 6}, {"P3 Start Lamp", "Panel", 0, 5},
+        {"Halogen 1", "Cabinet", 0, 3}, {"Halogen 2", "Cabinet", 0, 2}, {"Halogen 3", "Cabinet", 0, 1},
+    };
+}
+
 // GuitarFreaks: MAME's LAMPS port bits 7 to 4 (gtrfrks_lamps_b7..b4), as the board numbers them
 std::vector<Lamp> make_gtrf_lamps() {
     return {
@@ -623,7 +652,7 @@ const std::vector<Control> &controls(const std::string &family) {
     static const std::map<std::string, std::vector<Control>> all = {
         {"bm3", make_bm3()}, {"popn", make_popn()}, {"ppp", make_ppp()}, {"kbm", make_kbm()},
         {"djbm", make_djbm()}, {"djpopn", make_djpopn()}, {"djpstage", make_djpstage()}, {"ddr", make_ddr()}, {"ddrsolo", make_ddrsolo()},
-        {"dmx", make_dmx()}, {"mambo", make_mambo()}, {"drmn", make_drmn()}, {"gtrf", make_gtrf()}, {"iidx", make_iidx()}, {"pypopn", make_pypopn()},
+        {"dmx", make_dmx()}, {"mambo", make_mambo()}, {"drmn", make_drmn()}, {"gtrf", make_gtrf()}, {"stepchmp", make_stepchmp()}, {"iidx", make_iidx()}, {"pypopn", make_pypopn()},
         {"pcpopn", make_pypopn()},   // the PC pop'n music games (runtime/pc/): the same controls
         {"pcpopnhc", make_pcpopnhc()}};
     auto f = all.find(family);
@@ -634,7 +663,7 @@ const std::vector<Lamp> &lamps(const std::string &family) {
     static const std::map<std::string, std::vector<Lamp>> all = {
         {"bm3", make_bm3_lamps()}, {"popn", make_popn_lamps()}, {"ppp", make_ppp_lamps()}, {"kbm", make_kbm_lamps()},
         {"djbm", make_djbm_lamps()}, {"djpopn", make_djpopn_lamps()}, {"djpstage", make_djpstage_lamps()},
-        {"ddr", make_ddr_lamps()}, {"ddrsolo", make_ddrsolo_lamps()}, {"dmx", make_dmx_lamps()}, {"mambo", make_mambo_lamps()}, {"drmn", make_drmn_lamps()}, {"gtrf", make_gtrf_lamps()}, {"iidx", make_iidx_lamps()},
+        {"ddr", make_ddr_lamps()}, {"ddrsolo", make_ddrsolo_lamps()}, {"dmx", make_dmx_lamps()}, {"mambo", make_mambo_lamps()}, {"drmn", make_drmn_lamps()}, {"gtrf", make_gtrf_lamps()}, {"stepchmp", make_stepchmp_lamps()}, {"iidx", make_iidx_lamps()},
         {"pypopn", make_pypopn_lamps()}, {"pcpopn", make_pypopn_lamps()}, {"pcpopnhc", make_pypopn_lamps()}};
     auto f = all.find(family);
     return f != all.end() ? f->second : all.at("bm3");

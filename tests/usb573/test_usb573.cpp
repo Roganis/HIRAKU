@@ -20,6 +20,7 @@
 #include "shell/cabinet.h"
 #include "shell/core.h"
 #include "shell/wired573.h"
+#include "sys573/seriallamps.h"
 #include "sys573/wiredpins.h"
 
 extern "C" {
@@ -125,7 +126,34 @@ struct Machine : hk::Core {
     void out(uint64_t s, uint64_t after_us) {
         state = s;
         time_us += after_us;
-        changes.push_back({s, time_us});
+        changes.push_back({s, time_us, stages(s)});
+    }
+
+    // A DDR machine's stage boards as the 573 core emulates them (sys573/board.cpp, MAME's
+    // gn845pwbb_clk_w): data and clock are the outputs' levels, high while the pin doesn't sink;
+    // a rising clock shifts the data in; 0xc90 starts a dialogue of 22 more bits
+    struct Stage {
+        int clk = 1, shift = 0, bit = 0;
+        bool busy = false, open = false;
+    } stage[2];
+    uint8_t stages(uint64_t s) {
+        uint8_t tag = 0;
+        if (fam != "ddr") return tag;
+        for (int p = 0; p < 2; p++) {
+            Stage &st = stage[p];
+            const int data = !(s & (p ? wired573::out_b(4) : wired573::out_a(4))), clk = !(s & (p ? wired573::out_b(5) : wired573::out_a(5)));
+            if (clk && !st.clk) {
+                st.shift = (st.shift >> 1) | (data << 12);
+                if (!st.busy) {
+                    if (st.shift == 0xc90) st.busy = true, st.bit = 0;
+                } else if (++st.bit >= 22) {
+                    st.busy = false, st.open = true;
+                }
+            }
+            st.clk = clk;
+            tag |= (uint8_t)((st.busy ? wired573::STAGE_BUSY << p : 0) | (st.open ? wired573::STAGE_OPEN << p : 0));
+        }
+        return tag;
     }
 
     bool init(const Options &) override { return true; }
@@ -148,7 +176,7 @@ struct Machine : hk::Core {
     uint64_t lamp_changes() const override { return 0; }
     bool wired_attach(bool on) override {
         attached = on;
-        if (on) changes.push_back({state, time_us});
+        if (on) changes.push_back({state, time_us, stages(state)});
         return true;
     }
     void wired_inputs(uint32_t switches, const uint8_t *a) override {
@@ -212,6 +240,7 @@ static void test_reports() {
     CHECK(fw.fifo[1].state == (U573_OUT_EXT(7) | U573_OUT_COUNTER1) && fw.fifo[1].delay == 51);   // rounded up: never sooner
     CHECK(fw.fifo[2].state == U573_OUT_ALL && fw.fifo[2].delay == 0xffff);
     CHECK(OUT_ALL == U573_OUT_ALL && (OUT_STAGE1 | OUT_STAGE2) == (U573_OUT_A(4) | U573_OUT_A(5) | U573_OUT_B(4) | U573_OUT_B(5)));
+    CHECK(OUT_CART == U573_OUT_CART_ALL && out_cart(4) == U573_OUT_CART(4) && out_cart(7) == U573_OUT_CART(7));
     CHECK(u573_task(&fw, 1000, &drive) && drive == e[0].state);
 
     const auto flush = outputs_report(e, 1, true);
@@ -314,18 +343,20 @@ static void test_cabinet() {
 }
 
 // ---- a DDR cabinet: the stages' boards ---------------------------------------------------------
-// The game's side of a dialogue with stage p: `bits` data bits, each set on the data line and
-// clocked (clock up, clock down), as fast as a 573 writes (40 microseconds apart), a lamp changing
-// among them. The edges it makes are added to `edges`.
-static void speak(Machine &m, int p, int bits, std::vector<uint64_t> &edges) {
+// The game's side of the stage bus: `bits` bits of `word` (the lowest first, round and round), each
+// put on the data line and clocked (the clock pin sinks, then lets go: the edge that counts),
+// `gap` microseconds of the machine's time between edges, a lamp changing among them. The edges it
+// makes are added to `edges`. 0xc90 and 22 more bits are a dialogue (35 bits); zeroes are a bus
+// clocked with nothing said.
+static void speak(Machine &m, int p, int bits, std::vector<uint64_t> &edges, int word = 0xc90, uint64_t gap = 40) {
     const uint64_t data = p ? out_b(4) : out_a(4), clock = p ? out_b(5) : out_a(5);
     uint64_t s = m.state;
     for (int k = 0; k < bits; k++) {
-        const uint64_t want = (0xc90u >> (k % 13) & 1) ? data : 0;
-        if ((s & data) != want) m.out(s = (s & ~data) | want, 40), edges.push_back(s);
-        m.out(s |= clock, 40), edges.push_back(s);
-        if (k == 5) m.out(s ^= out_c(2), 40);   // (a lamp, no edge of the stage's)
-        m.out(s &= ~clock, 40), edges.push_back(s);
+        const uint64_t want = (word >> (k % 13) & 1) ? 0 : data;   // (a 1 is the pin let go)
+        if ((s & data) != want) m.out(s = (s & ~data) | want, gap), edges.push_back(s);
+        m.out(s |= clock, gap), edges.push_back(s);
+        if (k == 5) m.out(s ^= out_c(2), gap);   // (a lamp, no edge of the stage's)
+        m.out(s &= ~clock, gap), edges.push_back(s);
     }
 }
 
@@ -397,12 +428,32 @@ static void test_ddr() {
     CHECK(got.size() == edges2.size() && least >= STAGE_GAP_MIN);
     for (size_t k = 0; k < edges2.size() && k < got.size(); k++) CHECK(got[k] == (edges2[k] & OUT_STAGE2));
 
-    // the game speaks to stage 1 again (test mode's check): its panels are held back at once
+    // the game speaks to stage 1 again (test mode's check): its panels are held back at once, and
+    // count again when that dialogue is over and on the board
     std::vector<uint64_t> again;
-    speak(m, 0, 13, again);
+    speak(m, 0, 35, again);
     frames(m, 1);
     CHECK(m.sw == (P2_LEFT | P2_DOWN));
     CHECK(frames_until(m, [&] { return m.sw == (P1_LEFT | P1_DOWN | P2_LEFT | P2_DOWN); }));
+
+    // the bus clocked with nothing said, as a game does while it is played, at a 573's own pace
+    // (3 ms an edge): the panels go on counting all along, and the edges reach the board in order
+    // at that pace, not held up and not bunched
+    const size_t before3 = b->driven().size();
+    std::vector<uint64_t> idle;
+    const uint64_t began = micros();
+    for (int burst = 0; burst < 10; burst++) {   // (a frame's worth of the game's time at a time, as the core makes them)
+        speak(m, 0, 2, idle, 0, 3000);
+        frames(m, 1);
+        CHECK(m.sw == (P1_LEFT | P1_DOWN | P2_LEFT | P2_DOWN));
+    }
+    CHECK(frames_until(m, [&] { return stage_edges(b->driven(), before3, OUT_STAGE1, least).size() >= idle.size(); }));
+    got = stage_edges(b->driven(), before3, OUT_STAGE1, least);
+    CHECK(got.size() == idle.size());
+    for (size_t k = 0; k < idle.size() && k < got.size(); k++) CHECK(got[k] == (idle[k] & OUT_STAGE1));
+    CHECK(least >= 2900);                                          // the game's 3 ms, not the least allowed
+    CHECK(micros() - began < 10 * 16000 + 1500000);                // ... and not falling behind the game
+    CHECK(m.sw == (P1_LEFT | P1_DOWN | P2_LEFT | P2_DOWN));
     CHECK(!b->overflowed());
     host::usb573_stop();
     CHECK(b->pins() == 0);
@@ -429,6 +480,68 @@ static void test_ddr_late() {
     for (size_t k = 0; k < edges2.size() && k < got2.size(); k++) CHECK(got2[k] == (edges2[k] & OUT_STAGE2));
     CHECK(least >= STAGE_GAP_MIN && least2 >= STAGE_GAP_MIN);
     CHECK((b->pins() & ~(OUT_STAGE1 | OUT_STAGE2)) == (m.state & ~(OUT_STAGE1 | OUT_STAGE2)));
+    host::usb573_stop();
+}
+
+// A Step Champ cabinet: its lamps hang on the security cartridge, which takes them as serial words
+// on the slot's d5 (clock), d6 (reset) and d7 (data). Every edge reaches the slot in order, however
+// many come at once and whatever lamps change among them.
+static void test_cartridge() {
+    Machine m("stepchmp");
+    Board *b = start(m);
+    CHECK(frames_until(m, [&] { return b->writes > 0; }));
+    b->switches = P1_LEFT | P1_UP | P1_B2;   // the third player's red and Start, the first's green: no stage here
+    CHECK(frames_until(m, [&] { return m.sw == (P1_LEFT | P1_UP | P1_B2); }));
+
+    const size_t before = b->driven().size();
+    std::vector<uint64_t> edges;
+    uint64_t s = m.state;
+    auto put = [&](uint64_t now) { m.out(s = now, 30), edges.push_back(now & OUT_CART); };
+    for (int word = 0; word < 12; word++) {          // twelve words in one frame: some 300 edges
+        put(s | out_cart(6)), put(s & ~out_cart(6)); // reset
+        for (int k = 7; k >= 0; k--) {
+            const uint64_t want = ((0xa5 + word) >> k & 1) ? out_cart(7) : 0;
+            if ((s & out_cart(7)) != want) put((s & ~out_cart(7)) | want);
+            put(s | out_cart(5)), put(s & ~out_cart(5));
+            if (k == 4) m.out(s ^= out_a(word % 8), 30);   // (a lamp of the I/O board's, were there one)
+        }
+    }
+    CHECK(edges.size() > 250);
+    uint64_t least;
+    CHECK(frames_until(m, [&] { return stage_edges(b->driven(), before, OUT_CART, least).size() >= edges.size(); }));
+    const auto got = stage_edges(b->driven(), before, OUT_CART, least);
+    CHECK(got.size() == edges.size());
+    for (size_t k = 0; k < edges.size() && k < got.size(); k++) CHECK(got[k] == edges[k]);
+    CHECK(frames_until(m, [&] { return b->pins() == m.state; }));
+    CHECK(!b->overflowed());
+    host::usb573_stop();
+    CHECK(b->pins() == 0);
+}
+
+// A long time without the board, the game clocking a stage's bus all the while: what waits for the
+// board stays small, and still has the whole dialogue in it
+static void test_ddr_away() {
+    Machine m("ddr");
+    Board *b = start(m, false);
+    std::vector<uint64_t> edges, idle;
+    speak(m, 0, 35, edges);
+    frames(m, 2);
+    for (int k = 0; k < 60; k++) {   // 60 frames of a clocked bus and blinking lamps: 600 changes and more
+        speak(m, 0, 3, idle, 0, 3000);
+        m.out(m.state ^ out_c(4), 100);
+        frames(m, 1);
+    }
+    CHECK(idle.size() > 300);
+    b->switches = P1_DOWN;
+    b->plugged = true;
+    CHECK(frames_until(m, [&] { return m.sw == P1_DOWN; }, 600));
+    uint64_t least;
+    const auto d = b->driven();
+    const auto got = stage_edges(d, 0, OUT_STAGE1, least);
+    CHECK(got.size() >= edges.size() && got.size() < edges.size() + 130);   // the dialogue, and the bus's last moves
+    for (size_t k = 0; k < edges.size() && k < got.size(); k++) CHECK(got[k] == (edges[k] & OUT_STAGE1));
+    CHECK(d.size() < edges.size() + 160);
+    CHECK(frames_until(m, [&] { return b->pins() == m.state; }));
     host::usb573_stop();
 }
 
@@ -482,6 +595,15 @@ static void test_menu() {
         b->switches = P1_RIGHT | P1_UP | P1_LEFT | P2_DOWN | P2_START;
         CHECK(frames_until(menu, [&] { return took(menu, "2 Players Start=1"); }));
         CHECK(took(menu, "P2 Down=1") && menu.inputs.size() == 2);
+        host::usb573_stop();
+    }
+    {
+        // Step Champ: the third player's controls are on player 1's joystick pins
+        Other menu("stepchmp");
+        Board *b = start(menu);
+        b->switches = P1_LEFT | P1_UP | P2_B3;
+        CHECK(frames_until(menu, [&] { return took(menu, "P2 Blue=1"); }));
+        CHECK(took(menu, "P3 Red=1") && took(menu, "3 Players Start=1") && menu.inputs.size() == 3);
         host::usb573_stop();
     }
     {
@@ -568,6 +690,33 @@ static void test_pins() {
                                            {21, out_c(6)}, {22, out_c(7)}, {30, out_d(0)}, {31, out_d(1)}, {27, out_d(3)}};
     for (auto &[n, pin] : drmn1) CHECK(analog_pin(n) == pin);
 
+    // Step Champ's lamps: a word on the cassette's shift registers, the first bit the highest
+    // (MAME's stepchmp_lamp_clock: bits 7-5 the Start lamps, 3-1 the halogens), lamp k its bit k
+    {
+        k573::SerialLamps lamps;
+        int word = -1, words = 0;
+        auto send = [&](int w, int bits) {
+            lamps.reset(1), lamps.reset(0);
+            for (int k = bits - 1; k >= 0; k--) {
+                lamps.set_data(w >> k & 1);
+                words += lamps.clock(1, 8, word);
+                words += lamps.clock(1, 8, word);   // (held high: no second edge)
+                words += lamps.clock(0, 8, word);
+            }
+        };
+        send(0xa8, 8);
+        CHECK(words == 1 && word == 0xa8);
+        CHECK(lamp_number("stepchmp", "P1 Start Lamp") == 7 && lamp_number("stepchmp", "P3 Start Lamp") == 5 &&
+              lamp_number("stepchmp", "Halogen 1") == 3 && lamp_number("stepchmp", "Halogen 3") == 1);
+        send(0x07, 5);   // a word cut short, then started afresh by the reset
+        CHECK(words == 1);
+        send(0x4e, 8);
+        CHECK(words == 2 && word == 0x4e);
+    }
+    // ... and its three players on the 573's pins (MAME's hyperbbc ports): the third on player 1's joystick
+    CHECK(inputs(P1_B1 | P1_B2 | P1_B3).in2 == 0x7000u && inputs(P2_B1 | P2_B2 | P2_B3).in2 == 0x0070u);
+    CHECK(inputs(P1_LEFT | P1_RIGHT | P1_UP | P1_DOWN).in2 == 0x0f00u);   // 3P red, blue, Start, green
+
     // the switches on the ASIC's registers (psx-spx: 0x1f400008's bits 0-7 player 2's left, right,
     // up, down, buttons 1-3, start, 8-15 player 1's; 0x1f40000c's 8-11 player 1's buttons 4 and 5,
     // Test, button 6; 0x1f40000e's the same for player 2; 0x1f400006's 8, 9 the coins, 12 Service)
@@ -588,6 +737,8 @@ int main() {
     test_cabinet();
     test_ddr();
     test_ddr_late();
+    test_ddr_away();
+    test_cartridge();
     test_menu();
     test_refused();
     if (failures) {

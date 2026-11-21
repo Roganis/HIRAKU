@@ -16,7 +16,7 @@
 #include <stdint.h>
 
 #define HK_PC_LINK_MAGIC 0x4b50484bu   // "HKPK"
-#define HK_PC_LINK_VERSION 14u
+#define HK_PC_LINK_VERSION 15u
 #define HK_PC_WATCHES 8u                           // [[rate]]'s words of the game's memory
 
 // The pad's bits, as Konami's ezusb.dll gives them to pop'n music (usbPadRead)
@@ -153,6 +153,17 @@ struct hk_pc_link {
     // then: hiraku-pc's line on the performance overlay (runtime/host/statsview.h), the game's work
     // being in a process of its own
     volatile uint32_t cpu_ms, cpu_at_ms;
+    // (v15) The C33 cabinet's touch panel (Konami's ee'MALL station, runtime/pc/ezusb_c33.c).
+    // hiraku-pc's touch, in the panel's own units as TouchPanel.dll reports them (0-228 across, 0-300
+    // down; the DLL turns them into the panel's raw numbers), touch_down while held, touch_seq moved on with each change. Keys typed for the
+    // program's touch keyboard: type_ring[type_seq % 16] each, then type_seq counted (the key's
+    // character as the keyboard names it). The DLL sets typing while the program reads that keyboard:
+    // hiraku-pc then takes the PC keyboard's letters as typing
+    volatile int32_t touch_x, touch_y;
+    volatile uint32_t touch_down, touch_seq;
+    volatile uint32_t type_seq;
+    volatile uint8_t type_ring[16];
+    volatile uint32_t typing;
 };
 
 // A quad the game drew (two triangles in screen space, one texture): the texture (its address, the

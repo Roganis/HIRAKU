@@ -30,6 +30,8 @@
 //   board=c02               the C02 cabinet's board (runtime/pc/ezusb_c02.c, IIDX: family=iidx), not pop'n's
 //   board=c02-driver        the same board under its driver (runtime/pc/ezusb_dev.c, IIDX RED: PLAN.md
 //                           section 36), started from HIRAKU's RtEffect.dll; Konami's ezusb.dll kept
+//   board=c33               the C33 cabinet's boards and touch panel (runtime/pc/ezusb_c33.c: Konami's ee'MALL
+//                           1st Avenue station, family=eemall): HIRAKU's ezusb.dll and ezusb_video.dll
 //   security=MODEL A:B:C    its security plug: the game's model code and the boot's seeds
 //   sidcode=E11:J:A:D       the cabinet's software id, written as ..\sidcode.txt from the program
 #include <algorithm>
@@ -81,6 +83,7 @@ extern char **environ;
 #include "host/popnio.h"
 #include "host/script.h"
 #include "pc/link.h"
+#include "pc/c33.h"
 #include "pc/process.h"
 #include "eamuse/server.h"
 #include "eamuse/lobby.h"
@@ -366,6 +369,7 @@ public:
         cab_hz_ = cabinet_rate(), hz_ = cab_hz_;
         c02_ = m["board"] == "c02" || m["board"] == "c02-driver";
         c02_driver_ = m["board"] == "c02-driver";
+        c33_ = m["board"] == "c33";
         data_as_ = m.count("data_as") ? m["data_as"] : drive + "\\data";
 
         // The save folder: the program's copy (HIRAKU's DLLs for Konami's), the backup drive (e/)
@@ -396,12 +400,25 @@ public:
             set_env("HK_PC_CARDS", win_path(save_ + "/cards"));
             set_env("HK_PC_CARD1", win_path(save_ + "/card.bin"));
             set_env("HK_PC_CARD2", win_path(save_ + "/card2.bin"));
+        } else if (c33_) {
+            // the ee'MALL station (runtime/pc/ezusb_c33.c): its library asks services.<its domain>,
+            // which it takes from the reverse lookup of its own address (runtime/pc/net.c), the
+            // board's PCB id, and the video board's flash, kept in the save folder
+            set_env("HK_PC_EA_DOMAIN", "eamuse.konami.fun");
+            set_env("HK_PC_EA_RDNS", "1");
+            set_env("HK_PC_PCBID", ea_.pcbid.empty() ? "01201000000000C33001" : ea_.pcbid);
+            set_env("HK_PC_VIDEO_FLASH", win_path(save_ + "/video-flash.bin"));
+            // its card slot (c33_card): the card held to it, as the station sees it, in cards/
+            mkdirs(save_ + "/cards");
+            set_env("HK_PC_CARDS", win_path(save_ + "/cards"));
+            set_env("HK_PC_CARD1", win_path(save_ + "/card.bin"));
+            c33_popn9_cards_ = hk::user_data_dir(o.root) + "/popn9/cards";
         } else if (!ea_.pcbid.empty()) {
             // pop'n 15-18: the e-AMUSEMENT plug's id, which the game sends as its PCBID (runtime/pc/ezusb.c)
             set_env("HK_PC_PCBID", ea_.pcbid);
         }
         // a bare pop'n board's firmware: the game's own ezusb.dll, unless --popn-io-dll gave one
-        if (!c02_) hk::host::popnio_default_dll(program_ + "/ezusb.dll");
+        if (!c02_ && !c33_) hk::host::popnio_default_dll(program_ + "/ezusb.dll");
 
         if (!make_link()) return false;
 
@@ -412,7 +429,7 @@ public:
         set_env("HK_PC_HZ", "0");   // the shell paces
         set_env("HK_PC_PRESS_TIME", press_time_ ? "1" : "");
         set_env("HK_PC_JUDGE_OFFSET", judge_offset_ ? std::to_string(judge_offset_) : "");
-        set_env("HK_PC_KEYS", c02_ ? "iidx" : "");   // the pad's keys: IIDX's 14, else pop'n's 9 (cabinet.c)
+        set_env("HK_PC_KEYS", c02_ ? "iidx" : c33_ ? "c33" : "");   // the pad's keys: IIDX's 14, else pop'n's 9 (cabinet.c)
         set_env("HK_PC_LOG", win_path(save_ + "/pc.log"));
         { std::ofstream(save_ + "/pc.log", std::ios::trunc); }
         printf("hiraku-pc: %s, %s from %s; saves in %s\n", game_.c_str(), exe_.c_str(), program_.c_str(), save_.c_str());
@@ -431,7 +448,8 @@ public:
             std::string from = from_dir + "/" + f;
             if (lower == "rteffect.dll" && c02_driver_) continue;   // HIRAKU's, below
             if ((lower == "ezusb.dll" && !c02_driver_) || lower == "libacio.dll")
-                from = bin_dir() + "/pc/" + (c02_ && lower == "ezusb.dll" ? "c02/" : "") + lower;
+                from = bin_dir() + "/pc/" + (c02_ && lower == "ezusb.dll" ? "c02/" : "") + (c33_ && lower == "ezusb.dll" ? "c33/" : "") + lower;
+            if (lower == "ezusb_video.dll" && c33_) from = bin_dir() + "/pc/c33/" + lower;   // the C33 cabinet's video board
             if (!copy_in(from, to_dir + "/" + f)) return false;
         }
         return true;
@@ -730,7 +748,10 @@ public:
     int monitor_khz() const override { return 31; }   // a PC's VGA monitor
     // the 64-bit PC pop'n: 1920x1080, square pixels; IIDX's 640x480 shown on its cabinet's widescreen
     // monitor (as Twinkle's IIDX)
-    double display_aspect() const override { return pc64_ ? 0.0 : family_ == "iidx" ? 16.0 / 9.0 : 4.0 / 3.0; }
+    double display_aspect() const override { return pc64_ ? 0.0 : family_ == "iidx" ? 16.0 / 9.0 : c33_ ? 0.0 : 4.0 / 3.0; }
+    // the C33 cabinet's frame (c33.h): its main screen and its touch panel with the small display
+    // side by side, square pixels, each half a screen of its own (runtime/pc/ezusb_c33.c)
+    int screens() const override { return c33_ ? 2 : 1; }
     double seconds() const override { return sec0_ + (double)(tick_ - t0_) / ghz(); }
     // The game's memory is its own process's: only the words a mod's [[rate]] watches, as the DLL
     // last copied them (link.h, v9)
@@ -910,7 +931,7 @@ public:
     uint64_t between_drawn_ = 0, between_late_ = 0;
     // The C02 cabinet's turntables: the host's counts (1024 a turn) to the board's 0-255
     void turntable_add(int player, int delta) override {
-        if (!c02_ || !link_ || player < 0 || player > 1) return;
+        if (!(c02_ || c33_) || !link_ || player < 0 || player > 1) return;
         tt_frac_[player] += delta;
         const int whole = tt_frac_[player] / 4;
         tt_frac_[player] -= whole * 4;
@@ -1016,7 +1037,7 @@ public:
         if (!start_game()) fatal();
         // A new save folder: the game makes its backup files and asks to be switched off and on
         // (BACKUP ERROR 5-1502); that is done for it, once, when they've been there a few seconds
-        bool first_boot = !c02_ && !pc32_ && !pc64_ && list_files(run_e_ + "/settings").empty();
+        bool first_boot = !c02_ && !c33_ && !pc32_ && !pc64_ && list_files(run_e_ + "/settings").empty();
         auto backup_made = std::chrono::steady_clock::time_point{};
         auto last = std::chrono::steady_clock::now(), rate_from = last;
         uint32_t seen = link_->frame_seq, rate_pictures = seen;
@@ -1133,6 +1154,10 @@ public:
     int input_position(const std::string &name) const override {
         int k;
         if (link_ && name.rfind("Volume ", 0) == 0 && (k = std::atoi(name.c_str() + 7)) >= 1 && k <= 5) return link_->slider[k - 1];
+        // the C33 cabinet: the window's mouse is its touch panel's ("Pointer"), and while the program
+        // reads its touch keyboard the PC keyboard types ("Typing": 1)
+        if (c33_ && link_ && name == "Pointer") return 0;
+        if (c33_ && link_ && name == "Typing") return link_->typing ? 1 : 0;
         return -1;
     }
 
@@ -1143,6 +1168,7 @@ public:
             else w = w & ~b;
         };
         if (c02_) return c02_input(name, value, bit);
+        if (c33_) return c33_input(name, value, bit);
         if (name.rfind("P1 Button ", 0) == 0) {
             const int k = std::atoi(name.c_str() + 10);
             if (k < 1 || k > 9) return false;
@@ -1198,6 +1224,11 @@ public:
         const auto &l = hk::cab::lamps(family_);
         lamps_.resize(l.size());
         const uint32_t b = link_ ? link_->lamps : 0;
+        if (c33_) {   // usbLamp's bits 2 and 3 (runtime/pc/ezusb_c33.c)
+            for (size_t i = 0; i < l.size(); i++) lamps_[i] = l[i].name == "Lamp 1" ? (b >> 2 & 1) : l[i].name == "Lamp 2" ? (b >> 3 & 1) : 0;
+            if (b != last_lamps_) last_lamps_ = b, changes_++;
+            return lamps_;
+        }
         if (c02_) {
             const uint32_t led = link_ ? link_->led : 0, top = link_ ? link_->top_lamp : 0, neon = link_ ? link_->top_neon : 0;
             const uint32_t all = b | led << 16 | top << 20 | neon << 28;
@@ -1301,6 +1332,100 @@ private:
         else
             return false;
         return true;
+    }
+
+    // The C33 cabinet's controls (the family eemall's names, shell/cabinet.cpp) to its pad (c33.h): the
+    // dial is the link's player 1 turntable
+    template <class Bit> bool c33_input(const std::string &name, int value, Bit &bit) {
+        if (name == "A") bit(link_->pad, HK_PC_C33_A);
+        else if (name == "B") bit(link_->pad, HK_PC_C33_B);
+        else if (name == "Test") bit(link_->pad, HK_PC_C33_TEST);
+        else if (name == "Service") bit(link_->pad, HK_PC_C33_SERVICE);
+        else if (name == "Coin 1") {
+            if (value) link_->coins = link_->coins + 1;
+        } else if (name == "Card") {   // the card slot: -card0's card put in (c33_card)
+            if (value) present_card(ea_.card[0]);
+        } else if (name == "P1 Turntable") link_->turntable[0] = (uint8_t)value;   // a position (scripts' `set`)
+        // The touch panel (link.h v15): "Touch X"/"Touch Y" a place on it in TouchPanel.dll's own units
+        // (0-228 across, 0-300 down, as the test mode's TOUCH PANEL CHECK draws it; scripts' `set`),
+        // "Touch" held there. "Pointer X"/"Pointer Y"/"Pointer": the window's mouse, in the frame's
+        // pixels (the panel is drawn on its right half, c33.h). "Type": a key typed for the program's
+        // touch keyboard (its character)
+        else if (name == "Touch X" || name == "Touch Y") {
+            (name == "Touch X" ? link_->touch_x : link_->touch_y) = value;
+            link_->touch_seq = link_->touch_seq + 1;
+        } else if (name == "Touch") {
+            link_->touch_down = value ? 1 : 0;
+            link_->touch_seq = link_->touch_seq + 1;
+        } else if (name == "Pointer X") pointer_x_ = value;
+        else if (name == "Pointer Y") pointer_y_ = value;
+        else if (name == "Pointer") {
+            const int cx = (pointer_x_ - HK_PC_C33_PANEL_X) * HK_PC_C33_CTR / HK_PC_C33_PX;
+            const int cy = pointer_y_ * HK_PC_C33_CTR / HK_PC_C33_PX;
+            const bool on_panel = pointer_x_ >= HK_PC_C33_PANEL_X && cx <= HK_PC_C33_CTR_W && cy >= 0 && cy <= HK_PC_C33_CTR_H;
+            if (value && !on_panel && !link_->touch_down) return true;   // (a click beside the panel: no touch)
+            link_->touch_x = std::clamp(cx, 0, HK_PC_C33_CTR_W);
+            link_->touch_y = std::clamp(cy, 0, HK_PC_C33_CTR_H);
+            link_->touch_down = value ? 1 : 0;
+            link_->touch_seq = link_->touch_seq + 1;
+        } else if (name == "Type") {
+            if (value > 0 && value < 128) {
+                const uint32_t k = link_->type_seq;
+                link_->type_ring[k % 16] = (uint8_t)value;
+                link_->type_seq = k + 1;
+            }
+        } else return false;
+        return true;
+    }
+    int pointer_x_ = -1, pointer_y_ = -1;   // the C33 cabinet: the mouse's last place in the frame
+
+    // The ee'MALL station's card slot (runtime/pc/ezusb_c33.c reads the card from cards/NUMBER.bin).
+    // The station takes only a magnetic card already played on a game (pop'n music 9's layout, its
+    // header saying so), and its player is that card's in every HIRAKU game (one card for all). So
+    // the card put in is pop'n music 9's own card of that number, as pop'n 9 left it in its save
+    // folder (read, never written: the station never writes a card in play). A number pop'n 9 has
+    // never had is a fresh, never-played pop'n 9 card, which the station itself turns away with its
+    // own message: the owner's one choice, here (a station that let any card in would make the card
+    // as pop'n 9 registers one: header 68 23 41 01, the number in bytes 6-13 backwards)
+    std::string c33_popn9_cards_;   // pop'n music 9's cards (<saves>/popn9/cards)
+    void c33_card(const std::string &number) {
+        static const uint8_t FRESH[4] = {0x28, 0x23, 0x41, 0x01};   // a new pop'n 9 card's header
+        std::vector<uint8_t> card;
+        if (number.size() == 16) {
+            const std::string from = c33_popn9_cards_ + "/" + number + ".bin";
+            if (FILE *f = fopen(from.c_str(), "rb")) {
+                card.resize(128);
+                if (fread(card.data(), 1, 128, f) != 128) card.clear();
+                fclose(f);
+            }
+            if (card.empty()) printf("e-AMUSEMENT: pop'n music 9 has no card %s: the station is given a card never played\n", number.c_str());
+            else printf("e-AMUSEMENT: card %s: pop'n music 9's card (%s)\n", number.c_str(), from.c_str());
+        }
+        if (card.empty()) {   // fresh: its header and CRC-8, blank data and its CRC-16 (as python/cardunit.cpp)
+            card.assign(128, 0);
+            for (int i = 0; i < 4; i++) card[i] = FRESH[i];
+            uint8_t c8 = 0xff;
+            for (int i = 0; i < 4; i++) {
+                c8 ^= card[i];
+                for (int b = 0; b < 8; b++) c8 = (c8 & 1) ? (c8 >> 1) ^ 0x8c : c8 >> 1;
+            }
+            card[4] = (uint8_t)~c8;
+            uint16_t c16 = 0xffff;
+            for (int i = 5; i < 0x3f; i++) {
+                c16 ^= card[i];
+                for (int b = 0; b < 8; b++) c16 = (c16 & 1) ? (c16 >> 1) ^ 0x8408 : c16 >> 1;
+            }
+            c16 = (uint16_t)~c16;
+            card[0x3f] = (uint8_t)c16, card[0x40] = (uint8_t)(c16 >> 8);
+        }
+        const std::string mine = save_ + (number.size() == 16 ? "/cards/" + number + ".bin" : "/card.bin");
+        if (FILE *f = fopen(mine.c_str(), "wb")) {
+            fwrite(card.data(), 1, card.size(), f);
+            fclose(f);
+        }
+        for (int i = 0; i < 8; i++) link_->card_uid[i] = number.size() == 16 ? (uint8_t)std::stoul(number.substr(2 * i, 2), nullptr, 16) : 0;
+        link_->card_seq = link_->card_seq + 1;
+        printf("e-AMUSEMENT: card %s put in the slot\n", number.size() == 16 ? number.c_str() : "(no number)");
     }
 
     // e-AMUSEMENT: -url's server, or HIRAKU's own on this machine; the DLL is told where (HK_PC_EA)
@@ -1695,6 +1820,7 @@ private:
     }
 
     void present_card(const std::string &number) {
+        if (c33_) return c33_card(number);
         if (number.size() != 16) {
             printf("e-AMUSEMENT: no card number (-card0, or card0.txt in the save folder)\n");
             return;
@@ -2054,7 +2180,7 @@ private:
             }
         // Every IIDX in Japanese: its text is Shift-JIS (Wine's code page 932), the operator menu's
         // messages too (10th style's were garbled without)
-        const bool iidx_ja = family_ == "iidx" && !(pc64_ || pc32_);
+        const bool iidx_ja = (family_ == "iidx" || c33_) && !(pc64_ || pc32_);   // (and the ee'MALL station's)
         const bool own_lc = pc64_ || pc32_ || iidx_ja, own_dlls = pc64_ || pc32_ || d3dx_own;
         for (char **e = environ; *e; e++)
             if (!(own_lc && !strncmp(*e, "LC_ALL=", 7)) && !(own_dlls && !strncmp(*e, "WINEDLLOVERRIDES=", 17)) && strncmp(*e, "PWD=", 4))
@@ -2095,6 +2221,7 @@ private:
     std::string ea_dir_;              // HIRAKU's e-AMUSEMENT server's files ("": -url's server)
     bool c02_ = false;                // the C02 cabinet's board (beatmania IIDX 9th style, PLAN.md section 33)
     bool c02_driver_ = false;         // ... under its driver (IIDX RED, PLAN.md section 36)
+    bool c33_ = false;                // the C33 cabinet's boards (Konami's ee'MALL 1st Avenue station)
     std::string data_as_;             // the name the game gives its data folder (HK_PC_MAP)
     int tt_frac_[2] = {};             // turntable_add's counts not yet a whole step
     bool crt_ = false;                // --single-screen: the 64-bit loader's single-screen mode

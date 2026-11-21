@@ -144,6 +144,12 @@ target_link_libraries(test_ata_state PRIVATE hiraku_ata)
 target_include_directories(test_ata_state PRIVATE ${CMAKE_SOURCE_DIR}/runtime)
 add_test(NAME ata_state COMMAND test_ata_state)
 
+# The C33 cabinet's small display (runtime/pc/c33video.h: ee'MALL's video board) drawn from a
+# made-up board: tiles, palette rows, the bank, a hidden layer, a layer over another, the blank bit
+add_executable(test_c33video pc/test_c33video.c ${CMAKE_SOURCE_DIR}/runtime/pc/c33video.c)
+target_include_directories(test_c33video PRIVATE ${CMAKE_SOURCE_DIR}/runtime/pc)
+add_test(NAME pc_c33_video COMMAND test_c33video)
+
 # The picture's shader engine: FrameCount, frame history, feedback (needs a display and OpenGL
 # 3.3; skipped without them)
 if(TARGET hiraku_host)

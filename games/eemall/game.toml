@@ -1,0 +1,15 @@
+# ee'MALL 1st Avenue (C33 J:A:x), Konami 2003: the e-AMUSEMENT shop station, a Windows PC, the C33 cabinet
+id = "eemall"
+title = "ee'MALL 1st Avenue"
+family = "eemall"       # the station: buttons A and B, a dial, Test, Service, the coin mech, the card slot
+core = "pc"             # Konami's own program in HIRAKU's cabinet (runtime/pc/, runtime/pc/ezusb_c33.c)
+
+[pc]
+exe = "eemall.exe"      # in C33/JAx/, a folder by revision (JAE); started directly, as boot_c33.exe would
+mark = "GQC33"          # the station's program (its security code)
+layout = "revisions"
+board = "c33"           # the C33 cabinet's I/O board, its video board and the touch panel on COM1
+drive = 'D:\C33'        # where the station is: its program in JAx, Resource beside it
+data_as = 'D:\C33'      # the program names its files by whole paths (D:\C33\Resource\...)
+save_drive = 'E:\'      # its two backup drives (backupram-data.bin and book.bin on each, the downloads on E:)
+save_drive2 = 'F:\'

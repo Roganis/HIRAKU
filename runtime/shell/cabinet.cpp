@@ -380,6 +380,30 @@ std::vector<Control> make_iidx() {
     return c;
 }
 
+// Konami's ee'MALL station (1st Avenue, the C33 cabinet: runtime/pc/ezusb_c33.c): two buttons A and B,
+// a dial (an 8-bit position, which the PC core keeps as player 1's turntable: the host's turntable
+// handling turns it), Test, Service, the coin mech, the card slot
+std::vector<Control> make_eemall() {
+    std::vector<Control> c;
+    c.push_back({"A", "A button", "Station", false, "key:Z, joy0:button0"});
+    c.push_back({"B", "B button", "Station", false, "key:X, joy0:button1"});
+    c.push_back({"P1 Turntable", "Dial (analog axis)", "Station", true, "joy0:axis0"});
+    c.push_back({"P1 Turntable -", "Dial − (as a button)", "Station", false, "key:Left"});
+    c.push_back({"P1 Turntable +", "Dial + (as a button)", "Station", false, "key:Right"});
+    c.push_back({"Coin 1", "Coin", "Cabinet", false, "key:5"});
+    c.push_back({"Test", "Test", "Cabinet", false, "key:F2"});
+    c.push_back({"Service", "Service", "Cabinet", false, "key:9"});
+    c.push_back({"Card", "e-AMUSEMENT card (insert / take back)", "e-AMUSEMENT", false, "key:Insert"});
+    return c;
+}
+
+std::vector<Lamp> make_eemall_lamps() {
+    std::vector<Lamp> l;
+    l.push_back({"Lamp 1", "Station", 0, 2, false});
+    l.push_back({"Lamp 2", "Station", 0, 3, false});
+    return l;
+}
+
 // Twinkle's outputs (MAME twinkle.cpp), as the Twinkle core numbers them:
 // reg 0 = I/O output 0x37 (active low), reg 1 = 0x87 (the spotlights, active low; MAME's spotlight0
 // is bit 3, 1 bit 2, 2 bit 1, 3 bit 0, 4-7 bits 4-7), reg 2 = 0x8f (the neon, active low),
@@ -625,7 +649,8 @@ const std::vector<Control> &controls(const std::string &family) {
         {"djbm", make_djbm()}, {"djpopn", make_djpopn()}, {"djpstage", make_djpstage()}, {"ddr", make_ddr()}, {"ddrsolo", make_ddrsolo()},
         {"dmx", make_dmx()}, {"mambo", make_mambo()}, {"drmn", make_drmn()}, {"gtrf", make_gtrf()}, {"iidx", make_iidx()}, {"pypopn", make_pypopn()},
         {"pcpopn", make_pypopn()},   // the PC pop'n music games (runtime/pc/): the same controls
-        {"pcpopnhc", make_pcpopnhc()}};
+        {"pcpopnhc", make_pcpopnhc()},
+        {"eemall", make_eemall()}};   // Konami's ee'MALL station (runtime/pc/ezusb_c33.c)
     auto f = all.find(family);
     return f != all.end() ? f->second : all.at("bm3");
 }
@@ -635,7 +660,8 @@ const std::vector<Lamp> &lamps(const std::string &family) {
         {"bm3", make_bm3_lamps()}, {"popn", make_popn_lamps()}, {"ppp", make_ppp_lamps()}, {"kbm", make_kbm_lamps()},
         {"djbm", make_djbm_lamps()}, {"djpopn", make_djpopn_lamps()}, {"djpstage", make_djpstage_lamps()},
         {"ddr", make_ddr_lamps()}, {"ddrsolo", make_ddrsolo_lamps()}, {"dmx", make_dmx_lamps()}, {"mambo", make_mambo_lamps()}, {"drmn", make_drmn_lamps()}, {"gtrf", make_gtrf_lamps()}, {"iidx", make_iidx_lamps()},
-        {"pypopn", make_pypopn_lamps()}, {"pcpopn", make_pypopn_lamps()}, {"pcpopnhc", make_pypopn_lamps()}};
+        {"pypopn", make_pypopn_lamps()}, {"pcpopn", make_pypopn_lamps()}, {"pcpopnhc", make_pypopn_lamps()},
+        {"eemall", make_eemall_lamps()}};
     auto f = all.find(family);
     return f != all.end() ? f->second : all.at("bm3");
 }

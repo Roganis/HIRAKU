@@ -162,12 +162,13 @@ int hk_host_us(uint32_t *us) {
     return 1;
 }
 
-// The pad's keys (link.h): pop'n's 9 buttons (bits 8-16), or IIDX's 14 keys (8-21, HK_PC_KEYS=iidx)
+// The pad's keys (link.h): pop'n's 9 buttons (bits 8-16), or IIDX's 14 keys (8-21, HK_PC_KEYS=iidx), or
+// the ee'MALL station's two (0-1, HK_PC_KEYS=c33)
 static uint32_t key_bits(void) {
     static uint32_t bits;
     if (!bits) {
         const char *k = getenv("HK_PC_KEYS");
-        bits = k && !strcmp(k, "iidx") ? 0x3fff00u : 0x1ff00u;
+        bits = k && !strcmp(k, "iidx") ? 0x3fff00u : k && !strcmp(k, "c33") ? 0x3u : 0x1ff00u;   // (c33: ee'MALL's A and B)
     }
     return bits;
 }
@@ -363,6 +364,9 @@ static const char *mapped(const char *p, char *buf) {
     }
     return p;
 }
+
+// The same for a DLL of the cabinet's that hooks more of the game's file calls (ezusb_c33.c)
+const char *hk_map_path(const char *p, char *buf) { return mapped(p, buf); }
 
 // HIRAKU's RtEffect.dll is the game's way in (rteffect.c); read as a file (10th style checks its
 // folder's files), it is Konami's (HK_PC_RTEFFECT_FILE)
@@ -621,8 +625,10 @@ static D3DFORMAT g_rb_fmt;
 void hk_put_pixels(const void *bits, int pitch, unsigned w, unsigned h, int format) {
     struct hk_pc_link *l = hk_link();
     hk_convert_pixels((uint32_t *)((char *)l + HK_PC_PIXELS), bits, pitch, w, h, format);
+    if (hk_picture_more) hk_picture_more((uint32_t *)((char *)l + HK_PC_PIXELS), &w, &h);
     l->frame_w = w, l->frame_h = h;
 }
+void (*hk_picture_more)(uint32_t *pixels, unsigned *w, unsigned *h);
 
 void hk_convert_pixels(uint32_t *out, const void *bits, int pitch, unsigned w, unsigned h, int format) {
     for (UINT y = 0; y < h; y++) {
@@ -1613,6 +1619,7 @@ static const char *by_ordinal(const char *dll, unsigned ord) {
         {"ws2_32.dll", 2, "bind"},              {"ws2_32.dll", 3, "closesocket"},       {"ws2_32.dll", 4, "connect"},
         {"ws2_32.dll", 17, "recvfrom"},         {"ws2_32.dll", 20, "sendto"},
         {"ws2_32.dll", 23, "socket"},           {"ws2_32.dll", 52, "gethostbyname"},
+        {"ws2_32.dll", 51, "gethostbyaddr"},
         {"wsock32.dll", 2, "bind"},             {"wsock32.dll", 3, "closesocket"},      {"wsock32.dll", 4, "connect"},
         {"wsock32.dll", 17, "recvfrom"},        {"wsock32.dll", 20, "sendto"},
         {"wsock32.dll", 23, "socket"},          {"wsock32.dll", 52, "gethostbyname"},

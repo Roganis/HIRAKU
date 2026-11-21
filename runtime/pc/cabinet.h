@@ -68,6 +68,8 @@ uint32_t hk_card_seq2(void);
 // The file of the magnetic card held to player u's slot (0 or 1; the C02 cabinet's): each real card
 // its own (HK_PC_CARDS\<its number>.bin), else the one file of the slot's (HK_PC_CARD1, HK_PC_CARD2)
 const char *hk_magnetic_card_file(int u);
+// The path the game named, or where HK_PC_MAP (or a mod) sends it, written in buf (MAX_PATH bytes)
+const char *hk_map_path(const char *p, char *buf);
 // n bytes as the file at `path`, whole or not at all (the file from before kept when it can't be); 1: written
 int hk_write_file(const char *path, const void *data, size_t n);
 // The network's calls that lead to e-AMUSEMENT (net.c): the hook for a ws2_32 call, or NULL
@@ -88,6 +90,9 @@ void *hk_patch_slot(void **slot, void *to);  // a pointer (a vtable's, an import
 void hk_place_window(void *hwnd);            // the game's window, hidden while HIRAKU's shows it
 void hk_put_pixels(const void *bits, int pitch, unsigned w, unsigned h, int format);   // D3DFORMAT's numbers
 void hk_convert_pixels(uint32_t *out, const void *bits, int pitch, unsigned w, unsigned h, int format);   // to 0x00RRGGBB
+// A cabinet's more to its picture (the C33 cabinet's small display, ezusb_c33.c): called with the
+// game's picture just put in the link's pixels, it may make it wider or taller (in place, w and h)
+extern void (*hk_picture_more)(uint32_t *pixels, unsigned *w, unsigned *h);
 // In-between pictures (link v11, smooth motion): drawn when hiraku-pc asks, while the game waits for
 // its next frame (the Direct3D 8 hooks set it)
 extern void (*hk_between)(void);

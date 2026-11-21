@@ -12,6 +12,7 @@
 //     network off); and the addresses the cabinet would set on its card (AddIPAddress) left alone.
 //   - The cabinet's domain (GetNetworkParams), with HK_PC_EA_DOMAIN: beatmania IIDX 9th style's
 //     library asks for "services.<its domain>", so the domain is one the name lookup above answers.
+//     The ee'MALL station takes it from its own address's name (gethostbyaddr, with HK_PC_EA_RDNS).
 #include <winsock2.h>
 #include <windows.h>
 #include <iphlpapi.h>
@@ -64,6 +65,24 @@ static struct hostent *WSAAPI my_gethostbyname(const char *name) {
     return gethostbyname(name);
 }
 
+// The cabinet's own name, from its address (HK_PC_EA_RDNS: the ee'MALL station takes its domain,
+// the part after the first dot, from it): "cabinet.<HK_PC_EA_DOMAIN>" whatever the address
+static struct hostent *WSAAPI my_gethostbyaddr(const char *a, int len, int type) {
+    const char *d = getenv("HK_PC_EA_DOMAIN");
+    if (!a || len != 4 || type != AF_INET || !d || !*d) return gethostbyaddr(a, len, type);
+    static struct in_addr addr;
+    static char *list[2];
+    static struct hostent h;
+    static char hname[256];
+    snprintf(hname, sizeof hname, "cabinet.%s", d);
+    memcpy(&addr, a, 4);
+    list[0] = (char *)&addr, list[1] = NULL;
+    h.h_name = hname, h.h_aliases = NULL, h.h_addrtype = AF_INET, h.h_length = 4, h.h_addr_list = list;
+    static int said;
+    if (!said++) hk_log("hiraku-pc: the cabinet's name, from its address: %s", hname);
+    return &h;
+}
+
 static int WSAAPI my_connect_(SOCKET s, const struct sockaddr *to, int len);
 static int WSAAPI my_connect(SOCKET s, const struct sockaddr *to, int len) {
     const int r = my_connect_(s, to, len);
@@ -72,10 +91,13 @@ static int WSAAPI my_connect(SOCKET s, const struct sockaddr *to, int len) {
 }
 
 static int WSAAPI my_connect_(SOCKET s, const struct sockaddr *to, int len) {
+    static int station = -1;   // the ee'MALL station (HK_PC_EA_RDNS): its shop server is the e-AMUSEMENT server
+    if (station < 0) station = getenv("HK_PC_EA_RDNS") != NULL;
     if (ea() && to && to->sa_family == AF_INET && len >= (int)sizeof(struct sockaddr_in)) {
         const struct sockaddr_in *in = (const struct sockaddr_in *)to;
-        if (in->sin_addr.s_addr == g_ea_addr.s_addr && in->sin_port == htons(80)) {
+        if ((in->sin_addr.s_addr == g_ea_addr.s_addr || station) && in->sin_port == htons(80)) {
             struct sockaddr_in there = *in;
+            there.sin_addr = g_ea_addr;
             there.sin_port = g_ea_port;
             return connect(s, (const struct sockaddr *)&there, sizeof there);
         }
@@ -296,6 +318,7 @@ void *hk_net_card_hook(const char *fn) {
 void *hk_net_hook(const char *fn) {
     if (!ea()) return NULL;
     if (!strcmp(fn, "gethostbyname")) return (void *)my_gethostbyname;
+    if (!strcmp(fn, "gethostbyaddr")) return getenv("HK_PC_EA_RDNS") ? (void *)my_gethostbyaddr : NULL;
     if (!strcmp(fn, "connect")) return (void *)my_connect;
     if (!strcmp(fn, "socket")) return (void *)my_socket;
     if (!strcmp(fn, "WSASocketA")) return (void *)my_WSASocketA;

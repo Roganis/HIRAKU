@@ -98,6 +98,13 @@ picture::Mode g_mode = picture::Mode::off, g_shown = picture::Mode::off;
 SDL_AudioStream *g_audio = nullptr;
 int g_tw = 0, g_th = 0;
 SDL_FRect g_dst{};                // where the frame goes in the logical presentation (SDL renderer path)
+// Where each window (the first, and the second when split) last showed its picture, in its pixels,
+// and which part of the frame that was: the mouse's place in the frame, for a core whose screen is
+// touched (Core::input_position("Pointer"): the C33 cabinet's touch panel)
+struct PointerView {
+    int x = 0, y = 0, w = 0, h = 0;   // the picture's place in the window (pixels)
+    int fx = 0, fw = 0, fh = 0;       // the frame's columns fx..fx+fw it showed, and its height
+} g_pview[2];
 std::chrono::steady_clock::time_point g_t0;
 bool g_started = false;
 
@@ -249,6 +256,71 @@ uint64_t g_pointer_until = 0;     // full screen: the pointer shown until then (
 std::atomic<bool> g_picture_asked{false};   // F12 (window_picture_asked)
 std::atomic<bool> g_record_asked{false};    // F6 (window_record_asked)
 
+// The mouse on a touched screen (Core::input_position("Pointer") >= 0: the C33 cabinet's small
+// display): the left button's presses, and moves while it's down, as "Pointer X"/"Pointer Y" (the
+// frame's pixels) and "Pointer" (down). True if the event was that
+bool pointer_event(const SDL_Event &e) {
+    const bool press = (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN || e.type == SDL_EVENT_MOUSE_BUTTON_UP) && e.button.button == SDL_BUTTON_LEFT;
+    const bool drag = e.type == SDL_EVENT_MOUSE_MOTION && (e.motion.state & SDL_BUTTON_LMASK);
+    if (!press && !drag) return false;
+    if (core().input_position("Pointer") < 0) return false;
+    SDL_Window *w = SDL_GetWindowFromEvent(&e);
+    const int k = w && w == g_win2 && g_split ? 1 : 0;
+    if (!w || (w != g_win && w != g_win2)) return false;
+    const float mx = press ? e.button.x : e.motion.x, my = press ? e.button.y : e.motion.y;
+    int fx, fy;
+    if (g_gl || k == 1) {
+        const PointerView &v = g_pview[k];
+        if (v.w <= 0 || v.h <= 0) return true;
+        const float density = SDL_GetWindowPixelDensity(w) > 0 ? SDL_GetWindowPixelDensity(w) : 1.0f;
+        fx = v.fx + (int)std::floor((mx * density - v.x) * v.fw / v.w);
+        fy = (int)std::floor((my * density - v.y) * v.fh / v.h);
+    } else {   // the SDL renderer: its logical presentation, the frame at g_dst
+        float lx = 0, ly = 0;
+        if (!g_ren || g_dst.w <= 0 || g_dst.h <= 0 || !SDL_RenderCoordinatesFromWindow(g_ren, mx, my, &lx, &ly)) return true;
+        fx = (int)std::floor((lx - g_dst.x) * g_tw / g_dst.w);
+        fy = (int)std::floor((ly - g_dst.y) * g_th / g_dst.h);
+    }
+    core().set_input("Pointer X", fx);
+    core().set_input("Pointer Y", fy);
+    core().set_input("Pointer", press ? e.type == SDL_EVENT_MOUSE_BUTTON_DOWN : 1);
+    return true;
+}
+
+// The PC keyboard typing for the game (Core::input_position("Typing") == 1: the C33 cabinet's
+// program reading its touch keyboard): letters, digits, '.', '-', '_' (Shift+-), Backspace ('\b'),
+// Enter ('\r') and the arrows left and right ('<', '>') as "Type" (the character), not as the
+// controls they're bound to. A key whose press was typed has its release kept from the controls too
+bool typing_event(const SDL_Event &e) {
+    static bool typed[SDL_SCANCODE_COUNT];
+    if (e.type != SDL_EVENT_KEY_DOWN && e.type != SDL_EVENT_KEY_UP) return false;
+    const SDL_Scancode sc = e.key.scancode;
+    if (sc < 0 || sc >= SDL_SCANCODE_COUNT) return false;
+    if (e.type == SDL_EVENT_KEY_UP) {
+        const bool was = typed[sc];
+        typed[sc] = false;
+        return was;
+    }
+    if (e.key.mod & (SDL_KMOD_CTRL | SDL_KMOD_ALT | SDL_KMOD_GUI)) return false;
+    const SDL_Keycode k = e.key.key;
+    int c = 0;
+    if (k >= SDLK_A && k <= SDLK_Z) c = 'A' + (int)(k - SDLK_A);
+    else if (k >= SDLK_0 && k <= SDLK_9) c = '0' + (int)(k - SDLK_0);
+    else if (k >= SDLK_KP_1 && k <= SDLK_KP_9) c = '1' + (int)(k - SDLK_KP_1);
+    else if (k == SDLK_KP_0) c = '0';
+    else if (k == SDLK_PERIOD || k == SDLK_KP_PERIOD) c = '.';
+    else if (k == SDLK_MINUS || k == SDLK_KP_MINUS) c = e.key.mod & SDL_KMOD_SHIFT ? '_' : '-';
+    else if (k == SDLK_UNDERSCORE) c = '_';
+    else if (k == SDLK_BACKSPACE) c = '\b';
+    else if (k == SDLK_RETURN || k == SDLK_KP_ENTER) c = '\r';
+    else if (k == SDLK_LEFT) c = '<';
+    else if (k == SDLK_RIGHT) c = '>';
+    if (!c || core().input_position("Typing") != 1) return false;
+    if (!e.key.repeat) core().set_input("Type", c);
+    typed[sc] = true;
+    return true;
+}
+
 // Poll controls: called every few milliseconds of emulated time.
 void poll() {
     SDL_Event e;
@@ -285,6 +357,8 @@ void poll() {
                 g_pointer_until = prof::now_ns() + 2'500'000'000ull;
             }
         }
+        if (pointer_event(e)) continue;
+        if (typing_event(e)) continue;
         if (e.type == SDL_EVENT_KEY_DOWN && !e.key.repeat && e.key.key == SDLK_F9) {   // F9: the game's lights
             lampview::toggle();
             continue;
@@ -1055,6 +1129,7 @@ static void present_second(const uint32_t *rgb, int w, int h, double aspect, uin
         if (vh > wh) vh = wh, vw = (int)std::lround(wh * aspect);
         picture::set_window_fbo(0);   // (this window's own: the DXGI swap chain is the first's)
         picture::draw(rgb, w, h, (ww - vw) / 2, (wh - vh) / 2, std::max(1, vw), std::max(1, vh), ww, wh, g_mode, 1, frame);
+        g_pview[1] = {(ww - vw) / 2, (wh - vh) / 2, vw, vh, w, w, h};
         SDL_GL_SwapWindow(g_win2);
         SDL_GL_MakeCurrent(g_win, g_gl);
 #ifdef _WIN32
@@ -1341,6 +1416,7 @@ static void show_frame(const uint32_t *rgb, int w, int h, double frame_aspect, b
         core().display_cover(w, h, cw, ch);
         vw = std::max(1, (int)std::lround(vw * cw)), vh = std::max(1, (int)std::lround(vh * ch));
         modscript::set_view((ww - vw) / 2, (wh - vh) / 2, vw, vh, ww, wh);   // (mods' scripts' window layer)
+        g_pview[0] = {(ww - vw) / 2, (wh - vh) / 2, vw, vh, 0, w, h};
         // --crt-beam: each of the frame's refreshes is the beam's pass at its moment (picture.h), with
         // two refreshes a frame or more (120 Hz and up): the display's rate over the game's decides,
         // not the frame's own count (2 or 3 at 144 Hz), so it doesn't come and go from frame to frame

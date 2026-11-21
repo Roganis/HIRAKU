@@ -9,12 +9,16 @@
 #include <QHash>
 #include <QImageReader>
 #include <QComboBox>
+#include <QCoreApplication>
 #include <QSignalBlocker>
 #include <QLabel>
 #include <QListWidget>
 #include <QPainter>
 #include <QPainterPath>
 #include <QPushButton>
+#include <QScrollArea>
+#include <QScrollBar>
+#include <QStyle>
 #include <QStyledItemDelegate>
 #include <QVBoxLayout>
 
@@ -220,11 +224,25 @@ public:
 class HeadArt : public QWidget {
 public:
     const Head *h = nullptr;
-    // its height for its width, set as its own (a scroll area's layout doesn't ask again when only
-    // the chips change: the Play under them covered them)
+    HeadArt() {
+        QSizePolicy p(QSizePolicy::Preferred, QSizePolicy::Preferred);   // (not Fixed: its hint, at one width, the most)
+        p.setHeightForWidth(true);
+        setSizePolicy(p);
+    }
+    // its height for a width, asked by the scroll area before it decides on its bar (a height set
+    // for the width it had was the other width's once the bar came or went: the bar went on and off)
+    bool hasHeightForWidth() const override { return true; }
+    int heightForWidth(int w) const override { return place(w > 0 ? w : 300, nullptr); }
+    QSize sizeHint() const override { return QSize(300, heightForWidth(300)); }   // (not by the width it has: that went round)
+    // ... asked again when only the chips change (the Play under them covered them), by the scroll
+    // area over it too (its least size, all that scroll area watches, may stay the same)
     void fit() {
-        const int hh = place(width() > 0 ? width() : 300, nullptr);
-        if (height() != hh || minimumHeight() != hh) setFixedHeight(hh);
+        updateGeometry();
+        for (QWidget *w = parentWidget(); w; w = w->parentWidget())
+            if (auto *s = qobject_cast<QScrollArea *>(w)) {
+                QCoreApplication::postEvent(s, new QEvent(QEvent::LayoutRequest));
+                break;
+            }
         update();
     }
 protected:
@@ -523,12 +541,28 @@ void GameCards::themeChanged() {
 
 void GameCards::focusCards() { m_grid->setFocus(); }
 
-// as many cards across as the width takes, the room left shared between them
+// as many cards across as the width takes, the room left shared between them. The width is the one
+// Qt wraps them in (QListView's prepareItemsLayout): the most the viewport can have, less the scroll
+// bar's room whether the bar shows or not. (By the viewport's own width, which the bar takes from,
+// the cards went 4 across and 3 in turn at some sizes, the bar on and off, and never settled.)
 void GameCards::fitGrid() {
     QStyleOptionViewItem o;
     o.font = m_grid->font();
     const QSize card = CardPainter(this).sizeHint(o, QModelIndex()) + QSize(kGap, kGap);
-    const int w = m_grid->viewport()->width() - 4;
+    const QStyle *st = m_grid->style();
+    const QScrollBar *bar = m_grid->verticalScrollBar();
+    int room = 0;   // (none for a bar over the cards, or one always there: the viewport is without it)
+    if (m_grid->verticalScrollBarPolicy() == Qt::ScrollBarAsNeeded &&
+        !st->pixelMetric(QStyle::PM_ScrollView_ScrollBarOverlap, nullptr, bar)) {
+        room = st->pixelMetric(QStyle::PM_ScrollBarExtent, nullptr, bar);
+        if (st->styleHint(QStyle::SH_ScrollView_FrameOnlyAroundContents, nullptr, m_grid)) {
+            QStyleOption f;
+            f.initFrom(m_grid);
+            room += 2 * st->pixelMetric(QStyle::PM_DefaultFrameWidth, &f, m_grid);
+        }
+    }
+    // (a card stays in its row while it ends short of the width: one pixel less)
+    const int w = m_grid->maximumViewportSize().width() - room - 1;
     const int across = std::max(1, w / card.width());
     const QSize grid(std::max(card.width(), w / across), card.height());
     if (m_grid->gridSize() != grid) m_grid->setGridSize(grid);

@@ -31,6 +31,7 @@
 #endif
 
 #include "../shell/core.h"
+#include "../shell/smoothgate.h"
 #include "../shell/sys.h"
 #include "macro.h"
 #include "pacing.h"
@@ -147,6 +148,7 @@ uint64_t g_audio_opened_ns = 0;   // when it was last opened
 bool g_display_sync = true;       // display pacing (pacing.h)
 bool g_smooth_motion = false;     // --smooth-motion: the core's in-between pictures on the frame's other refreshes
 uint64_t g_in_between = 0;        // how many it showed (the exit report)
+uint64_t g_smooth_frames = 0, g_smooth_open = 0;   // frames shown with it asked for; of them in a song (smoothgate.h)
 bool g_beam = false, g_beam_ok = false;   // --crt-beam, and its shader built
 float g_beam_gamma = 2.2f, g_beam_gain = 0.7f;
 uint64_t g_beam_frames = 0, g_beam_without = 0;   // frames through it, and not (the exit report)
@@ -511,11 +513,13 @@ bool window_set_shader_key(const std::string &spec) {
     const size_t eq = spec.find('=');
     return eq != std::string::npos && shaderview::set_control(spec.substr(0, eq), spec.substr(eq + 1));
 }
-void window_set_smooth_motion(bool on) { g_smooth_motion = on, pacing::set_smooth_motion(on || g_beam); }
+// smooth motion on this frame: asked for, and (--smooth-motion songs) a song being played (shell/smoothgate.h)
+static bool smooth_now() { return g_smooth_motion && smoothgate::open(); }
+void window_set_smooth_motion(bool on) { g_smooth_motion = on, pacing::set_smooth_motion(smooth_now() || g_beam); }
 bool window_smooth_motion() { return g_smooth_motion; }
 void window_set_beam(bool on, float gamma, float gain) {
     g_beam = on, g_beam_gamma = gamma, g_beam_gain = gain;
-    pacing::set_smooth_motion(on || g_smooth_motion);   // the game at its own speed, every refresh a picture
+    pacing::set_smooth_motion(on || smooth_now());   // the game at its own speed, every refresh a picture
     pacing::set_whole_refreshes(on);                     // ... the same refreshes every frame where it nearly fits
 }
 
@@ -1439,7 +1443,7 @@ static void keep_shot(const uint32_t *rgb, int w, int h, double frame_aspect, do
     s.number = core().frame_count();
     for (Shot::Picture &b : s.between) b.has = false;
     const int k = pacing::refreshes_per_frame();
-    if (!beam_now(true) && g_smooth_motion) {
+    if (!beam_now(true) && smooth_now()) {
         auto ask = [&](int i) {
             int bw = w, bh = h;
             const uint32_t *px = modscript::compose_between(core().render_between(pacing::phase(i), bw, bh), bw, bh);
@@ -1478,6 +1482,20 @@ static void present_now(const uint32_t *rgb, int w, int h, double vsec, bool bef
     }
     const double period = g_last_vsec < 0 || g_fast ? 0.0 : vsec - g_last_vsec;
     g_last_vsec = vsec;
+    // --smooth-motion songs: outside a song display pacing runs as without smooth motion (each frame
+    // held for its refreshes), and the core is asked for one in-between picture, not shown, so what it
+    // pairs from frame to frame goes on and a song's first in-between pictures are those smooth motion
+    // everywhere would make
+    if (g_smooth_motion && !g_beam) {
+        static bool was = true;
+        const bool now = smoothgate::open();
+        if (now != was) pacing::set_smooth_motion(now), was = now;
+        g_smooth_frames++, g_smooth_open += now;
+        if (!now) {
+            int bw = w, bh = h;
+            core().render_between(0.0, bw, bh);
+        }
+    }
     g_sf.period = period;
     const bool sync = pacing::frame(period) && !g_fast;
     g_sync = sync;
@@ -1537,7 +1555,7 @@ static void show_frame(const uint32_t *rgb, int w, int h, double frame_aspect, b
         const double beam_fph = beam ? frame_refreshes : 0;
         // --smooth-motion at the game's own speed: the frame's first refresh comes after its moment
         // (up to a refresh), so it too is shown carried on to the refresh's
-        const bool exact = !beam && sync && g_smooth_motion && !g_split && pacing::exact_speed();
+        const bool exact = !beam && sync && smooth_now() && !g_split && pacing::exact_speed();
         const uint32_t *first = rgb;
         int fw = w, fh = h;
         // (at its moment too: what scrolls is drawn on the scroll's steady line, up to a pixel off
@@ -1576,7 +1594,7 @@ static void show_frame(const uint32_t *rgb, int w, int h, double frame_aspect, b
         // at a half). The frame is held as it is only when neither the first refresh nor the last
         // (the furthest on) has anything moved, or the core can't
         int bw = w, bh = h;
-        const bool can = !beam && g_smooth_motion && !g_split && k > 1 && pacing::can_fill_refreshes();
+        const bool can = !beam && smooth_now() && !g_split && k > 1 && pacing::can_fill_refreshes();
         const uint32_t *between = can ? between_picture(1, bw, bh) : nullptr;
         bool fill = beam || between != nullptr;
         if (can && !fill && k > 2) {
@@ -2109,6 +2127,9 @@ std::string audio_describe() {
     if (std::string cs = cpu_speed_describe(); !cs.empty()) out += "\n" + cs;
 #endif
     if (g_smooth_motion && !g_beam) out += "\nvideo: smooth motion: " + std::to_string(g_in_between) + " in-between pictures shown";
+    if (g_smooth_motion && !g_beam && smoothgate::state().has)
+        out += "\nvideo: smooth motion in songs: asked for on " + std::to_string(g_smooth_open) + " of " + std::to_string(g_smooth_frames) +
+               " frames shown (the others outside a song, each held for its refreshes)";
     if (g_beam)
         out += "\nvideo: CRT beam: " + std::to_string(g_beam_frames) + " frames through it" +
                (g_beam_without ? ", " + std::to_string(g_beam_without) + " without (" + g_beam_why + ")" : std::string());
@@ -2150,7 +2171,7 @@ static void stats_window(statsview::Window &w) {
     w.device_ms = (float)(g_device_frames * 1000.0 / g_rate);
     w.breaks = g_device_short_late.load(std::memory_order_relaxed);
     w.picture = g_shown != picture::Mode::off ? picture::mode_label(g_shown) : "";
-    w.smooth = g_smooth_motion && !g_beam;
+    w.smooth = smooth_now() && !g_beam;
     w.beam = g_beam && g_beam_ok;
     w.picture_p50 = g_start_to_picture.n ? (float)g_start_to_picture.percentile(0.5) : 0.0f;
     w.picture_p99 = g_start_to_picture.n ? (float)g_start_to_picture.percentile(0.99) : 0.0f;

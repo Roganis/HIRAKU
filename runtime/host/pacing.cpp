@@ -570,7 +570,13 @@ void pump() {
 #endif
 }
 
-void set_smooth_motion(bool on) { g_smooth_motion = on; }
+// (switched in a run, --smooth-motion songs at a song's start and end: the next frame starts afresh
+// on the display's grid, its moment at its first refresh; carried over, a frame's moment from before a
+// song gave its refreshes to the past, none shown)
+void set_smooth_motion(bool on) {
+    if (on != g_smooth_motion) g_fresh = true;
+    g_smooth_motion = on;
+}
 void set_whole_refreshes(bool on) { g_whole = on; }
 
 // --smooth-motion: the game at its own speed. Each frame has a moment on the steady clock, one

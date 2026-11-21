@@ -86,6 +86,70 @@ exact speed and pitch (without smooth motion, display sync speeds pop'n 4-8 up 2
 smoother; at 60 Hz it mostly evens out the frame that would be held twice every 30 frames.
 `HK_PACING_DEBUG` prints each frame's refreshes and their moments.
 
+### In songs only (`--smooth-motion songs`, the default)
+
+The in-between pictures are a guess one frame ahead, and menus are where it guesses worst: text
+redrawn with other letters (a letter paired with another of the same height, carried on), panels
+that slide in and stop (carried a frame too far), cursors that bob (carried past where they turn),
+lists that wrap. beatmania III's sound select vibrated where nothing moved (a player's report,
+2026-11-21: the coin text every 60 frames, the cursor's arrow every 20, a title card as it lands),
+and the menus gain little from smoothness. So a game can say, by a word of its memory, when a song
+is being played, and smooth motion is only on then:
+
+```toml
+[smooth]                       # in games/<game>/game.toml
+while_changing = 0x80107f30    # the word that changes every frame while a song plays
+# while_equal = 0x...          # and (optional) while this word holds `value`
+# value = 4
+```
+
+The condition is a mod's `[[rate]]`'s (docs/MODS.md; `runtime/shell/wordcond.h`, shared): on once
+the word has changed on two frames in a row, off after two still ones, and with `while_equal` only
+while that word holds `value`. It's read from game.toml, not a mod, so the saves' folder stays the
+game's own. Outside a song (`runtime/shell/smoothgate.h`, once a frame where the mods' patches go
+in):
+- no in-between pictures are asked for, and display pacing runs as without smooth motion: each
+  frame held for its refreshes, the game on the display's rate (beatmania III 0.1 % faster). At the
+  switch the next frame starts afresh on the display's refreshes (`pacing::set_smooth_motion`);
+- the core is still asked for one in-between picture a frame, not shown, so what it pairs from one
+  frame to the next goes on as with smooth motion everywhere: a song's first in-between pictures
+  are those smooth motion everywhere makes, bit for bit (checked below). It costs one picture's
+  drawing a frame on the menus (an in-between picture of beatmania III: 1.4 ms, "Costs" below),
+  against the three or so a 240 Hz display asks for.
+
+`--smooth-motion everywhere` (Settings > Display > Motion > "Smooth motion everywhere") is the way
+it was, on every screen. A game without `[smooth]` has it everywhere either way. The run log says
+which (`smooth motion: in songs only (while the word at ... changes ...)` or `smooth motion:
+everywhere (...)`), and the exit report how many frames had it: headless `smooth motion in songs:
+in-between pictures on N of M frames`, in a window `video: smooth motion in songs: asked for on N
+of M frames shown`.
+
+| Game | Word | What it is | Open in the attract's How to Play |
+|---|---|---|---|
+| beatmania III THE FINAL (`bm3final`) | 0x80107f30 | the stage's frame counter: 0 on the sound select, +1 a frame from the stage's title to its end, held after | yes |
+| beatmania III (`bm3`) | 0x801062a8 | the frame within the bar, +1 a frame through a song, back to 1 at each bar | yes |
+| beatmania III APPEND CORE REMIX (`bm3core`) | 0x801079f0 | the same (a frame now and then without its step: one still frame, which the rule rides over) | yes |
+| beatmania III APPEND 6th MIX (`bm36th`) | 0x80108bc8 | the same (as CORE REMIX) | yes |
+| beatmania III APPEND 7th MIX (`bm37th`) | 0x80109e80 | the same | yes |
+
+Each was found by RAM dumps (three frames in a row every 600 frames through two credits and the
+attract) and the words that change on every frame of each stage and on none of the menus', and
+then checked through two credits (beatmania III APPEND 7th MIX: two stages of one credit) with the
+word watched every frame and the rule worked out from the log: open from each stage's start (its
+title) to its end, closed on the sound select, between stages, on the results, the continue, the
+rankings and the title; open in the attract's How to Play, which plays a song as a demo. Other words
+looked right in one credit and weren't: CORE REMIX's and 6th MIX's stage frame counters ran in the
+first credit's stage and not the second's, and one of beatmania III's opened for a few frames on
+the menus.
+
+Checked on THE FINAL (headless, `HK_BETWEEN_SNAP`, which goes by the same rule): the sound select
+left idle (300 frames) and scrolled to the folders (160) make no in-between pictures, where smooth
+motion everywhere drew 19,942 and 80,806 pixels moving that the game doesn't move (the coin text,
+the cursor's arrow, the title card landing); a song's in-between pictures (5140-5200, 6000-6030) are
+the same, bit for bit, in songs, everywhere, and before this change. Not yet seen on a real 120 or
+240 Hz display: the switch at a stage's start and end under fifo-v1 or DWM (the headless rig has
+neither, so its pacing was the same on both sides).
+
 Checked in a virtual KWin (60 Hz): pop'n 3 and pop'n 4 at their own 58.00 and 58.49 Hz, every
 refresh on time, each refresh's moment 1/30 of a frame on from the last's (60 against 58 Hz).
 

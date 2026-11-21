@@ -1447,8 +1447,8 @@ QStringList MainWindow::arguments(const Game &g) const {
         if (s.value("video/crtBeam", false).toBool())   // docs/SMOOTH.md
             a << "--crt-beam" << "--crt-beam-gamma" << QString::number(s.value("video/crtBeamGamma", 2.2).toDouble())
               << "--crt-beam-gain" << QString::number(s.value("video/crtBeamGain", 0.7).toDouble());
-        else if (s.value("video/smoothMotion", false).toBool())
-            a << "--smooth-motion";
+        else if (s.value("video/smoothMotion", false).toBool())   // in songs (the default) or everywhere
+            a << "--smooth-motion" << (s.value("video/smoothMotionWhere", "songs").toString() == "everywhere" ? "everywhere" : "songs");
     }
     // the picture mode, and its settings: all games', then the game's (picturedialog.h)
     a << "--picture" << picture::mode(g.id) << "--picture-config" << picture::configDir() << "--picture-config"

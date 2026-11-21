@@ -258,6 +258,10 @@ endif()
 add_executable(test_scroll_guess smooth/test_scroll_guess.cpp)
 target_include_directories(test_scroll_guess PRIVATE ${CMAKE_SOURCE_DIR}/include)
 add_test(NAME scroll_guess COMMAND test_scroll_guess)
+# ... only in songs: a game's [smooth] word (runtime/shell/smoothgate.h, the [[rate]] condition)
+add_executable(test_smoothgate smooth/test_smoothgate.cpp)
+target_include_directories(test_smoothgate PRIVATE ${CMAKE_SOURCE_DIR}/runtime)
+add_test(NAME smoothgate COMMAND test_smoothgate)
 
 # e-AMUSEMENT (docs/EAMUSE3.md). runtime/eamuse/kbin.h: binary XML and its LZ77
 add_executable(test_kbin eamuse/test_kbin.cpp ${CMAKE_SOURCE_DIR}/runtime/eamuse/kbin.cpp)

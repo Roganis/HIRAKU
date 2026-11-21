@@ -23,3 +23,8 @@ rom = "a21jca03.3q"     # 68000 program, from the MAME set
 # Functions Ghidra cannot find: their addresses are built in code (lis/addi),
 # not stored in data. Found by the runtime's interpreter-fallback log.
 extra_entries = [0x800bddc8, 0x800bd5bc]
+
+[smooth]
+# smooth motion in songs only (docs/SMOOTH.md): the stage's frame counter, 0 on the sound select,
+# +1 a frame from the stage's title to its end, held after it
+while_changing = 0x80107f30

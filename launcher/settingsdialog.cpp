@@ -463,15 +463,21 @@ void SettingsDialog::displayPage(QVBoxLayout *v) {
     // with the fifo protocol: KWin 6.7); docs/SMOOTH.md
     m_motion = new QComboBox;
     m_motion->addItem("Each frame held for its refreshes", "held");
-    m_motion->addItem("Smooth motion: every refresh a picture of its own moment", "smooth");
+    m_motion->addItem("Smooth motion in songs: every refresh a picture of its own moment while a song plays", "smooth");
+    m_motion->addItem("Smooth motion everywhere: on every screen", "smooth-everywhere");
     m_motion->addItem("CRT beam: each refresh the part of the tube the beam sweeps (120 Hz and up)", "beam");
-    m_motion->setCurrentIndex(s.value("video/crtBeam", false).toBool()          ? 2
-                              : s.value("video/smoothMotion", false).toBool() ? 1
-                                                                                : 0);
+    // (smooth motion as it was saved, on: in songs)
+    m_motion->setCurrentIndex(m_motion->findData(s.value("video/crtBeam", false).toBool() ? "beam"
+                                                 : !s.value("video/smoothMotion", false).toBool() ? "held"
+                                                 : s.value("video/smoothMotionWhere", "songs").toString() == "everywhere"
+                                                     ? "smooth-everywhere"
+                                                     : "smooth"));
     m_motion->setToolTip("DJ Main, Firebeat, Twinkle and System 573 games, and the PC beatmania IIDX games, with smooth "
                          "frames on, on a display faster than the game. Smooth motion: the game at its exact speed on any "
                          "display (60, 144, 240 Hz), the notes and other moving objects carried on along their move at "
-                         "each refresh (the PC IIDX games: the notes only, the rest as the game drew it). CRT beam "
+                         "each refresh (the PC IIDX games: the notes only, the rest as the game drew it). In songs: only "
+                         "while a song is played, the menus each frame held for its refreshes, for the games that say "
+                         "when a song plays (beatmania III); the others get it everywhere until they do. CRT beam "
                          "(Blur Busters' CRT Beam Simulator): each refresh lights the part of the tube the electron "
                          "beam sweeps then and lets the rest fade, for a CRT's motion clarity; best at 240 Hz, SDR, "
                          "with the monitor's ABL/APL and its own strobing off. Windows, or Wayland with the fifo "
@@ -1082,7 +1088,8 @@ void SettingsDialog::accept() {
     s.setValue("video/fullscreen", m_fullscreen->isChecked());
     s.setValue("video/splitScreens", m_splitScreens->isChecked());
     s.setValue("video/displaySync", m_displaySync->isChecked());
-    s.setValue("video/smoothMotion", m_motion->currentData().toString() == "smooth");
+    s.setValue("video/smoothMotion", m_motion->currentData().toString().startsWith("smooth"));
+    s.setValue("video/smoothMotionWhere", m_motion->currentData().toString() == "smooth-everywhere" ? "everywhere" : "songs");
     s.setValue("video/crtBeam", m_motion->currentData().toString() == "beam");
     s.setValue("video/crtBeamGamma", m_beamGamma->value());
     s.setValue("video/crtBeamGain", m_beamGain->value());

@@ -302,7 +302,9 @@ Keyboardmania at 58.51.
 - **Variable refresh** (FreeSync, G-Sync, HDMI VRR): turn off "Smooth frames on a 60, 120 or 240
   Hz display" in Settings and play fullscreen (F11).
 - **Settings > Display > Motion** (needs Wayland with KWin 6.7, or Windows, checked under Wine
-  only): **Smooth motion** shows the notes where they are at each refresh, on any display; **CRT
+  only): **Smooth motion** shows the notes where they are at each refresh, on any display, **in
+  songs** (the menus each frame held as without it: beatmania III; the other games until they say
+  when a song plays, everywhere) or **everywhere** (`--smooth-motion songs|everywhere`); **CRT
   beam** simulates a CRT's beam on 120 Hz and up: set **Display gamma** to your display's, use
   SDR, and turn off the display's ABL/APL and strobing. See [MOTION.md](MOTION.md).
 

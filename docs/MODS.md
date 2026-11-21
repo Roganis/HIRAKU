@@ -574,6 +574,8 @@ IIDX's display type: 59.935 or 60.035 Hz), for a game whose mod counts in shorte
 more pictures a second. What it computes from a clock (a song's position, timing windows) stays
 right and moves more smoothly; what it counts in frames (animations, effects, menu timers) would
 run faster, which is why the rate is tied to a condition, and what `between_ticks` is for.
+(The same condition, in a game's own game.toml as `[smooth]`, says when a song is played for smooth
+motion in songs only: docs/SMOOTH.md.)
 
 The cabinet's ticks: while a rate is on, HIRAKU keeps count of the machine's time, and a vsync
 that completes another 1/59.94 s is a tick (every second one at 119.88 Hz, every fourth at 239.76,

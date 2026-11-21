@@ -43,6 +43,7 @@ extern char **environ;   // (the run's test switches, for its log: shell/switche
 #include "shell/core.h"
 #include "shell/userdir.h"
 #include "shell/saves.h"
+#include "shell/smoothgate.h"
 #include "shell/sys.h"
 #include "shell/switches.h"
 #include "host/bio2.h"
@@ -104,7 +105,9 @@ static const char COMMON_OPTIONS[] = R"HK(  --frames N        stop after N video
                     573) instead of frames held for
                     uneven numbers of refreshes.
                     Needs the compositor's fifo-v1 (KWin 6.7), or Windows (DWM's vblank).
-                    docs/SMOOTH.md
+                    --smooth-motion songs (the default): only while a song is played, for a
+                    game whose game.toml says when ([smooth]; the others everywhere);
+                    --smooth-motion everywhere: on every screen. docs/SMOOTH.md
   --crt-beam        the Blur Busters CRT beam simulator over the picture, on a display faster
                     than the game (120 Hz and up; best at 240): each refresh lights the part of
                     the tube the beam sweeps then, for a CRT's motion clarity. Needs what
@@ -378,6 +381,7 @@ int main(int argc, char **argv) {
     std::vector<std::string> picture_config, shader_keys;
     std::vector<std::string> macro_specs;
     bool display_sync = true, smooth_motion = false, lights_overlay = false, crt_beam = false;
+    std::string smooth_where = "songs";   // --smooth-motion songs|everywhere (shell/smoothgate.h)
     float beam_gamma = 2.2f, beam_gain = 0.7f;
     std::string lights_log_path;
     bool nvram_given = false;
@@ -440,7 +444,14 @@ int main(int argc, char **argv) {
         else if (a == "--shader-key") shader_keys.push_back(val());
         else if (a == "--macro") macro_specs.push_back(val());
         else if (a == "--display-sync") display_sync = val() != "off";
-        else if (a == "--smooth-motion") smooth_motion = true;
+        else if (a == "--smooth-motion") {
+            smooth_motion = true;
+            smooth_where = (k + 1 < argc && argv[k + 1][0] != '-') ? val() : "songs";
+            if (smooth_where != "songs" && smooth_where != "everywhere") {
+                fprintf(stderr, "--smooth-motion %s: songs (the default) or everywhere\n", smooth_where.c_str());
+                return 2;
+            }
+        }
         else if (a == "--crt-beam") crt_beam = true;
         else if (a == "--crt-beam-gamma") beam_gamma = std::stof(val());
         else if (a == "--crt-beam-gain") beam_gain = std::stof(val());
@@ -614,6 +625,9 @@ int main(int argc, char **argv) {
                    between_bench, (unsigned long long)between_n,
                    (double)between_ticks * prof::ns_per_tick() / 1e6 / (double)between_n,
                    (double)between_max * prof::ns_per_tick() / 1e6, (unsigned long long)between_hash);
+        if (const hk::smoothgate::State &g = hk::smoothgate::state(); smooth_motion && g.has)
+            printf("smooth motion in songs: in-between pictures on %llu of %llu frames (the song's word changing)\n",
+                   (unsigned long long)g.open_frames, (unsigned long long)g.frames);
         machine.report();
         mods::report();
         close_wav();
@@ -663,6 +677,29 @@ int main(int argc, char **argv) {
         host::menukey::hand_screen_to_launcher();   // (a core's own end, an error: its window goes next)
     };
     machine.set_on_fatal(finish);
+
+    // --smooth-motion songs: the game's [smooth] (its game.toml) says when a song is played; the
+    // in-between pictures only then (shell/smoothgate.h)
+    if (smooth_motion) {
+        std::string text, err;
+        if (FILE *f = fopen((opt.root + "/games/" + game + "/game.toml").c_str(), "rb")) {
+            char b[4096];
+            for (size_t n; (n = fread(b, 1, sizeof b, f)) > 0;) text.append(b, n);
+            fclose(f);
+        }
+        hk::smoothgate::State &g = hk::smoothgate::state();
+        bool has = false;
+        if (!hk::smoothgate::parse(text, g.cond, has, err)) {
+            fprintf(stderr, "games/%s/%s\n", game.c_str(), err.c_str());
+            return 2;
+        }
+        g.has = has && smooth_where == "songs";
+        if (g.has)
+            printf("smooth motion: in songs only (while the word at 0x%08x changes, games/%s/game.toml [smooth]); the "
+                   "other screens each frame held for its refreshes\n", g.cond.address, game.c_str());
+        else
+            printf("smooth motion: everywhere (%s)\n", smooth_where == "songs" ? "this game has no song condition yet" : "asked for");
+    }
 
 #ifdef HK_WITH_SDL
     host::window_set_picture(picture_mode, opt.root + "/shaders", picture_config);
@@ -860,6 +897,11 @@ int main(int argc, char **argv) {
     // HK_BETWEEN_BENCH: the in-between pictures where a window asks for them (with the picture at
     // the end of vertical blank, for a core that has one; else with the frame's)
     auto between_draw = [&](int w, int h) {
+        if (!hk::smoothgate::open()) {   // (outside songs: one asked for, not counted, as the window does)
+            int bw = w, bh = h;
+            machine.render_between(0.0, bw, bh);
+            return;
+        }
         for (int i = 1; i < between_bench; i++) {
             int bw = w, bh = h;
             const uint64_t t0 = prof::ticks();
@@ -913,6 +955,7 @@ int main(int argc, char **argv) {
         if (window_scale) mods::display_rate(host::pacing::refresh_hz());
 #endif
         mods::frame();
+        if (smooth_motion) hk::smoothgate::frame([&](uint32_t a) { return machine.mem(a, 4); }, machine.frame_repeated());
         macro::frame(f);
         if (!script_path.empty()) {
             bool keep = script::frame(f, [&]() {

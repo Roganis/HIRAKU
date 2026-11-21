@@ -1114,3 +1114,11 @@ A player's request (2026-11-21): **F5** in the game's window saves the game's ow
 
 **Open**
 - (owner) F5 in a real window, on Windows itself, and from the Python core and hiraku-pc (built and run headless only for DJ Main and Twinkle).
+
+## 50. Smooth motion in songs only
+
+A player's report (2026-11-21): with smooth motion, beatmania III THE FINAL's sound select still vibrated, and the other III games' song selects more; the player asked for smooth motion only in the songs, as the high-frame-rate mods already have it. Studied first: the in-between pictures' guess goes wrong on what menus are made of: text redrawn with other letters, panels that stop, cursors that bob, lists that wrap (reproduced headless: still pixels drawn moving), and the menus gain little from it. **`--smooth-motion songs`** (the default; `--smooth-motion everywhere` is the old way): a game's game.toml `[smooth]` names a word of its memory that changes every frame while a song plays, with the condition of a mod's `[[rate]]` (`runtime/shell/wordcond.h`, now shared with host/mods.cpp: on after two changing frames, off after two still, optional `while_equal`/`value`); outside a song (`runtime/shell/smoothgate.h`, once a frame after the mods' patches) the window asks for no in-between pictures and display pacing runs as without smooth motion (a frame afresh on the display's refreshes at each switch, `pacing::set_smooth_motion`), while the core is still asked for one in-between picture a frame (not shown), so a song's first in-between pictures are those smooth motion everywhere makes. A game without `[smooth]` gets it everywhere. Launcher: Settings > Display > Motion: held / smooth motion in songs / smooth motion everywhere / CRT beam (`video/smoothMotionWhere`; a saved "smooth motion" is in songs). The five beatmania III games have their words (docs/SMOOTH.md: THE FINAL's stage frame counter, the others' frame within the bar), each found from RAM dumps and checked through two credits and the attract. Tests: `smoothgate`.
+
+**Open**
+- (owner) a real 120/240 Hz display: the switch at a stage's start and end (exact speed to locked and back) under fifo-v1 and DWM, which the headless rig doesn't have.
+- The other games with smooth motion (pop'n music 4-8, ParaParaParadise, DJ Main's, Twinkle's and the 573's) have no `[smooth]` yet: everywhere, as before.

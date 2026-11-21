@@ -31,6 +31,7 @@
 #include "../spu/spu.h"
 #include "../shell/cabinet.h"
 #include "../shell/saves.h"
+#include "../shell/smoothgate.h"
 #include "../shell/sys.h"
 #include "spectrum.h"
 #include "synth.h"
@@ -719,6 +720,14 @@ void between_snap() {
     };
     std::vector<uint32_t> fb;
     int w, h;
+    // outside a song (--smooth-motion songs, shell/smoothgate.h): none made, one asked for as the
+    // window does, and the frame as it is
+    if (!hk::smoothgate::open()) {
+        render_between(0.0, w, h);
+        draw_picture(fb, w, h);
+        write(fb.data(), w, h, 0);
+        return;
+    }
     // the frame's own picture as the window shows it with --smooth-motion at the game's own speed
     // (its first refresh too drawn by render_between: what scrolls on the scroll's line), else the
     // frame as it is; then the in-between pictures, made then too, as the window makes them

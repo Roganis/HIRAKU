@@ -34,6 +34,7 @@
 #include "shell/sha1.h"
 #include "shell/sys.h"
 #include "shell/userdir.h"
+#include "shell/wordcond.h"
 
 namespace hk::mods {
 
@@ -104,11 +105,7 @@ struct Rate {
     std::string mod;
     double hz = 0, now = 0;   // as asked; as set
     int times = 0;            // hz = "x2"...: that many times the machine's own rate (as it is: a PC IIDX's display type)
-    uint32_t address = 0, last = 0;
-    int changed = 0, still = 0;   // frames in a row the word changed, didn't
-    bool always = false;          // no while_changing: from the first frame on
-    bool gated = false;           // while_equal: and only while this word holds `value`
-    uint32_t gate = 0, value = 0;
+    WordCondition when;       // while_changing, while_equal (shell/wordcond.h)
     bool on = false, refused = false;
 };
 
@@ -944,12 +941,12 @@ bool load(const std::vector<std::string> &dirs, const std::string &game, const s
                         r.hz = real("hz");
                         if (r.hz < 30 || r.hz > 1000) fail("'hz' is between 30 and 1000");
                     }
-                    if (t.values.count("while_changing")) r.address = (uint32_t)num("while_changing");
-                    else r.always = true;
+                    if (t.values.count("while_changing")) r.when.address = (uint32_t)num("while_changing");
+                    else r.when.always = true;
                     if (t.values.count("while_equal") || t.values.count("value")) {
-                        r.gated = true;
-                        r.gate = (uint32_t)num("while_equal");
-                        r.value = (uint32_t)num("value");
+                        r.when.gated = true;
+                        r.when.gate = (uint32_t)num("while_equal");
+                        r.when.value = (uint32_t)num("value");
                     }
                     if (!off) g_rates.push_back(r);
                 } else if (t.kind == "bytes") {
@@ -1160,27 +1157,9 @@ void display_rate(double hz) { g_display_hz = hz; }
 void frame() {
     for (Rate &r : g_rates) {
         if (r.refused || core().frame_repeated()) continue;
-        if (r.always) {
-            r.changed = 2, r.still = 0;
-        } else {
-            const uint8_t *m = core().mem(r.address, 4);
-            if (!m) continue;
-            uint32_t v;
-            memcpy(&v, m, 4);
-            if (v != r.last) r.changed++, r.still = 0;
-            else r.still++, r.changed = 0;
-            r.last = v;
-        }
-        // two frames in a row either way, so a word that changes once (a load) doesn't count; and
-        // with while_equal, only while that word holds the value (off at once when it doesn't)
-        bool in_state = true;
-        if (r.gated) {
-            const uint8_t *g = core().mem(r.gate, 4);
-            uint32_t gv = 0;
-            if (g) memcpy(&gv, g, 4);
-            in_state = g && gv == r.value;
-        }
-        const bool want = in_state && (r.on ? r.still < 2 : r.changed >= 2);
+        bool known;
+        const bool want = r.when.step(r.on, [](uint32_t a) { return core().mem(a, 4); }, known);
+        if (!known) continue;
         // hz = "display": follow the display (a window moved to another one)
         const double hz = r.times ? r.times * core().native_rate() : r.hz > 0 ? r.hz : g_display_hz > 30 ? g_display_hz : kDisplayFallbackHz;
         if (want == r.on && (!want || hz == r.now)) continue;
@@ -1276,8 +1255,8 @@ std::vector<RatePatch> rate_patches() {
 std::vector<uint32_t> rate_words() {
     std::vector<uint32_t> out;
     for (const Rate &r : g_rates) {
-        if (!r.always) out.push_back(r.address);
-        if (r.gated) out.push_back(r.gate);
+        if (!r.when.always) out.push_back(r.when.address);
+        if (r.when.gated) out.push_back(r.when.gate);
     }
     return out;
 }

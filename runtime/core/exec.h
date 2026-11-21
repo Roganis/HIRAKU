@@ -33,6 +33,7 @@ bool call(hk_ctx *c, uint32_t addr);     // run it, as a recompiled function is 
 // ... an exception's handler: run, or what its run did the last time it started from this state
 // done in its place (exec.cpp, "runs remembered"). False: none there, or not this way (call())
 bool call_memo(hk_ctx *c, uint32_t addr);
+uint64_t memo_used();                    // calls taken from a remembered run so far (tests)
 
 // The functions made into the host's code at load (exec_jit.cpp; PLAN.md section 45): whether
 // this build and its settings make any (not on ARM, nor with HK_JIT=0 or HK_403_JIT=0), how many

@@ -916,7 +916,9 @@ instructions where the translated code takes them at its polls, so even a patch 
 nothing moves the machine's timing a little (pop'n 4: the picture the same in every frame, the
 sound reaching the same total a few frames apart); and it is slower, which shows only in a
 function the game calls very often (pop'n 4's message poller, called ~3,000 times a frame: 1.1 →
-3.8 ms of host work a frame).
+3.8 ms of host work a frame). In `hiraku-firebeat` the rest of the program keeps its speed: the runs the
+executor remembers and replays are forgotten once when a patch first changes a function, and a run
+that reaches a changed function is never remembered.
 
 pop'n music 13 and 14 keep their program (`ee/boot/game.bin`) encrypted on the disk, so its text
 and code are changed with `[[patch]]` once it's loaded, not on the disk.

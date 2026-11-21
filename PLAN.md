@@ -977,6 +977,7 @@ Identical: the 13 Firebeat regress cases give the shared baseline's frames and s
 
 **Open**
 - (build) Firebeat after made code: the remembered runs' bookkeeping (`call_memo`: the state's hash, the compares, the replay) is 9 % of THE FINAL's run, as much as made code's calls out; a guest call is four host calls (`fn_call`, `run_made`, the made code, back).
+- (done) a `[[patch]]` mod turned the remembered runs off for the whole program. Now they are forgotten once when a function is newly patched, and a run that reaches a patched function is never remembered (`tests/core/test_exec_patch.cpp`); THE FINAL's stage with a patch in its hottest function went from 1.89-2.10 ms a frame to 1.25-1.30, as without a mod.
 - (build) the multi-session unit's MIPS (MAME's `mips1`, another core): 42 % of DrumMania 10th's processor time now.
 - (build) a made R3000 block is large, about 2.5 KiB (DDR 2ndMIX 19 MiB for 7651 blocks, an arena limit of 192 MiB): each memory access has its own slow half and way out. Shared ones would shrink it several times.
 - (build) stencils for ARM (the copier's kinds for AArch64's relocations; `test_meg_jit` under qemu is the check): an ARM build interprets, and says so at configure.

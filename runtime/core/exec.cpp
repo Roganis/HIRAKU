@@ -463,6 +463,13 @@ bool call(hk_ctx *c, uint32_t addr) {
 // on, wherever the bytes it read are as they were and the budget outlasts it (so that no poll
 // inside would have run the scheduler), its writes, registers and cycles are put in place of
 // running it. Nothing here knows a game or its kernel.
+//
+// A mod's code patch (core/patched.cpp): its functions run interpreted from their next call, and
+// a recording that reaches one, by any kind of call, is not kept (exec_run.inc's patched test is
+// an outside thing to the recorder, as dyn() is). So what is kept from then on never holds a
+// changed function's run, and only what was recorded before can: all of it is forgotten when a
+// function is newly marked. A patch lifted or put back leaves its functions marked (interpreted,
+// reading the code as it is), so nothing remembered since needs forgetting again.
 // ---------------------------------------------------------------------------------------------
 namespace {
 
@@ -490,6 +497,7 @@ struct Memos {
     std::vector<Slot> slots;
     uint32_t last_addr = 1;        // the handler looked up last (1: none, never an address of one)
     const Code *last = nullptr;
+    uint32_t marked = 0;           // patched_count() when what is kept was checked against it
     MemoStats st;
     Memos() {
         if (const char *e = getenv("HK_EXEC_MEMO")) mode = !strcmp(e, "0") ? Mode::off : !strcmp(e, "check") ? Mode::check : Mode::on;
@@ -662,11 +670,16 @@ void check(hk_ctx *c, const Code *k, const Memo &m) {
 
 }  // namespace
 
+uint64_t memo_used() { return g_memo.st.used; }
+
 bool call_memo(hk_ctx *c, uint32_t addr) {
     Memos &g = g_memo;
-    // not with a mod's code patch in (the steps are the program as it was; the patched functions
-    // run interpreted), nor where the game's own binary runs its functions
-    if (g.mode == Mode::off || hk_patched_any || hk_func_count || recording()) return false;
+    // not where the game's own binary runs its functions
+    if (g.mode == Mode::off || hk_func_count || recording()) return false;
+    if (__builtin_expect(hk_patched_any, 0)) {   // a function newly changed by a mod: see above
+        if (const uint32_t n = patched_count(); n != g.marked) g.marked = n, forget();
+        if (patched(addr)) return false;
+    }
     if (addr != g.last_addr) g.last_addr = addr, g.last = find(addr);   // (a handful of vectors, one mostly)
     const Code *k = g.last;
     if (!k) return false;

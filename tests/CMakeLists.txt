@@ -621,6 +621,13 @@ target_link_libraries(test_exec_hook PRIVATE hiraku_rt)
 add_test(NAME exec_hook COMMAND test_exec_hook ${CMAKE_CURRENT_BINARY_DIR}/exec-hook-test)
 add_test(NAME exec_hook_memo_check COMMAND test_exec_hook ${CMAKE_CURRENT_BINARY_DIR}/exec-hook-test-check)
 set_tests_properties(exec_hook_memo_check PROPERTIES ENVIRONMENT "HK_EXEC_MEMO=check")
+# A mod's code patch and the remembered runs (runtime/core/exec.cpp): a caller's run from before a
+# patch is not taken after it, the rest still are (twice: HK_EXEC_MEMO=check)
+add_executable(test_exec_patch core/test_exec_patch.cpp ${CMAKE_SOURCE_DIR}/runtime/core/no_table.c)
+target_link_libraries(test_exec_patch PRIVATE hiraku_rt)
+add_test(NAME exec_patch COMMAND test_exec_patch ${CMAKE_CURRENT_BINARY_DIR}/exec-patch-test)
+add_test(NAME exec_patch_memo_check COMMAND test_exec_patch ${CMAKE_CURRENT_BINARY_DIR}/exec-patch-test-check)
+set_tests_properties(exec_patch_memo_check PROPERTIES ENVIRONMENT "HK_EXEC_MEMO=check")
 
 # The PlayStation cores' waiting loops (runtime/sys573/idle.cpp): for how many turns a comparison
 # keeps its result, against every turn worked out

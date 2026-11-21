@@ -4,7 +4,9 @@
 // it was), so a function whose code changed runs in the interpreter from its next entry on: the
 // interpreter reads the code as it is now. Its entries (secondary ones too) are kept here; a
 // recompiled function's poll at its entry (hiraku/recomp.h, HK_POLL), the executor's calls
-// (core/exec.cpp) and the dispatch (core/dispatch.cpp) look them up.
+// (core/exec.cpp) and the dispatch (core/dispatch.cpp) look them up. A function stays marked when
+// its patch is lifted (the interpreter reads the original back as well); patched_count() goes up
+// with each one newly marked, for what was made from the code as it was (exec.cpp's remembered runs).
 #include <cstdio>
 #include <unordered_set>
 
@@ -19,6 +21,7 @@ int hk_patched_any = 0;
 namespace hk {
 namespace {
 std::unordered_set<uint32_t> g_patched;
+uint32_t g_marked = 0;
 }
 
 void patch_functions(const spec::Program &p, uint32_t lo, uint32_t hi) {
@@ -26,14 +29,17 @@ void patch_functions(const spec::Program &p, uint32_t lo, uint32_t hi) {
         bool hit = false;
         for (const auto &[a, b] : f.ranges) hit |= a < hi && lo < b;
         if (!hit) continue;
-        if (g_patched.insert(entry).second)
+        if (g_patched.insert(entry).second) {
             fprintf(stderr, "mods: the function at %08x changed: from its next call on, it runs interpreted\n", entry);
-        for (uint32_t s : f.entries) g_patched.insert(s);
+            g_marked++;
+        }
+        for (uint32_t s : f.entries) g_marked += g_patched.insert(s).second;
     }
     hk_patched_any = !g_patched.empty();
 }
 
 bool patched(uint32_t entry) { return hk_patched_any && g_patched.count(entry); }
+uint32_t patched_count() { return g_marked; }
 
 }  // namespace hk
 

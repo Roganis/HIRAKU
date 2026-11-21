@@ -60,10 +60,12 @@ hk_func lookup(uint32_t guest_addr);               // nullptr if not recompiled
 bool has_guest(uint32_t guest_addr);
 bool call_guest(hk_ctx *c, uint32_t guest_addr);
 // Functions a mod's code patch changed run interpreted from then on (core/patched.cpp): the
-// program's functions overlapping [lo, hi) marked, and whether an entry is one of theirs
+// program's functions overlapping [lo, hi) marked, and whether an entry is one of theirs; the
+// entries marked so far (it only goes up: a lifted patch's function stays marked)
 namespace spec { struct Program; }
 void patch_functions(const spec::Program &p, uint32_t lo, uint32_t hi);
 bool patched(uint32_t entry);
+uint32_t patched_count();
 
 // ---------------------------------------------------------------------------
 // Interpreter

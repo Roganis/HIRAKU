@@ -451,6 +451,14 @@ if(HK_PC_DLL_CC)
     DEPENDS tests/pc/test_vsock.c runtime/pc/vsock.c runtime/pc/cabinet.h
     COMMENT "pc/test_vsock.exe (32-bit)")
   add_custom_target(hiraku-pc-test-vsock ALL DEPENDS ${CMAKE_BINARY_DIR}/pc/test_vsock.exe)
+  # the mods' files through the board DLL's hooks (cabinet.c): tests/pc/test_modfiles.sh runs it under Wine
+  add_custom_command(OUTPUT ${CMAKE_BINARY_DIR}/pc/test_modfiles.exe
+    COMMAND ${HK_PC_DLL_CC} --target=i686-w64-mingw32 ${HK_PC_DLL_SYS} -O2 -Wall -Wextra -fuse-ld=lld -static
+            -o ${CMAKE_BINARY_DIR}/pc/test_modfiles.exe ${CMAKE_SOURCE_DIR}/tests/pc/test_modfiles.c
+    DEPENDS tests/pc/test_modfiles.c
+    COMMENT "pc/test_modfiles.exe (32-bit)")
+  add_custom_target(hiraku-pc-test-modfiles ALL DEPENDS ${CMAKE_BINARY_DIR}/pc/test_modfiles.exe)
+  add_dependencies(hiraku-pc-test-modfiles hiraku-pc-dlls)
   # HIRAKU's own "game" for hiraku-pc, with no game's data (tests/pc/selfgame.c): it loads the
   # board's DLL, reads the pad, draws with Direct3D 9, plays a sound. tests/pc/test_selfgame.sh
   # runs it under hiraku-pc and Wine

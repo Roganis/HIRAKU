@@ -4,6 +4,7 @@
 
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
+#include <mmsystem.h>
 #define COBJMACROS
 #include <d3d9.h>
 #include <psapi.h>
@@ -305,10 +306,28 @@ static void read_map(void) {
     }
 }
 
-// --- mods (docs/MODS.md): the game's files a mod's file takes the place of (HK_PC_FILES)
+// --- mods (docs/MODS.md): the game's files a mod's file takes the place of, and the files and
+// folders a mod adds to the game's data (HK_PC_FILES: "PATH<tab>MOD", "PATH<tab>MOD<tab>new",
+// "PATH<tab>MOD<tab>folder", PATH as the game names it). A path is looked for as the table keeps
+// it (key_of): "..\data\sd_data\\x.bin", "..\DATA/sd_data/x.bin" and "..\data\.\sd_data\x.bin\"
+// are one file. Several thousand of them: a hash table, not a list gone through at each call
 
-static struct { char *game, *mod; int said; } *g_files;
-static int g_nfiles;
+enum { FILE_REPLACED, FILE_NEW, FOLDER_NEW };
+static struct mod_file {
+    char *key, *mod, *name;   // the path as the table keeps it; the mod's file; the name in its folder (as given)
+    unsigned hash;
+    int kind, said, folder, next;   // folder: its folder's in g_folders; next: the next one there (-1: none)
+} *g_files;
+static int g_nfiles, g_nnew;
+static int *g_file_slots;   // open addressing: an entry's number + 1, 0 empty
+static unsigned g_file_mask;
+// the folders with a mod's files in them (their listings show the new names too, and the replaced
+// files' sizes): key, the first of those files (in g_files)
+static struct mod_folder { char *key; unsigned hash; int first; } *g_folders;
+static int g_nfolders;
+static int *g_folder_slots;
+static unsigned g_folder_mask;
+static CRITICAL_SECTION g_listings_lock;
 
 static char *read_text(const char *path) {
     FILE *f = path && *path ? fopen(path, "rb") : NULL;
@@ -322,32 +341,143 @@ static char *read_text(const char *path) {
     return t;
 }
 
+// p as the table keeps a path, in out (cap bytes): lower case, one '\' between parts (a '/' is one
+// too), no "." parts, a "name\.." pair taken out (the ".." the game starts its paths with kept),
+// none at the end; one '\' kept at the start (a path from the drive's root). -1: too long. Names in
+// the PC's code page: a double-byte letter's second byte is never a separator
+static int hk_path_key(const char *p, char *out, size_t cap) {
+    size_t n = 0;
+    int parts = 0, ups = 0;   // parts in out; how many of the first are ".."
+    if (*p == '\\' || *p == '/') {
+        if (cap < 2) return -1;
+        out[n++] = '\\';
+    }
+    const size_t root = n;
+    while (*p) {
+        while (*p == '\\' || *p == '/') p++;
+        const char *b = p;
+        while (*p && *p != '\\' && *p != '/') p += IsDBCSLeadByte((BYTE)*p) && p[1] ? 2 : 1;
+        const size_t len = (size_t)(p - b);
+        if (!len || (len == 1 && b[0] == '.')) continue;
+        if (len == 2 && b[0] == '.' && b[1] == '.' && parts > ups) {
+            size_t last = n;   // out's last part goes (a drive stays: "D:\.." is "D:\")
+            while (last > root && out[last - 1] != '\\') last--;
+            if (out[n - 1] == ':') continue;
+            n = last > root ? last - 1 : root;
+            parts--;
+            continue;
+        }
+        if (n + (parts ? 1 : 0) + len + 1 > cap) return -1;
+        if (parts) out[n++] = '\\';
+        for (size_t i = 0; i < len; i++) {
+            const char c = b[i];
+            const int lead = IsDBCSLeadByte((BYTE)c) && i + 1 < len;
+            out[n++] = !lead && c >= 'A' && c <= 'Z' ? (char)(c | 0x20) : c;
+            if (lead) out[n++] = b[++i];
+        }
+        if (len == 2 && b[0] == '.' && b[1] == '.') ups++;
+        parts++;
+    }
+    out[n] = 0;
+    return (int)n;
+}
+
+static unsigned key_hash(const char *k) {
+    unsigned h = 2166136261u;
+    while (*k) h = (h ^ (unsigned char)*k++) * 16777619u;
+    return h;
+}
+
+static int file_at(const char *key, unsigned h) {
+    if (!g_file_slots) return -1;
+    for (unsigned i = h & g_file_mask;; i = (i + 1) & g_file_mask) {
+        const int e = g_file_slots[i] - 1;
+        if (e < 0) return -1;
+        if (g_files[e].hash == h && !strcmp(g_files[e].key, key)) return e;
+    }
+}
+
+static int folder_at(const char *key, unsigned h) {
+    if (!g_folder_slots) return -1;
+    for (unsigned i = h & g_folder_mask;; i = (i + 1) & g_folder_mask) {
+        const int e = g_folder_slots[i] - 1;
+        if (e < 0) return -1;
+        if (g_folders[e].hash == h && !strcmp(g_folders[e].key, key)) return e;
+    }
+}
+
 static void read_files(void) {
+    InitializeCriticalSection(&g_listings_lock);
     char *t = read_text(getenv("HK_PC_FILES"));
+    int lines = 0;
+    for (char *c = t; c && *c; c++) lines += *c == '\n';
+    g_files = (struct mod_file *)calloc((size_t)lines + 1, sizeof *g_files);
     for (char *line = t ? strtok(t, "\r\n") : NULL; line; line = strtok(NULL, "\r\n")) {
         char *tab = strchr(line, '\t');
-        if (!tab) continue;
+        if (!tab || g_nfiles > lines) continue;
         *tab = 0;
-        g_files = realloc(g_files, sizeof *g_files * (size_t)(g_nfiles + 1));
-        g_files[g_nfiles].game = line, g_files[g_nfiles].mod = tab + 1, g_files[g_nfiles].said = 0;
+        char *kind = strchr(tab + 1, '\t');
+        if (kind) *kind++ = 0;
+        char key[MAX_PATH];
+        if (hk_path_key(line, key, sizeof key) <= 0) continue;
+        struct mod_file *f = &g_files[g_nfiles];
+        f->key = _strdup(key), f->mod = tab + 1, f->hash = key_hash(key), f->folder = f->next = -1;
+        f->kind = !kind ? FILE_REPLACED : !strcmp(kind, "new") ? FILE_NEW : !strcmp(kind, "folder") ? FOLDER_NEW : -1;
+        if (f->kind < 0) continue;   // (a kind of a later HIRAKU's)
+        const char *slash = strrchr(line, '\\'), *fwd = strrchr(line, '/');
+        f->name = (char *)(fwd > slash ? fwd + 1 : slash ? slash + 1 : line);
         g_nfiles++;
     }
-    if (g_nfiles) hk_log("hiraku-pc: mods: %d of the game's files are a mod's", g_nfiles);
+    if (!g_nfiles) return;
+    // the tables: at most half full
+    unsigned size = 16;
+    while (size < 2u * (unsigned)g_nfiles) size *= 2;
+    g_file_slots = (int *)calloc(size, sizeof *g_file_slots), g_file_mask = size - 1;
+    g_folder_slots = (int *)calloc(size, sizeof *g_folder_slots), g_folder_mask = size - 1;
+    g_folders = (struct mod_folder *)calloc((size_t)g_nfiles, sizeof *g_folders);
+    int replaced = 0, folders = 0;
+    for (int e = 0; e < g_nfiles; e++) {
+        struct mod_file *f = &g_files[e];
+        if (file_at(f->key, f->hash) >= 0) continue;   // (hiraku-pc lists each once)
+        unsigned i = f->hash & g_file_mask;
+        while (g_file_slots[i]) i = (i + 1) & g_file_mask;
+        g_file_slots[i] = e + 1;
+        replaced += f->kind == FILE_REPLACED, folders += f->kind == FOLDER_NEW, g_nnew += f->kind == FILE_NEW;
+        // its folder's listing shows a new name, and a replaced file's size
+        char *cut = strrchr(f->key, '\\');
+        if (!cut) continue;
+        *cut = 0;
+        const unsigned h = key_hash(f->key);
+        int d = folder_at(f->key, h);
+        if (d < 0) {
+            d = g_nfolders++;
+            g_folders[d].key = _strdup(f->key), g_folders[d].hash = h, g_folders[d].first = -1;
+            unsigned j = h & g_folder_mask;
+            while (g_folder_slots[j]) j = (j + 1) & g_folder_mask;
+            g_folder_slots[j] = d + 1;
+        }
+        *cut = '\\';
+        f->folder = d, f->next = g_folders[d].first, g_folders[d].first = e;
+    }
+    hk_log("hiraku-pc: mods: %d of the game's files are a mod's, %d new files and %d new folders in its data", replaced, g_nnew, folders);
+}
+
+// The mod's file for the path the game asked for (a new folder: the mod's), or NULL
+static const char *mod_file(const char *p) {
+    char key[MAX_PATH];
+    if (!g_nfiles || !p || hk_path_key(p, key, sizeof key) <= 0) return NULL;
+    const int e = file_at(key, key_hash(key));
+    if (e < 0 || strlen(g_files[e].mod) >= MAX_PATH) return NULL;
+    if (!g_files[e].said) g_files[e].said = 1, hk_log("hiraku-pc: mods: %s from %s", p, g_files[e].mod);
+    return g_files[e].mod;
 }
 
 // The path the game asked for, or where HK_PC_MAP sends it (in buf)
 static const char *mapped(const char *p, char *buf) {
     if (!p) return p;
-    for (int i = 0; i < g_nfiles; i++) {   // a mod's file instead of the game's
-        const char *a = p, *b = g_files[i].game;
-        for (; *a && *b; a++, b++) {
-            const char x = *a == '/' ? '\\' : *a;
-            if ((x | 0x20) != (*b | 0x20) && x != *b) break;
-        }
-        if (!*a && !*b && strlen(g_files[i].mod) < MAX_PATH) {
-            if (!g_files[i].said) g_files[i].said = 1, hk_log("hiraku-pc: mods: %s from %s", p, g_files[i].mod);
-            return strcpy(buf, g_files[i].mod);
-        }
+    if (g_nfiles) {   // a mod's file instead of the game's, or one it adds
+        const char *m = mod_file(p);
+        if (m) return strcpy(buf, m);
     }
     for (int i = 0; i < g_nmap; i++) {
         const size_t n = g_map[i].n;
@@ -394,13 +524,172 @@ static BOOL WINAPI my_CreateDirectoryA(LPCSTR p, LPSECURITY_ATTRIBUTES sa) {
     char b[MAX_PATH];
     return CreateDirectoryA(mapped(p, b), sa);
 }
+// A folder's listing with the mods' files (FindFirstFileA with a wildcard, over a folder of
+// g_folders): the game's own entries, a replaced file's with the mod's file's size and times (none
+// for a folder only the mods have: its "." and ".." then), and each new name the pattern takes, in
+// a list of HIRAKU's that FindNextFileA and FindClose know by its handle
+static struct listing { struct listing *next; int n, at; WIN32_FIND_DATAA e[]; } *g_listings;
+
+// Windows' wildcards, any case: '*' any letters, '?' one ("*.*" is everything)
+static int wild(const char *pat, const char *name) {
+    if (!strcmp(pat, "*.*")) pat = "*";
+    for (; *pat; pat++, name++) {
+        if (*pat == '*') {
+            for (const char *n = name;; n++) {
+                if (wild(pat + 1, n)) return 1;
+                if (!*n) return 0;
+            }
+        }
+        if (!*name) return 0;
+        if (*pat != '?' && (*pat | (*pat >= 'A' && *pat <= 'Z' ? 0x20 : 0)) != (*name | (*name >= 'A' && *name <= 'Z' ? 0x20 : 0))) return 0;
+    }
+    return !*name;
+}
+
+static struct listing *listing_add(struct listing *l, int *cap, const WIN32_FIND_DATAA *e) {
+    if (l->n == *cap) {
+        *cap *= 2;
+        l = (struct listing *)realloc(l, sizeof *l + sizeof *l->e * (size_t)*cap);
+    }
+    l->e[l->n++] = *e;
+    return l;
+}
+
+static HANDLE listing(const char *p, int folder, const char *pat, LPWIN32_FIND_DATAA d) {
+    int cap = 64;
+    struct listing *l = (struct listing *)malloc(sizeof *l + sizeof *l->e * (size_t)cap);
+    l->n = l->at = 0;
+    char b[MAX_PATH];
+    WIN32_FIND_DATAA e;
+    HANDLE h = FindFirstFileA(mapped(p, b), &e);   // the game's
+    if (h != INVALID_HANDLE_VALUE) {
+        do l = listing_add(l, &cap, &e);
+        while (FindNextFileA(h, &e));
+        FindClose(h);
+    }
+    const int first = g_folders[folder].first;
+    if (!l->n && first >= 0 && g_files[first].kind != FILE_REPLACED) {   // a folder only the mods have: its own "." and "..", as a mod's folder has them
+        char in[MAX_PATH];
+        const char *mod = g_files[first].mod, *cut = strrchr(mod, '\\');
+        if (cut && (size_t)(cut - mod) + 3 < sizeof in) {
+            snprintf(in, sizeof in, "%.*s\\*", (int)(cut - mod), mod);
+            if ((h = FindFirstFileA(in, &e)) != INVALID_HANDLE_VALUE) {
+                do
+                    if ((!strcmp(e.cFileName, ".") || !strcmp(e.cFileName, "..")) && wild(pat, e.cFileName)) l = listing_add(l, &cap, &e);
+                while (FindNextFileA(h, &e));
+                FindClose(h);
+            }
+        }
+    }
+    const int game = l->n;
+    for (int f = first; f >= 0; f = g_files[f].next) {
+        if (!wild(pat, g_files[f].name) || (h = FindFirstFileA(g_files[f].mod, &e)) == INVALID_HANDLE_VALUE) continue;
+        FindClose(h);
+        if (g_files[f].kind == FILE_REPLACED) {   // the game's entry, with the mod's file's size and times
+            for (int i = 0; i < game; i++)
+                if (!_stricmp(l->e[i].cFileName, g_files[f].name)) {
+                    l->e[i].nFileSizeHigh = e.nFileSizeHigh, l->e[i].nFileSizeLow = e.nFileSizeLow;
+                    l->e[i].ftCreationTime = e.ftCreationTime, l->e[i].ftLastAccessTime = e.ftLastAccessTime;
+                    l->e[i].ftLastWriteTime = e.ftLastWriteTime;
+                    break;
+                }
+            continue;
+        }
+        snprintf(e.cFileName, sizeof e.cFileName, "%s", g_files[f].name);   // (new: none of the game's has its name)
+        e.cAlternateFileName[0] = 0;
+        l = listing_add(l, &cap, &e);
+    }
+    if (!l->n) {
+        free(l);
+        SetLastError(ERROR_FILE_NOT_FOUND);
+        return INVALID_HANDLE_VALUE;
+    }
+    *d = l->e[l->at++];
+    EnterCriticalSection(&g_listings_lock);
+    l->next = g_listings, g_listings = l;
+    LeaveCriticalSection(&g_listings_lock);
+    return (HANDLE)l;
+}
+
+// h as a listing of HIRAKU's (taken out of the list when `take`), or NULL: Windows' own
+static struct listing *listing_of(HANDLE h, int take) {
+    if (!g_listings) return NULL;
+    EnterCriticalSection(&g_listings_lock);
+    struct listing **at = &g_listings;
+    while (*at && (HANDLE)*at != h) at = &(*at)->next;
+    struct listing *l = *at;
+    if (l && take) *at = l->next;
+    LeaveCriticalSection(&g_listings_lock);
+    return l;
+}
+
 static HANDLE WINAPI my_FindFirstFileA(LPCSTR p, LPWIN32_FIND_DATAA d) {
     char b[MAX_PATH];
+    if (g_nfolders && p) {   // a wildcard in a folder with a mod's files
+        const char *slash = strrchr(p, '\\'), *fwd = strrchr(p, '/');
+        const char *leaf = fwd > slash ? fwd + 1 : slash ? slash + 1 : p;
+        char key[MAX_PATH];
+        if (strpbrk(leaf, "*?") && leaf > p && (size_t)(leaf - p) < sizeof key) {
+            memcpy(b, p, (size_t)(leaf - p)), b[leaf - p] = 0;
+            const int folder = hk_path_key(b, key, sizeof key) > 0 ? folder_at(key, key_hash(key)) : -1;
+            if (folder >= 0) return listing(p, folder, leaf, d);
+        }
+    }
     return FindFirstFileA(mapped(p, b), d);
+}
+static BOOL WINAPI my_FindNextFileA(HANDLE h, LPWIN32_FIND_DATAA d) {
+    struct listing *l = listing_of(h, 0);
+    if (!l) return FindNextFileA(h, d);
+    if (l->at >= l->n) {
+        SetLastError(ERROR_NO_MORE_FILES);
+        return FALSE;
+    }
+    *d = l->e[l->at++];
+    return TRUE;
+}
+static BOOL WINAPI my_FindClose(HANDLE h) {
+    struct listing *l = listing_of(h, 1);
+    if (!l) return FindClose(h);
+    free(l);
+    return TRUE;
 }
 static DWORD WINAPI my_GetFileAttributesA(LPCSTR p) {
     char b[MAX_PATH];
     return GetFileAttributesA(mapped(p, b));
+}
+static BOOL WINAPI my_GetFileAttributesExA(LPCSTR p, GET_FILEEX_INFO_LEVELS level, LPVOID info) {
+    char b[MAX_PATH];
+    return GetFileAttributesExA(mapped(p, b), level, info);
+}
+// The calls that take a mod's files only (HK_PC_MAP isn't theirs): a name given in UTF-16 (the
+// libraries in the game's folder: D3DX's), ...
+static HANDLE WINAPI my_CreateFileW(LPCWSTR p, DWORD acc, DWORD share, LPSECURITY_ATTRIBUTES sa, DWORD cd, DWORD fl, HANDLE t) {
+    char a[MAX_PATH];
+    WCHAR w[MAX_PATH];
+    const char *m = p && WideCharToMultiByte(CP_ACP, 0, p, -1, a, sizeof a, NULL, NULL) > 0 ? mod_file(a) : NULL;
+    if (m && MultiByteToWideChar(CP_ACP, 0, m, -1, w, MAX_PATH) > 0) p = w;
+    return CreateFileW(p, acc, share, sa, cd, fl, t);
+}
+// ... and a name the game turns into UTF-16 for DirectShow, which opens the movies itself
+// (IGraphBuilder::RenderFile: IIDX's "..\data\movie\NNNN.4"): the mod's file's name instead.
+// Only a whole name with a separator in it is looked for
+static int WINAPI my_MultiByteToWideChar(UINT page, DWORD fl, LPCCH s, int n, LPWSTR w, int wn) {
+    if (s && n == -1 && (page == CP_ACP || page == CP_THREAD_ACP) && (strchr(s, '\\') || strchr(s, '/')) && strlen(s) < MAX_PATH) {
+        const char *m = mod_file(s);
+        if (m) {
+            const int r = MultiByteToWideChar(page, fl, m, -1, w, wn);
+            if (r > 0) return r;   // (too long for the game's buffer: the game's own name)
+        }
+    }
+    return MultiByteToWideChar(page, fl, s, n, w, wn);
+}
+// mmioOpenA (a game's sounds): a name as the other calls take it (a memory file's "name" is none)
+static HMMIO WINAPI my_mmioOpenA(LPSTR p, LPMMIOINFO info, DWORD flags) {
+    typedef HMMIO(WINAPI * mmioOpenA_t)(LPSTR, LPMMIOINFO, DWORD);
+    static mmioOpenA_t real;
+    if (!real) real = (mmioOpenA_t)(void *)GetProcAddress(LoadLibraryA("winmm.dll"), "mmioOpenA");
+    char b[MAX_PATH];
+    return real(p && !(info && info->pchBuffer) ? (LPSTR)mapped(p, b) : p, info, flags);
 }
 static BOOL WINAPI my_DeleteFileA(LPCSTR p) {
     char b[MAX_PATH];
@@ -1573,7 +1862,13 @@ static void *cabinet_hook_for(const char *dll, const char *fn) {
         {"kernel32.dll", "CreateFileA", (void *)my_CreateFileA},
         {"kernel32.dll", "CreateDirectoryA", (void *)my_CreateDirectoryA},
         {"kernel32.dll", "FindFirstFileA", (void *)my_FindFirstFileA},
+        {"kernel32.dll", "FindNextFileA", (void *)my_FindNextFileA},
+        {"kernel32.dll", "FindClose", (void *)my_FindClose},
         {"kernel32.dll", "GetFileAttributesA", (void *)my_GetFileAttributesA},
+        {"kernel32.dll", "GetFileAttributesExA", (void *)my_GetFileAttributesExA},
+        {"kernel32.dll", "CreateFileW", (void *)my_CreateFileW},
+        {"kernel32.dll", "MultiByteToWideChar", (void *)my_MultiByteToWideChar},
+        {"winmm.dll", "mmioOpenA", (void *)my_mmioOpenA},
         {"kernel32.dll", "DeleteFileA", (void *)my_DeleteFileA},
         {"kernel32.dll", "RemoveDirectoryA", (void *)my_RemoveDirectoryA},
         {"kernel32.dll", "MoveFileA", (void *)my_MoveFileA},
@@ -1591,6 +1886,11 @@ static void *cabinet_hook_for(const char *dll, const char *fn) {
             if (hooks[i].to == (void *)my_Direct3DCreate9 && !g_win_w && !g_win_full && g_hz <= 0 && !host_shows()) return NULL;
             if (hooks[i].to == (void *)hk_Direct3DCreate8 && !host_shows()) return NULL;   // HIRAKU's window only
             if (hooks[i].dll[0] == 'k' && !g_nmap && !g_nfiles) return NULL;
+            // the mods' alone (a game without mods: as it was)
+            if ((hooks[i].to == (void *)my_FindNextFileA || hooks[i].to == (void *)my_FindClose) && !g_nfolders) return NULL;
+            if ((hooks[i].to == (void *)my_GetFileAttributesExA || hooks[i].to == (void *)my_CreateFileW ||
+                 hooks[i].to == (void *)my_MultiByteToWideChar || hooks[i].to == (void *)my_mmioOpenA) && !g_nfiles)
+                return NULL;
             // the window and the sound are HIRAKU's only when its window shows the game
             if ((!_stricmp(hooks[i].dll, "user32.dll") || !_stricmp(hooks[i].dll, "dsound.dll")) && !host_shows()) return NULL;
             return hooks[i].to;

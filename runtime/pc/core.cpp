@@ -1600,6 +1600,45 @@ private:
             list += as + "\t" + win_path(mod_file) + "\n";
             md5_of[lower(as)] = md5_file(mod_file);
         }
+        // The files new to the game's data (docs/MODS.md, "The PC games"): "PATH<tab>MOD<tab>new", and
+        // each folder on their way the data folder lacks, "PATH<tab>THE MOD'S<tab>folder" (the DLL lists
+        // them in their folders). Not for pop'n 15-18: 15 checks its files against its list of them
+        // (dat.bin) by their scrambled names, and 16-18 take no mods' files yet
+        const auto added = hk::mods::added_files();
+        if (!added.empty() && family_ == "pcpopn") {
+            const std::string first = slashes(added[0].first), root = slashes(data) + "/";
+            fprintf(stderr, "mods: %zu file%s the game's data lacks, left out: pop'n 15-18 take only files that replace theirs (%s%s)\n",
+                    added.size(), added.size() == 1 ? "" : "s", (first.rfind(root, 0) == 0 ? first.substr(root.size()) : first).c_str(),
+                    added.size() > 1 ? ", ..." : "");
+        } else if (!added.empty()) {
+            const std::string root = slashes(data);
+            std::set<std::string> folders;   // (each once, lower case)
+            size_t n = 0;
+            std::string first;
+            for (const auto &[game_file, mod_file] : added) {
+                const std::string g = slashes(game_file), m = slashes(mod_file);
+                if (g.size() <= root.size() || g.compare(0, root.size(), root) != 0 || g[root.size()] != '/') continue;
+                // the folders on its way, from the data folder down, that it lacks (the mod's names
+                // from the first: new_in_folder kept the game's case for the game's own)
+                for (size_t at = g.find('/', root.size() + 1); at != std::string::npos; at = g.find('/', at + 1)) {
+                    const std::string folder = g.substr(0, at);
+                    if (hk::sys::is_dir(folder) || !folders.insert(lower(folder)).second) continue;
+                    std::string as = data_as_ + folder.substr(root.size());
+                    for (char &c : as)
+                        if (c == '/') c = '\\';
+                    // (the folder in the mod; a [[file]]'s from elsewhere in it: the folder that file is in)
+                    const std::string tail = g.substr(at);
+                    const bool same = m.size() > tail.size() && m.compare(m.size() - tail.size(), tail.size(), tail) == 0;
+                    list += as + "\t" + win_path(same ? m.substr(0, m.size() - tail.size()) : m.substr(0, m.rfind('/'))) + "\tfolder\n";
+                }
+                std::string as = data_as_ + g.substr(root.size());
+                for (char &c : as)
+                    if (c == '/') c = '\\';
+                list += as + "\t" + win_path(mod_file) + "\tnew\n";
+                if (!n++) first = g.substr(root.size() + 1);
+            }
+            if (n) printf("mods: %zu file%s added to the game's data (%s%s)\n", n, n == 1 ? "" : "s", first.c_str(), n > 1 ? ", ..." : "");
+        }
         std::ofstream(save_ + "/mods-files.txt", std::ios::trunc) << game_side(list);
         set_env("HK_PC_FILES", list.empty() ? "" : win_path(save_ + "/mods-files.txt"));
         // dat.bin: a count, then each file's MD5 (16 bytes) and its path (D:\..., ending in a zero);

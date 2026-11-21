@@ -52,6 +52,10 @@ std::vector<RatePatch> rate_patches();
 // reads them for frame() through core().mem(address, 4)
 std::vector<uint32_t> rate_words();
 std::vector<std::pair<std::string, std::string>> folder_files();
+// - the files a mod's folder (or a [[file]] at medium = "data") has that the folder medium "data"
+//   lacks: new files there, the path they'd have (the folder's case for the folders it has) -> the
+//   mod's, the first mod winning; the core takes them or leaves them out (the 32-bit PC games)
+std::vector<std::pair<std::string, std::string>> added_files();
 std::vector<std::string> folders();   // the mods' folders, in the list's order (the first wins)
 
 // [[text]]: a string of the game's (Shift-JIS here, converted from the mod's UTF-8) replaced

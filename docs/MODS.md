@@ -746,6 +746,24 @@ so their memory and files are the game's own process's, not an emulated machine'
   any length (`mods-files.txt` in the save folder lists them; the save folder's `pc.log` says when
   the game first opens each). `[[file]]` with `medium = "data"` and the file's `path` under it
   does the same from a file elsewhere in the mod. `[[bytes]]` doesn't apply (no disk image).
+  The path is matched however the game writes it: `\` or `/`, a doubled one (IIDX EMPRESS opens
+  `..\data\sd_data\\...`), `.\`, `x\..`, a separator at the end, any case.
+- **New files** (the 32-bit games under hiraku-pc but pop'n 15-18, 2026-11-21: IIDX 9th style to
+  EMPRESS, the ee'MALL station): a file the game's data folder lacks is added to it, new folders
+  too: the game opens it, looks at it and finds it at `data/a/b` as if it were there, and a
+  listing of its folder (`*.*`) shows it, each name once (a replaced file with the mod's file's
+  size). Where two mods have the same file, the first in the list wins, as for replaced files; a
+  new folder in two mods lists both mods' files. `[[file]]` with `medium = "data"` and a `path`
+  the data folder lacks adds that file. Never the game's: `mod.toml`, `macros.txt`, the files a
+  table names (`from`), anything hidden (a name starting with `.`, folders and all), and a path
+  that would go under one of the game's files or over one of its folders; anything else in the
+  folder is, a readme at the top too (`data/readme.txt`, which no game asks for). hiraku-pc says
+  how many files were added and the first; the DLL's `pc.log` line counts replaced files, new
+  files and new folders. DirectShow opens IIDX's movies itself: a new or replaced
+  `movie/NNNN.4` reaches it by the name the game hands it. pop'n 15-18 keep the old way: a file
+  their data lacks is left out (said in the log, with the first), as 15 checks its files by
+  their scrambled names against `dat.bin` and 16-18 take no mods' files yet. Other media (disc
+  and disk images) take no new files either.
 - **The game's check of its data**: pop'n music 15 keeps an MD5 of every data file in its
   program folder's `dat.bin` and checks a twentieth of them at each boot (error 5-1503 when one
   differs). HIRAKU runs the program from a copy in the save folder, and writes that copy's

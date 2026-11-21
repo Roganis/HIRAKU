@@ -368,6 +368,13 @@ endif()
 # hiraku-pc with a game of HIRAKU's own and no game's data (tests/pc/selfgame.c): the board's DLL
 # hooked into it, its pictures in step, its pad, its sound, its files by drive letters, under
 # Wine. Wine draws through X: skipped where there is no display
+# The mods' files in a PC game's process (runtime/pc/cabinet.c), under Wine: a program of HIRAKU's
+# loads the board's DLL and opens, looks at and lists replaced and added files and folders through
+# the DLL's hooks (tests/pc/test_modfiles.c)
+if(TARGET hiraku-pc-test-modfiles AND HK_WINE AND (NOT WIN32 OR CMAKE_CROSSCOMPILING))
+  add_test(NAME pc_mod_files COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/pc/test_modfiles.sh ${CMAKE_BINARY_DIR})
+  set_tests_properties(pc_mod_files PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 300)
+endif()
 if(TARGET hiraku-pc-selfgame AND TARGET hiraku-pc AND HK_WINE AND (NOT WIN32 OR CMAKE_CROSSCOMPILING))
   add_test(NAME pc_selfgame COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/pc/test_selfgame.sh ${CMAKE_BINARY_DIR})
   set_tests_properties(pc_selfgame PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 900 RUN_SERIAL TRUE)
@@ -492,6 +499,11 @@ add_test(NAME mods_text COMMAND test_find_text)
 add_executable(test_patch_order mods/test_patch_order.cpp)
 target_link_libraries(test_patch_order PRIVATE hiraku_shell)
 add_test(NAME mods_patch_order COMMAND test_patch_order)
+# ... and their files over a folder medium (the PC games' data): replaced, added, left out, the
+# first mod winning
+add_executable(test_mod_files mods/test_mod_files.cpp)
+target_link_libraries(test_mod_files PRIVATE hiraku_shell)
+add_test(NAME mods_files COMMAND test_mod_files ${CMAKE_CURRENT_BINARY_DIR}/mod-files-test)
 # ... and the mod API's tables (api, requires, program, [[hook]], [[setting]], [[action]]) on a
 # made-up machine, with the sample mod under tests/mods/sample-hook
 add_executable(test_mod_api mods/test_mod_api.cpp)

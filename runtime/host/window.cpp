@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <cstdarg>
 #include <cmath>
 #include <cstring>
 #include <filesystem>
@@ -53,6 +54,17 @@
 #include "swapchain.h"
 #endif
 
+// The report's text is built in one buffer: a piece that doesn't fit is cut, and the pieces after it
+// are left out (snprintf's own count would run past the end, and the next piece's room go negative)
+static int put(char *b, size_t size, int n, const char *fmt, ...) {
+    if (n < 0 || (size_t)n + 1 >= size) return n;
+    va_list ap;
+    va_start(ap, fmt);
+    const int m = vsnprintf(b + n, size - (size_t)n, fmt, ap);
+    va_end(ap);
+    return m < 0 ? n : (int)std::min((size_t)n + (size_t)m, size - 1);
+}
+
 namespace hk::host {
 
 static void watch_audio();   // below: the sound's way out, opened again if it stopped taking the sound
@@ -67,6 +79,10 @@ std::atomic<uint64_t> g_device_pulls{0}, g_device_short{0};   // the device's pu
 // (the game menu with its choice made) would otherwise have it destroyed under that thread
 hk::sys::Wake &g_pulled = *new hk::sys::Wake;
 std::atomic<uint64_t> g_device_short_late{0};                  // ... of those, after the game's boot (g_tune_from)
+// the last pull the queue fell short of: what was there and what the device asked for (bytes of the
+// stream's output, the device's format: g_out_bytes_per_ms), for the slow-frame line
+std::atomic<int> g_short_avail{-1}, g_short_want{0};
+double g_out_bytes_per_ms = 0;   // the stream's output: bytes a millisecond (0: not known)
 std::atomic<uint64_t> g_tune_from{0};   // the queue target self-tunes from here on (window_open + 10 s)
 
 // window_set_split: each of the frame's monitors (Core::screens) in a window of its own
@@ -205,15 +221,21 @@ struct LeadTuner {
 // the time since the chunk before went, for the exit report
 struct LateChunks {
     struct Late {
-        float need = 0, gap = 0, wait = 0, cat[prof::NCAT] = {};
+        float need = 0, gap = 0, wait = 0, cat[prof::NCAT] = {}, by[pacing::NWAIT] = {};
         uint64_t frame = 0;
     } worst[3];
     uint64_t wait_mark = 0;   // prof::g_wait_ticks at the chunk before
+    uint64_t by_mark[pacing::NWAIT] = {};   // ... and pacing::waited_by()
+    void mark() {
+        wait_mark = prof::g_wait_ticks;
+        std::copy(pacing::waited_by(), pacing::waited_by() + pacing::NWAIT, by_mark);
+    }
     void add(float need, double gap) {
         if (need > worst[2].need) {
             Late l;
             l.need = need, l.gap = (float)gap, l.frame = core().frame_count();
             l.wait = (float)((prof::g_wait_ticks - wait_mark) * prof::ns_per_tick() / 1e6);
+            for (int k = 0; k < pacing::NWAIT; k++) l.by[k] = (float)((pacing::waited_by()[k] - by_mark[k]) * prof::ns_per_tick() / 1e6);
             for (int c = 0; c < prof::NCAT; c++) l.cat[c] = (float)(prof::ns((prof::Cat)c) / 1e6);
             int k = 2;
             for (; k > 0 && need > worst[k - 1].need; k--) worst[k] = worst[k - 1];
@@ -245,7 +267,7 @@ struct FrameBudget {
         if (budget > ready) {
             const uint64_t w0 = prof::ticks();
             SDL_DelayPrecise((Uint64)(budget - ready));
-            pacing::waited(prof::ticks() - w0);
+            pacing::waited(prof::ticks() - w0, pacing::Wait::hold);
         }
     }
 } g_frame_budget;
@@ -730,7 +752,17 @@ static void start_dxgi() {
 // The window's picture to the screen: through the DXGI swap chain on Windows, else OpenGL's swap.
 // sync: display pacing's (each picture in turn); extra: one of a frame's other refreshes' pictures
 // (dxgi::present may leave it out)
+static void swap_time(uint64_t ticks);   // below: the swaps' own time in the frame's account
+// The swaps' own time, of the window's work (but for the waits in them: the DXGI present the display
+// held, pacing::Wait::present): on Linux a swap that blocks counts as the window's work, and the
+// slow-frame line says how much of it was the swap's, so the drawing and the display can be told apart
+struct SwapTime {
+    uint64_t t0 = prof::ticks(), w0 = prof::g_wait_ticks;
+    ~SwapTime() { swap_time((prof::ticks() - t0) - (prof::g_wait_ticks - w0)); }
+};
+
 static void swap_window(bool sync, bool extra = false) {
+    SwapTime timed;
     // HK_WINDOW_SWAP_MS=N: each swap takes N ms more, as a display that takes its pictures slowly
     // does (a cabinet's present was 2-8 ms): for trying the pacing around it on a PC that swaps at once
     static const double slow_ms = getenv("HK_WINDOW_SWAP_MS") ? atof(getenv("HK_WINDOW_SWAP_MS")) : 0;
@@ -816,12 +848,18 @@ static void open_audio(int level, int target_ms) {
             g_device_pulls.fetch_add(1, std::memory_order_relaxed);
             g_pulled.signal();
             const uint64_t t = prof::now_ns();
-            if (SDL_GetAudioStreamAvailable(s) < total && !g_fast && t >= g_settle_until) {
+            if (const int avail = SDL_GetAudioStreamAvailable(s); avail < total && !g_fast && t >= g_settle_until) {
+                g_short_avail.store(avail, std::memory_order_relaxed), g_short_want.store(total, std::memory_order_relaxed);
                 g_device_short.fetch_add(1, std::memory_order_relaxed);
                 if (t >= g_tune_from) g_device_short_late.fetch_add(1, std::memory_order_relaxed);
             }
         }, nullptr);
         SDL_ResumeAudioStreamDevice(g_audio);
+        {   // what the stream gives the device, for the log's milliseconds of a short pull
+            SDL_AudioSpec out{};
+            if (!SDL_GetAudioStreamFormat(g_audio, nullptr, &out) || out.freq <= 0 || out.channels <= 0) out = spec;
+            g_out_bytes_per_ms = (double)SDL_AUDIO_FRAMESIZE(out) * out.freq / 1000.0;
+        }
         g_settle_until = prof::now_ns() + 250'000'000;
         // the queue's target tunes itself once the game has started; a way out opened in a run is
         // left two seconds (the changeover's own late chunks aren't the device's)
@@ -1130,7 +1168,10 @@ static void present_second(const uint32_t *rgb, int w, int h, double aspect, uin
         picture::set_window_fbo(0);   // (this window's own: the DXGI swap chain is the first's)
         picture::draw(rgb, w, h, (ww - vw) / 2, (wh - vh) / 2, std::max(1, vw), std::max(1, vh), ww, wh, g_mode, 1, frame);
         g_pview[1] = {(ww - vw) / 2, (wh - vh) / 2, vw, vh, w, w, h};
-        SDL_GL_SwapWindow(g_win2);
+        {
+            SwapTime timed;
+            SDL_GL_SwapWindow(g_win2);
+        }
         SDL_GL_MakeCurrent(g_win, g_gl);
 #ifdef _WIN32
         picture::set_window_fbo(dxgi::fbo());
@@ -1149,6 +1190,7 @@ static void present_second(const uint32_t *rgb, int w, int h, double aspect, uin
     SDL_UpdateTexture(g_tex2, nullptr, rgb, w * 4);
     SDL_RenderClear(g_ren2);
     SDL_RenderTexture(g_ren2, g_tex2, nullptr, &dst);
+    SwapTime timed;
     SDL_RenderPresent(g_ren2);
 }
 
@@ -1193,7 +1235,7 @@ std::string cpu_speed_describe() {
                      "of its nominal %lu MHz", (unsigned long)(g_cpu_speed.sum / g_cpu_speed.n), (unsigned long)g_cpu_speed.lowest,
                      (unsigned long)g_cpu_speed.nominal);
     if (g_cpu_speed.limit && g_cpu_speed.limit < g_cpu_speed.nominal)
-        n += snprintf(b + n, sizeof b - n, " (the power plan holds it to %lu MHz)", (unsigned long)g_cpu_speed.limit);
+        n = put(b, sizeof b, n, " (the power plan holds it to %lu MHz)", (unsigned long)g_cpu_speed.limit);
     const bool slowed = g_cpu_speed.lowest * 10 < g_cpu_speed.nominal * 9;
     GUID *scheme = nullptr;
     if (PowerGetActiveScheme(nullptr, &scheme) == ERROR_SUCCESS && scheme) {
@@ -1202,13 +1244,13 @@ std::string cpu_speed_describe() {
         char utf8[256] = {};
         if (PowerReadFriendlyName(nullptr, scheme, nullptr, nullptr, (UCHAR *)name, &size) == ERROR_SUCCESS &&
             WideCharToMultiByte(CP_UTF8, 0, name, -1, utf8, sizeof utf8 - 1, nullptr, nullptr) > 0)
-            n += snprintf(b + n, sizeof b - n, "; Windows' power plan: %s", utf8);
+            n = put(b, sizeof b, n, "; Windows' power plan: %s", utf8);
         LocalFree(scheme);
     }
     // A game's frame is a short burst of work, then a wait: a plan that lets the processors slow down
     // while they wait starts each burst slow. The same work then takes longer, and frames come late.
     if (slowed)
-        snprintf(b + n, sizeof b - n, "\nsystem: Windows let the CPU slow down between the frames' bursts of work, which then take "
+        (void)put(b, sizeof b, n, "\nsystem: Windows let the CPU slow down between the frames' bursts of work, which then take "
                  "longer: its High performance power plan (or a minimum processor state of 100 %% in this one) keeps it at speed. "
                  "HIRAKU's Settings > Audio can change to that plan while a game runs");
     return b;
@@ -1224,10 +1266,32 @@ static struct StatsFrame {
     uint64_t part[prof::NCAT] = {};       // prof::g_total at the frame's start, less the waits in each part
     uint64_t late = 0, breaks = 0;        // the late frames and the sound's breaks counted by then
     double period = 0;                    // the frame's period, s (0: not at the game's pace)
+    // for the slow-frame lines and the breaks' classes (host/breaks.h)
+    uint64_t swap_ticks = 0;              // the swaps' own time since (SwapTime)
+    uint64_t wait_by[pacing::NWAIT] = {}; // pacing::waited_by() at the frame's start
+    int low_frames = -1;                  // the sound queued at its lowest as a chunk came (frames; -1: none)
+    uint64_t burst_n = 0;                 // pacing::last_burst().n as the frame started
+    float own_late_ms = -1;               // the frame's own burst, after its time (-1: not on the grid)
+    breaks::Path own_path;                // ... and the picture path before it (the frame before's)
 } g_sf;
+breaks::Summary g_break_kinds;            // every break of the run, by class (the exit report)
 
 static void stats_frame() {
     const uint64_t t = prof::ticks(), w = prof::g_wait_ticks;
+    const double tick_ms = prof::ns_per_tick() / 1e6;
+    // display sync: the burst that starts now (pacing::wait_next just ran), and the picture path before it
+    const pacing::Burst &burst = pacing::last_burst();
+    const bool on_grid = burst.n != g_sf.burst_n;
+    g_sf.burst_n = burst.n;
+    const float next_late = on_grid ? (float)std::max<int64_t>(0, burst.late_ns) / 1e6f : -1.0f;
+    breaks::Path path;
+    if (on_grid && burst.handed) {
+        path.known = true;
+        path.commit_late_ms = (float)burst.commit_late_ns / 1e6f;
+        path.room_ms = (float)burst.room_ns / 1e6f, path.took_ms = (float)burst.took_ns / 1e6f;
+        path.swap_ms = (float)((double)g_sf.swap_ticks * tick_ms);   // (a frame's swaps all come after its picture is handed over)
+        for (int k = 0; k < pacing::NWAIT; k++) path.wait_ms[k] = (float)((double)burst.waits[k] * tick_ms);
+    }
     // a part's work so far: its scopes' time, the one open on this thread up to now (the frame hook
     // is called inside one: a device's timer), less the waits inside them
     auto part = [t](int c) {
@@ -1255,13 +1319,45 @@ static void stats_frame() {
             f.cpu_mhz = (int)g_cpu_speed.last, f.cpu_nominal_mhz = (int)g_cpu_speed.nominal;
 #endif
             for (int c = 0; c < prof::NCAT; c++) f.part_ms[c] = (float)((double)(part(c) - std::min(part(c), g_sf.part[c])) * ms);
+            // what tells a late frame's or a break's causes apart (host/breaks.h)
+            f.swap_ms = (float)((double)g_sf.swap_ticks * ms);
+            for (int k = 0; k < pacing::NWAIT; k++) f.wait_ms[k] = (float)((double)(pacing::waited_by()[k] - g_sf.wait_by[k]) * ms);
+            f.own_late_ms = g_sf.own_late_ms, f.next_late_ms = next_late, f.path = path;
+            const double frames_ms = 1000.0 / (g_rate * g_ratio);
+            f.queue_low_ms = g_sf.low_frames >= 0 ? (float)(g_sf.low_frames * frames_ms) : -1.0f;
+            f.target_ms = (float)(g_target_frames * 1000.0 / g_rate), f.device_ms = (float)(g_device_frames * 1000.0 / g_rate);
+            if (f.breaks && g_out_bytes_per_ms > 0) {
+                f.short_queued_ms = (float)(g_short_avail.load(std::memory_order_relaxed) / g_out_bytes_per_ms);
+                f.short_wanted_ms = (float)(g_short_want.load(std::memory_order_relaxed) / g_out_bytes_per_ms);
+            }
+            breaks::Input in;
+            in.period_ms = f.period_ms, in.window_ms = f.draw_ms, in.again = f.again;
+            in.cpu_mhz = f.cpu_mhz, in.cpu_nominal_mhz = f.cpu_nominal_mhz;
+            float named = 0;
+            for (int c = 0; c < prof::NCAT; c++)
+                if (c != prof::PRESENT) in.machine_ms[c] = f.part_ms[c], named += f.part_ms[c];
+            in.other_ms = std::max(0.0f, f.game_ms - named);
+            // the later of the frame's own burst and the next one's: a late one before the frame's sound
+            // or after it, before the next sound, runs the queue down in this frame
+            in.paced = f.own_late_ms >= 0 || next_late >= 0;
+            const bool own_later = f.own_late_ms > next_late;
+            in.late_ms = std::max(f.own_late_ms, next_late);
+            in.path = own_later ? g_sf.own_path : path;
+            if (in.paced && in.late_ms >= breaks::LATE_MS) f.cause = breaks::cause(in.path);
+            if (f.breaks > 0) f.kind = g_break_kinds.add(in, f.breaks, f.queue_low_ms, f.short_queued_ms);
             statsview::frame(f);
         }
         g_sf.last = t;
     }
+    if (next_late >= 0 && !g_fast && prof::now_ns() >= g_tune_from) g_break_kinds.burst(next_late);   // (as the breaks: after the first 10 s)
     g_sf.last_wait = w, g_sf.draw_ticks = 0, g_sf.late = late, g_sf.breaks = breaks;
     for (int c = 0; c < prof::NCAT; c++) g_sf.part[c] = part(c);
+    g_sf.swap_ticks = 0, g_sf.low_frames = -1;
+    std::copy(pacing::waited_by(), pacing::waited_by() + pacing::NWAIT, g_sf.wait_by);
+    g_sf.own_late_ms = next_late, g_sf.own_path = path;
 }
+
+static void swap_time(uint64_t ticks) { g_sf.swap_ticks += ticks; }
 
 struct DrawTime {   // the window's own work, for the slow-frame lines (every way out of where it stands)
     uint64_t t0 = prof::ticks(), w0 = prof::g_wait_ticks;
@@ -1661,7 +1757,10 @@ static void show_frame(const uint32_t *rgb, int w, int h, double frame_aspect, b
             g_frame_budget.hold(g_frame_start_ns);
         }
         if (!sync) pacing::observe();
-        SDL_RenderPresent(g_ren);
+        {
+            SwapTime timed;
+            SDL_RenderPresent(g_ren);
+        }
         g_start_to_picture.add(g_frame_start_ns);
         if (sync) pacing::committed();
         if (g_split) present_second(g_half[1].data(), w, h, frame_aspect, core().frame_count());
@@ -1747,11 +1846,11 @@ static bool next_frame(double vsec) {
             poll();   // (which also opens the sound again if its device has stopped: the queue then empties)
             wait_pull();
         }
-        pacing::waited(prof::ticks() - w0);
+        pacing::waited(prof::ticks() - w0, pacing::Wait::sound);
         poll();
         g_frame_start_ns = g_last_push_end = prof::now_ns();   // the wait isn't host work
         g_queued_after = queued_bytes() / 8;
-        g_late.wait_mark = prof::g_wait_ticks;
+        g_late.mark();
         sound_lag(vsec);
         return !g_quit;
     }
@@ -1768,7 +1867,7 @@ static bool next_frame(double vsec) {
     if (due > now) {
         const uint64_t w0 = prof::ticks();
         hk::sys::sleep_until(due);
-        pacing::waited(prof::ticks() - w0);
+        pacing::waited(prof::ticks() - w0, pacing::Wait::clock);
     }
     else if (now - due > std::chrono::milliseconds(250)) g_t0 += now - due;   // fell behind: don't try to catch up
     g_frame_start_ns = prof::now_ns();
@@ -1816,6 +1915,7 @@ void push_chunk(const float *lr, int frames) {
         int queued = queued_bytes() / 8;
         g_ast.chunks++;
         if (queued == 0) g_ast.empty++;
+        g_sf.low_frames = g_sf.low_frames < 0 ? queued : std::min(g_sf.low_frames, queued);   // (the slow-frame line's)
         // what was left of the queue as this chunk came (the device takes it in whole buffers, so
         // estimated from the queue after the last chunk and the time since)
         const double left = g_queued_after * 1000.0 / (g_rate * g_ratio) - gap;
@@ -1858,10 +1958,10 @@ void push_chunk(const float *lr, int frames) {
         poll();   // (which also opens the sound again if its device has stopped: the queue then empties)
         wait_pull();
     }
-    pacing::waited(prof::ticks() - w0);
+    pacing::waited(prof::ticks() - w0, pacing::Wait::sound);
     poll();
     prof::reset();
-    g_late.wait_mark = prof::g_wait_ticks;
+    g_late.mark();
     g_last_push_end = prof::now_ns();
     g_queued_after = queued_bytes() / 8;
 }
@@ -1919,46 +2019,64 @@ std::string audio_describe() {
                      (unsigned long long)g_ast.gap_hist[4], (unsigned long long)g_ast.gap_hist[5],
                      (unsigned long long)g_ast.gap_hist[6], (unsigned long long)g_ast.gap_hist[7]);
     for (int c = 0; c < prof::NCAT; c++)
-        n += snprintf(b + n, sizeof b - n, " %s %.0f ms", prof::NAMES[c], g_ast.low_ns[c] / 1e6);
+        n = put(b, sizeof b, n, " %s %.0f ms", prof::NAMES[c], g_ast.low_ns[c] / 1e6);
     if (g_late.worst[0].need > 0) {
-        n += snprintf(b + n, sizeof b - n, "\naudio: the latest chunks (the lead each needed; the time since the chunk "
+        n = put(b, sizeof b, n, "\naudio: the latest chunks (the lead each needed; the time since the chunk "
                                            "before, the pacing's waits in it, and the host's work, present including waits):");
         for (const LateChunks::Late &l : g_late.worst) {
             if (l.need <= 0) break;
-            n += snprintf(b + n, sizeof b - n, "%s frame %llu %.1f ms (%.1f, waiting %.1f", &l == g_late.worst ? "" : ";",
+            n = put(b, sizeof b, n, "%s frame %llu %.1f ms (%.1f, waiting %.1f", &l == g_late.worst ? "" : ";",
                           (unsigned long long)l.frame, l.need, l.gap, l.wait);
+            bool any = false;   // ... by what for
+            for (int k = 0; k < pacing::NWAIT && n < (int)sizeof b - 200; k++)
+                if (l.by[k] >= 0.05f)
+                    n = put(b, sizeof b, n, "%s%s %.1f", any ? ", " : " [for ", pacing::WAIT_NAMES[k], l.by[k]), any = true;
+            if (any) n = put(b, sizeof b, n, "]");
             for (int c = 0; c < prof::NCAT; c++)
-                if (l.cat[c] >= 0.05f) n += snprintf(b + n, sizeof b - n, ", %s %.1f", prof::NAMES[c], l.cat[c]);
-            n += snprintf(b + n, sizeof b - n, ")");
+                if (l.cat[c] >= 0.05f) n = put(b, sizeof b, n, ", %s %.1f", prof::NAMES[c], l.cat[c]);
+            n = put(b, sizeof b, n, ")");
         }
     }
     // a queue kept fixed that kept running dry: what it cost (nothing above says the game slowed)
     if (g_audio_fixed && g_breaks_late > std::max<uint64_t>(20, g_device_pulls.load() / 200))
-        n += snprintf(b + n, sizeof b - n,
+        n = put(b, sizeof b, n,
                       "\naudio: the queue was kept at %.1f ms (fixed) and ran dry %llu times after the first 10 s%s: a longer "
                       "queue, or one that tunes itself (Settings > Audio), holds",
                       g_target_frames * 1000.0 / g_rate, (unsigned long long)g_breaks_late,
                       pacing::active() ? "" : "; the sound paces the game here, so each break also put the game behind (it ran slower than it should)");
 #ifdef _WIN32
-    if (wasapi::active()) n += snprintf(b + n, sizeof b - n, "\n%s", wasapi::describe().c_str());
-    if (asio::active()) n += snprintf(b + n, sizeof b - n, "\n%s", asio::describe().c_str());
+    if (wasapi::active()) n = put(b, sizeof b, n, "\n%s", wasapi::describe().c_str());
+    if (asio::active()) n = put(b, sizeof b, n, "\n%s", asio::describe().c_str());
 #endif
     if (const std::string card = alsa::describe(); !card.empty())   // the card's own pace
-        n += snprintf(b + n, sizeof b - n, "\n%s", card.c_str());
+        n = put(b, sizeof b, n, "\n%s", card.c_str());
     if (g_audio_again)
-        n += snprintf(b + n, sizeof b - n, "\naudio: the way out stopped taking the sound and was opened again %d time%s in the run "
+        n = put(b, sizeof b, n, "\naudio: the way out stopped taking the sound and was opened again %d time%s in the run "
                                            "(the first line says what plays now)", g_audio_again, g_audio_again == 1 ? "" : "s");
     if (g_present.n) {
         const PresentStats &p = g_present;
         double mean = p.sum / p.n, sd = std::sqrt(std::max(0.0, p.sum2 / p.n - mean * mean));
-        snprintf(b + n, sizeof b - n,
+        (void)put(b, sizeof b, n,
                  "\nvideo: %llu presents, time between them minus the frame period: mean %+.3f ms, sd %.2f ms, worst %.2f ms; "
                  "|off| <0.5:%llu <1:%llu <2:%llu <4:%llu <8:%llu >=8:%llu ms",
                  (unsigned long long)p.n, mean, sd, p.worst, (unsigned long long)p.hist[0], (unsigned long long)p.hist[1],
                  (unsigned long long)p.hist[2], (unsigned long long)p.hist[3], (unsigned long long)p.hist[4],
                  (unsigned long long)p.hist[5]);
     }
-    std::string out = std::string(b) + "\n" + pacing::describe();
+    std::string out = std::string(b);
+    // every break of the run by what its frame shows (host/breaks.h), and the game's thread's waits by
+    // what for: the slow-frame lines are a few of them, and their "waiting" one lump
+    out += "\n" + g_break_kinds.describe(g_breaks_late, g_target_frames * 1000.0 / g_rate, g_device_frames * 1000.0 / g_rate);
+    {
+        std::string waits;
+        for (int k = 0; k < pacing::NWAIT; k++)
+            if (const double s = (double)pacing::waited_by()[k] * prof::ns_per_tick() / 1e9; s >= 0.05) {
+                snprintf(b, sizeof b, "%s %s %.1f s", waits.empty() ? "" : ",", pacing::WAIT_NAMES[k], s);
+                waits += b;
+            }
+        if (!waits.empty()) out += "\nvideo: the game's thread waited over the run, for" + waits;
+    }
+    out += "\n" + pacing::describe();
 #ifdef __linux__
     {   // what the CPU ran at by the end: GameMode, when allowed, sets the governor to performance
         auto read = [](const char *f) {

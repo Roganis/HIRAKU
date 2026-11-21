@@ -25,6 +25,10 @@
 #include <string>
 #include <vector>
 
+#ifndef _WIN32
+extern char **environ;   // (the run's test switches, for its log: shell/switches.h)
+#endif
+
 #include "core/prof.h"
 #include "host/macro.h"
 #include "host/menukey.h"
@@ -39,6 +43,7 @@
 #include "shell/userdir.h"
 #include "shell/saves.h"
 #include "shell/sys.h"
+#include "shell/switches.h"
 #include "host/bio2.h"
 #include "host/popnio.h"
 #include "host/readers.h"
@@ -512,6 +517,12 @@ int main(int argc, char **argv) {
     opt.nvram_dir = nvram_dir;
     opt.window = window_scale != 0;
     if (window_scale) printf("build: %s %s\n", program.c_str(), hk::sys::build_id());   // which ran (a test zip swaps one program)
+    // and with which test switches (two runs with one command line can differ by them)
+#ifdef _WIN32
+    if (window_scale) printf("%s\n", hk::switches_line(_environ).c_str());
+#else
+    if (window_scale) printf("%s\n", hk::switches_line(environ).c_str());
+#endif
     if (!nvram_dir.empty()) {
         mkdirs(nvram_dir);
         printf("nvram: %s\n", nvram_dir.c_str());

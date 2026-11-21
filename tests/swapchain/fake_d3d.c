@@ -138,6 +138,11 @@ static HRESULT STDMETHODCALLTYPE swap_resize(IDXGISwapChain1 *s, UINT n, UINT w,
 /* A picture is shown at the first vblank it is in time for (presented g_compose before it), and
    after the last picture's: one a refresh, in the order presented. With three waiting, Present
    waits for the first of them to show, as a flip-model swap chain's does at its latency limit */
+/* fake_present_hold: every nth present of that thread's held so long, as a display that takes its
+   pictures slowly holds them */
+static int g_hold_every = 0, g_hold_ms = 0, g_hold_n = 0;
+static DWORD g_hold_thread = 0;
+void fake_present_hold(int every, int ms) { g_hold_every = every, g_hold_ms = ms, g_hold_thread = GetCurrentThreadId(); }
 /* fake_cover, fake_present_stall, fake_statistics_fail, fake_composed (fake_d3d.h) */
 static volatile LONG g_cover = FAKE_SHOWN, g_stall_ms = 0, g_stats_fail = 0;
 static int g_late_refreshes = 0;
@@ -159,6 +164,7 @@ static HRESULT STDMETHODCALLTYPE swap_present(IDXGISwapChain1 *s, UINT sync, UIN
     LONG stall;
     (void)s, (void)flags;
     enter();
+    if (g_hold_every > 0 && GetCurrentThreadId() == g_hold_thread && ++g_hold_n % g_hold_every == 0) Sleep((DWORD)g_hold_ms);
     if ((stall = InterlockedExchange(&g_stall_ms, 0)) > 0) Sleep((DWORD)stall);
     if (g_cover == FAKE_OCCLUDED) {   /* (minimized: thrown away, as nothing would show it) */
         leave();

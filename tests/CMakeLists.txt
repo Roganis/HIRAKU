@@ -102,6 +102,9 @@ if(WIN32 AND TARGET hiraku_host)
   # cabinet's tight case: a frame's work, a refresh and its pictures' drawing more than a frame
   add_test(NAME swapchain_own COMMAND test_swapchain own)
   add_test(NAME swapchain_tight COMMAND test_swapchain tight 120 5.0 900)
+  # ... and a display that holds some of the game's thread's presents: the bursts after them late, and
+  # the log's account of each (host/breaks.h) naming the present as what made them late
+  add_test(NAME swapchain_held COMMAND test_swapchain held 120 3.0 600)
   # ... a window the display stops showing for a while (Alt+Tab, covered, minimized), then shows again:
   # its pictures presented again at once (the statistics that stood still meanwhile not believed), with
   # and without smooth motion and display sync; a composited desktop's statistics, late after each
@@ -188,6 +191,13 @@ if(HK_FFMPEG_FOUND)
   add_test(NAME host_record COMMAND test_record ${CMAKE_CURRENT_BINARY_DIR}/record)
   set_tests_properties(host_record PROPERTIES SKIP_RETURN_CODE 77)   # (an FFmpeg without the recorder's parts)
 endif()
+
+# The breaks in the sound sorted by what their frame shows (runtime/host/breaks.h: the exit report's
+# classes and the slow-frame lines' late-burst causes) from made-up frames, and the log's line of test
+# switches (runtime/shell/switches.h), a secret's value never in it
+add_executable(test_breaks host/test_breaks.cpp)
+target_include_directories(test_breaks PRIVATE ${CMAKE_SOURCE_DIR}/runtime)
+add_test(NAME host_breaks COMMAND test_breaks)
 
 # The performance overlay (runtime/host/statsview.h): what it reads of the system's files (made-up
 # ones), its panel from made-up frames, its levels, and its place: the corners, a drag with the

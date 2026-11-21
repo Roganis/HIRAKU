@@ -4,13 +4,17 @@
 // window_present and window_next, smooth motion on) against a pretend Direct3D device, swap chain,
 // display and OpenGL (fake_d3d.h): no graphics card is needed, so it runs under Wine.
 //
-//   test_swapchain queue|own|wait [HZ [WORK_MS [FRAMES [strict]]]]
+//   test_swapchain queue|own|wait|held [HZ [WORK_MS [FRAMES [strict]]]]
 //
 // queue: the pictures queued for the swap chain's own thread, the frames' own too; own:
 // HK_DXGI_QUEUE_OWN=0, the frames' own waited for and presented by the game's thread, the others
 // queued; wait: HK_DXGI_NO_QUEUE, each waited for on the game's thread. A frame's emulation (WORK_MS, default 6) comes after its
 // picture, as on Twinkle: longer than a refresh at 240 Hz (HZ's default), so `wait` isn't ready in
 // time for most frames and `queue` is.
+//
+// held: as own, every 20th of the game's thread's presents held 14 ms by the pretend display: the
+// bursts after them start late, and the log's account of each (pacing::last_burst, host/breaks.h)
+// must name the display holding the present as what made it late.
 //
 // A window the display stops showing for a while (Alt+Tab to another, covered, minimized), each way
 // fake_d3d.h's fake_cover has, then shown again: covered-jump, covered-lost, covered-live, occluded;
@@ -40,6 +44,7 @@
 #include <vector>
 
 #include "core/prof.h"
+#include "host/breaks.h"
 #include "host/dwm.h"
 #include "host/pacing.h"
 #include "host/swapchain.h"
@@ -122,8 +127,9 @@ int main(int argc, char **argv) {
     // "tight-own": the same with HK_DXGI_QUEUE_OWN=0, as it was, to see the difference (nothing checked)
     const bool tight = mode == "tight", tight_own = mode == "tight-own";
     const bool even = mode == "even" || tight, uneven = mode == "uneven", as_was = tight_own;
-    const bool queue = mode == "queue" || mode == "own" || even || uneven || as_was || away || composed;
-    const bool own_queued = queue && mode != "own" && !tight_own;   // the frames' own pictures queued too
+    const bool holds = mode == "held";
+    const bool queue = mode == "queue" || mode == "own" || holds || even || uneven || as_was || away || composed;
+    const bool own_queued = queue && mode != "own" && !holds && !tight_own;   // the frames' own pictures queued too
     _putenv(queue ? "HK_DXGI_NO_QUEUE=" : "HK_DXGI_NO_QUEUE=1");
     if (queue && !own_queued) _putenv("HK_DXGI_QUEUE_OWN=0");
     if (uneven) _putenv("HK_PACING_EVEN=0");
@@ -139,6 +145,7 @@ int main(int argc, char **argv) {
     check(dxgi::queues() == queue, "queues() isn't what HK_DXGI_NO_QUEUE says");
     pacing::init(nullptr, !nosync);
     pacing::set_smooth_motion(!nosmooth);
+    if (holds) fake_present_hold(20, 14);
     if (composed) fake_composed(1, snapshot ? 0 : 2'000'000);
     if (snapshot) fake_statistics_at_present(1);
     // (away) the window away from frame cover_from to cover_to; the game's thread's longest stretch
@@ -147,6 +154,8 @@ int main(int argc, char **argv) {
     long long t_uncover = 0, stamp_uncover = 0, left_at_stall = -1;
     double longest_ms = 0;
     int longest_at = -1;
+    breaks::Summary bursts;               // (held) every burst's lateness, as the exit report counts them
+    long long late_bursts = 0, by_cause[breaks::NCAUSE] = {}, said = 0;
 
     const DWORD game_thread = GetCurrentThreadId();
     const double period = tight || tight_own ? 1.0 / 59.95 : even || uneven ? 1.0 / 58.0 : 1.0 / 59.94;
@@ -158,6 +167,24 @@ int main(int argc, char **argv) {
         // window_next: until the frame's burst, then the last of its emulation
         if (sync) pacing::wait_next();
         const uint64_t presenting = prof::now_ns();   // (away) from here to the frame's pictures handed over
+        if (holds && sync && f > 30) {   // the window's account of the burst (window.cpp's stats_frame), but the swaps' time
+            const pacing::Burst &b = pacing::last_burst();
+            breaks::Path p;
+            p.known = b.handed;
+            p.commit_late_ms = (float)b.commit_late_ns / 1e6f, p.room_ms = (float)b.room_ns / 1e6f, p.took_ms = (float)b.took_ns / 1e6f;
+            for (int k = 0; k < pacing::NWAIT; k++) p.wait_ms[k] = (float)((double)b.waits[k] * prof::ns_per_tick() / 1e6);
+            const float late = (float)std::max<int64_t>(0, b.late_ns) / 1e6f;
+            bursts.burst(late);
+            if (late >= breaks::LATE_MS) {
+                const breaks::Cause c = breaks::cause(p);
+                late_bursts++, by_cause[c]++;
+                if (said++ < 4)
+                    printf("held: frame %d's burst %.1f ms late: the picture handed over, then the window took %.1f ms where the "
+                           "schedule left %.1f (the display holding a present %.1f, the swap chain's thread %.1f): %s\n", f, late,
+                           p.took_ms, p.room_ms, p.wait_ms[(int)pacing::Wait::present], p.wait_ms[(int)pacing::Wait::lock],
+                           breaks::CAUSE_SAID[c]);
+            }
+        }
         if (away && f == cover_from) {
             if (stall) fake_present_stall(500);
             else if (cover != FAKE_SHOWN) fake_cover(cover);
@@ -305,6 +332,16 @@ int main(int argc, char **argv) {
         printf("%s: the frames' work ended within %.2f ms of the game's even pace (%zu frames, the outer twentieths left out)\n",
                mode.c_str(), spread, n);
         if (even) check(spread < (tight ? 1.5 : 3.0), "the frames' work doesn't end at the game's even pace");
+    }
+    if (holds) {
+        const double present_s = (double)pacing::waited_by()[(int)pacing::Wait::present] * prof::ns_per_tick() / 1e9;
+        printf("held: %lld late bursts, %lld of them after the display held a present (%lld after the swap chain's thread, "
+               "%lld woken late, %lld the picture itself late); the game's thread waited %.2f s for the display to take a present\n"
+               "%s\n", late_bursts, by_cause[breaks::PRESENT], by_cause[breaks::LOCK], by_cause[breaks::WOKE_LATE],
+               by_cause[breaks::LATE_PICTURE], present_s, bursts.describe(0, 5, 4).c_str());
+        check(present_s > 0, "held: no wait for the display to take a present was counted");
+        check(late_bursts > 0 && by_cause[breaks::PRESENT] * 2 >= late_bursts,
+              "held: the late bursts weren't put down to the display holding a present");
     }
     pacing::shutdown();
     dxgi::stop();

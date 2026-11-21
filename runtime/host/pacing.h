@@ -36,7 +36,9 @@
 // Off when the display doesn't fit (144 Hz for 58.49 Hz games), with fast-forward, or with
 // --display-sync off (for variable-refresh displays, which follow the game at its own rate).
 // Testing: HK_DISPLAY_SYNC_SKEW (the most the speed may change, 0.03), HK_PACING_DEBUG (a line per
-// presented frame), HK_PACING_NO_FIFO, HK_PACING_SWEEP (keep moving the commit, to map the deadline).
+// presented frame), HK_PACING_NO_FIFO, HK_PACING_SWEEP (keep moving the commit, to map the deadline),
+// HK_PACING_STALL=N,MS (every Nth frame's burst MS ms longer), HK_DISPLAY_HZ (a display that gives no
+// refresh rate: SDL's offscreen driver).
 #pragma once
 
 #include <cstdint>
@@ -97,12 +99,47 @@ void pump();
 // count the frames that went to the screen directly (scanout_describe).
 void observe();
 std::string describe();
+// What a wait on the game's thread was for. A frame's waiting told as one lump couldn't say whether
+// a late burst came from the picture's own commit time, the display holding a present, the swap
+// chain's thread or the sound's queue (the IIDX cabinet's breaks, 2026-11): the slow-frame lines,
+// the latest chunks and the exit report give each its own
+enum class Wait {
+    commit,    // display sync: until the frame's picture's commit time (wait_commit)
+    next,      // display sync: until the next frame's burst should start (wait_next)
+    extra,     // display sync: until a frame's other refresh's commit time (commit_extra, no queue)
+    present,   // Windows: a present the display held, a refresh or more (DXGI swap chain)
+    lock,      // Windows: for the swap chain's own thread (its lock, or the pictures queued before)
+    sound,     // the sound paces the game: until the queue is down to its target
+    hold,      // display sync off, the sound once a frame: a picture held to its steady time
+    clock,     // no sound device: until the frame's time by the clock
+    other,
+};
+constexpr int NWAIT = 9;
+// how a log line names each, after "for" ("waiting 9.4 ms: for the commit time 6.0, ...")
+inline const char *const WAIT_NAMES[NWAIT] = {"the commit time", "the next burst", "the other refreshes' times",
+                                             "the display to take a present", "the swap chain's thread", "the sound queue",
+                                             "the picture's hold", "the clock", "something else"};
 // A wait on purpose just ended on this thread, `ticks` long (prof::ticks): counted in
 // prof::g_wait_ticks, and under the part of the work it was waited in (core/prof.h's scopes count
 // the waits inside them as their own: a sound chip's timer hands the sound on, and the window
-// waits there for the queue), so that a frame's parts can be told without their waits
-void waited(uint64_t ticks);
+// waits there for the queue), so that a frame's parts can be told without their waits; and by what
+// it was for
+void waited(uint64_t ticks, Wait kind = Wait::other);
 const uint64_t *waited_in();   // by part (prof::NCAT of them), since the start
+const uint64_t *waited_by();   // by what for (NWAIT of them), since the start
+// Display sync: the latest wait_next(), for the log. A burst that starts late makes its sound late,
+// and a short queue runs dry; what the window did after the frame's picture was handed over (its
+// commit, or queued for the swap chain's thread) up to the burst's time says why it was late
+struct Burst {
+    uint64_t n = 0;                 // wait_next()s so far (changed: a new burst)
+    int64_t late_ns = 0;            // the burst started this long after its time on the grid (<= 0: on time)
+    bool handed = false;            // the frame's own picture was handed over since the burst before
+    int64_t commit_late_ns = 0;     // ... this long after its commit time (> 0: not ready in time)
+    int64_t room_ns = 0;            // from then to the burst's time, as the schedule had it
+    int64_t took_ns = 0;            // ... and to the window being done (wait_next called)
+    uint64_t waits[NWAIT] = {};     // the waits in that stretch (prof::ticks), by what for
+};
+const Burst &last_burst();
 // The same numbers as they stand, for the performance overlay (host/statsview.h)
 struct Stats {
     bool enabled = false, active = false, exact = false;   // exact: the game at its own speed (smooth motion's pacing)

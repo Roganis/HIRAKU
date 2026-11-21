@@ -150,7 +150,7 @@ struct Locked {
                 else Sleep(1);
             }
             if (!settled || q.jobs.empty()) {
-                if (waited) pacing::waited(prof::ticks() - t0);
+                if (waited) pacing::waited(prof::ticks() - t0, pacing::Wait::lock);
                 return;
             }
             q.mu.unlock();
@@ -629,7 +629,7 @@ bool present(bool in_turn, bool extra) {
     // wait for the display, a refresh or more, not work)
     const uint64_t t0 = prof::ticks();
     const HRESULT hr = g_swap->Present(in_turn ? 1 : 0, 0);
-    if (const uint64_t t = prof::ticks() - t0; (double)t * prof::ns_per_tick() > 1e6) pacing::waited(t), n_present_waits++;
+    if (const uint64_t t = prof::ticks() - t0; (double)t * prof::ns_per_tick() > 1e6) pacing::waited(t, pacing::Wait::present), n_present_waits++;
     g_left_row = 0;
     if (FAILED(hr)) {
         present_failed(hr);

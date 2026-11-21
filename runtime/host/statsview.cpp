@@ -134,6 +134,49 @@ std::string parts(const Frame &f) {
     return out;
 }
 
+// The slow-frame line's clauses that tell a late frame's or a break's causes apart (host/breaks.h):
+// the swaps within the window's work, the waits by what for, how late the bursts started on display
+// sync's grid and what the window did before the next one, the sound queue at the break. Each
+// "; ..." (none when there's nothing to say)
+std::string diagnosis(const Frame &f) {
+    std::string out;
+    if (f.swap_ms >= 0.1f) out += fmt("; of the window's work, the swaps %.1f ms (the display taking the pictures)", f.swap_ms);
+    float waiting = 0;
+    std::string waits;
+    for (int k = 0; k < pacing::NWAIT; k++) {
+        waiting += f.wait_ms[k];
+        if (f.wait_ms[k] >= 0.05f) waits += fmt("%s %s %.1f", waits.empty() ? "" : ",", pacing::WAIT_NAMES[k], f.wait_ms[k]);
+    }
+    if (waiting >= 0.05f) out += fmt("; waiting %.1f ms, for%s", waiting, waits.c_str());
+    if (f.own_late_ms >= 0 || f.next_late_ms >= 0) {   // (a burst's start can't be before its time: a sleep ends after it)
+        out += "; on the grid its burst started ";
+        out += f.own_late_ms >= 0 ? fmt("%.1f ms after its time", std::max(0.0f, f.own_late_ms)) : std::string("off it");
+        if (f.next_late_ms >= 0) out += fmt(", the next one %.1f ms after", std::max(0.0f, f.next_late_ms));
+    }
+    const breaks::Path &p = f.path;
+    if (p.known && (f.next_late_ms >= breaks::LATE_MS || p.took_ms > p.room_ms || p.commit_late_ms > 0.2f)) {
+        float w = 0;
+        for (float v : p.wait_ms) w += v;
+        if (p.room_ms <= 0)   // (nothing the window did after it: the picture itself came too late)
+            out += fmt("; its picture handed over %.1f ms after its commit time, %.1f ms past the next burst's time already",
+                       p.commit_late_ms, -p.room_ms);
+        else out += fmt("; its picture handed over %.1f ms %s its commit time, then the window took %.1f ms where the schedule left "
+                   "%.1f before the next burst (the swaps %.1f, other drawing %.1f, waits %.1f)",
+                   std::fabs(p.commit_late_ms), p.commit_late_ms > 0 ? "after" : "before", p.took_ms, p.room_ms, p.swap_ms,
+                   std::max(0.0f, p.took_ms - p.swap_ms - w), w);
+    }
+    if (f.cause >= 0 && f.cause < breaks::NCAUSE) out += fmt("; the late burst's cause: %s", breaks::CAUSE_SAID[f.cause]);
+    if (f.breaks) {
+        out += fmt("; the sound broke: %d short pull%s", f.breaks, f.breaks == 1 ? "" : "s");
+        if (f.queue_low_ms >= 0) out += fmt(", the queue at its lowest %.1f ms as the frame's sound came", f.queue_low_ms);
+        if (f.short_queued_ms >= 0)
+            out += fmt(", %.1f ms queued when the device asked for %.1f ms", f.short_queued_ms, f.short_wanted_ms);
+        out += fmt(" (target %.1f ms, device buffer %.1f ms)", f.target_ms, f.device_ms);
+        if (f.kind >= 0 && f.kind < breaks::NCLASS) out += fmt("; this break's kind: %s", breaks::CLASS_SHORT[f.kind]);
+    }
+    return out;
+}
+
 void save_place() {
     if (g_store.empty()) return;
     if (FILE *f = fopen(g_store.c_str(), "w")) {
@@ -459,7 +502,7 @@ void frame(const Frame &f) {
                 if (f.cpu_mhz && f.cpu_mhz * 10 < f.cpu_nominal_mhz * 9) clock = fmt("; the CPU at %d of its %d MHz", f.cpu_mhz, f.cpu_nominal_mhz);
                 fprintf(stderr, "slow frame %llu: %.1f ms of work for a %.1f ms frame%s%s%s%s%s%s\n", (unsigned long long)f.number, work,
                         f.period_ms, where.empty() ? "" : (" (" + where + ")").c_str(), f.late && f.sync ? "; shown late" : "",
-                        f.breaks ? "; the sound broke" : "", clock.c_str(),
+                        diagnosis(f).c_str(), clock.c_str(),
                         more.c_str(), ++g_logged == LOG_MOST ? "; no more of these lines in this run" : "");
                 g_logged_at = now, g_unsaid = 0;
             }

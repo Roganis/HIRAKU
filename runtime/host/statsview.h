@@ -36,6 +36,8 @@
 #include <vector>
 
 #include "../core/prof.h"
+#include "breaks.h"
+#include "pacing.h"
 
 namespace hk::host::statsview {
 
@@ -60,6 +62,17 @@ struct Frame {
     float part_ms[prof::NCAT] = {};   // the work by part (core/prof.h)
     int cpu_mhz = 0, cpu_nominal_mhz = 0;   // the processors' clock about now and their nominal one (0: not known:
                                             // Windows says; a slow frame's line has it when the PC ran them slow)
+    // For the slow-frame line only (the panel doesn't show them): what tells the causes of a late
+    // frame or a break apart (host/breaks.h)
+    float swap_ms = 0;                      // of draw_ms, the swaps' own (the display taking the pictures)
+    float wait_ms[pacing::NWAIT] = {};      // the frame's waits, by what for (not in its work)
+    float own_late_ms = -1, next_late_ms = -1;   // display sync: this frame's burst and the next one's started so long
+                                                 // after their times on the grid (-1: no grid)
+    breaks::Path path;                      // display sync: the picture path before the next burst
+    float queue_low_ms = -1;                // the sound queued at its lowest as the frame's sound came (-1: none came)
+    float short_queued_ms = -1, short_wanted_ms = -1;   // a break: queued when the device found it short, and what it asked for
+    float target_ms = 0, device_ms = 0;     // the queue's target then, the device's buffer
+    int kind = -1, cause = -1;              // a break: its class (breaks::Class), and a late burst's cause (breaks::Cause)
 };
 void frame(const Frame &f);
 void gap();   // the frames aren't at the game's pace now (fast-forward): none counted, the next starts afresh

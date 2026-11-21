@@ -94,33 +94,56 @@ std::string g_state;           // the last announced state, to print changes onc
 bool g_debug = getenv("HK_PACING_DEBUG") != nullptr;
 
 uint64_t g_waited_in[prof::NCAT] = {};
+uint64_t g_waited_by[NWAIT] = {};
+
+// The log's account of the picture path (Burst): when the frame's own picture was handed over (0:
+// not since the last burst), the waits by then, and how late it was for its commit time
+int64_t g_handed = 0, g_handed_late = 0;
+uint64_t g_handed_waits[NWAIT] = {};
+Burst g_burst;
+
+void handed(int64_t at, int64_t late) {
+    g_handed = at, g_handed_late = late;
+    std::copy(g_waited_by, g_waited_by + NWAIT, g_handed_waits);
+}
 
 }  // namespace
 
-void waited(uint64_t ticks) {
+void waited(uint64_t ticks, Wait kind) {
     prof::g_wait_ticks += ticks;
     if (prof::g_open >= 0) g_waited_in[prof::g_open] += ticks;
+    g_waited_by[(int)kind] += ticks;
 }
 const uint64_t *waited_in() { return g_waited_in; }
+const uint64_t *waited_by() { return g_waited_by; }
+const Burst &last_burst() { return g_burst; }
 
 namespace {
 
-void sleep_until(int64_t t) {
-    int64_t d = t - (int64_t)prof::now_ns();
-    if (d <= 0) return;
+// (the clock as it was read on the way in: the log's)
+int64_t sleep_until(int64_t t, Wait kind) {
+    const int64_t now = (int64_t)prof::now_ns();
+    int64_t d = t - now;
+    if (d <= 0) return now;
     const uint64_t w0 = prof::ticks();
     SDL_DelayPrecise((Uint64)d);
-    waited(prof::ticks() - w0);
+    waited(prof::ticks() - w0, kind);
+    return now;
 }
+
+// testing: HK_DISPLAY_HZ=N, the refresh rate of a display that gives none (SDL's offscreen driver:
+// the rigs that try display sync and its log lines without a screen)
+const double g_test_hz = getenv("HK_DISPLAY_HZ") ? atof(getenv("HK_DISPLAY_HZ")) : 0;
 
 // The display mode's refresh period, ns (0: unknown)
 int64_t mode_period() {
     if (!g_win) return 0;
     const SDL_DisplayMode *m = SDL_GetCurrentDisplayMode(SDL_GetDisplayForWindow(g_win));
-    if (!m) return 0;
+    const int64_t test = g_test_hz > 0 ? (int64_t)(1e9 / g_test_hz + 0.5) : 0;
+    if (!m) return test;
     if (m->refresh_rate_numerator > 0 && m->refresh_rate_denominator > 0)
         return (int64_t)(1e9 * m->refresh_rate_denominator / m->refresh_rate_numerator + 0.5);
-    return m->refresh_rate > 0 ? (int64_t)(1e9 / m->refresh_rate + 0.5) : 0;
+    return m->refresh_rate > 0 ? (int64_t)(1e9 / m->refresh_rate + 0.5) : test;
 }
 
 void refresh_from_mode() {
@@ -708,7 +731,8 @@ void wait_commit() {
     const int64_t at = g_target - g_lead;
     g_overrun = now > at + MS / 5;
     if (g_overrun) n_overrun++;
-    sleep_until(at);
+    sleep_until(at, Wait::commit);
+    handed(std::max(now, at), now - at);   // (out of the sleep about its time: no clock read for it)
 }
 
 // The frame's own picture to the swap chain's own thread (Windows, the DXGI queue), which presents
@@ -732,6 +756,7 @@ bool commit_queued(int64_t *at_ns) {
     burst_done(now);
     g_overrun = now > at + MS / 5;
     if (g_overrun) n_overrun++;
+    handed(now, now - at);
     g_sent.push_back({0, g_ticket, g_target, std::max(at, now), g_overrun, g_k});
     if (g_sent.size() > 64) g_sent.erase(g_sent.begin());
     dxgi_feedback();
@@ -829,7 +854,7 @@ bool commit_extra(int i) {
 #ifdef _WIN32
     if (g_dxgi && g_dwm && dxgi_queue(g_target + (int64_t)i * g_T, g_target + (int64_t)i * g_T - g_lead)) return true;
 #endif
-    if (g_dwm) sleep_until(g_target + (int64_t)i * g_T - g_lead);
+    if (g_dwm) sleep_until(g_target + (int64_t)i * g_T - g_lead, Wait::extra);
 #ifdef _WIN32
     if (g_dxgi) dxgi_sent(g_target + (int64_t)i * g_T, -1);
 #endif
@@ -851,8 +876,21 @@ void wait_next() {
     int64_t start = g_target + (int64_t)g_k * g_T - g_lead - g_budget;
     if (g_active && g_exact && g_even && g_period_ns > 0)
         start = std::min(start, (int64_t)(g_frame_at + g_period_ns) - g_lead - g_budget);
-    sleep_until(start);
-    g_burst_start = std::max(start, (int64_t)prof::now_ns());
+    const int64_t entry = sleep_until(start, Wait::next);
+    const int64_t now = (int64_t)prof::now_ns();
+    g_burst_start = std::max(start, now);
+    // the log's (Burst): how late this burst is, and the picture path before it. The waits since
+    // the picture was handed over are those up to here, but for this one's own
+    Burst &b = g_burst;
+    b.n++;
+    b.late_ns = now - start;
+    b.handed = g_handed != 0;
+    b.commit_late_ns = b.handed ? g_handed_late : 0;
+    b.room_ns = b.handed ? start - g_handed : 0;
+    b.took_ns = b.handed ? entry - g_handed : 0;
+    for (int k = 0; k < NWAIT; k++) b.waits[k] = b.handed ? g_waited_by[k] - g_handed_waits[k] : 0;
+    b.waits[(int)Wait::next] = 0;
+    g_handed = 0;
 }
 
 void observe() {

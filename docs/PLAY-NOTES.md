@@ -605,6 +605,37 @@ back, the game menu between two games included. A plan you chose yourself is lef
 PC without that plan (some laptops have only Balanced) is told so in the log. The PC uses more
 power while it is on.
 
+**Reading a log for breaks in the sound.** A break is a pull of the sound device's that found the
+queue short. Display sync runs each frame as a *burst* (the machine's work, its sound made as it
+runs), then hands the frame's picture over at its commit time, then waits for the next burst's
+time; a burst that starts late makes its sound late, and a short queue runs dry. What the log says
+to tell the causes apart:
+
+- The log's first lines: `environment:` lists every test switch set for the run (`HK_*`, `SDL_*`,
+  `WAIT_SPIN_MICROSECONDS`, `OVERRIDE_VECTOR_ISA`), so two runs with one command line can be told
+  apart. A name with KEY, PIN, PASS, TOKEN, SECRET or CARD in it is listed without its value.
+- A `slow frame` line now also says: of the window's work, the swaps' own time (the display taking
+  the pictures: on Linux a swap that blocks is in the window's work, and this is how much of it);
+  `waiting N ms, for` each thing the game's thread waited for (the commit time, the next burst, the
+  other refreshes' times, the display to take a present, the swap chain's thread, the sound queue,
+  the picture's hold, the clock); on display sync's grid, how late the frame's burst and the next
+  one started; when the next one was late, the picture path before it (handed over so long before
+  or after its commit time, then the window took so long where the schedule left so long: the
+  swaps, other drawing, waits) and `the late burst's cause`; for a break, how many short pulls, the
+  queue at its lowest as the frame's sound came, what was queued when the device asked and how
+  much it asked for, the target and the device's buffer, and `this break's kind`.
+- The exit report sorts **every** break after the first 10 s (not only those with a line) by what
+  the frame it came in shows: the work fit but a burst started late (how late, in steps, and what
+  the window spent most of the time on before it: the swaps, its other drawing, the display
+  holding a present, the swap chain's thread, waits for the other refreshes' times, the thread
+  woken late, the picture itself late); the work fit and the bursts were on time (the queue too
+  short for the device: its target, the device's buffer, what was left to spare, and the queue in
+  those frames); the frame's own work over its time with the window's part the largest, or a part
+  of the machine's (named), or with the CPU running slow; the work fit without display sync; a
+  frame a PC game drew no picture for; outside the frames at the game's pace. Then how late every
+  burst on the grid started, and what the game's thread waited for over the run. The `latest
+  chunks` line splits each one's waiting the same way.
+
 The overlay is drawn by the window over the picture it shows: no snapshot, recording or digest
 has it, and the game computes the same with it. Its graph is redrawn ten times a second and its
 text once a second, some tens of microseconds each time.

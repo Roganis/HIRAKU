@@ -16,6 +16,10 @@ void fake_display(double hz, long long compose_ns);
 long long fake_now_ns(void);
 long long fake_last_vblank_ns(long long *period_ns);
 
+/* Every nth present made by the thread that calls this held `ms` ms first (0: none), as a display that
+   takes its pictures slowly holds them */
+void fake_present_hold(int every, int ms);
+
 /* A window the display isn't showing (Alt+Tab to another, covered, minimized), from now until called
    again with FAKE_SHOWN. Its presents still succeed and count (GetLastPresentCount), and still take
    their refreshes, but aren't shown:

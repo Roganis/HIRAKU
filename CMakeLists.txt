@@ -190,9 +190,10 @@ function(hk_stencils name target)
       COMMAND ${CMAKE_C_COMPILER} --target=x86_64-unknown-linux-gnu -ffreestanding -O2 -fno-pic -mcmodel=small
               -mno-red-zone -mgeneral-regs-only -fno-asynchronous-unwind-tables -fno-stack-protector
               -fcf-protection=none -ffunction-sections -fno-jump-tables -fomit-frame-pointer
-              -Wall -Wextra -Wno-unused-parameter -Werror -c ${src} -o ${obj}
+              -Wall -Wextra -Wno-unused-parameter -Werror -I${HK_JIT_GEN} -c ${src} -o ${obj}
       COMMAND python3 ${CMAKE_SOURCE_DIR}/tools/stencilgen.py ${obj} ${inc} ${name}
-      DEPENDS ${src} ${heads} ${CMAKE_SOURCE_DIR}/tools/stencilgen.py
+      # (HK_STENCILS_DEPENDS_<name>: files the source includes that are made at build time)
+      DEPENDS ${src} ${heads} ${CMAKE_SOURCE_DIR}/tools/stencilgen.py ${HK_STENCILS_DEPENDS_${name}}
       COMMENT "stencils: ${name}" VERBATIM)
     add_custom_target(hk_stencils_${name} DEPENDS ${inc})
   endif()
@@ -208,11 +209,22 @@ add_library(hiraku_xt446 STATIC
   ${HK_MAME}/src/devices/sound/swp30.cpp
   runtime/dev/xt446.cpp
   runtime/dev/xt446_meg.cpp
+  runtime/dev/xt446_h8jit.cpp
   ${HK_H8_GEN})
 target_include_directories(hiraku_xt446 PRIVATE ${HK_MAME}/shim ${HK_MAME}/src/devices ${HK_MAME_GEN})
 target_include_directories(hiraku_xt446 PUBLIC runtime)
 target_link_libraries(hiraku_xt446 PUBLIC hiraku_sys hiraku_jit)
 hk_stencils(meg hiraku_xt446)
+# The H8S's instructions as stencils (xt446_h8jit.cpp): written from MAME's h8.lst by h8jitgen.py
+set(HK_STENCILS_DEPENDS_h8 ${HK_JIT_GEN}/hk_h8_ops.h)
+add_custom_command(
+  OUTPUT ${HK_JIT_GEN}/hk_h8_ops.h ${HK_JIT_GEN}/hk_h8_table.inc
+  COMMAND python3 ${CMAKE_SOURCE_DIR}/tools/h8jitgen.py ${HK_MAME}/src/devices/cpu/h8 ${HK_JIT_GEN}
+  DEPENDS ${CMAKE_SOURCE_DIR}/tools/h8jitgen.py ${HK_MAME}/src/devices/cpu/h8/h8.lst
+          ${HK_MAME}/src/devices/cpu/h8/h8make.py ${HK_MAME}/src/devices/cpu/h8/h8.cpp
+  COMMENT "h8jitgen.py" VERBATIM)
+hk_stencils(h8 hiraku_xt446)
+set_source_files_properties(runtime/dev/xt446_h8jit.cpp PROPERTIES OBJECT_DEPENDS ${HK_JIT_GEN}/hk_h8_table.inc)
 # The MEG's effect programs compiled to C++ from a recording (HK_MEG_RECORD=build/xt446/meg.txt,
 # never committed: it holds the firmware's programs). Every build: meggen.py does nothing unless
 # the output would change; with no recording the table is empty and the MEG is interpreted.

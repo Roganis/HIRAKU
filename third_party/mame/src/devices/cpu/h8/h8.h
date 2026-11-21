@@ -25,6 +25,12 @@ class h8_device;
 
 class h8_device : public h8_cpu_base, public device_nvram_interface {
 public:
+	// HIRAKU: made code for the instructions (runtime/dev/xt446_h8jit.cpp, PLAN.md section 45).
+	// execute_run() offers it each instruction start; true when it ran one or more.
+	bool (*m_hk_run)(h8_device &) = nullptr;
+	void *m_hk_ctx = nullptr;
+	friend struct hk_h8;
+
 	enum {
 		H8_PC = 1,
 		H8_R0,

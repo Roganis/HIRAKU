@@ -32,6 +32,10 @@ public:
     // interpreter, on programs and states drawn from seed, with no ROM: "" when they agree,
     // "skip: ..." where this build makes no code, else what differed (tests/jit).
     static std::string meg_selftest(unsigned seed, int rounds);
+    // The H8 as made into the host's code (xt446_h8jit.cpp) against MAME's interpreter: two cards
+    // running made-up programs (seed onwards), compared after every sample. "" when they agree,
+    // "skip: ..." where this build makes no code, else what differed (tests/jit).
+    static std::string h8_selftest(unsigned seed, int programs, int samples);
 
     // statistics
     uint64_t samples() const;

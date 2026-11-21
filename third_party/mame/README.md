@@ -89,7 +89,7 @@ with a port of `twinkle.cpp`'s driver class.
 - `sound/mas3507d.cpp` / `.h`, `sound/mp3_audio.cpp` / `.h`: `hk_predict()` works out the samples the decoder's next stream update will put out, on copies of its state, data and decoded frame, for the host's `--fine-sound` (`runtime/sys573/board.cpp`). The decoder decodes and asks for data as its stream updates, which the board sees, so the stream can't be updated sooner. What the machine sees is unchanged.
 - `machine/intelfsh.cpp`: each write marks the chip (`m_hk_written`, on the shim's `device_nvram_interface`), so a save while playing looks at the flash chips written since the last one instead of all of them (a 573 has 24, 48 MB: 13-34 ms of a frame every 15 s). What the machine sees is unchanged.
 - `bus/rs232/rs232.cpp`: no devices in `default_rs232_devices` (MAME lists ~20 terminals, printers, a pty...), and without MAME's explicit instantiations of its two-parameter `device_finder`. Twinkle's ports hold the DVD player or nothing.
-- The H8 files are unchanged.
+- `cpu/h8/h8.h` / `h8.cpp` (the XT446's H8S/2655): `execute_run()` offers each instruction start to `m_hk_run` (`runtime/dev/xt446_h8jit.cpp`, PLAN.md section 45), which runs the card's program as code made at run time for as long as MAME would run those instructions whole, and returns true if it ran any; `m_hk_ctx` is its state, `friend struct hk_h8` gives it the registers. Nothing is attached unless `hk::h8jit::attach()` is called (the XT446 does); without it the loop is MAME's. The instructions' stencils are written from `h8.lst` by `tools/h8jitgen.py` through `h8make.py`'s own parser.
 
 ## The multi-session unit (windyfairy's fork)
 

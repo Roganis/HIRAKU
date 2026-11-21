@@ -9,10 +9,12 @@
 #include <algorithm>
 #include <chrono>
 #include <cstdio>
+#include <cstring>
 #include <deque>
 #include <fstream>
 #include <vector>
 
+#include "dev/xt446_h8jit.h"
 #include "emu.h"
 #include "cpu/h8/h8s2655.h"
 #include "sound/swp30.h"
@@ -122,10 +124,79 @@ struct Xt446::Impl {
     u64 midi_count = 0;
     double cpu_s = 0;
 
+    // HK_H8_JIT=check: the same card again with its H8 interpreted, run alongside and compared
+    std::unique_ptr<Impl> shadow;
+    u64 checked = 0;
+
+    ~Impl() {
+        if (dev && dev->m_maincpu->m_hk_ctx && getenv("HK_H8_STATS")) fprintf(stderr, "%s\n", hk::h8jit::stats(*dev->m_maincpu).c_str());
+        if (dev) hk::h8jit::detach(*dev->m_maincpu);   // (its made code freed)
+    }
+    void start(const std::vector<u8> &prg, const std::vector<u8> &wave, const std::vector<u8> &sintab) {
+        machine.add_region("maincpu", std::vector<u8>(prg));
+        machine.add_region("swp30", std::vector<u8>(wave));
+        machine.add_region("sintab", std::vector<u8>(sintab));
+        dev = &XT446(machine.config(), "xt446");
+        dev->m_swp30->hk_on_sample = [this](const std::array<s32, 4> &adc) {
+            // MAME: stream outputs 0/1 (the DAC) to the speaker, put_int_clamp(.., 1 << 17)
+            for (int i = 0; i < 2; i++) out.push_back((float)std::clamp<s32>(adc[i], -(1 << 17), (1 << 17) - 1) / (float)(1 << 17));
+        };
+        line_timer = machine.alloc_timer([this](s32) { line_fire(); });
+        machine.start();
+        machine.reset();
+    }
+    // the H8 made into host code unless switched off (HK_JIT=0, HK_H8_JIT=0); with
+    // HK_H8_JIT=check a second card, interpreted, to compare with
+    void h8_code(const std::vector<u8> &prg, const std::vector<u8> &wave, const std::vector<u8> &sintab) {
+        const char *e = getenv("HK_H8_JIT");
+        if (e && !strcmp(e, "check")) {
+            shadow = std::make_unique<Impl>();
+            shadow->start(prg, wave, sintab);
+        }
+        hk::h8jit::attach(*dev->m_maincpu);
+    }
+    // after each sample: the shadow card brought to the same time and compared (the H8's state
+    // every sample, its RAM every 64th, and the sound)
+    void check() {
+        Impl &o = *shadow;
+        o.sample_index = sample_index;
+        o.machine.run_until(attotime::from_ticks(sample_index, 44100u));
+        std::string d = hk::h8jit::compare(*dev->m_maincpu, *o.dev->m_maincpu);
+        if (d.empty() && (sample_index & 63) == 0) {
+            address_space &a = dev->m_maincpu->space(AS_PROGRAM), &b = o.dev->m_maincpu->space(AS_PROGRAM);
+            for (offs_t r0 : {0x200000u, 0xffec00u}) {
+                const offs_t len = r0 == 0x200000u ? 0x20000u : 0x1000u;
+                for (offs_t k = 0; k < len && d.empty(); k += 0x100)
+                    if (memcmp(a.mem_ptr(r0 + k, false), b.mem_ptr(r0 + k, false), 0x100)) d = "RAM near " + std::to_string(r0 + k);
+            }
+        }
+        if (d.empty() && (out.size() != o.out.size() || !std::equal(out.begin(), out.end(), o.out.begin())))
+            d = "sound";
+        if (!d.empty()) {
+            fprintf(stderr, "xt446: HK_H8_JIT=check: made code and the interpreter differ at sample %llu: %s\n", (unsigned long long)sample_index, d.c_str());
+            abort();
+        }
+        checked++;
+    }
+
     void arm_line() {
         if (line.empty()) return;
         attotime d = line.front().first - machine.time();
         line_timer->adjust(d < attotime::zero ? attotime::zero : d);
+    }
+    // 8N1 at 31250 baud, timed like MAME's 16550 (ins8250.cpp/diserial.cpp): a byte
+    // reaches the shift register now, or when the previous one starts its stop bit;
+    // its bit clock (toggled every half bit) then makes its first rising edge, the
+    // start bit, one bit later. Bytes back to back are 320 us apart.
+    void send(u8 b) {
+        midi_count++;
+        const attotime bit = attotime::from_usec(32);
+        attotime t = std::max(machine.time(), line_free) + bit;
+        line.emplace_back(t, 0);
+        for (int i = 0; i < 8; i++) line.emplace_back(t + bit * (u32)(i + 1), (b >> i) & 1);
+        line.emplace_back(t + bit * 9u, 1);
+        line_free = t + bit * 9u;
+        arm_line();
     }
     void line_fire() {
         attotime now = machine.time();
@@ -165,17 +236,7 @@ bool Xt446::load(const std::string &dir, std::string &err) {
     if (!read_file(path("sin-table.bin"), 0x10000, sintab)) sintab = swp30_sin_table();
 
     Impl &s = *m;
-    s.machine.add_region("maincpu", std::move(prg));
-    s.machine.add_region("swp30", std::move(wave));
-    s.machine.add_region("sintab", std::move(sintab));
-    s.dev = &XT446(s.machine.config(), "xt446");
-    s.dev->m_swp30->hk_on_sample = [&s](const std::array<s32, 4> &adc) {
-        // MAME: stream outputs 0/1 (the DAC) to the speaker, put_int_clamp(.., 1 << 17)
-        for (int i = 0; i < 2; i++) s.out.push_back((float)std::clamp<s32>(adc[i], -(1 << 17), (1 << 17) - 1) / (float)(1 << 17));
-    };
-    s.line_timer = s.machine.alloc_timer([&s](s32) { s.line_fire(); });
-    s.machine.start();
-    s.machine.reset();
+    s.start(prg, wave, sintab);
     if (const char *e = getenv("HK_XT446_SWPLOG"); e && *e) {
         // debugging: the H8's writes to the SWP30, in the MAME oracle's swp-w.txt format
         static FILE *f = fopen(e, "w");
@@ -189,6 +250,7 @@ bool Xt446::load(const std::string &dir, std::string &err) {
                 fprintf(f, "%.6f %06x %04x %04x r\n", s.machine.time().as_double(), a, (unsigned)(d & 0xffff), (unsigned)(mask & 0xffff));
         };
     }
+    s.h8_code(prg, wave, sintab);
     return true;
 }
 
@@ -206,21 +268,64 @@ std::string Xt446::meg_selftest(unsigned seed, int rounds) {
     return a.dev->m_swp30->hk_meg_selftest(*b.dev->m_swp30, seed, rounds);
 }
 
+std::string Xt446::h8_selftest(unsigned seed, int programs, int samples) {
+    const std::vector<u8> wave(0x1800000, 0), sintab = swp30_sin_table();
+    u64 made = 0, total = 0;
+    for (int p = 0; p < programs; p++) {
+        const unsigned sd = seed + (unsigned)p;
+        const std::vector<u8> rom = hk::h8jit::test_program(sd);
+        if (const char *e = getenv("HK_H8_TEST_DUMP")) {   // (the program, for a disassembler)
+            if (FILE *f = fopen((std::string(e) + std::to_string(sd)).c_str(), "wb")) { fwrite(rom.data(), 1, rom.size(), f); fclose(f); }
+        }
+        Impl a, b;
+        a.start(rom, wave, sintab);
+        b.start(rom, wave, sintab);
+        if (!hk::h8jit::attach(*a.dev->m_maincpu)) return "skip: this build makes no code for the H8";
+        u64 x = 0x853c49e6748fea9bull ^ sd;
+        auto rnd = [&x] { x ^= x << 13; x ^= x >> 7; x ^= x << 17; return (u32)(x >> 24); };
+        for (int k = 1; k <= samples; k++) {
+            if (rnd() % 64 == 0) {   // a byte on the serial line now and then
+                const u8 byte = (u8)rnd();
+                a.send(byte);
+                b.send(byte);
+            }
+            const attotime t = attotime::from_ticks((u64)k, 44100u);
+            std::string ea, eb;
+            try { a.machine.run_until(t); } catch (const std::exception &e) { ea = e.what(); }
+            try { b.machine.run_until(t); } catch (const std::exception &e) { eb = e.what(); }
+            char where[64];
+            std::snprintf(where, sizeof where, "program %u, sample %d: ", sd, k);
+            if (ea != eb) return where + std::string("made code: '") + ea + "', interpreter: '" + eb + "'";
+            if (!ea.empty()) break;   // (both stopped the same way: the program wrote somewhere MAME gives up)
+            std::string d = hk::h8jit::compare(*a.dev->m_maincpu, *b.dev->m_maincpu);
+            if (d.empty() && ((k & 15) == 0 || k == samples)) {
+                address_space &sa = a.dev->m_maincpu->space(AS_PROGRAM), &sb = b.dev->m_maincpu->space(AS_PROGRAM);
+                for (offs_t r0 : {0x200000u, 0xffec00u}) {
+                    const offs_t len = r0 == 0x200000u ? 0x20000u : 0x1000u;
+                    for (offs_t o = 0; o < len && d.empty(); o += 0x100)
+                        if (memcmp(sa.mem_ptr(r0 + o, false), sb.mem_ptr(r0 + o, false), 0x100)) d = "RAM near " + std::to_string(r0 + o);
+                }
+            }
+            if (!d.empty()) return where + d;
+        }
+        if (getenv("HK_H8_STATS")) fprintf(stderr, "program %u: %s\n", sd, hk::h8jit::stats(*a.dev->m_maincpu).c_str());
+        made += hk::h8jit::made_cycles(*a.dev->m_maincpu);
+        total += a.dev->m_maincpu->total_cycles();
+        hk::h8jit::detach(*a.dev->m_maincpu);
+    }
+    if (total && made * 4 < total) return "made code ran only " + std::to_string(100 * made / total) + " % of the cycles";
+    return "";
+}
+
 void Xt446::midi(uint8_t b) {
     Impl &s = *m;
     if (!s.dev) return;
-    s.midi_count++;
-    // 8N1 at 31250 baud, timed like MAME's 16550 (ins8250.cpp/diserial.cpp): a byte
-    // reaches the shift register now, or when the previous one starts its stop bit;
-    // its bit clock (toggled every half bit) then makes its first rising edge, the
-    // start bit, one bit later. Bytes back to back are 320 us apart.
-    const attotime bit = attotime::from_usec(32);
-    attotime t = std::max(s.machine.time(), s.line_free) + bit;
-    s.line.emplace_back(t, 0);
-    for (int i = 0; i < 8; i++) s.line.emplace_back(t + bit * (u32)(i + 1), (b >> i) & 1);
-    s.line.emplace_back(t + bit * 9u, 1);
-    s.line_free = t + bit * 9u;
-    s.arm_line();
+    s.send(b);
+    if (s.shadow) {
+        s.shadow->line = s.line;
+        s.shadow->line_free = s.line_free;
+        s.shadow->arm_line();
+    }
 }
 
 void Xt446::render(float *lr, int frames, float gain) { produce(frames, lr, gain, true); }
@@ -234,6 +339,7 @@ void Xt446::produce(int frames, float *lr, float gain, bool add) {
     while (s.out.size() - s.out_pos < need) {
         s.sample_index++;
         s.machine.run_until(attotime::from_ticks(s.sample_index, 44100u));
+        if (s.shadow) s.check();
     }
     if (add)
         for (size_t k = 0; k < need; k++) lr[k] += s.out[s.out_pos + k] * gain;
@@ -242,6 +348,7 @@ void Xt446::produce(int frames, float *lr, float gain, bool add) {
     s.out_pos += need;
     if (s.out_pos > 65536) {
         s.out.erase(s.out.begin(), s.out.begin() + (std::ptrdiff_t)s.out_pos);
+        if (s.shadow) s.shadow->out.erase(s.shadow->out.begin(), s.shadow->out.begin() + (std::ptrdiff_t)s.out_pos);
         s.out_pos = 0;
     }
     s.cpu_s += std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();

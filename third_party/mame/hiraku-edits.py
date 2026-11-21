@@ -8,7 +8,7 @@ SRC_DEVICES_DIR is a MAME src/devices tree, or third_party/mame/src/devices
 holding fresh copies of the files listed in the README (and minimp3.h in the
 src/3rdparty next to it). The edits are applied
 in place. Every anchor must be found exactly once, so the script fails loudly
-when upstream changes the code an edit relies on. The H8 files need no edits.
+when upstream changes the code an edit relies on.
 """
 import sys
 from pathlib import Path
@@ -2577,6 +2577,28 @@ def machine_intelfsh_cpp(s):
 ''', 'machine/intelfsh.cpp written')
 
 
+def h8_h(s):
+    s = edit(s, 'class h8_device : public h8_cpu_base, public device_nvram_interface {\npublic:\n',
+             'class h8_device : public h8_cpu_base, public device_nvram_interface {\npublic:\n'
+             '\t// HIRAKU: made code for the instructions (runtime/dev/xt446_h8jit.cpp, PLAN.md section 45).\n'
+             '\t// execute_run() offers it each instruction start; true when it ran one or more.\n'
+             '\tbool (*m_hk_run)(h8_device &) = nullptr;\n'
+             '\tvoid *m_hk_ctx = nullptr;\n'
+             '\tfriend struct hk_h8;\n\n', 'hk_run')
+    return s
+
+
+def h8_cpp(s):
+    s = edit(s, '''		while(m_icount > m_bcount) {
+			if(m_inst_state < 0x10000) {
+				m_PPC = m_NPC;''', '''		while(m_icount > m_bcount) {
+			if(m_hk_run && m_inst_state < 0x10000 && m_hk_run(*this))   // HIRAKU: made code ran
+				continue;
+			if(m_inst_state < 0x10000) {
+				m_PPC = m_NPC;''', 'hk_run call')
+    return s
+
+
 def main():
     if len(sys.argv) != 2:
         sys.exit(__doc__)
@@ -2596,7 +2618,8 @@ def main():
                     ('bus/ata/atadev.h', bus_ata_atadev_h), ('bus/ata/hdd.h', bus_ata_hdd_h),
                     ('bus/ata/ataintf.h', bus_ata_ataintf_h), ('bus/ata/ataintf.cpp', bus_ata_ataintf_cpp),
                     ('machine/atahle.h', machine_atahle_h), ('machine/atahle.cpp', machine_atahle_cpp),
-                    ('machine/intelfsh.cpp', machine_intelfsh_cpp)]:
+                    ('machine/intelfsh.cpp', machine_intelfsh_cpp),
+                    ('cpu/h8/h8.h', h8_h), ('cpu/h8/h8.cpp', h8_cpp)]:
         p = root / rel
         text = p.read_text()
         if 'HIRAKU' in text:

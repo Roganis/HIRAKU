@@ -355,6 +355,8 @@ void h8_device::execute_run()
 
 	while(m_icount > 0) {
 		while(m_icount > m_bcount) {
+			if(m_hk_run && m_inst_state < 0x10000 && m_hk_run(*this))   // HIRAKU: made code ran
+				continue;
 			if(m_inst_state < 0x10000) {
 				m_PPC = m_NPC;
 				if(debugger_enabled())

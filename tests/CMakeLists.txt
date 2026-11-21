@@ -581,6 +581,10 @@ endif()
 add_executable(test_meg_jit jit/test_meg_jit.cpp)
 target_link_libraries(test_meg_jit PRIVATE hiraku_xt446)
 add_test(NAME meg_jit COMMAND test_meg_jit)
+# the XT446's H8 made into code at run time against MAME's interpreter (made-up programs, no ROM)
+add_executable(test_h8_jit jit/test_h8_jit.cpp)
+target_link_libraries(test_h8_jit PRIVATE hiraku_xt446)
+add_test(NAME h8_jit COMMAND test_h8_jit)
 # ... and the PlayStation R3000's blocks made at run time (runtime/sys573/mipsjit.cpp) against MAME's
 # interpreter: random programs on two bare CPUs, compared every 1/2000 s. No game needed
 add_executable(test_r3000_jit jit/test_r3000_jit.cpp)

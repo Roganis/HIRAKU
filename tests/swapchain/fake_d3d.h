@@ -16,6 +16,26 @@ void fake_display(double hz, long long compose_ns);
 long long fake_now_ns(void);
 long long fake_last_vblank_ns(long long *period_ns);
 
+/* A window the display isn't showing (Alt+Tab to another, covered, minimized), from now until called
+   again with FAKE_SHOWN. Its presents still succeed and count (GetLastPresentCount), and still take
+   their refreshes, but aren't shown:
+   FAKE_COVER_JUMP: the statistics stand still while it lasts, then name the latest present at once;
+   FAKE_COVER_LOST: the statistics stand still, and the presents made meanwhile are never named;
+   FAKE_COVER_LIVE: as LOST, but the statistics' vblank (SyncRefreshCount, SyncQPCTime) goes on;
+   FAKE_OCCLUDED: each Present returns DXGI_STATUS_OCCLUDED, its picture neither counted nor shown */
+enum { FAKE_SHOWN, FAKE_COVER_JUMP, FAKE_COVER_LOST, FAKE_COVER_LIVE, FAKE_OCCLUDED };
+void fake_cover(int how);
+/* The next present (whichever thread's) held `ms` ms, as Windows holds one when the window changes */
+void fake_present_stall(int ms);
+/* The next n frame-statistics readings fail (DXGI_ERROR_FRAME_STATISTICS_DISJOINT) */
+void fake_statistics_fail(int n);
+/* A composed window: every picture shown `refreshes` after the first vblank it is in time for, and the
+   statistics naming a vblank only `lag_ns` after it */
+void fake_composed(int refreshes, long long lag_ns);
+/* The statistics brought up to date only when a present is made (as found then), not at each vblank:
+   with no present after it, the last ones are never named shown (a Windows 11 VM's, measured) */
+void fake_statistics_at_present(int on);
+
 /* The number the next picture OpenGL hands over carries (set before each is "drawn") */
 extern volatile long long fake_drawn;
 
@@ -26,6 +46,7 @@ struct fake_present {
     long long at_ns;        /* when Present was called (fake_now_ns) */
     long long vblank_ns;    /* when it reaches the screen */
     unsigned long thread;
+    int covered;            /* presented while the window wasn't shown (fake_cover's how) */
 };
 int fake_presents(const struct fake_present **log);
 

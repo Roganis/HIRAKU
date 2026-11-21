@@ -102,6 +102,17 @@ if(WIN32 AND TARGET hiraku_host)
   # cabinet's tight case: a frame's work, a refresh and its pictures' drawing more than a frame
   add_test(NAME swapchain_own COMMAND test_swapchain own)
   add_test(NAME swapchain_tight COMMAND test_swapchain tight 120 5.0 900)
+  # ... a window the display stops showing for a while (Alt+Tab, covered, minimized), then shows again:
+  # its pictures presented again at once (the statistics that stood still meanwhile not believed), with
+  # and without smooth motion and display sync; a composited desktop's statistics, late after each
+  # vblank or brought up to date only by the next present: few pictures left out, never many in a row
+  add_test(NAME swapchain_covered_lost COMMAND test_swapchain covered-lost 60 3.0 400 nosmooth)
+  add_test(NAME swapchain_covered_live COMMAND test_swapchain covered-live 240 3.0 400)
+  add_test(NAME swapchain_covered_jump COMMAND test_swapchain covered-jump 60 3.0 400)
+  add_test(NAME swapchain_covered_nosync COMMAND test_swapchain covered-lost 60 3.0 400 nosync)
+  add_test(NAME swapchain_occluded COMMAND test_swapchain occluded 60 3.0 400 nosmooth)
+  add_test(NAME swapchain_composed COMMAND test_swapchain composed 60 3.0 1500 nosmooth)
+  add_test(NAME swapchain_snapshot COMMAND test_swapchain snapshot 60 3.0 1500 nosmooth)
 endif()
 # Display pacing's judgement of the compositor's deadline (runtime/host/pacing.cpp) from made-up
 # presentation feedback, as Wayland's fifo-v1 gives it: windows missed after a late commit leave the

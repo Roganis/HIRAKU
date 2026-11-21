@@ -138,16 +138,39 @@ static HRESULT STDMETHODCALLTYPE swap_resize(IDXGISwapChain1 *s, UINT n, UINT w,
 /* A picture is shown at the first vblank it is in time for (presented g_compose before it), and
    after the last picture's: one a refresh, in the order presented. With three waiting, Present
    waits for the first of them to show, as a flip-model swap chain's does at its latency limit */
+/* fake_cover, fake_present_stall, fake_statistics_fail, fake_composed (fake_d3d.h) */
+static volatile LONG g_cover = FAKE_SHOWN, g_stall_ms = 0, g_stats_fail = 0;
+static int g_late_refreshes = 0;
+static long long g_stats_lag = 0;
+static DXGI_FRAME_STATISTICS g_frozen;   /* the statistics as the window was covered */
+static void statistics(DXGI_FRAME_STATISTICS *st);
+void fake_cover(int how) {
+    if (how != FAKE_SHOWN && how != FAKE_OCCLUDED && g_cover == FAKE_SHOWN) statistics(&g_frozen);
+    InterlockedExchange(&g_cover, how);
+}
+void fake_present_stall(int ms) { InterlockedExchange(&g_stall_ms, ms); }
+void fake_statistics_fail(int n) { InterlockedExchange(&g_stats_fail, n); }
+void fake_composed(int refreshes, long long lag_ns) { g_late_refreshes = refreshes, g_stats_lag = lag_ns; }
+static int g_snapshot = 0;              /* fake_statistics_at_present */
+static DXGI_FRAME_STATISTICS g_snap;    /* ... the statistics as the last present found them */
+void fake_statistics_at_present(int on) { g_snapshot = on; }
 static HRESULT STDMETHODCALLTYPE swap_present(IDXGISwapChain1 *s, UINT sync, UINT flags) {
     long long now, v;
+    LONG stall;
     (void)s, (void)flags;
     enter();
+    if ((stall = InterlockedExchange(&g_stall_ms, 0)) > 0) Sleep((DWORD)stall);
+    if (g_cover == FAKE_OCCLUDED) {   /* (minimized: thrown away, as nothing would show it) */
+        leave();
+        return DXGI_STATUS_OCCLUDED;
+    }
     for (;;) {
         now = fake_now_ns();
         if (!sync || g_last_shown_vblank - now / g_period < 3) break;
         Sleep(1);
     }
-    v = (now + g_compose + g_period - 1) / g_period;
+    if (g_snapshot) statistics(&g_snap);
+    v = (now + g_compose + g_period - 1) / g_period + g_late_refreshes;
     EnterCriticalSection(&g_cs);
     if (sync && v <= g_last_shown_vblank) v = g_last_shown_vblank + 1;
     if (v > g_last_shown_vblank) g_last_shown_vblank = v;
@@ -158,6 +181,7 @@ static HRESULT STDMETHODCALLTYPE swap_present(IDXGISwapChain1 *s, UINT sync, UIN
         p->at_ns = now;
         p->vblank_ns = v * g_period;
         p->thread = GetCurrentThreadId();
+        p->covered = (int)g_cover;
         g_presents++;
     }
     LeaveCriticalSection(&g_cs);
@@ -171,14 +195,14 @@ static HRESULT STDMETHODCALLTYPE swap_last_present(IDXGISwapChain1 *s, UINT *n) 
     leave();
     return S_OK;
 }
-static HRESULT STDMETHODCALLTYPE swap_statistics(IDXGISwapChain1 *s, DXGI_FRAME_STATISTICS *st) {
-    const long long now = fake_now_ns(), current = now / g_period;
+/* the latest picture shown by the last vblank the statistics have seen (but those never named) */
+static void statistics(DXGI_FRAME_STATISTICS *st) {
+    const long long now = fake_now_ns(), current = (now - g_stats_lag) / g_period;
     int i;
-    (void)s;
-    enter();
     memset(st, 0, sizeof *st);
     EnterCriticalSection(&g_cs);
-    for (i = g_presents - 1; i >= 0 && g_log[i].vblank_ns > current * g_period; i--) {}
+    for (i = g_presents - 1; i >= 0 && (g_log[i].vblank_ns > current * g_period || g_log[i].covered == FAKE_COVER_LOST ||
+                                        g_log[i].covered == FAKE_COVER_LIVE); i--) {}
     if (i >= 0) {
         st->PresentCount = g_log[i].id;
         st->PresentRefreshCount = (UINT)(g_log[i].vblank_ns / g_period);
@@ -186,6 +210,25 @@ static HRESULT STDMETHODCALLTYPE swap_statistics(IDXGISwapChain1 *s, DXGI_FRAME_
         st->SyncQPCTime.QuadPart = ns_to_qpc(current * g_period);
     }
     LeaveCriticalSection(&g_cs);
+}
+static HRESULT STDMETHODCALLTYPE swap_statistics(IDXGISwapChain1 *s, DXGI_FRAME_STATISTICS *st) {
+    const LONG cover = g_cover;
+    (void)s;
+    enter();
+    if (g_stats_fail > 0 && InterlockedDecrement(&g_stats_fail) >= 0) {
+        leave();
+        return DXGI_ERROR_FRAME_STATISTICS_DISJOINT;
+    }
+    if (cover == FAKE_COVER_JUMP || cover == FAKE_COVER_LOST || cover == FAKE_COVER_LIVE) {
+        DXGI_FRAME_STATISTICS now;
+        statistics(&now);
+        *st = g_frozen;
+        if (cover == FAKE_COVER_LIVE) st->SyncRefreshCount = now.SyncRefreshCount, st->SyncQPCTime = now.SyncQPCTime;
+    } else if (g_snapshot) {
+        *st = g_snap;
+    } else {
+        statistics(st);
+    }
     leave();
     return S_OK;
 }

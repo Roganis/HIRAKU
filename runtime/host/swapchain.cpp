@@ -25,6 +25,7 @@
 #include <vector>
 
 #include "../core/prof.h"
+#include "dwm.h"
 #include "pacing.h"
 
 namespace hk::host::dxgi {
@@ -93,8 +94,18 @@ GLuint g_tex = 0, g_fbo = 0;              // OpenGL's own picture of the window 
 int g_w = 0, g_h = 0;
 const char *g_effect = "";
 std::string g_adapter;
-uint64_t n_presents = 0, n_left_out = 0, n_failed = 0;
+uint64_t n_presents = 0, n_left_out = 0, n_failed = 0, n_occluded = 0;
 uint32_t g_queued = 0;
+// The leave-out rule's doubts (leave_out()): pictures presented though the statistics said two were
+// waiting, as they spoke of a vblank before the latest or four were left out in a row (behind), or hadn't moved for some refreshes
+// (unseen: the display not reporting the window's pictures, covered or minimized); the leave-outs
+// since the last present; the statistics' latest present and when it last moved; the times the
+// statistics stood still were said in the log
+uint64_t n_behind = 0, n_unseen = 0;
+int g_left_row = 0, g_said_still = 0;
+uint32_t g_stats_id = 0;
+int64_t g_stats_moved = 0, g_still_since = 0, g_started_ns = 0;
+uint64_t g_still_presents = 0;
 
 // The pictures queued for their times (queue()), and the thread that presents them. Direct3D only
 // on that thread; q.mu is held around every call of the swap chain's and every use of the back
@@ -325,6 +336,48 @@ bool shown_locked(Shown &s) {
     s.vblank_ns = qpc_ns(st.SyncQPCTime.QuadPart);
     s.since = st.SyncRefreshCount >= st.PresentRefreshCount ? st.SyncRefreshCount - st.PresentRefreshCount : 0;
     s.queued = g_queued = last - st.PresentCount;
+    if (st.PresentCount != g_stats_id) {
+        const int64_t now = (int64_t)prof::now_ns();
+        if (g_still_since && g_said_still <= 8)
+            fprintf(stderr, "video: the display reports the window's pictures shown again at %.1f s, after %.1f s (%llu presented meanwhile)\n",
+                    (double)(now - g_started_ns) / 1e9, (double)(now - g_still_since) / 1e9, (unsigned long long)g_still_presents);
+        g_stats_id = st.PresentCount, g_stats_moved = now, g_still_since = 0;
+    }
+    return true;
+}
+
+// A picture left out: two presents waiting already by the frame statistics `s` (it would show two
+// refreshes late), where those can be believed. They name a present shown only as of some vblank, and
+// Windows brings them up to date late: some time after the vblank (on a composited desktop, right when
+// the pictures are presented if display pacing's lead has gone up to near a refresh: 30 % of the
+// pictures left out on a player's PC), or, on some, only when another present comes; and not at all
+// while the window is covered or minimized, though its presents go on succeeding. Believed as they
+// stood, the rule left out every picture after such a reading: none presented, nothing to move the
+// statistics again, the picture frozen for good with the game running on. So each of the display's
+// refreshes since the vblank they speak of counts as one picture shown; statistics that haven't moved
+// for four refreshes, or after four left out in a row, aren't believed. Under q.mu
+bool leave_out(bool have, const Shown &s) {
+    if (!have || s.queued < 2) return false;
+    int64_t vblank = 0, period = 0;
+    if (!dwm::vblank(vblank, period) || period <= 0) vblank = 0, period = 16'666'667;
+    const int64_t now = (int64_t)prof::now_ns();
+    // (70 ms at least: they are read once a frame of the game's, whatever the display's rate)
+    if (now - g_stats_moved > std::max<int64_t>(4 * period, 70'000'000)) {   // standing still
+        n_unseen++;
+        if (!g_still_since) {
+            g_still_since = g_stats_moved, g_still_presents = 0;
+            if (++g_said_still <= 8)
+                fprintf(stderr, "video: the display has reported none of the window's pictures shown since %.1f s (the window covered or "
+                        "minimized?): presented all the same%s\n", (double)(g_stats_moved - g_started_ns) / 1e9,
+                        g_said_still == 8 ? " (not said again)" : "");
+        }
+        return false;
+    }
+    const int64_t behind = vblank > s.vblank_ns ? (vblank - s.vblank_ns + period / 2) / period : 0;
+    if ((int64_t)s.queued - behind < 2 || g_left_row >= 4) {
+        n_behind++;
+        return false;
+    }
     return true;
 }
 
@@ -357,15 +410,19 @@ void presenter() {
             if (q.seen.size() >= 64) q.seen.erase(q.seen.begin());
             q.seen.push_back(st);
         }
-        if (have && st.queued >= 2) {   // two waiting already (this one would show two refreshes late): left out
-            n_left_out++;
+        if (leave_out(have, st)) {   // two waiting already (this one would show two refreshes late): left out
+            n_left_out++, g_left_row++;
         } else {
             const int64_t late = (int64_t)prof::now_ns() - j.at;
             g_ctx->CopyResource(g_back, s.tex);
             const HRESULT hr = g_swap->Present(1, 0);   // at the refresh after the last picture's
+            g_left_row = 0;
             if (FAILED(hr)) {
                 present_failed(hr);
+            } else if (hr == DXGI_STATUS_OCCLUDED) {   // (minimized: not presented, and not a failure)
+                n_occluded++;
             } else {
+                g_still_presents += g_still_since != 0;
                 id = last_present_locked();
                 n_presents++, n_queued++;
                 g_queue_late_sum += late, g_queue_late_worst = std::max(g_queue_late_worst, late);
@@ -511,6 +568,7 @@ bool start(void *hwnd, int w, int h, std::string &why) {
         return false;
     }
     g_on = true;
+    g_started_ns = (int64_t)prof::now_ns();
     g_queues = guarded && !getenv("HK_DXGI_NO_QUEUE");
     return true;
 }
@@ -554,8 +612,9 @@ bool present(bool in_turn, bool extra) {
         Locked l(true);   // the pictures queued before it first
         if (extra) {   // two waiting already (this one would show two refreshes late): left out
             Shown s;
-            if (shown_locked(s) && s.queued >= 2) {
-                n_left_out++;
+            const bool have = shown_locked(s);
+            if (leave_out(have, s)) {
+                n_left_out++, g_left_row++;
                 gl.BindFramebuffer(GL_FRAMEBUFFER, g_fbo);
                 return false;
             }
@@ -571,10 +630,16 @@ bool present(bool in_turn, bool extra) {
     const uint64_t t0 = prof::ticks();
     const HRESULT hr = g_swap->Present(in_turn ? 1 : 0, 0);
     if (const uint64_t t = prof::ticks() - t0; (double)t * prof::ns_per_tick() > 1e6) pacing::waited(t), n_present_waits++;
+    g_left_row = 0;
     if (FAILED(hr)) {
         present_failed(hr);
         return false;
     }
+    if (hr == DXGI_STATUS_OCCLUDED) {   // (minimized: not presented, and not a failure)
+        n_occluded++;
+        return false;
+    }
+    g_still_presents += g_still_since != 0;
     n_presents++;
     return true;
 }
@@ -661,6 +726,14 @@ std::string describe() {
              g_effect, g_adapter.empty() ? "" : ", on ", g_adapter.c_str(), g_shared_as, (unsigned long long)n_presents,
              (unsigned long long)n_left_out, n_failed ? (", " + std::to_string(n_failed) + " presents failed").c_str() : "");
     std::string out = b;
+    // the leave-out rule's doubts (leave_out), and presents Windows didn't take (minimized)
+    if (n_behind || n_unseen || n_occluded) {
+        snprintf(b, sizeof b, "; presented though two were said to be waiting: %llu as the statistics hadn't moved for some refreshes "
+                 "(the window covered or minimized), %llu as they spoke of a vblank before the latest or 4 were left out in a row; "
+                 "%llu not taken (the window occluded)",
+                 (unsigned long long)n_unseen, (unsigned long long)n_behind, (unsigned long long)n_occluded);
+        out += b;
+    }
     if (n_present_waits)   // (the frame's next start waits with it; not counted as its work)
         out += "; " + std::to_string(n_present_waits) + " of the frames' own waited over 1 ms for the display to take them";
     // the queue's thread: how near their times its pictures went

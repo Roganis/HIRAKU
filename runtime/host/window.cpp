@@ -315,6 +315,20 @@ void poll() {
                                                     : picture::Mode::off;
         if (e.type == SDL_EVENT_WINDOW_DISPLAY_CHANGED || e.type == SDL_EVENT_DISPLAY_CURRENT_MODE_CHANGED)
             pacing::display_changed();
+        // the window out of sight and back (Alt+Tab, minimized, covered), in the run log with the game's
+        // frame: what a picture that stopped or stuttered went with (the first 16 times a run)
+        if (const char *what = e.type == SDL_EVENT_WINDOW_FOCUS_LOST     ? "another window took the keyboard"
+                               : e.type == SDL_EVENT_WINDOW_FOCUS_GAINED ? "the keyboard back"
+                               : e.type == SDL_EVENT_WINDOW_MINIMIZED    ? "minimized"
+                               : e.type == SDL_EVENT_WINDOW_RESTORED     ? "restored"
+                               : e.type == SDL_EVENT_WINDOW_OCCLUDED     ? "out of sight"
+                                                                         : nullptr;
+            what && g_win && SDL_GetWindowFromEvent(&e) == g_win) {
+            static int said = 0;
+            if (said++ < 16)
+                fprintf(stderr, "window: %s at frame %llu%s\n", what, (unsigned long long)core().frame_count(),
+                        said == 16 ? " (not said again)" : "");
+        }
         // no pointer over the game in fullscreen (it would also keep the compositor from
         // scanning the picture out directly, where the pointer isn't a plane of its own)
         if (e.type == SDL_EVENT_WINDOW_ENTER_FULLSCREEN) SDL_HideCursor();

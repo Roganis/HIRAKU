@@ -7,6 +7,7 @@
 
 class QLabel;
 class QListWidget;
+class QPushButton;
 
 class ModsDialog : public QDialog {
     Q_OBJECT
@@ -23,7 +24,9 @@ public:
 private:
     void fill();
     void move(int by);
+    void selected(int row);   // its description and settings below the list, Settings… for it
     QString m_game;
     QListWidget *m_list;
     QLabel *m_about;
+    QPushButton *m_settings;   // the chosen mod's settings panel (modsettingsdialog.h)
 };

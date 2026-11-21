@@ -57,6 +57,15 @@ std::vector<std::pair<std::string, std::string>> folder_files();
 //   mod's, the first mod winning; the core takes them or leaves them out (the 32-bit PC games)
 std::vector<std::pair<std::string, std::string>> added_files();
 std::vector<std::string> folders();   // the mods' folders, in the list's order (the first wins)
+// For a loader that lays the mods' folders over the game's data itself (the 64-bit and the last
+// 32-bit PC pop'n): the folders to lay, in order (the first wins): each mod's [[files]] folders whose
+// `when` holds (the first table's first), then the mod's own folder; and in each, the folders that
+// aren't the game's files at their own paths (paths in it: the [[files]] folders, chosen or not)
+struct Layer {
+    std::string dir;
+    std::vector<std::string> left_out;
+};
+std::vector<Layer> layers();
 
 // [[text]]: a string of the game's (Shift-JIS here, converted from the mod's UTF-8) replaced
 // wherever it is, as a whole string (a zero before and after it), by one that fits its room (the

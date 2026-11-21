@@ -730,7 +730,7 @@ controls and cards around it.
 - **The picture and sound** go through HIRAKU, with its keys and settings.
 - **Presses judged when they happened** and **Judgement offset** (Settings > Audio, Latency); **Type
   the card's PIN** (Settings > e-AMUSEMENT). Free play and the like are in the game's test mode.
-- **Mods:** right-click > **Mods…** ([MODS.md](MODS.md)).
+- **Mods:** right-click > **Mods…** ([MODS.md](MODS.md)); a mod's own settings: **Settings…** there.
 - From a terminal: `bin/hiraku-pc --game popn15 --window`.
 
 **pop'n music 15–18:** e-AMUSEMENT on in test mode > NETWORK OPTIONS; the title says NETWORK OK.

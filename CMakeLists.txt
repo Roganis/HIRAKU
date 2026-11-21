@@ -727,6 +727,7 @@ if(Qt6_FOUND AND TARGET hiraku_hidout)
     launcher/lightsdialog.cpp
     launcher/dipsdialog.cpp
     launcher/modsdialog.cpp
+    launcher/modsettingsdialog.cpp
     launcher/music.cpp
     launcher/theme.cpp
     launcher/settingsdialog.cpp

@@ -26,7 +26,8 @@ to the game they were made for.
 and the files it names, or the game's files at their own paths (below), or both. Mods that come
 with HIRAKU are in `games/<game>/mods/<mod>/` (pop'n music 9-14's `smooth-notes`); a folder of the
 player's with the same name wins. The launcher lists both under a game's **Mods…** (right-click
-the game), in order; the command line takes `--mod FOLDER`, several in order. Where two mods
+the game), in order, and **Settings…** there opens the chosen mod's settings (below); the command
+line takes `--mod FOLDER`, several in order. Where two mods
 change the same thing, the first one wins, as with ifs_layeredfs (whose mods are listed by name). That
 holds for memory patches too: of two `[[patch]]`es that expect the same bytes, the first mod's goes
 in; one with no `original` (written every frame) is left out where a mod before it patches, and
@@ -182,7 +183,9 @@ A translation mod's patches carry the Japanese they replace (that's how they kno
 such a mod is Konami's text too: share it as a mod, never in HIRAKU's own folders.
 
 A game with mods on keeps its saves in a folder of its own, named after the mods
-(`<game>+<mod>+<mod>`), started as a copy of the clean game's saves the first time.
+(`<game>+<mod>+<mod>`), started as a copy of the clean game's saves the first time. A mod's
+settings don't change which: the same mods with another timing or another set of files chosen
+(below) keep the same saves.
 
 ## mod.toml
 
@@ -314,8 +317,8 @@ tables and capabilities; one that changes a rule is API 2, and a HIRAKU says whi
 - **Checked at start, refused with a message**: `api` above this HIRAKU's ("this mod is for mod
   API 2, this HIRAKU's is 1"); a capability in `requires` that this core or build hasn't ("this
   mod needs hook; this core/build has none (it has: settings, actions)"); a `[[hook]]`,
-  `[[setting]]` or `[[action]]` in a mod without `api = 1`, or not listed in its `requires`
-  (`hook`, `settings`, `actions`); a program other than `program`'s ("this mod is for the program
+  `[[setting]]`, `[[action]]`, `[[files]]`, `choices` or a table's `when` in a mod without
+  `api = 1`, or not listed in its `requires` (`hook`, `settings`, `actions`, `choose`); a program other than `program`'s ("this mod is for the program
   whose SHA-1 is ...; this run's (...) is ..."); a register the machine hasn't; and a hook at an
   address in none of the program's functions (it would never run).
 - `program` is the SHA-1 of the whole program image the run loads (`dumps/<game>/program.bin` on
@@ -328,13 +331,13 @@ byte order and the program's SHA-1, and exits:
 ```
 $ hiraku-firebeat --game bm3final --mod-api
 mod API 1
-capabilities: hook settings script input memory actions draw
+capabilities: hook settings script input choose memory actions draw
 registers: r0 r1 ... r31 cr xer lr ctr
 memory: big-endian
 program: 1b5bd916011107a82f5324558f60c1cbb144c0e3 (.../dumps/bm3final/program.bin)
 ```
 
-Which programs have what: `settings`, `script` and `input` every one; `memory` every one whose
+Which programs have what: `settings`, `script`, `input` and `choose` every one; `memory` every one whose
 machine is emulated (not the PC games, whose memory is their own process's); `actions` and `draw`
 every one with a window (all of a release's); `hook` only `hiraku-firebeat`, the executor
 (PLAN.md section 27), which builds the program's functions at start and puts a hook's step in
@@ -445,7 +448,7 @@ ones; a colour is `0xRRGGBB` (opaque), `0xAARRGGBB`, or `hk.rgb(r, g, b [, a])`,
 | `hk.read8(a)`, `hk.read16(a)`, `hk.read32(a)` | the machine's memory at `a`, in its own byte order, 0 and up; `hk.read16(a, true)` signed; nil where `a` isn't plain memory (as `[[patch]]`'s addresses) |
 | `hk.write8(a, v)`, `hk.write16(a, v)`, `hk.write32(a, v)` | written (taken as that many bits); false where it isn't plain memory. The machine's code there is translated again, as for a patch; don't write code from a hook's call |
 | `hk.setting(name)` | a `[[setting]]` of this mod's, now |
-| `hk.set_setting(name, v)` | set (clamped to its ends) and kept, as an action does; its value back |
+| `hk.set_setting(name, v)` | set (clamped to its ends) and kept, as an action does; its value back (one a `when` names: its files and patches from the next start) |
 | `hk.counter(name)` | a `[[hook]]` `count`'s count (0: none of that name) |
 | `hk.frame()` | the game frame's number |
 | `hk.time()` | the machine's time, seconds since power-on (never the PC's clock) |
@@ -480,8 +483,84 @@ At exit the log has a line for each script: its calls, the most instructions one
 at most, and why it stopped if it did.
 
 Not there yet (later versions of the API): hooks on the other cores (DJ Main, System 573, Twinkle,
-the Konami Python and PC games), pictures and sounds from a mod's files, a mod's settings in the
-launcher.
+the Konami Python and PC games), pictures and sounds from a mod's files, files chosen again while
+the game runs (a change applies from the next start, below).
+
+### Files and patches chosen by a setting (`choices`, `when`, `[[files]]`)
+
+A mod can carry more than one way of doing something and let the player choose: two sets of
+charts, a picture in two styles, a patch on or off. The player chooses with a setting, in the
+launcher (**Mods…**, the mod, **Settings…**) or with an action's key; the mod's tables say which
+setting value each file and patch goes with.
+
+```toml
+name = "Charts in two timings"
+game = "iidx16"
+api = 1
+requires = ["settings", "choose"]
+
+[[setting]]
+name = "timing"
+label = "Backing track timing"
+choices = ["Arcade", "PS2"]     # the values' names: 0 and 1 (min and max are theirs)
+default = "Arcade"              # by name or by number (default: the first)
+
+[[files]]                       # a folder of the mod's, laid over the game's files as the mod's own
+folder = "alt/ps2-timing"       #   folder is (alt/ps2-timing/sd_data/1234/1234.1 is the game's
+when = "timing=PS2"             #   sd_data/1234/1234.1), only while the setting has this value
+
+[[patch]]                       # any table but [[hook]], [[setting]] and [[action]] takes a `when`
+address = 0x00401000
+original = "75"
+replace = "eb"
+when = "timing=1"               # a value by number works too
+```
+
+- **`choices`** names a `[[setting]]`'s values, 0 to one less than their count; `min` and `max`
+  aren't given then, `default` and `--mod-setting`, the settings file and a `when` take a name or
+  a number, and the name is what is shown: the box over the game, the log, the launcher. The
+  settings file keeps the number. A setting from 0 to 1 without names is a tick box in the
+  launcher, any other a number box with its `min`, `max` and `step`.
+- **`when = "SETTING=VALUE"`** on `[[patch]]`, `[[text]]`, `[[bytes]]`, `[[file]]`, `[[rate]]`
+  and `[[files]]`: the table is read and checked as any (an unknown key, a missing `from` file
+  still refuse the mod), and used only while the setting has that value. A `[[hook]]`'s `when` is
+  its own (a register or a word of memory, above): a hook follows a setting with
+  `value = "setting:NAME"`. A `when` naming a setting the mod hasn't, or a value outside its
+  range or not among its `choices`, refuses the mod with the file's line.
+- **`[[files]] folder = "..."`**: a folder inside the mod's, laid over the game's media as the
+  mod's own folder is (replaced files, new files where the medium takes them, pictures as PNGs on
+  pop'n music 14's disk), its files **winning over the mod's own** at the same path. Of two
+  `[[files]]` that hold at once, the first in the file wins. The files under a folder that a
+  `[[files]]` names, chosen or not, are that folder's only: never laid at their own path in the mod
+  (`alt/ps2-timing/...` isn't the game's `alt/...`), and neither are the files a table's `from`
+  names, used or not. Without `when`, the folder is laid always.
+- **When**: the values are those the run starts with: the settings file, then `--mod-setting`,
+  read before any `when` is looked at. The game opens its files whenever it likes, so they aren't
+  changed while it runs: a setting that a `when` names, changed while playing (an action's key,
+  `hk.set_setting`), is kept and applies from the next start; the box over the game says so
+  ("Files and patches: from the game's next start") and the log too.
+- **Between mods** nothing changes: the first mod in the list wins, whatever its settings.
+- **Saves**: a mod's settings don't make a save folder of their own (the saves are kept per set
+  of mods that are on, not per setting).
+- **Media**: every one the loader lays files on: Konami Python 1 disks and ISO 9660 discs (the
+  emulated boards), the PC games' data folder through hiraku-pc (replaced and, for IIDX 9th style
+  to EMPRESS and the ee'MALL station, new files), and the two pop'n whose own loader lays the mods'
+  folders (the 64-bit pop'n and the last 32-bit one): they are handed each chosen `[[files]]`
+  folder as a mod folder of its own just before its mod's, and leave every `[[files]]` folder out
+  of their search for music data (`.xml`); their games never ask for a file at a path such as
+  `alt/...`.
+- **Older HIRAKUs** (0.13.0 and before) don't know `[[files]]`, `choices` or `when` on these
+  tables and refuse a mod that has them ("unknown table", "unknown key"), and one that lists
+  `choose` in `requires` with "this mod needs choose": never laid wrong. A mod that uses them
+  lists `choose`.
+
+**The launcher's panel** (**Mods…**, a mod, **Settings…**, for a mod that is on or not): a row a
+setting, its label and a tick box, a list or a number box, the default marked; the actions' keys
+under them, read-only ("Keypad 8: Lift higher (Lift (pixels) up by 10)"); **Defaults**, OK,
+Cancel. It reads the mod.toml with the loader's own reader (`runtime/host/modsettings.h`), so a
+mod the game would refuse says why there, and writes the same settings file the game keeps,
+every other line in it as it was (the actions' bindings, a setting the mod no longer has). The
+Mods dialog shows the chosen mod's settings under its description.
 
 ## High frame rates (`[[rate]]`)
 
@@ -760,7 +839,8 @@ so their memory and files are the game's own process's, not an emulated machine'
   folder is, a readme at the top too (`data/readme.txt`, which no game asks for). hiraku-pc says
   how many files were added and the first; the DLL's `pc.log` line counts replaced files, new
   files and new folders. DirectShow opens IIDX's movies itself: a new or replaced
-  `movie/NNNN.4` reaches it by the name the game hands it. pop'n 15-18 keep the old way: a file
+  `movie/NNNN.4` reaches it by the name the game hands it. A `[[files]]` folder whose `when`
+  holds (above) is laid as the mod's own folder is, before it: its files replace and add too. pop'n 15-18 keep the old way: a file
   their data lacks is left out (said in the log, with the first), as 15 checks its files by
   their scrambled names against `dat.bin` and 16-18 take no mods' files yet. Other media (disc
   and disk images) take no new files either.

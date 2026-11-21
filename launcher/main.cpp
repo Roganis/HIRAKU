@@ -30,6 +30,7 @@
 #include "nvidia.h"
 #include "dipsdialog.h"
 #include "modsdialog.h"
+#include "modsettingsdialog.h"
 #include "theme.h"
 #include "updater.h"
 
@@ -123,6 +124,15 @@ int main(int argc, char **argv) {
         else if (what == "picture") win = new PictureDialog("bmiidx", "beatmania IIDX", true, &w);
         else if (what == "unlocks") win = new UnlocksDialog("popn12", "pop'n music 12 Iroha", false, &w);
         else if (what == "mods") win = new ModsDialog("popn14", "pop'n music 14 FEVER!", &w);
+        else if (what == "mod-settings") {   // the first of popn14's mods (the player's) that has settings
+            for (const QString &f : QDir(cfg::modsDir("popn14")).entryList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name)) {
+                ModSettings m;
+                if (m.load(cfg::modPath("popn14", f), cfg::modSettingsFile("popn14", f)) && !m.empty()) {
+                    win = new ModSettingsDialog("popn14", f, &w);
+                    break;
+                }
+            }
+        }
         else if (what == "dips") win = new DipsDialog("popn1j", "pop'n music", &w);
         else if (what == "about") win = new AboutDialog(&w);
         else if (what == "nvidia") {   // the PC games' NVIDIA notice, with a sample value

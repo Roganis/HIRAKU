@@ -13,6 +13,8 @@
 #include <QVBoxLayout>
 
 #include "config.h"
+#include "modsettings.h"
+#include "modsettingsdialog.h"
 
 ModsDialog::Info ModsDialog::read(const QString &dir) {
     Info i;
@@ -61,6 +63,18 @@ ModsDialog::ModsDialog(const QString &game, const QString &title, QWidget *paren
     connect(down, &QPushButton::clicked, this, [this] { move(1); });
     side->addWidget(up);
     side->addWidget(down);
+    // the chosen mod's [[setting]]s, whether it's on or not (they're the mod's)
+    m_settings = new QPushButton("Settings…");
+    m_settings->setToolTip("The chosen mod's settings, kept for the game's next start with it on");
+    m_settings->setEnabled(false);
+    connect(m_settings, &QPushButton::clicked, this, [this] {
+        const int r = m_list->currentRow();
+        if (r < 0) return;
+        ModSettingsDialog d(m_game, m_list->item(r)->data(Qt::UserRole).toString(), this);
+        if (d.exec() == QDialog::Accepted) selected(r);
+    });
+    side->addSpacing(12);
+    side->addWidget(m_settings);
     side->addStretch(1);
     row->addLayout(side);
     v->addLayout(row, 1);
@@ -68,11 +82,7 @@ ModsDialog::ModsDialog(const QString &game, const QString &title, QWidget *paren
     m_about->setWordWrap(true);
     m_about->setMinimumHeight(48);
     v->addWidget(m_about);
-    connect(m_list, &QListWidget::currentRowChanged, this, [this](int r) {
-        if (r < 0) { m_about->clear(); return; }
-        const Info i = read(cfg::modPath(m_game, m_list->item(r)->data(Qt::UserRole).toString()));
-        m_about->setText(i.description.isEmpty() ? "(no description)" : i.description);
-    });
+    connect(m_list, &QListWidget::currentRowChanged, this, &ModsDialog::selected);
     auto *bb = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
     auto *open = bb->addButton("Open the mods folder", QDialogButtonBox::ActionRole);
     connect(open, &QPushButton::clicked, this, [this] {
@@ -114,6 +124,24 @@ void ModsDialog::fill() {
                          ": its mod.toml, or the game's files at their own paths, pictures as PNG (docs/MODS.md).");
     else if (m_list->currentRow() < 0)
         m_list->setCurrentRow(0);
+}
+
+void ModsDialog::selected(int r) {
+    if (r < 0) {
+        m_about->clear();
+        m_settings->setEnabled(false);
+        return;
+    }
+    const QString folder = m_list->item(r)->data(Qt::UserRole).toString(), dir = cfg::modPath(m_game, folder);
+    const Info i = read(dir);
+    QString text = i.description.isEmpty() ? "(no description)" : i.description;
+    ModSettings settings;
+    QString err;
+    const bool ok = settings.load(dir, cfg::modSettingsFile(m_game, folder), &err);
+    if (!ok) text += "\n\nIts mod.toml can't be read: " + err;
+    else if (!settings.empty()) text += "\n\nSettings: " + settings.summary();
+    m_about->setText(text);
+    m_settings->setEnabled(!ok || !settings.empty());   // (refused: the panel says why)
 }
 
 void ModsDialog::move(int by) {

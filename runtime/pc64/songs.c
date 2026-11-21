@@ -325,9 +325,28 @@ static void read_xml(const WCHAR *path) {
     }
 }
 
-// every .xml under a mod's folder, in their names' order
+// HK_PC_DATA_SKIP ("N:PATH;N:PATH", runtime/pc/core.cpp): folders in the N-th mod folder that aren't
+// the game's files at their paths (a mod's [[files]] folders: laid as folders of their own when chosen)
+static int skipped(int mod, const WCHAR *rel) {
+    for (const char *s = getenv("HK_PC_DATA_SKIP"); s && *s;) {
+        const char *end = strchr(s, ';');
+        const size_t len = end ? (size_t)(end - s) : strlen(s);
+        char *colon = NULL;
+        const long n = strtol(s, &colon, 10);
+        if (colon > s && *colon == ':' && n == mod && colon < s + len) {
+            char a[MAX_PATH];
+            WCHAR w[MAX_PATH];
+            snprintf(a, sizeof a, "%.*s", (int)(s + len - colon - 1), colon + 1);
+            if (MultiByteToWideChar(CP_ACP, 0, a, -1, w, MAX_PATH) && !_wcsicmp(w, rel)) return 1;
+        }
+        s = end ? end + 1 : NULL;
+    }
+    return 0;
+}
+
+// every .xml under a mod's folder (the mod-th; rel: this folder's path in it), in their names' order
 static int by_name(const void *a, const void *b) { return _wcsicmp(*(WCHAR *const *)a, *(WCHAR *const *)b); }
-static void xml_files(const WCHAR *dir, WCHAR ***list, size_t *n, size_t *cap, int depth) {
+static void xml_files(const WCHAR *dir, WCHAR ***list, size_t *n, size_t *cap, int depth, int mod, const WCHAR *rel) {
     WCHAR pattern[MAX_PATH * 2];
     _snwprintf(pattern, MAX_PATH * 2, L"%ls\\*", dir);
     WIN32_FIND_DATAW d;
@@ -339,7 +358,9 @@ static void xml_files(const WCHAR *dir, WCHAR ***list, size_t *n, size_t *cap, i
         _snwprintf(path, MAX_PATH * 2, L"%ls\\%ls", dir, d.cFileName);
         const size_t len = wcslen(d.cFileName);
         if (d.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
-            if (depth < 8) xml_files(path, list, n, cap, depth + 1);
+            WCHAR in_mod[MAX_PATH * 2];
+            _snwprintf(in_mod, MAX_PATH * 2, rel[0] ? L"%ls\\%ls" : L"%ls%ls", rel, d.cFileName);
+            if (depth < 8 && !skipped(mod, in_mod)) xml_files(path, list, n, cap, depth + 1, mod, in_mod);
         } else if (len > 4 && !_wcsicmp(d.cFileName + len - 4, L".xml")) {
             if (*n == *cap) {
                 *cap = *cap ? *cap * 2 : 64;
@@ -820,7 +841,7 @@ void pc64_songs_install(HMODULE game) {
     for (int m = g_nmods - 1; m >= 0; m--) {
         WCHAR **list = NULL;
         size_t n = 0, cap = 0;
-        xml_files(g_mods[m], &list, &n, &cap, 0);
+        xml_files(g_mods[m], &list, &n, &cap, 0, m, L"");
         if (n > 1) qsort(list, n, sizeof *list, by_name);
         for (size_t i = 0; i < n; i++) read_xml(list[i]), free(list[i]);
         free(list);

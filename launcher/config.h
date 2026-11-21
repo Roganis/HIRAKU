@@ -33,6 +33,10 @@ QString modPath(const QString &game, const QString &mod);   // the player's, els
 QStringList modsOn(const QString &game);
 void setModsOn(const QString &game, const QStringList &mods);
 QString saveDir(const QString &game);
+// A mod's settings (its [[setting]]s' values, its actions' bindings), as the game keeps them:
+// <data>/mod-settings/<game>/<mod folder>.txt, <data> the runtime's own (hk::user_data_dir: the
+// portable package's user/data, else the system's), whatever Settings' save folder is
+QString modSettingsFile(const QString &game, const QString &mod);
 // The e-AMUSEMENT cards' own floppy disks and memory cards (--card-media, runtime/shell/cardmedia.h):
 // a folder a card, <saves>/card-media/NUMBER, or with Settings' save folder <it>/<game>/cards/NUMBER
 QString cardMediaDir(const QString &game);

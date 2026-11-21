@@ -1021,3 +1021,13 @@ A mod for the 32-bit games under hiraku-pc could only replace a file the game's 
 **Open**
 - (owner) a song pack on EMPRESS on a cabinet and on Windows itself: only Wine has run the hooks.
 - (build) the same for pop'n 15 (new names in `dat.bin`, scrambled) and 16-18 when their files are worked out.
+
+## 48. A mod's settings choose its files, and a panel for them
+
+A mod may carry two ways of one thing (charts in two timings, a picture in two styles) and let the player pick one. Since 2026-11-21 (mod API 1, capability `choose`, `docs/MODS.md`, "Files and patches chosen by a setting"): a `[[setting]]` may name its values (`choices = ["Arcade", "PS2"]`, values 0..n-1, shown by name in the box over the game, the log and the launcher); `when = "SETTING=VALUE"` on `[[patch]]`, `[[text]]`, `[[bytes]]`, `[[file]]` and `[[rate]]` uses the table only while the setting has that value; `[[files]] folder = "..."` lays a folder of the mod's over the game's files as the mod's own folder is, its files winning over the mod's own, and the files under a `[[files]]` folder are never laid at their literal path. The loader (`runtime/host/mods.cpp`) reads a mod's top and settings first, then its settings file and `--mod-setting`, then the other tables: the choice is made once, at start; a setting a `when` names changed while playing is kept and said to apply from the next start. Saves stay per set of mods, not per setting. The 64-bit and last 32-bit pop'n loaders, which lay folders themselves, are handed a chosen folder as a layer before its mod (`mods::layers()`) and leave `[[files]]` folders out of their music-data search (`HK_PC_DATA_SKIP`). Older HIRAKUs refuse such a mod (unknown table or key, or `choose` missing).
+
+The launcher's Mods dialog has **Settings…** for the chosen mod (on or not), a panel with a tick box, a list or a number box a setting, the default marked, Defaults, the actions' keys read-only (`launcher/modsettingsdialog.cpp`, model `launcher/modsettings.h`), reading mod.toml with the loader's own reader (`runtime/host/modsettings.h`) and writing the game's settings file with its other lines kept. `hiraku --show mod-settings --shot FILE` captures it. Tests: `tests/mods/test_mod_choose.cpp` (ctest `mods_choose`), `tests/launcher/test_mod_settings.cpp` (`launcher_mod_settings`).
+
+**Open**
+- (owner) a mod with two sets of files on a real game and on Windows itself: only the tests have chosen files.
+- (later) choices from the cabinet's game menu (the Mods dialog isn't there).

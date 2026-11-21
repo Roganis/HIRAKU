@@ -448,6 +448,12 @@ if(Qt6_FOUND)
   target_include_directories(test_gamemenu PRIVATE ${CMAKE_SOURCE_DIR}/launcher)
   target_link_libraries(test_gamemenu PRIVATE Qt6::Core)
   add_test(NAME launcher_game_menu COMMAND test_gamemenu ${CMAKE_CURRENT_BINARY_DIR})
+  # a mod's settings panel, the launcher's side (launcher/modsettings.h): read by the loader's own
+  # reader (runtime/host/modsettings.h), its rows, and the settings file written with its other lines kept
+  add_executable(test_mod_settings launcher/test_mod_settings.cpp)
+  target_include_directories(test_mod_settings PRIVATE ${CMAKE_SOURCE_DIR}/launcher ${CMAKE_SOURCE_DIR}/runtime)
+  target_link_libraries(test_mod_settings PRIVATE Qt6::Core)
+  add_test(NAME launcher_mod_settings COMMAND test_mod_settings ${CMAKE_CURRENT_BINARY_DIR}/mod-settings-test)
   # the game menu's text in the launcher's fonts: made by the launcher's side, read by the menu's
   # (launcher/menufont.h, runtime/menu/font.h)
   if(TARGET hiraku_menu AND TARGET Qt6::Gui)
@@ -504,6 +510,11 @@ add_test(NAME mods_patch_order COMMAND test_patch_order)
 add_executable(test_mod_files mods/test_mod_files.cpp)
 target_link_libraries(test_mod_files PRIVATE hiraku_shell)
 add_test(NAME mods_files COMMAND test_mod_files ${CMAKE_CURRENT_BINARY_DIR}/mod-files-test)
+# ... and files and patches chosen by a setting (choices, when, [[files]]), with the settings file
+# and --mod-setting read before them
+add_executable(test_mod_choose mods/test_mod_choose.cpp)
+target_link_libraries(test_mod_choose PRIVATE hiraku_shell)
+add_test(NAME mods_choose COMMAND test_mod_choose ${CMAKE_CURRENT_BINARY_DIR}/mod-choose-test)
 # ... and the mod API's tables (api, requires, program, [[hook]], [[setting]], [[action]]) on a
 # made-up machine, with the sample mod under tests/mods/sample-hook
 add_executable(test_mod_api mods/test_mod_api.cpp)

@@ -137,6 +137,12 @@ QString saveDir(const QString &game) {
     return QFileInfo(nvramDir(game)).path() + "/" + name;
 }
 
+QString modSettingsFile(const QString &game, const QString &mod) {
+    const QString base = portable() ? portableRoot() + "/user/data"
+                                    : QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + "/hiraku";
+    return base + "/mod-settings/" + game + "/" + mod + ".txt";
+}
+
 QString cardMediaDir(const QString &game) {
     // (as the game finds it: beside the saves when its save folder is in its default place)
     return nvramBase().isEmpty() ? QFileInfo(nvramDir(game)).path() + "/card-media" : saveDir(game) + "/cards";

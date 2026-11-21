@@ -646,9 +646,8 @@ public:
         // the mods (docs/MODS.md): each folder the game's data folder's files laid over it, new ones
         // too (a file at <mod>/a/b is the game's data/a/b), and the songs its music data describes
         // (the loader's HK_PC64_DATA: runtime/pc64/files.c, songs.c)
-        std::string data_mods;
         const std::vector<std::string> mods = hk::mods::folders();
-        for (const std::string &d : mods) data_mods += (data_mods.empty() ? "" : ";") + win_path(d);
+        const std::string data_mods = mod_layers();
         if (!data_mods.empty()) {
             set_env("HK_PC64_DATA", data_mods);
             printf("hiraku-pc: %zu mod%s over the game's data\n", mods.size(), mods.size() == 1 ? "" : "s");
@@ -677,6 +676,25 @@ public:
         printf("hiraku-pc: %s from %s; saves in %s\n", game_.c_str(), contents_.c_str(), save_.c_str());
         fflush(stdout);
         return true;
+    }
+
+    // The mods' folders for a loader that lays them over the game's data itself (pc64, pc32: their
+    // HK_PC64_DATA, HK_PC32_DATA, "DIR;DIR"): each mod's chosen [[files]] folders, then its own; and
+    // HK_PC_DATA_SKIP, "N:PATH;N:PATH", the folders in the N-th of them that aren't the game's files at
+    // their paths (its [[files]] folders), which their music data's search leaves out
+    std::string mod_layers() {
+        std::string dirs, skip;
+        const std::vector<hk::mods::Layer> layers = hk::mods::layers();
+        for (size_t i = 0; i < layers.size(); i++) {
+            dirs += (dirs.empty() ? "" : ";") + win_path(layers[i].dir);
+            for (std::string f : layers[i].left_out) {
+                for (char &c : f)
+                    if (c == '/') c = '\\';
+                skip += (skip.empty() ? "" : ";") + std::to_string(i) + ":" + f;
+            }
+        }
+        set_env("HK_PC_DATA_SKIP", skip);
+        return dirs;
     }
 
     // The last 32-bit PC pop'n (PLAN.md section 35): hiraku-pc32.exe (runtime/pc32/) starts Konami's
@@ -727,10 +745,8 @@ public:
         set_env("HK_PC_PROGRAM", m.count("exe") ? m["exe"] : "popn22.dll");   // the game's own code: the DLL, not the loader
         // the mods (docs/MODS.md): each folder laid over the game's data folder, new files too, and
         // inside its packs (<pack>_ifs/<member>), as ifs_layeredfs (the loader's HK_PC32_DATA: files.c)
-        std::string data_mods;
         const std::vector<std::string> mods = hk::mods::folders();
-        for (const std::string &d : mods) data_mods += (data_mods.empty() ? "" : ";") + win_path(d);
-        set_env("HK_PC32_DATA", data_mods);
+        set_env("HK_PC32_DATA", mod_layers());
         if (!mods.empty()) printf("hiraku-pc: %zu mod%s over the game's data\n", mods.size(), mods.size() == 1 ? "" : "s");
         { std::ofstream(save_ + "/pc.log", std::ios::trunc); }
         printf("hiraku-pc: %s from %s; saves in %s\n", game_.c_str(), contents_.c_str(), save_.c_str());

@@ -743,6 +743,9 @@ void set_view(int x, int y, int w, int h, int ww, int wh) {
 
 void set_font(const uint8_t (*glyphs)[8]) { g_font = glyphs; }
 void set_notice(std::function<void(const std::vector<std::string> &)> fn) { g_notice = std::move(fn); }
+void notice(const std::vector<std::string> &lines) {
+    if (g_notice) g_notice(lines);
+}
 
 std::vector<std::string> report_lines() {
     std::vector<std::string> out;

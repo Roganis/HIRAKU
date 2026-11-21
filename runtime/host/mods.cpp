@@ -24,6 +24,7 @@
 #endif
 
 #include "host/modscript.h"
+#include "host/modsettings.h"
 #include "host/png.h"
 #include "host/pythondisk.h"
 #include "shell/core.h"
@@ -38,70 +39,9 @@ namespace hk::mods {
 
 namespace {
 
-// ---- mod.toml: the TOML a mod needs (docs/MODS.md) -----------------------------------------
-// key = "string" | number (decimal, 0x hex, _ separators) | true | false, # comments, and
-// [[patch]] / [[bytes]] / [[file]] tables. Values keep their text; the reader below converts.
-struct Table {
-    std::string kind;   // "" for the top, else patch / bytes / file
-    int line = 0;
-    std::map<std::string, std::string> values;
-    std::map<std::string, bool> is_string;
-};
-
-std::vector<Table> parse(const std::string &text, const std::string &file) {
-    std::vector<Table> out(1);
-    std::istringstream in(text);
-    std::string line;
-    int n = 0;
-    auto fail = [&](const std::string &why) { throw std::runtime_error(file + ":" + std::to_string(n) + ": " + why); };
-    while (std::getline(in, line)) {
-        n++;
-        // the comment, outside a string
-        bool str = false;
-        for (size_t i = 0; i < line.size(); i++) {
-            if (line[i] == '"' && (i == 0 || line[i - 1] != '\\')) str = !str;
-            else if (line[i] == '#' && !str) { line.erase(i); break; }
-        }
-        size_t a = line.find_first_not_of(" \t\r"), b = line.find_last_not_of(" \t\r");
-        if (a == std::string::npos) continue;
-        line = line.substr(a, b - a + 1);
-        if (line.rfind("[[", 0) == 0) {
-            if (line.size() < 4 || line.substr(line.size() - 2) != "]]") fail("a table header is [[name]]");
-            Table t;
-            t.kind = line.substr(2, line.size() - 4);
-            t.line = n;
-            out.push_back(t);
-            continue;
-        }
-        if (line[0] == '[') fail("only [[patch]], [[text]], [[bytes]], [[file]], [[rate]], [[hook]], [[setting]] and [[action]] tables");
-        const size_t eq = line.find('=');
-        if (eq == std::string::npos) fail("expected key = value");
-        std::string key = line.substr(0, eq), val = line.substr(eq + 1);
-        key.erase(key.find_last_not_of(" \t") + 1);
-        val.erase(0, val.find_first_not_of(" \t"));
-        Table &t = out.back();
-        if (t.values.count(key)) fail("'" + key + "' given twice");
-        if (!val.empty() && val[0] == '"') {
-            std::string s;
-            size_t i = 1;
-            for (; i < val.size() && val[i] != '"'; i++) {
-                if (val[i] == '\\' && i + 1 < val.size()) {
-                    const char e = val[++i];
-                    s += e == 'n' ? '\n' : e == 't' ? '\t' : e;
-                } else
-                    s += val[i];
-            }
-            if (i >= val.size()) fail("unterminated string");
-            t.values[key] = s;
-            t.is_string[key] = true;
-        } else {
-            if (val.empty()) fail("'" + key + "' has no value");
-            t.values[key] = val;
-            t.is_string[key] = false;
-        }
-    }
-    return out;
-}
+// ---- mod.toml: the TOML a mod needs (docs/MODS.md): host/modsettings.h, shared with the launcher
+using modsettings::Table;
+using modsettings::parse;
 
 struct Patch {
     std::string mod;
@@ -181,6 +121,7 @@ bool g_tick = true;
 
 struct Mod {
     std::string dir, name, version;
+    std::vector<std::string> folders, chosen;   // its [[files]] folders (paths in it); those laid this run, in order
 };
 
 std::vector<Patch> g_patches;
@@ -196,6 +137,8 @@ std::map<std::string, std::pair<std::string, std::string>> g_added_files;
 struct Setting {
     std::string mod, folder, name, label;   // the mod's name, its folder's name; the setting's
     int64_t min = 0, max = 0, dflt = 0, step = 1;
+    std::vector<std::string> choices;       // its values' names (0..n-1), if it has them
+    bool chooses = false;                   // a `when` of its mod's names it: the files and patches chosen at start
     std::atomic<int64_t> value{0};          // (hooks read it on the machine's thread, actions set it)
 };
 struct Action {
@@ -301,10 +244,16 @@ void save_settings(const std::string &folder) {
     saves::writer().write(g_settings_dir, {{folder + ".txt", text}});
 }
 
-std::string shown(const Setting &s) {
-    const int64_t v = s.value.load();
-    return (s.min < 0 && v > 0 ? "+" : "") + std::to_string(v);
+modsettings::Setting def_of(const Setting &s) {
+    modsettings::Setting d;
+    d.name = s.name, d.label = s.label, d.min = s.min, d.max = s.max, d.dflt = s.dflt, d.step = s.step, d.choices = s.choices;
+    return d;
 }
+
+std::string shown(const Setting &s) { return modsettings::shown(def_of(s), s.value.load()); }
+
+// a setting that chooses files or patches changed while playing: from the next start (said)
+const char *kNextStart = "from the game's next start";
 
 std::string read_file(const std::string &path) {
     std::ifstream f(path, std::ios::binary);
@@ -508,12 +457,24 @@ void add_file(const std::string &game_file, const std::string &mod_file) {
 // palette). A file the game's data folder (the medium "data", the PC games') lacks is added to it
 // (added_files(): whether the game can take it is the core's business). What isn't on any medium
 // of the game's is left out (said once).
+// `sub` "": the mod's own folder; else one of its [[files]] folders (a path in it), laid as the mod's
+// own folder is. `files_folders`: all its [[files]] folders, chosen or not: a file in one is that folder's
+// only (the deepest one's), never laid at its own path in the mod's
 void lay_files(const std::string &dir, const std::string &name, const std::set<std::string> &named,
+               const std::vector<std::string> &files_folders, const std::string &sub,
                const std::map<std::string, std::string> &medium_paths,
                std::map<std::string, std::unique_ptr<pythondisk::Files>> &python_disks) {
     namespace fs = std::filesystem;
     std::vector<std::string> files;
-    const fs::path root = fs_path(dir);
+    const fs::path root = fs_path(sub.empty() ? dir : dir + "/" + sub);
+    auto owner = [&](const std::string &in_mod) {   // the [[files]] folder a file of the mod's is in ("": none)
+        std::string best;
+        for (const std::string &f : files_folders)
+            if (in_mod.size() > f.size() && in_mod[f.size()] == '/' && modsettings::same_name(in_mod.substr(0, f.size()), f) &&
+                f.size() > best.size())
+                best = f;
+        return best;
+    };
     for (auto it = fs::recursive_directory_iterator(root); it != fs::recursive_directory_iterator(); ++it) {
         const std::string leaf = utf8(it->path().filename());
         if (!leaf.empty() && leaf[0] == '.') {   // hidden: skipped, folders and all
@@ -522,7 +483,9 @@ void lay_files(const std::string &dir, const std::string &name, const std::set<s
         }
         if (!it->is_regular_file()) continue;
         std::string rel = utf8(fs::relative(it->path(), root), true);
-        if (rel == "mod.toml" || rel == "macros.txt" || named.count(rel)) continue;   // (macros.txt: its codes, macro.h)
+        const std::string in_mod = sub.empty() ? rel : sub + "/" + rel;
+        if (in_mod == "mod.toml" || in_mod == "macros.txt" || named.count(in_mod)) continue;   // (macros.txt: its codes, macro.h)
+        if (!modsettings::same_name(owner(in_mod), sub)) continue;
         files.push_back(rel);
     }
     if (files.empty()) return;
@@ -546,18 +509,19 @@ void lay_files(const std::string &dir, const std::string &name, const std::set<s
     int left_out = 0;
     std::string first_left_out;
     for (const std::string &rel : files) {
-        const std::string label = name + ": " + rel;
+        const std::string label = name + ": " + (sub.empty() ? rel : sub + "/" + rel);
+        const std::string src = dir + "/" + (sub.empty() ? rel : sub + "/" + rel);   // the mod's file
         bool in_a_folder = false;
         for (const std::string &folder : folders)
             if (const std::string game_file = in_folder(folder, rel); !game_file.empty()) {
-                g_folder_files[game_file] = dir + "/" + rel;
+                g_folder_files[game_file] = src;
                 in_a_folder = true;
                 break;
             }
         if (in_a_folder) continue;
         if (!data_folder.empty()) {   // new to the game's data
             if (const std::string game_file = new_in_folder(data_folder, rel); !game_file.empty()) {
-                add_file(game_file, dir + "/" + rel);
+                add_file(game_file, src);
                 continue;
             }
         }
@@ -565,7 +529,7 @@ void lay_files(const std::string &dir, const std::string &name, const std::set<s
             if (!left_out++) first_left_out = rel;
             continue;
         }
-        const std::string data = read_file(dir + "/" + rel);
+        const std::string data = read_file(src);
         std::vector<uint8_t> bytes(data.begin(), data.end());
         bool laid = false;
         const bool is_png = rel.size() > 4 && (rel.substr(rel.size() - 4) == ".png" || rel.substr(rel.size() - 4) == ".PNG");
@@ -576,14 +540,14 @@ void lay_files(const std::string &dir, const std::string &name, const std::set<s
                 int w, h;
                 std::vector<uint8_t> rgba;
                 std::string err;
-                if (!png::decode(bytes, w, h, rgba, err)) throw std::runtime_error(dir + "/" + rel + ": " + err);
+                if (!png::decode(bytes, w, h, rgba, err)) throw std::runtime_error(src + ": " + err);
                 const std::vector<uint8_t> like = disk->get(target);
                 const size_t slash = target.find_last_of('/');
                 const std::vector<uint8_t> idx = slash == std::string::npos ? std::vector<uint8_t>() : disk->get(target.substr(0, slash) + "/system.idx");
                 try {
                     disk->put(target, pythondisk::picture(like, rgba.data(), w, h, idx), name + ": " + target + " (from " + rel + ")");
                 } catch (const std::exception &e) {
-                    throw std::runtime_error(dir + "/" + rel + ": " + e.what());
+                    throw std::runtime_error(src + ": " + e.what());
                 }
                 laid = true;
                 break;
@@ -601,8 +565,8 @@ void lay_files(const std::string &dir, const std::string &name, const std::set<s
         if (!laid && !left_out++) first_left_out = rel;
     }
     if (left_out)
-        fprintf(stderr, "mods: %s: %d file%s on none of the game's media, left out (%s%s)\n", name.c_str(), left_out,
-                left_out == 1 ? "" : "s", first_left_out.c_str(), left_out > 1 ? ", ..." : "");
+        fprintf(stderr, "mods: %s: %d file%s%s on none of the game's media, left out (%s%s)\n", name.c_str(), left_out,
+                left_out == 1 ? "" : "s", sub.empty() ? "" : (" of " + sub).c_str(), first_left_out.c_str(), left_out > 1 ? ", ..." : "");
 }
 
 }  // namespace
@@ -624,7 +588,7 @@ bool load(const std::vector<std::string> &dirs, const std::string &game, const s
             const std::string text = read_file(file);
             // no mod.toml: a folder of files laid over the game's (below), named after the folder
             const std::vector<Table> tables = text.empty() ? std::vector<Table>(1) : parse(text, file);
-            Mod mod{dir, utf8(fs_path(dir).filename()), ""};
+            Mod mod{dir, utf8(fs_path(dir).filename()), "", {}, {}};
             const std::string folder = mod.name;
             std::set<std::string> named;   // the files its tables name (not laid over the game's)
             // the mod API's (docs/MODS.md, "Hooks, settings and actions"): what the mod says of
@@ -638,7 +602,57 @@ bool load(const std::vector<std::string> &dirs, const std::string &game, const s
             struct PendingAction { Action a; std::string setting, where; };
             std::vector<PendingHook> hooks;
             std::vector<PendingAction> actions;
-            for (const Table &t : tables) {
+            // [[files]]: its folders (paths in the mod's), each "folder (when)", and those whose `when`
+            // holds this run, in the file's order (the first wins)
+            std::vector<std::string> files_folders;
+            std::vector<std::pair<std::string, std::string>> chosen;
+            int left_by_when = 0;   // tables whose `when` doesn't hold: read and checked, not used
+            // Its top and its [[setting]]s are read first, then its settings as kept and --mod-setting's
+            // (settings_as_kept), then the rest: a `when` sees the values this run plays with
+            std::vector<const Table *> order;
+            for (const Table &t : tables)
+                if (t.kind.empty() || t.kind == "setting") order.push_back(&t);
+            const size_t rest = order.size();
+            for (const Table &t : tables)
+                if (!t.kind.empty() && t.kind != "setting") order.push_back(&t);
+            std::map<std::string, std::string> kv;   // its settings file's lines
+            std::string kept;
+            bool kept_read = false;
+            auto settings_as_kept = [&] {
+                if (kept_read) return;
+                kept_read = true;
+                if (!used.count("settings")) return;
+                // its settings as last kept (<user data>/mod-settings/<game>/<folder>.txt): a number,
+                // or a choice's name
+                kept = settings_file(folder);
+                kv = read_kv(kept);
+                for (Setting &s : g_settings) {
+                    if (s.folder != folder) continue;
+                    auto it = kv.find(s.name);
+                    const char *from = "the mod's default";
+                    int64_t v;
+                    if (it != kv.end() && modsettings::value_of(def_of(s), it->second, v)) {
+                        s.value = std::clamp<int64_t>(v, s.min, s.max);
+                        from = "kept";
+                    }
+                    fprintf(stderr, "mods: %s: %s = %s (%s)\n", mod.name.c_str(), s.name.c_str(), shown(s).c_str(), from);
+                }
+                if (!kv.empty()) fprintf(stderr, "mods: %s: settings from %s\n", mod.name.c_str(), kept.c_str());
+                // --mod-setting: this run's values (checked once all mods are read, below)
+                for (const auto &[name, value] : g_overrides)
+                    for (Setting &s : g_settings) {
+                        if (s.folder != folder || (s.name != name && s.folder + "/" + s.name != name)) continue;
+                        int64_t v;
+                        if (value.empty() || !modsettings::value_of(def_of(s), value, v))
+                            throw std::runtime_error("--mod-setting " + name + "=" + value + ": a whole number" +
+                                                     (s.choices.empty() ? std::string() : " or one of its choices"));
+                        s.value = std::clamp<int64_t>(v, s.min, s.max);
+                        fprintf(stderr, "mods: %s: %s = %s (--mod-setting, this run's)\n", s.mod.c_str(), s.name.c_str(), shown(s).c_str());
+                    }
+            };
+            for (size_t k = 0; k < order.size(); k++) {
+                if (k == rest) settings_as_kept();
+                const Table &t = *order[k];
                 const std::string where = file + (t.line ? ":" + std::to_string(t.line) : std::string());
                 auto fail = [&](const std::string &why) { throw std::runtime_error(where + ": " + why); };
                 auto str = [&](const char *k, bool need) -> std::string {
@@ -742,6 +756,23 @@ bool load(const std::vector<std::string> &dirs, const std::string &game, const s
                     if (data.empty()) fail("'from' file " + f + " not found (or empty)");
                     return std::vector<uint8_t>(data.begin(), data.end());
                 };
+                // `when = "SETTING=VALUE"` (not a [[hook]]'s, whose `when` is a register): the table is
+                // read and checked as any, and used only while the mod's setting has that value at start
+                bool off = false;
+                if (!t.kind.empty() && t.kind != "hook" && t.kind != "setting" && t.kind != "action" && t.values.count("when")) {
+                    used.try_emplace("choose", "'when'");
+                    std::vector<modsettings::Setting> defs;
+                    std::vector<Setting *> mine;
+                    for (Setting &s : g_settings)
+                        if (s.folder == folder) defs.push_back(def_of(s)), mine.push_back(&s);
+                    size_t which = 0;
+                    int64_t value = 0;
+                    std::string why;
+                    if (!modsettings::condition(defs, str("when", true), which, value, why)) fail(why);
+                    mine[which]->chooses = true;
+                    off = mine[which]->value.load() != value;
+                    left_by_when += off;
+                }
                 if (t.kind.empty()) {
                     if (text.empty()) continue;
                     known({"name", "version", "game", "author", "description", "api", "requires", "program", "script"});
@@ -790,36 +821,26 @@ bool load(const std::vector<std::string> &dirs, const std::string &game, const s
                     }
                 } else if (t.kind == "setting") {
                     used.try_emplace("settings", "[[setting]]");
-                    known({"name", "label", "min", "max", "default", "step"});
-                    const std::string name = ident("name");
+                    if (t.values.count("choices")) used.try_emplace("choose", "'choices'");
+                    const modsettings::Setting d = modsettings::setting(t, where);   // (the launcher's reader too)
                     for (const Setting &s : g_settings)
-                        if (s.folder == folder && s.name == name) fail("a second setting '" + name + "'");
+                        if (s.folder == folder && s.name == d.name) fail("a second setting '" + d.name + "'");
                     Setting &s = g_settings.emplace_back();
-                    s.mod = mod.name, s.folder = folder, s.name = name;
-                    s.label = str("label", false);
-                    if (s.label.empty()) s.label = name;
-                    s.min = inum("min"), s.max = inum("max"), s.dflt = inum("default");
-                    s.step = t.values.count("step") ? inum("step") : 1;
-                    if (s.min > s.max) fail("'min' is above 'max'");
-                    if (s.dflt < s.min || s.dflt > s.max) fail("'default' is from 'min' to 'max'");
-                    if (s.step <= 0) fail("'step' is 1 or more");
+                    s.mod = mod.name, s.folder = folder, s.name = d.name, s.label = d.label;
+                    s.min = d.min, s.max = d.max, s.dflt = d.dflt, s.step = d.step, s.choices = d.choices;
                     s.value = s.dflt;
                 } else if (t.kind == "action") {
                     used.try_emplace("actions", "[[action]]");
-                    known({"name", "label", "binding", "setting", "do"});
+                    const modsettings::Action d = modsettings::action(t, where);
                     PendingAction p;
                     p.a.mod = mod.name;
-                    p.a.name = ident("name");
+                    p.a.name = d.name;
                     for (const PendingAction &q : actions)
                         if (q.a.name == p.a.name) fail("a second action '" + p.a.name + "'");
-                    p.a.label = str("label", false);
-                    p.a.binding = str("binding", true);
-                    const std::string d = str("do", true);
-                    if (d == "up") p.a.what = Action::Do::up;
-                    else if (d == "down") p.a.what = Action::Do::down;
-                    else if (d == "toggle") p.a.what = Action::Do::toggle;
-                    else fail("'do' is \"up\", \"down\" (the setting by its step) or \"toggle\" (from its min to its max and back)");
-                    p.setting = str("setting", true);
+                    p.a.label = d.label;
+                    p.a.binding = d.binding;
+                    p.a.what = d.what == "up" ? Action::Do::up : d.what == "down" ? Action::Do::down : Action::Do::toggle;
+                    p.setting = d.setting;
                     p.where = where;
                     actions.push_back(std::move(p));
                 } else if (t.kind == "hook") {
@@ -875,7 +896,7 @@ bool load(const std::vector<std::string> &dirs, const std::string &game, const s
                     }
                     hooks.push_back(std::move(p));
                 } else if (t.kind == "patch") {
-                    known({"address", "module", "original", "replace", "once", "while_rate", "between_ticks"});
+                    known({"address", "module", "original", "replace", "once", "while_rate", "between_ticks", "when"});
                     Patch p;
                     p.mod = mod.name;
                     p.address = (uint32_t)num("address");
@@ -891,9 +912,9 @@ bool load(const std::vector<std::string> &dirs, const std::string &game, const s
                         fail("a while_rate patch has its 'original' (put back when the rate is off) and isn't 'once'");
                     if (p.replace.empty()) fail("'replace' is empty");
                     if (!p.original.empty() && p.original.size() != p.replace.size()) fail("'original' and 'replace' are as long as each other");
-                    g_patches.push_back(std::move(p));
+                    if (!off) g_patches.push_back(std::move(p));
                 } else if (t.kind == "text") {
-                    known({"find", "replace", "from", "to", "every"});
+                    known({"find", "replace", "from", "to", "every", "when"});
                     Text x;
                     x.t.mod = mod.name;
                     x.t.line = where;
@@ -909,9 +930,9 @@ bool load(const std::vector<std::string> &dirs, const std::string &game, const s
                         if (x.t.to <= x.t.from) fail("'to' is after 'from'");
                     }
                     x.t.every = flag("every");
-                    g_texts.push_back(std::move(x));
+                    if (!off) g_texts.push_back(std::move(x));
                 } else if (t.kind == "rate") {
-                    known({"hz", "while_changing", "while_equal", "value"});
+                    known({"hz", "while_changing", "while_equal", "value", "when"});
                     Rate r;
                     r.mod = mod.name;
                     if (t.values.count("hz") && t.is_string.at("hz")) {
@@ -930,9 +951,9 @@ bool load(const std::vector<std::string> &dirs, const std::string &game, const s
                         r.gate = (uint32_t)num("while_equal");
                         r.value = (uint32_t)num("value");
                     }
-                    g_rates.push_back(r);
+                    if (!off) g_rates.push_back(r);
                 } else if (t.kind == "bytes") {
-                    known({"medium", "offset", "from"});
+                    known({"medium", "offset", "from", "when"});
                     const std::string medium = str("medium", true);
                     auto it = medium_paths.find(medium);
                     if (it == medium_paths.end()) fail("no medium '" + medium + "' in dumps/" + game + "/machine.txt");
@@ -941,9 +962,10 @@ bool load(const std::vector<std::string> &dirs, const std::string &game, const s
                         fail("'" + medium + "' is a folder: its files are changed whole ([[file]], or the files at their paths)");
                     char what[64];
                     snprintf(what, sizeof what, ": %s bytes at 0x%llx", medium.c_str(), (unsigned long long)num("offset"));
-                    overlay::add(it->second, num("offset"), from(), mod.name + what);
+                    auto data = from();
+                    if (!off) overlay::add(it->second, num("offset"), std::move(data), mod.name + what);
                 } else if (t.kind == "file") {
-                    known({"medium", "path", "from"});
+                    known({"medium", "path", "from", "when"});
                     const std::string medium = str("medium", true);
                     auto it = medium_paths.find(medium);
                     if (it == medium_paths.end()) fail("no medium '" + medium + "' in dumps/" + game + "/machine.txt");
@@ -961,6 +983,7 @@ bool load(const std::vector<std::string> &dirs, const std::string &game, const s
                         if (f.find("..") != std::string::npos) fail("'from' is a file inside the mod's folder");
                         if (!std::filesystem::is_regular_file(fs_path(dir + "/" + f), ec)) fail("'from' file " + f + " not found");
                         named.insert(f);
+                        if (off) continue;
                         if (game_file.empty()) add_file(new_file, dir + "/" + f);
                         else g_folder_files[game_file] = dir + "/" + f;
                         continue;
@@ -968,6 +991,7 @@ bool load(const std::vector<std::string> &dirs, const std::string &game, const s
                     try {
                         const std::string label = mod.name + ": " + str("path", true);
                         auto data = from();
+                        if (off) continue;
                         if (!python_disks.count(it->second) && !iso_file(it->second, str("path", true), data, label)) {
                             auto disk = pythondisk::Files::open(it->second);
                             if (!disk) throw std::runtime_error(it->second + ": neither an ISO 9660 disc nor a disk whose file system HIRAKU knows");
@@ -977,10 +1001,30 @@ bool load(const std::vector<std::string> &dirs, const std::string &game, const s
                     } catch (const std::exception &e) {
                         fail(e.what());
                     }
+                } else if (t.kind == "files") {
+                    // a folder of the mod's laid over the game's files as the mod's own folder is, its
+                    // files winning over the mod's own; never laid at its own path in the mod's
+                    known({"folder", "when"});
+                    used.try_emplace("choose", "[[files]]");
+                    std::string f = str("folder", true);
+                    for (char &c : f)
+                        if (c == '\\') c = '/';
+                    while (!f.empty() && f.back() == '/') f.pop_back();
+                    const std::filesystem::path fp = fs_path(f);
+                    if (f.empty() || f[0] == '/' || f[0] == '.' || fp.has_root_name() || f.find("..") != std::string::npos ||
+                        f.find(':') != std::string::npos || f.find("/.") != std::string::npos)
+                        fail("'folder' is a folder inside the mod's, not hidden (\"alt/ps2-timing\")");
+                    std::error_code ec;
+                    if (!std::filesystem::is_directory(fs_path(dir + "/" + f), ec)) fail("'folder' " + f + " isn't a folder in the mod's");
+                    for (const std::string &o : files_folders)
+                        if (modsettings::same_name(o, f)) fail("a second [[files]] for " + f);
+                    files_folders.push_back(f);
+                    if (!off) chosen.emplace_back(f, t.values.count("when") ? t.values.at("when") : std::string());
                 } else {
                     fail("unknown table [[" + t.kind + "]]");
                 }
             }
+            settings_as_kept();   // (a mod of settings alone)
             // the mod API: what the mod needs, against what this build has; the program it's for
             auto fail = [&](const std::string &why) { throw std::runtime_error(file + ": " + why); };
             if (!used.empty() && !api)
@@ -1053,31 +1097,22 @@ bool load(const std::vector<std::string> &dirs, const std::string &game, const s
                 if (p.a.label.empty()) p.a.label = p.a.name;
                 g_actions.push_back(std::move(p.a));
             }
-            // its settings as last kept (<user data>/mod-settings/<game>/<folder>.txt), and the
-            // actions' bindings as the player changed them there
-            if (used.count("settings") || used.count("actions")) {
-                const std::string kept = settings_file(folder);
-                const auto kv = read_kv(kept);
-                for (Setting &s : g_settings) {
-                    if (s.folder != folder) continue;
-                    auto it = kv.find(s.name);
-                    const char *from = "the mod's default";
-                    if (it != kv.end()) {
-                        char *end = nullptr;
-                        const long long v = std::strtoll(it->second.c_str(), &end, 10);
-                        if (!it->second.empty() && !*end) {
-                            s.value = std::clamp<int64_t>(v, s.min, s.max);
-                            from = "kept";
-                        }
-                    }
-                    fprintf(stderr, "mods: %s: %s = %s (%s)\n", mod.name.c_str(), s.name.c_str(), shown(s).c_str(), from);
-                }
-                for (Action &a : g_actions)
-                    if (a.setting && a.setting->folder == folder)
-                        if (auto it = kv.find("action." + a.name); it != kv.end() && !it->second.empty()) a.binding = it->second;
-                if (!kv.empty()) fprintf(stderr, "mods: %s: settings from %s\n", mod.name.c_str(), kept.c_str());
+            // the actions' bindings as the player changed them in its settings file
+            for (Action &a : g_actions)
+                if (a.setting && a.setting->folder == folder)
+                    if (auto it = kv.find("action." + a.name); it != kv.end() && !it->second.empty()) a.binding = it->second;
+            // its files: its own folder's, then its chosen [[files]] folders' over them (the first last: it wins)
+            lay_files(dir, mod.name, named, files_folders, "", medium_paths, python_disks);
+            for (auto c = chosen.rbegin(); c != chosen.rend(); ++c) {
+                fprintf(stderr, "mods: %s: the files of %s%s\n", mod.name.c_str(), c->first.c_str(),
+                        c->second.empty() ? "" : (" (" + c->second + ")").c_str());
+                lay_files(dir, mod.name, named, files_folders, c->first, medium_paths, python_disks);
             }
-            lay_files(dir, mod.name, named, medium_paths, python_disks);
+            if (left_by_when)
+                fprintf(stderr, "mods: %s: %d table%s left out by %s 'when'\n", mod.name.c_str(), left_by_when, left_by_when == 1 ? "" : "s",
+                        left_by_when == 1 ? "its" : "their");
+            for (const std::string &f : files_folders) mod.folders.push_back(f);
+            for (const auto &c : chosen) mod.chosen.push_back(c.first);
             g_mods.insert(g_mods.begin(), mod);   // in the list's order
             // ... and its memory patches before those of the mods after it: patches go in in their
             // order, and the one that finds its 'original' bytes there first is the one in place
@@ -1105,19 +1140,13 @@ bool load(const std::vector<std::string> &dirs, const std::string &game, const s
                     std::string why;
                     if (!core().mod_hook(kept.at, run_hook, &kept, kept.where, why)) throw std::runtime_error(kept.where + ": " + why);
                 }
-        // --mod-setting: this run's values
+        // --mod-setting: this run's values, each set as its mod was read (before its `when`s): here,
+        // a name no mod has, or two mods have, refuses the run
         for (const auto &[name, value] : g_overrides) {
-            Setting *found = nullptr;
             int n = 0;
-            for (Setting &s : g_settings)
-                if (s.name == name || s.folder + "/" + s.name == name) found = &s, n++;
+            for (Setting &s : g_settings) n += s.name == name || s.folder + "/" + s.name == name;
             if (!n) throw std::runtime_error("--mod-setting " + name + ": no mod here has a setting of that name");
             if (n > 1) throw std::runtime_error("--mod-setting " + name + ": two mods have one: give it as FOLDER/" + name);
-            char *end = nullptr;
-            const long long v = std::strtoll(value.c_str(), &end, 0);
-            if (value.empty() || *end) throw std::runtime_error("--mod-setting " + name + "=" + value + ": a whole number");
-            found->value = std::clamp<int64_t>(v, found->min, found->max);
-            fprintf(stderr, "mods: %s: %s = %s (--mod-setting, this run's)\n", found->mod.c_str(), found->name.c_str(), shown(*found).c_str());
         }
     } catch (const std::exception &e) {
         err = e.what();
@@ -1309,6 +1338,20 @@ std::vector<std::string> folders() {
     return f;
 }
 
+std::vector<Layer> layers() {
+    std::vector<Layer> out;
+    for (const Mod &m : g_mods) {
+        for (const std::string &c : m.chosen) {
+            Layer l{m.dir + "/" + c, {}};
+            for (const std::string &f : m.folders)   // (a [[files]] folder inside this one)
+                if (f.size() > c.size() && f[c.size()] == '/' && modsettings::same_name(f.substr(0, c.size()), c)) l.left_out.push_back(f.substr(c.size() + 1));
+            out.push_back(std::move(l));
+        }
+        out.push_back({m.dir, m.folders});
+    }
+    return out;
+}
+
 std::vector<std::string> describe() {
     std::vector<std::string> d;
     for (const Mod &m : g_mods) d.push_back(m.name + (m.version.empty() ? "" : " " + m.version) + " (" + m.dir + ")");
@@ -1322,6 +1365,7 @@ std::vector<std::string> capabilities() {
     c.push_back("settings");   // (the shell's: settings files, read by hooks)
     c.push_back("script");     // ... a script (host/modscript.h), the controls the game is given
     c.push_back("input");
+    c.push_back("choose");     // ... files and patches chosen by a setting (`when`, [[files]], `choices`)
     if (core().mod_memory()) c.push_back("memory");   // ... and the machine's memory, where it's its own
     for (const std::string &o : g_offered)
         if (std::find(c.begin(), c.end(), o) == c.end()) c.push_back(o);
@@ -1412,9 +1456,11 @@ std::vector<std::string> action(size_t id, bool down, bool repeat) {
     if (v != was) {
         s.value = v;
         save_settings(s.folder);
-        fprintf(stderr, "mods: %s: %s = %s (%s)\n", s.mod.c_str(), s.name.c_str(), shown(s).c_str(), a.name.c_str());
+        fprintf(stderr, "mods: %s: %s = %s (%s)%s\n", s.mod.c_str(), s.name.c_str(), shown(s).c_str(), a.name.c_str(),
+                s.chooses ? (std::string(": the files and patches it chooses change ") + kNextStart).c_str() : "");
     }
     // (said even when it's at its end: the player sees where it is)
+    if (s.chooses) return {s.mod, s.label + ": " + shown(s), std::string("Files and patches: ") + kNextStart};
     return {s.mod, s.label + ": " + shown(s)};
 }
 
@@ -1445,7 +1491,9 @@ bool set_setting(const std::string &folder, const std::string &name, int64_t val
             now = std::clamp(value, s.min, s.max);
             if (s.value.exchange(now) != now) {
                 save_settings(folder);
-                fprintf(stderr, "mods: %s: %s = %s (its script)\n", s.mod.c_str(), s.name.c_str(), shown(s).c_str());
+                fprintf(stderr, "mods: %s: %s = %s (its script)%s\n", s.mod.c_str(), s.name.c_str(), shown(s).c_str(),
+                        s.chooses ? (std::string(": the files and patches it chooses change ") + kNextStart).c_str() : "");
+                if (s.chooses) modscript::notice({s.mod, s.label + ": " + shown(s), std::string("Files and patches: ") + kNextStart});
             }
             return true;
         }

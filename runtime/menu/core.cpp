@@ -20,6 +20,7 @@
 #include "menu.h"
 #include "pads.h"
 #include "../host/input.h"
+#include "../host/menukey.h"
 
 namespace hk {
 
@@ -293,6 +294,7 @@ private:
 
     // --- the way out: the choice said, then the program's end ------------------
     [[noreturn]] void leave(const menu::Game &g) {
+        host::menukey::hand_screen_to_launcher();   // (before the line: the launcher acts on it)
         printf("menu: chosen %s\n", g.id.c_str());
         if (!choice_path_.empty()) {
             if (FILE *f = fopen(choice_path_.c_str(), "w")) {

@@ -6,7 +6,10 @@
 #include <QJsonObject>
 #include <QMainWindow>
 #include <QProcess>
+#include <QElapsedTimer>
+#include <QTimer>
 
+#include "gamemenu.h"
 #include "games.h"
 
 class QAction;
@@ -132,12 +135,21 @@ private:
     QString m_boxFont, m_boxLogo;
     double m_boxScale = 0;
     QList<int> m_order;                 // m_games in the list's order (refresh)
-    QList<QWidget *> m_covers;          // black over each screen between a full-screen game and the menu
-    quint64 m_coverShown = 0;           // counts the times it was put up
+    // Black over each screen while one full-screen program gives way to the next (gamemenu::CoverPlan
+    // says where, cover.h puts it there)
+    QList<QWidget *> m_covers;
+    gamemenu::CoverPlan m_coverPlan;
+    quint64 m_coverTops = 0;            // counts the times it went on top (coverTo's fallback timer)
+    QTimer m_coverRetry;                // under a program whose window isn't there yet: tried again
+    QElapsedTimer m_coverUnderSince;    // ... since
+    QByteArray m_procLine, m_menuLine;  // a line of the programs' output not ended yet
+    QString m_menuSaid;                 // the menu's output, for its log
     bool m_fromMenu = false;            // the game running was chosen in the menu: it goes back there when it ends
+    bool m_choosing = false;            // play() is starting the game chosen in the menu
     void menuClosed(int code, QProcess::ExitStatus st);
-    void cover(bool on);
-    void uncoverLater();                // ... off again once the program just started has its window up
+    void cover(bool on);                // on: on top (a program left for the next), off: down (the launcher's window is back)
+    void coverTo(gamemenu::Cover at);   // ... where the plan says
+    void coverSaid(QByteArray &partial, const QByteArray &more);   // a program's output, read for the plan's lines
     void planBack();                    // Windows' power plan as it was before a game (powerplan.h)
     // updates (updater.h): the bar that says a new version is out, the release it names
     void checkForUpdate(bool asked);

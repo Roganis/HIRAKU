@@ -3,6 +3,7 @@
 #include "theme.h"
 #include "runlogs.h"
 #include "gamemenu.h"
+#include "cover.h"
 #include "powerplan.h"
 #include "menufont.h"
 #include "recording.h"
@@ -83,6 +84,8 @@
 #include "report.h"
 #include "shell/sys.h"
 #include "updater.h"
+
+static void coverTrace(const QString &what);   // (tests: MainWindow::coverTo)
 
 namespace {
 
@@ -700,7 +703,11 @@ MainWindow::MainWindow() {
         QMessageBox::warning(this, "HIRAKU", "Could not run tools/ingest.py (python3 is needed):\n" + m_ingest.errorString());
     });
     m_proc.setProcessChannelMode(QProcess::MergedChannels);
-    connect(&m_proc, &QProcess::readyRead, this, [this] { log(QString::fromLocal8Bit(m_proc.readAll())); });
+    connect(&m_proc, &QProcess::readyRead, this, [this] {
+        const QByteArray more = m_proc.readAll();
+        log(QString::fromLocal8Bit(more));
+        coverSaid(m_procLine, more);   // (a hold of the way out to the menu, its first picture)
+    });
     connect(&m_proc, &QProcess::finished, this, [this](int code, QProcess::ExitStatus st) {
         QString title = find(m_running) ? find(m_running)->title : m_running;
         // left from the cabinet's controls for the game menu (runtime/host/menukey.h); and a game
@@ -725,7 +732,9 @@ MainWindow::MainWindow() {
         const QString left = std::exchange(m_running, QString());
         m_stopping = false;
         m_killed = false;
-        if (toMenu) cover(true);   // (before anything else is shown: the desktop stays out of sight)
+        m_procLine.clear();
+        coverTrace("ended " + left);
+        if (toMenu) coverTo(m_coverPlan.ended(true));   // (on top since the game said it was leaving, if it was full screen)
         else {
             cover(false);
             if (isHidden()) show();
@@ -749,7 +758,17 @@ MainWindow::MainWindow() {
             openMenu(left, ok ? QString() : title + "|ended with an error: HIRAKU's window has its log");
         }
     });
+    m_coverRetry.setInterval(100);
+    connect(&m_coverRetry, &QTimer::timeout, this, [this] {
+        if (m_coverPlan.pending()) coverTo(m_coverPlan.at());
+        else m_coverRetry.stop();
+    });
     m_menu.setProcessChannelMode(QProcess::MergedChannels);
+    connect(&m_menu, &QProcess::readyRead, this, [this] {
+        const QByteArray more = m_menu.readAll();
+        m_menuSaid += QString::fromLocal8Bit(more);
+        coverSaid(m_menuLine, more);   // (its first picture, the game chosen)
+    });
     connect(&m_menu, &QProcess::finished, this, &MainWindow::menuClosed);
     connect(&m_menu, &QProcess::errorOccurred, this, [this](QProcess::ProcessError e) {
         if (e != QProcess::FailedToStart) return;
@@ -762,10 +781,10 @@ MainWindow::MainWindow() {
         if (e != QProcess::FailedToStart) return;
         log("\n--- could not start " + m_proc.program() + ": " + m_proc.errorString() + " ---\n");
         closeRunLog();
-        QMessageBox::warning(this, "HIRAKU", "Could not start " + m_proc.program() + ":\n" + m_proc.errorString());
         m_running.clear();
-        cover(false);
+        cover(false);   // (before the message: not under the black)
         if (isHidden()) show();
+        QMessageBox::warning(this, "HIRAKU", "Could not start " + m_proc.program() + ":\n" + m_proc.errorString());
         planBack();
         updateActions();
     });
@@ -1648,7 +1667,12 @@ void MainWindow::play(const QString &id) {
         boxLook(env);
         m_proc.setProcessEnvironment(env);
     }
+    // the black cover: in the loop (chosen in the menu) on top till the game's first picture, then
+    // under it; a game started from the launcher's window has none but during a hold (gamemenu.h)
+    m_procLine.clear();
+    coverTo(m_coverPlan.started(args.contains("--fullscreen"), m_choosing));
     m_proc.start(g->exe, args);
+    coverTrace("started " + g->id);
     m_unitInstall = unitState(*g) == "install" ? g->id : QString();
     cfg::settings().remove("cassette/" + g->id);   // "Boot once with the install cassette" is used up
     cfg::settings().remove("cd/" + g->id);         // ... and "Boot once with the install CD"
@@ -1755,7 +1779,9 @@ void MainWindow::openMenu(const QString &left, const QString &notice) {
     // the display, sound and cabinet as a game of that family gets them; no saves of its own
     QStringList a = {"--window", QString::number(s.value("video/scale", 2).toInt()), "--nvram", "",
                      "--family", from->family, "--list", m_menuList, "--choice", m_menuChoice};
-    if (s.value("video/fullscreen", false).toBool()) a << "--fullscreen";
+    // in full screen as the launcher's games are, or as the game just left was (its own arguments)
+    const bool full = s.value("video/fullscreen", false).toBool() || (!left.isEmpty() && m_coverPlan.full());
+    if (full) a << "--fullscreen";
     if (!s.value("video/displaySync", true).toBool()) a << "--display-sync" << "off";
     if (const QScreen *scr = screen(); scr && scr->size().width() * 10 >= scr->size().height() * 15) a << "--wide";   // a wide screen: 16:9
     if (!notice.isEmpty()) a << "--notice" << (fonts ? notice : gamemenu::plainTitle(notice));
@@ -1771,16 +1797,20 @@ void MainWindow::openMenu(const QString &left, const QString &notice) {
     env.insert("HIRAKU_ROOT", cfg::rootDir());
     env.insert("HK_LAUNCHER", "1");
     m_menu.setProcessEnvironment(env);
-    cover(true);
+    m_menuSaid.clear();
+    m_menuLine.clear();
+    coverTo(m_coverPlan.started(full, true));   // (black till its first picture, then under it)
     m_menu.start(exe, a);
-    uncoverLater();
+    coverTrace("started the menu");
     statusBar()->showMessage("The game menu is open (the cabinet's controls choose; Escape closes it)");
     if (s.value("ui/hideWhileRunning", false).toBool()) hide();
 }
 
 void MainWindow::menuClosed(int code, QProcess::ExitStatus st) {
+    coverTrace("menu ended");
     const QString id = gamemenu::readChoice(m_menuChoice);
-    const QString said = QString::fromLocal8Bit(m_menu.readAll());
+    const QString said = std::exchange(m_menuSaid, QString()) + QString::fromLocal8Bit(m_menu.readAll());
+    m_menuLine.clear();
     QFile::remove(m_menuChoice);
     QFile::remove(m_menuList);
     QFile::remove(m_menuFont);
@@ -1788,11 +1818,13 @@ void MainWindow::menuClosed(int code, QProcess::ExitStatus st) {
     const bool fine = st == QProcess::NormalExit && (code == 0 || code == 130);
     if (!fine || !said.contains("menu: chosen")) log(said);   // (what went wrong, or nothing chosen: its own lines)
     if (fine && !id.isEmpty() && find(id)) {
-        cover(true);
+        coverTo(m_coverPlan.ended(true));   // (on top since the menu said its choice, if it was full screen)
+        m_choosing = true;
         play(id);   // (clears the log for the game's own)
+        m_choosing = false;
         if (!m_running.isEmpty()) {
             m_fromMenu = true;
-            return uncoverLater();
+            return;
         }
     }
     cover(false);
@@ -1802,40 +1834,77 @@ void MainWindow::menuClosed(int code, QProcess::ExitStatus st) {
     if (!fine) m_logDock->show();
 }
 
-// Black over every screen while one full-screen program gives way to the next (a game to the game
-// menu, the menu to a game), so that the desktop doesn't show on a cabinet's screen in between.
-// Only where the games are in full screen.
 void MainWindow::planBack() {
     if (!powerplan::available()) return;
     if (const QString said = powerplan::restore(cfg::settings(), powerplan::windowsApi()); !said.isEmpty()) log(said + "\n");
 }
 
-void MainWindow::cover(bool on) {
-    if (!on) {
-        for (QWidget *w : m_covers) w->hide();
-        return;
-    }
-    if (!cfg::settings().value("video/fullscreen", false).toBool()) return;
-    if (m_covers.isEmpty())
-        for (QScreen *scr : QGuiApplication::screens()) {
-            auto *w = new QWidget(nullptr, Qt::Window | Qt::FramelessWindowHint);
-            w->setWindowTitle("HIRAKU");
-            w->setStyleSheet("background: black");
-            w->setCursor(Qt::BlankCursor);
-            w->setScreen(scr);
-            w->setGeometry(scr->geometry());
-            m_covers << w;
-        }
-    for (QWidget *w : m_covers) w->showFullScreen();
-    m_coverShown++;
+// Black over every screen while one full-screen program gives way to the next (a game to the game
+// menu, the menu to a game), so that nothing else shows on a cabinet's screen in between: up before
+// the old window goes, down once the next one has its picture (gamemenu::CoverPlan, cover.h).
+// on: on top now (a program gone with another to come); off: down, the launcher's window is back
+void MainWindow::cover(bool on) { coverTo(on ? m_coverPlan.ended(true) : m_coverPlan.back()); }
+
+// (tests: HK_COVER_LOG=FILE has each move of the cover and each line it heard, with the time, to set
+// beside a probe's record of the screen)
+static void coverTrace(const QString &what) {
+    static const QString to = qEnvironmentVariable("HK_COVER_LOG");
+    if (to.isEmpty()) return;
+    if (QFile f(to); f.open(QIODevice::Append))
+        f.write((QDateTime::currentDateTime().toString("hh:mm:ss.zzz ") + what + "\n").toUtf8());
 }
 
-// ... and away again a few seconds after the next program was started: its window is up by then
-// (a game's opens before the game boots), and should it have opened behind the cover it shows now
-void MainWindow::uncoverLater() {
-    QTimer::singleShot(4000, this, [this, shown = m_coverShown] {
-        if (shown == m_coverShown) cover(false);   // (not a cover put up since, for the next change)
-    });
+void MainWindow::coverTo(gamemenu::Cover at) {
+    using gamemenu::Cover;
+    if (at != Cover::Down && m_covers.isEmpty())
+        for (QScreen *scr : QGuiApplication::screens()) {
+            QWidget *w = cover::make(scr->geometry());
+            w->setScreen(scr);
+            m_covers << w;
+        }
+    const qint64 pid = m_proc.state() != QProcess::NotRunning ? m_proc.processId()
+                       : m_menu.state() != QProcess::NotRunning ? m_menu.processId()
+                                                                : 0;
+    // under a window opening full screen once it covers the screen (cover.h), waited for 1.5 s at most
+    if (at == Cover::Under && !m_coverPlan.pending()) m_coverUnderSince.start();
+    const bool whole = at == Cover::Under && m_coverUnderSince.isValid() && m_coverUnderSince.elapsed() < 1500;
+    bool all = true;
+    for (QWidget *w : m_covers) {
+        const bool placed = cover::place(w, at, pid, whole);
+        all = all && placed;
+        if (placed || !m_coverPlan.pending())   // (a try again that failed again: not each time)
+            coverTrace(QString("cover: %1 %2%3%4").arg(at == Cover::Top ? "top" : at == Cover::Under ? "under" : "down").arg(pid)
+                           .arg(placed ? "" : " (not placed)").arg(cover::note()));
+    }
+    // under a program with no window yet (or not yet the whole screen): the black stays as it was,
+    // tried again every tenth of a second till it can go there or the plan has moved on (gamemenu.h)
+    m_coverPlan.placed(all);
+    if (m_coverPlan.pending() && !m_coverRetry.isActive()) m_coverRetry.start();
+    if (at == Cover::Top) {
+        // the launcher's window out of the way till it is back (every way back shows it): nothing
+        // of it between the black and the next program
+        if (isVisible()) hide();
+        // the next program never says its picture is up (an older one, or one stuck before it
+        // draws): the black gives way to it all the same
+        static const int wait = qEnvironmentVariableIntValue("HK_COVER_WAIT_MS") > 0 ? qEnvironmentVariableIntValue("HK_COVER_WAIT_MS") : 20000;   // (tests)
+        QTimer::singleShot(wait, this, [this, n = ++m_coverTops] {
+            if (n == m_coverTops && m_coverPlan.at() == gamemenu::Cover::Top) coverTo(m_coverPlan.timedOut());
+        });
+    }
+}
+
+// A running program's output (the game's, the menu's) as it comes: its whole lines read for the
+// plan's (gamemenu.h: a hold begun or let go, leaving, the first picture)
+void MainWindow::coverSaid(QByteArray &partial, const QByteArray &more) {
+    partial += more;
+    for (qsizetype nl; (nl = partial.indexOf('\n')) >= 0;) {
+        const QString line = QString::fromLocal8Bit(partial.left(nl)).trimmed();
+        partial.remove(0, nl + 1);
+        if (line.startsWith("game menu:") || line.startsWith("menu: chosen") || line.startsWith("window:")) coverTrace(line);
+        const gamemenu::Cover before = m_coverPlan.at();
+        if (const gamemenu::Cover at = m_coverPlan.said(line); at != before) coverTo(at);
+    }
+    if (partial.size() > 4096) partial.clear();   // (a program that never ends a line)
 }
 
 void MainWindow::contextMenu(const QPoint &pos) {

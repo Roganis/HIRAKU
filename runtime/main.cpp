@@ -653,6 +653,7 @@ int main(int argc, char **argv) {
         machine.shutdown();
         lights_off();
         report();
+        host::menukey::hand_screen_to_launcher();   // (a core's own end, an error: its window goes next)
     };
     machine.set_on_fatal(finish);
 
@@ -832,6 +833,10 @@ int main(int argc, char **argv) {
     if (present_at_vblank_end && !digest && script_path.empty() && !snap_every) machine.frame_picture_unused();
 #endif
     auto last_save = std::chrono::steady_clock::now();
+    // Lines for the launcher's black cover between full-screen programs (launcher/gamemenu.h): the
+    // window's first picture, and a hold of the way out to the game menu begun or let go
+    const bool tell_launcher = window_scale && getenv("HK_LAUNCHER");
+    bool told_picture = false, told_hold = false;
     machine.set_frame_hook([&](uint64_t f, const uint32_t *rgb, int w, int h) {
         frame_times.frame(f);
         // the machine's saved memories, every so often (the core hands what changed to another thread)
@@ -891,6 +896,7 @@ int main(int argc, char **argv) {
             machine.shutdown();
             lights_off();
             report();
+            host::menukey::hand_screen_to_launcher();
             host::window_close();
             hk::sys::exit(0);
         }
@@ -918,8 +924,18 @@ int main(int argc, char **argv) {
                             });
         host::bio2_frame(machine);
         host::popnio_frame(machine);
+        if (tell_launcher) {
+            if (!told_picture) {   // (shown by the window_frame/next above)
+                told_picture = true;
+                host::menukey::window_up_for_launcher();
+                printf("window: first picture\n");
+            }
+            if (const bool held = host::menukey::progress(host::menukey::now()) > 0; held != told_hold)
+                told_hold = held, printf(held ? "game menu: hold begun\n" : "game menu: hold let go\n");
+        }
         // 5, 7 and 3 held (host/menukey.h): the game ends as a closed window ends it, and says where to
         if (host::menukey::frame(host::menukey::now())) {
+            host::menukey::hand_screen_to_launcher();   // (before the line: the launcher acts on it)
             printf("game menu: asked for from the cabinet's controls\n");
             finish();
 #ifdef HK_WITH_SDL
@@ -949,6 +965,7 @@ int main(int argc, char **argv) {
             lights_off();
             report();
 #ifdef HK_WITH_SDL
+            host::menukey::hand_screen_to_launcher();
             if (window_scale) host::window_close();   // the sound card back to its owner
 #endif
             hk::sys::exit(machine.exit_code());

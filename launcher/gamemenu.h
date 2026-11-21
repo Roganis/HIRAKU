@@ -50,4 +50,71 @@ inline QString readChoice(const QString &path) {
     return QString::fromUtf8(f.readAll()).section('\n', 0, 0).trimmed();
 }
 
+// The lines a program says to the launcher about its window (runtime/main.cpp, with HK_LAUNCHER=1),
+// and the ones a game and the menu say as they leave for the next program
+constexpr const char *kHoldBegun = "game menu: hold begun";       // 5, 7 and 3 held: the box shows
+constexpr const char *kHoldLetGo = "game menu: hold let go";      // ... and let go before leaving
+constexpr const char *kLeaving = "game menu: asked for";          // the hold lasted: the game ends
+constexpr const char *kChosen = "menu: chosen ";                  // the menu ends for a game
+constexpr const char *kFirstPicture = "window: first picture";    // the window is up, its picture on it
+
+// Where the black cover goes over the screens (MainWindow::cover), as a program gives way to the next
+// one in full screen (a game to the game menu, the menu to a game). The cover is up BEFORE the old
+// window goes and down only once the next one has a picture, so nothing else is seen in between:
+// - Down: not shown.
+// - Under: shown right under the running program's window (Windows: placed after it; X11: kept
+//   below), painted and out of sight, ready for the moment that window goes: during a hold of the
+//   way out, and all through the menu loop (the menu, a game chosen in it), where any ending of the
+//   program (its own, Escape, an error) shows black.
+// - Top: above everything, the taskbar too, from a program's leaving until the next one's first
+//   picture is under it (the next program's window opens and goes full screen under the black).
+// Outside the loop a game started from the launcher's window has no cover, except under it during a hold.
+enum class Cover { Down, Under, Top };
+
+class CoverPlan {
+public:
+    // A program was started: in full screen or not, and in the menu loop (the menu itself, a game
+    // chosen in it) or from the launcher's window
+    Cover started(bool full, bool loop) {
+        full_ = full, loop_ = loop;
+        if (!full_) at_ = Cover::Down;   // (a cover up for a window that isn't full screen: off)
+        else if (loop_ && at_ == Cover::Down) at_ = Cover::Top;   // (the menu at the start: black till it shows)
+        return at_;
+    }
+    // A line of the running program's output
+    Cover said(const QString &line) {
+        if (line.startsWith(kHoldBegun)) {
+            if (full_ && at_ == Cover::Down) at_ = Cover::Under;
+        } else if (line.startsWith(kHoldLetGo)) {
+            if (at_ == Cover::Under && !loop_) at_ = Cover::Down;
+        } else if (line.startsWith(kLeaving) || line.startsWith(kChosen)) {
+            if (full_) at_ = Cover::Top;
+        } else if (line.startsWith(kFirstPicture)) {
+            if (at_ == Cover::Top) at_ = loop_ ? Cover::Under : Cover::Down;
+        }
+        return at_;
+    }
+    // The program ended: `next` a program comes after it (the menu, or the game chosen in it)
+    Cover ended(bool next) {
+        at_ = next && (full_ || at_ != Cover::Down) ? Cover::Top : Cover::Down;
+        return at_;
+    }
+    // The next program has said nothing of its picture for long (an old one, or one that never
+    // draws): the black gives way as if it had
+    Cover timedOut() { return said(kFirstPicture); }
+    // The launcher's own window is shown again, or the next program couldn't start
+    Cover back() { return at_ = Cover::Down; }
+    // Where the cover went, against the plan: under a program that has no window yet (its start
+    // slow, the fallback before it) it stays as it was, and is put there again and again till it
+    // can be (MainWindow::coverTo's timer), or the plan has moved on
+    void placed(bool ok) { pending_ = !ok && at_ == Cover::Under; }
+    bool pending() const { return pending_ && at_ == Cover::Under; }
+    Cover at() const { return at_; }
+    bool full() const { return full_; }   // the last program started was in full screen
+
+private:
+    Cover at_ = Cover::Down;
+    bool full_ = false, loop_ = false, pending_ = false;
+};
+
 }  // namespace gamemenu

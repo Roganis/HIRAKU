@@ -259,7 +259,9 @@ plays), and so do a keyboard's arrows and a plain gamepad. Escape brings the lau
 (**Game > Picture in the game menu**). The launcher's
 **Cards** view shows the same pictures.
 
-It needs the launcher. Not yet checked on a cabinet's reader, BIO2 or pop'n I/O board.
+It needs the launcher. In full screen the screen stays black from one to the next (a game to the
+menu, the menu to a game): no desktop, taskbar or launcher window in between. Not yet checked on a
+cabinet's reader, BIO2 or pop'n I/O board.
 
 Details: [PLAY-NOTES.md](PLAY-NOTES.md#the-game-menu-changing-games-from-the-cabinet)
 

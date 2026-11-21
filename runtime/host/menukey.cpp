@@ -3,7 +3,16 @@
 
 #include <atomic>
 #include <chrono>
+#include <cstdlib>
 #include <mutex>
+
+#ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#include <tlhelp32.h>
+
+#include <cwchar>
+#endif
 
 namespace hk::host::menukey {
 
@@ -85,6 +94,73 @@ double progress(double now_seconds) {
 
 double now() {
     return std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();
+}
+
+#ifdef _WIN32
+namespace {
+DWORD parent_pid() {
+    DWORD self = GetCurrentProcessId(), parent = 0;
+    HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+    if (snap == INVALID_HANDLE_VALUE) return 0;
+    PROCESSENTRY32W pe{};
+    pe.dwSize = sizeof pe;
+    for (BOOL more = Process32FirstW(snap, &pe); more; more = Process32NextW(snap, &pe))
+        if (pe.th32ProcessID == self) parent = pe.th32ParentProcessID;
+    CloseHandle(snap);
+    return parent;
+}
+
+struct Cover {
+    DWORD pid;
+    HWND found;
+};
+
+// This program's own windows go at once, with no fading out: Windows draws a window's fading over
+// every other, the launcher's black too, with whatever picture it last had of it
+BOOL CALLBACK no_fade(HWND h, LPARAM) {
+    using Set = HRESULT(WINAPI *)(HWND, DWORD, LPCVOID, DWORD);
+    static const Set set = [] {
+        HMODULE dwm = LoadLibraryW(L"dwmapi.dll");
+        return dwm ? reinterpret_cast<Set>(reinterpret_cast<void *>(GetProcAddress(dwm, "DwmSetWindowAttribute"))) : nullptr;
+    }();
+    DWORD pid = 0;
+    GetWindowThreadProcessId(h, &pid);
+    const BOOL off = TRUE;
+    if (set && pid == GetCurrentProcessId()) set(h, 3 /* DWMWA_TRANSITIONS_FORCEDISABLED */, &off, sizeof off);
+    return TRUE;
+}
+
+// The launcher's black cover: its visible window named "HIRAKU" (launcher/cover.h)
+BOOL CALLBACK find_cover(HWND h, LPARAM p) {
+    auto *c = reinterpret_cast<Cover *>(p);
+    DWORD pid = 0;
+    GetWindowThreadProcessId(h, &pid);
+    wchar_t title[16];
+    if (pid != c->pid || !IsWindowVisible(h) || GetWindowTextW(h, title, 16) != 6 || wcscmp(title, L"HIRAKU")) return TRUE;
+    c->found = h;
+    return FALSE;
+}
+}  // namespace
+#endif
+
+void window_up_for_launcher() {
+#ifdef _WIN32
+    if (getenv("HK_LAUNCHER")) EnumWindows(no_fade, 0);
+#endif
+}
+
+void hand_screen_to_launcher() {
+#ifdef _WIN32
+    if (!getenv("HK_LAUNCHER")) return;
+    // the launcher (the parent) may take the foreground; and its cover, when it has one up, takes it
+    // now, while this program still has it: Windows would otherwise give it to some other window when
+    // this one goes, the taskbar coming up over the black
+    Cover c{parent_pid(), nullptr};
+    if (c.pid) AllowSetForegroundWindow(c.pid);
+    EnumWindows(no_fade, 0);
+    if (c.pid) EnumWindows(find_cover, reinterpret_cast<LPARAM>(&c));
+    if (c.found) SetForegroundWindow(c.found);
+#endif
 }
 
 }  // namespace hk::host::menukey

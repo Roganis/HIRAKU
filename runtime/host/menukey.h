@@ -34,5 +34,12 @@ bool frame(double now_seconds);
 // (a touch of the three keys shows nothing)
 double progress(double now_seconds);
 double now();   // seconds on the steady clock
+// Started by the launcher (HK_LAUNCHER): its black cover may take the screen from this program's
+// window, which is about to go (Windows: the foreground is handed over, so that the cover hides the
+// taskbar and keeps the keyboard; nothing elsewhere). Before the window goes, however it goes
+void hand_screen_to_launcher();
+// ... and once its window is up: that window will go at once, with no fading out, however the
+// program ends (a crash too: Windows would draw the fading over the launcher's black)
+void window_up_for_launcher();
 
 }  // namespace hk::host::menukey

@@ -108,9 +108,21 @@ the word has changed on two frames in a row, off after two still ones, and with 
 while that word holds `value`. It's read from game.toml, not a mod, so the saves' folder stays the
 game's own. Outside a song (`runtime/shell/smoothgate.h`, once a frame where the mods' patches go
 in):
-- no in-between pictures are asked for, and display pacing runs as without smooth motion: each
-  frame held for its refreshes, the game on the display's rate (beatmania III 0.1 % faster). At the
-  switch the next frame starts afresh on the display's refreshes (`pacing::set_smooth_motion`);
+- no in-between pictures are asked for, and each frame is held for its refreshes. How display
+  pacing runs then depends on how far the game's rate is from the display's: locking the game to a
+  whole number of refreshes a frame changes its speed, and its music's pitch, by the frame's period
+  over theirs. Where that change is 0.5 % or less, the game is locked as without smooth motion
+  (beatmania III's 59.94 Hz: 0.1 % faster at 60, 120 or 240 Hz), and at the switch the next frame
+  starts afresh on the display's refreshes (`pacing::set_smooth_motion`). Where it is more, the
+  game keeps its exact speed outside songs too, the pacing smooth motion uses, each refresh showing
+  the latest real frame: Firebeat's pop'n music (58.49 Hz) would run 2.6 % faster on the menus than
+  in the songs, a step in the music's speed at every song's start and end, and DJ Main's 58.00 Hz
+  (3.4 %) is further off than display sync takes at all (more than 3 %: frames shown as they come).
+  So nothing changes speed at the switch, and the frames' moments go on across it
+  (`shell/smoothgate.h` `exact_outside_songs`, decided in `pacing::frame`; a 144 Hz display, 2.4
+  refreshes a 59.94 Hz frame, is exact outside songs too). The exit report in a window says which
+  (`video: outside songs: N frames at the game's exact speed, M locked to the display (locking
+  changes its speed +2.58 %: more than 0.5 %, kept exact)`);
 - the core is still asked for one in-between picture a frame, not shown, so what it pairs from one
   frame to the next goes on as with smooth motion everywhere: a song's first in-between pictures
   are those smooth motion everywhere makes, bit for bit (checked below). It costs one picture's
@@ -131,8 +143,31 @@ of M frames shown`.
 | beatmania III APPEND CORE REMIX (`bm3core`) | 0x801079f0 | the same (a frame now and then without its step: one still frame, which the rule rides over) | yes |
 | beatmania III APPEND 6th MIX (`bm36th`) | 0x80108bc8 | the same (as CORE REMIX) | yes |
 | beatmania III APPEND 7th MIX (`bm37th`) | 0x80109e80 | the same | yes |
+| pop'n music 4 (`popn4`) | 0x8014646c | the song's chart position, +3 to 5 a frame from the stage's first frame to the song's end | no |
+| pop'n music 5 (`popn5`) | 0x801406d0 | the same (+4 or 5 a frame) | no |
+| pop'n music 6 (`popn6`) | 0x80122fe8 | the song's frame counter, from the notes' first frame (normal and battle mode) | no |
+| pop'n music 7 (`popn7`) | 0x80216c94 | the song's frame counter, from the notes' first frame | no (none seen) |
+| pop'n music 8 (`popn8`) | 0x8021825c | the song's frame counter, from the notes' first frame | no |
+| pop'n music Animelo (`popnanm`) | 0x802ab8dc | the song's frame counter, from the stage's start (after READY GO) | yes (demo play) |
+| pop'n music Animelo 2 (`popnanm2`) | 0x802b3d7c | changes every frame from the stage's start (after READY) to the song's end; what it is not known | none seen |
+| pop'n music Mickey Tunes! (`popnmt2`) | 0x802af674 | the notes' scroll position (a float), from the notes' first frame | no |
+| ParaParaParadise (`ppp`) | 0x801018d0, while_equal 0x801025c0 = 1 | a counter of the stage's frames, and the play screen's flag, which drops as STAGE CLEAR (the result) comes over the play screen | none seen |
+| ParaParaParadise 1.1 (`ppp11`) | 0x80101930, while_equal 0x801026e8 = 1 | the same | none seen |
+| ParaParaDancing (`ppd`) | 0x80101ac8, while_equal 0x80102e84 = 1 | the same | none seen |
+| pop'n music (`popn1j`, DJ Main) | 0x404a28, while_equal 0x40749c = 1 | a word of the play screen, changing every frame from the notes' first frame (the credit's instruction stage too), and a word that is 1 only then | no |
+| pop'n music 2, 3, pop'n stage EX (`popn2`, `popn3`, `popnstex`) | 0x404508 | the song's clock (16.16, +1.0 a frame), from the notes' first frame | yes (demo play) |
+| beatmania (`bm1stmix`) | 0x4071d8 | the stage's clock (16.16, +1.0 a frame), from the play screen's first frame; the practice stage too | yes (demo play) |
+| beatmania 2nd MIX and its other version (`bm2ndmix`, `bm2ndmixa`) | 0x4073f0 | the same | yes |
+| beatmania 3rd MIX and its other version (`bm3rdmix`, `bm3rdmixe`) | 0x4079d4 | the same | yes |
+| beatmania 4th MIX (`bm4thmix`) | 0x4064ec | a word of the play screen, changing every frame of a stage; open on the rankings screen too (about 400 frames): the only word found that runs through every stage | yes |
+| beatmania 5th MIX (`bm5thmix`) | 0x407d3c | the stage's frame counter (+1 a frame) | yes |
+| beatmania 6th MIX, 7th MIX, THE FINAL (`bm6thmix`, `bm7thmix`, `bmfinal`) | 0x406554 | the stage's clock (16.16) | yes |
+| beatmania Club MIX, complete MIX 2, featuring Dreams Come True, hiphopmania complete MIX 2 (`bmclubmx`, `bmcompm2`, `bmdct`, `hmcompm2`) | 0x407d7c | the stage's frame counter (+1 a frame) | yes |
+| beatmania complete MIX, JA-B (`bmcompmxb`) | 0x407934 | the stage's clock (16.16) | yes |
+| beatmania CORE REMIX (`bmcorerm`) | 0x407d40 | the stage's clock (16.16) | yes |
+| hiphopmania complete MIX (`hmcompmx`) | 0x406254 | changes every frame of the play screen; open on the final stage's title card too (as THE FINAL's from the stage's title) | yes |
 
-Each was found by RAM dumps (three frames in a row every 600 frames through two credits and the
+The beatmania III words were found by RAM dumps (three frames in a row every 600 frames through two credits and the
 attract) and the words that change on every frame of each stage and on none of the menus', and
 then checked through two credits (beatmania III APPEND 7th MIX: two stages of one credit) with the
 word watched every frame and the rule worked out from the log: open from each stage's start (its
@@ -141,6 +176,30 @@ rankings and the title; open in the attract's How to Play, which plays a song as
 looked right in one credit and weren't: CORE REMIX's and 6th MIX's stage frame counters ran in the
 first credit's stage and not the second's, and one of beatmania III's opened for a few frames on
 the menus.
+
+The others (2026-11-21) the same way: a run through two credits with the buttons mashed (no
+fail-safe needed: pop'n music 4, 5 and the DJ Main games end the credit at the first failed stage,
+so each credit has one song there, the others two or three), RAM dumped at three frames in a row
+every 900 frames, the words that change at both steps of every song's dumps and at neither of the
+menus' grouped by where they change; then the best few watched every frame through the same
+credits, and the rule's spans checked against pictures of the frames around each song's start and
+end: open within a frame or two of the notes' first frame (pop'n music 1-8 and the anime games) or
+of the play screen's (beatmania, ParaParaParadise: the notes come later), closed before the result.
+ParaParaParadise's words change through STAGE CLEAR too (the result comes over the play screen),
+so a flag of the play screen gates them (`while_equal`: `value` is the word as the machine reads
+it, big-endian on Firebeat and DJ Main, `Core::mod_big_endian`). pop'n music 1's best word alone opened for 2 to 8 frames a few times in the
+attract; a word that is 1 only in play gates it. Each game's run with `--smooth-motion` then counted
+the frames with in-between pictures, the same number as the rule worked out from the watched word
+(`out/smooth-more`, local). Left without a word (smooth motion everywhere, as before):
+ParaParaParadise 1st Mix Plus, Keyboardmania and Keyboardheaven (no set-up save here to get past
+their first-boot errors), Keyboardmania 2nd Mix (its best words stop for 3 or 4 frames inside a
+song), Keyboardmania 3rd Mix (its stage word runs on under the RESULT panel, 200 frames, and no
+clean flag of the play screen was found to gate it), the DJ Main sets whose media isn't here (`popn1`, `popn1a`,
+`popn1k`, `bm3rdmixa`, `bmcmxaac`, `bmcompmx`, `bs4thmix`, `bscompmx`: pop'n music 1's word is
+likely theirs, not checked), and the Twinkle and System 573 games. The menus do misbehave on the
+Firebeat games without the gate: pop'n music 8's music select drew 207,927 pixels moving that the
+game holds still in 150 frames (`tools/still.py` as below; THE FINAL's idle select: 19,942 in 300),
+ParaParaParadise's song select 115,245 in 150. DJ Main has no picture dump to measure it with.
 
 Checked on THE FINAL (headless, `HK_BETWEEN_SNAP`, which goes by the same rule): the sound select
 left idle (300 frames) and scrolled to the folders (160) make no in-between pictures, where smooth

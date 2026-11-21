@@ -515,7 +515,9 @@ bool window_set_shader_key(const std::string &spec) {
 }
 // smooth motion on this frame: asked for, and (--smooth-motion songs) a song being played (shell/smoothgate.h)
 static bool smooth_now() { return g_smooth_motion && smoothgate::open(); }
-void window_set_smooth_motion(bool on) { g_smooth_motion = on, pacing::set_smooth_motion(smooth_now() || g_beam); }
+void window_set_smooth_motion(bool on) {
+    g_smooth_motion = on, pacing::set_smooth_asked(on), pacing::set_smooth_motion(smooth_now() || g_beam);
+}
 bool window_smooth_motion() { return g_smooth_motion; }
 void window_set_beam(bool on, float gamma, float gain) {
     g_beam = on, g_beam_gamma = gamma, g_beam_gain = gain;
@@ -2130,6 +2132,20 @@ std::string audio_describe() {
     if (g_smooth_motion && !g_beam && smoothgate::state().has)
         out += "\nvideo: smooth motion in songs: asked for on " + std::to_string(g_smooth_open) + " of " + std::to_string(g_smooth_frames) +
                " frames shown (the others outside a song, each held for its refreshes)";
+    // ... and how those were paced: at the game's exact speed (locking would have changed it more than
+    // 0.5 %), or locked to the display (shell/smoothgate.h exact_outside_songs)
+    if (g_smooth_motion && !g_beam && smoothgate::state().has) {
+        uint64_t exact = 0, locked = 0;
+        double change = 0;
+        pacing::outside_songs(exact, locked, change);
+        char b[320];
+        snprintf(b, sizeof b,
+                 "\nvideo: outside songs: %llu frames at the game's exact speed, %llu locked to the display "
+                 "(locking changes its speed %+.2f %%: %s)",
+                 (unsigned long long)exact, (unsigned long long)locked, change * 100.0,
+                 !exact && !locked ? "display sync not used" : std::fabs(change) > smoothgate::MOST_LOCK_CHANGE ? "more than 0.5 %, kept exact" : "0.5 % or less, locked");
+        out += b;
+    }
     if (g_beam)
         out += "\nvideo: CRT beam: " + std::to_string(g_beam_frames) + " frames through it" +
                (g_beam_without ? ", " + std::to_string(g_beam_without) + " without (" + g_beam_why + ")" : std::string());

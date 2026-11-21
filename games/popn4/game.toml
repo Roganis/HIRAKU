@@ -18,3 +18,7 @@ dongle = "gq986_gc986"     # DS1991 image inside the MAME ROM set
 
 [spu]
 rom = "a02jaa04.3q"     # 68000 program, from the MAME set (same for pop'n 4-8)
+
+[smooth]
+# smooth motion in songs only (docs/SMOOTH.md): the song's chart position, +3 to 5 a frame from the stage's first frame to the song's end, held after it
+while_changing = 0x8014646c

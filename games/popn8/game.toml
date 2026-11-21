@@ -18,3 +18,7 @@ dongle = "gcb30-ja_gcb30-jb"   # DS1991 image inside the MAME ROM set
 
 [spu]
 rom = "a02jaa04.3q"     # 68000 program, from the MAME set
+
+[smooth]
+# smooth motion in songs only (docs/SMOOTH.md): the song's frame counter, +1 a frame from the notes' first frame to the stage's end
+while_changing = 0x8021825c

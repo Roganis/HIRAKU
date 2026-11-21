@@ -19,3 +19,7 @@ chs = "4200,16,63"       # its geometry (cylinders, heads, sectors), as the CHD 
 # ATA security, from MAME init_hmcompmx(): the disk stays locked until the game sends these
 ata_master_password = "4d4743284b294e4f4d4120494c41204c49524847535452205345524545562e44"
 ata_user_password = "4442564b3a34382a5a4d783e74616c0a7a631977737d0d126b09020f05007d1b"
+
+[smooth]
+# smooth motion in songs only (docs/SMOOTH.md): a word of the play screen that changes every frame from the play screen's first frame to the stage's end (open on the final stage's title card too, as beatmania III THE FINAL's from the stage's title); open in the attract's demo play too
+while_changing = 0x406254

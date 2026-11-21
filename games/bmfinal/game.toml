@@ -18,3 +18,7 @@ chs = "1222,255,63"       # its geometry (cylinders, heads, sectors), as the CHD
 # ATA security, from MAME init_bmfinal(): the disk stays locked until the game sends these
 ata_master_password = "4d4743284b294e4f4d4120494c41204c49524847535452205345524545562e44"
 ata_user_password = "4442564b3f4f4a235a520c3e0704637f76746a647e680c0c0c06716e77797d7a"
+
+[smooth]
+# smooth motion in songs only (docs/SMOOTH.md): the stage's clock (16.16, +1.0 a frame) from the play screen's first frame to the stage's end; open in the attract's demo play too
+while_changing = 0x406554

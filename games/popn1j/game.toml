@@ -15,3 +15,11 @@ tiles   = ["803jaa07.22d", "803jaa08.23d", "803jaa09.25d", "803jaa10.27d"]
 [hdd]
 chd = "803jaa11"
 chs = "4965,16,63"       # its geometry (cylinders, heads, sectors), as the CHD gives it to MAME's drive
+
+[smooth]
+# smooth motion in songs only (docs/SMOOTH.md): a word of the play screen that changes every frame
+# from the notes' first frame (the credit's instruction stage too), gated by a word that is 1 only
+# then (alone the first changes for a few frames now and then in the attract)
+while_changing = 0x404a28
+while_equal = 0x40749c
+value = 1                # as the 68000 reads it (big-endian)

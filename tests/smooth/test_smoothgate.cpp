@@ -105,6 +105,43 @@ int main() {
         check(s.frames == 7 && s.open_frames == 3, "frames counted");
     }
 
+    // a big-endian machine (DJ Main, Firebeat): while_equal's value is the word as the machine reads it
+    {
+        hk::smoothgate::State &s = hk::smoothgate::state();
+        s = hk::smoothgate::State{};
+        s.has = true, s.big_endian = true;
+        s.cond.address = 0x100, s.cond.gated = true, s.cond.gate = 0x200, s.cond.value = 1;
+        std::vector<int> open;
+        const uint32_t be1 = 0x01000000u;   // bytes 00 00 00 01 on a little-endian host
+        for (int i = 0; i < 6; i++) {
+            g_counter = (uint32_t)i;
+            g_phase = i < 4 ? be1 : 1u;      // the last two: 01 00 00 00, the machine's 0x01000000
+            hk::smoothgate::frame(read, false);
+            open.push_back(hk::smoothgate::open());
+        }
+        check(open == std::vector<int>{0, 0, 1, 1, 0, 0}, "big-endian while_equal");
+        s = hk::smoothgate::State{};
+    }
+
+    // outside songs: locked to the display where that changes the game's speed 0.5 % or less, else
+    // kept at its exact speed (no step in the music's speed at a song's ends)
+    {
+        using hk::smoothgate::exact_outside_songs;
+        using hk::smoothgate::lock_change;
+        const double bm3 = 1 / 59.94, popn = 1 / 58.49, djmain = 1 / 57.996;
+        for (double hz : {60.0, 120.0, 240.0}) {
+            check(!exact_outside_songs(bm3, 1 / hz), "beatmania III (59.94 Hz) locked at 60/120/240 Hz");
+            check(std::fabs(lock_change(bm3, 1 / hz) - 0.001) < 0.0002, "beatmania III: +0.1 %");
+            check(exact_outside_songs(popn, 1 / hz), "Firebeat pop'n (58.49 Hz) kept exact at 60/120/240 Hz");
+            check(std::fabs(lock_change(popn, 1 / hz) - 0.0258) < 0.0005, "Firebeat pop'n: +2.6 %");
+            check(exact_outside_songs(djmain, 1 / hz), "DJ Main (58.00 Hz) kept exact");
+        }
+        check(exact_outside_songs(bm3, 1 / 144.0), "59.94 Hz at 144 Hz (2 refreshes: +20 %) kept exact");
+        check(!exact_outside_songs(1 / 60.0, 1 / 60.0) && lock_change(1 / 60.0, 1 / 60.0) == 0, "the display's own rate");
+        check(exact_outside_songs(1 / 59.6, 1 / 60.0) && !exact_outside_songs(1 / 59.8, 1 / 60.0), "the 0.5 % line");
+        check(lock_change(bm3, 0) == 0 && lock_change(0, 1 / 60.0) == 0, "unknown rates: no change");
+    }
+
     if (failures) return 1;
     std::printf("smoothgate: ok\n");
     return 0;

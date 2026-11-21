@@ -20,3 +20,9 @@ dongle = "gq977"        # DS1991 image inside the MAME ROM set
 [recomp]
 # Functions Ghidra cannot find (from the runtime's interpreter-fallback log)
 extra_entries = [0x8003c238, 0x8003bb0c]
+
+[smooth]
+# smooth motion in songs only (docs/SMOOTH.md): a counter of the stage's frames (+1 a frame, from the song's title on), and the play screen's flag, which drops as STAGE CLEAR (the result) comes over it
+while_changing = 0x801018d0
+while_equal = 0x801025c0   # 1 from the stage's start to its last frame, 0 from STAGE CLEAR on
+value = 1

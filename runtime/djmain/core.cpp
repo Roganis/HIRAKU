@@ -107,6 +107,7 @@ public:
 
     double seconds() const override { return (double)dj::cycles() / dj::CPU_HZ; }
     const uint8_t *mem(uint32_t addr, uint32_t len) const override { return dj::mem(addr, len); }
+    bool mod_big_endian() const override { return true; }   // the 68000's: RAM kept big-endian (board.cpp be32)
     uint64_t frame_count() const override { return dj::frame_count(); }
     bool set_vsync_rate(double hz) override { return dj::set_frame_rate(hz), true; }
     double native_rate() const override { return (double)dj::CPU_HZ / dj::FRAME_CYCLES; }

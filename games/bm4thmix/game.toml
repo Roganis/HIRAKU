@@ -17,3 +17,9 @@ chd = "847jaa11"
 chs = "4200,16,63"       # its geometry (cylinders, heads, sectors), as the CHD gives it to MAME's drive
 # ATA security, from MAME init_bm4thmix(): the disk stays locked until the game sends these
 ata_user_password = "4442294b2f2c4c32485d0c3e626f7e73671019796c7d000118061e07771a7d77"
+
+[smooth]
+# smooth motion in songs only (docs/SMOOTH.md): a word of the play screen that changes every frame
+# from the play screen's first frame to the stage's end, and in the attract's demo play; it is open on
+# the rankings screen too (about 400 frames), the only word found that runs through every stage
+while_changing = 0x4064ec

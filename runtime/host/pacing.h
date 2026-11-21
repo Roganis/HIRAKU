@@ -80,6 +80,13 @@ bool can_fill_refreshes();
 // 58 Hz game; 0: the frame isn't shown); exact_speed() says it's so, and phase(i) is refresh i's
 // moment in frames after the frame's (0 <= phase, the next frame's moment at 1)
 void set_smooth_motion(bool on);
+// --smooth-motion songs: smooth motion asked for, its pictures on only in songs. Outside them (smooth
+// motion off) the game keeps its exact speed where locking it to the display would change that by
+// more than 0.5 % (shell/smoothgate.h exact_outside_songs): each frame held for its refreshes, none
+// carried on; else it's locked as without smooth motion. outside_songs() says which the frames
+// outside songs had (exact, locked) and the change locking would make (+0.026: 2.6 % faster)
+void set_smooth_asked(bool on);
+void outside_songs(uint64_t &exact, uint64_t &locked, double &change);
 // The CRT beam (window.h): with smooth motion's pacing, a whole number of refreshes a frame instead
 // of the game's exact speed where display sync would (within its skew: the game that much faster)
 void set_whole_refreshes(bool on);

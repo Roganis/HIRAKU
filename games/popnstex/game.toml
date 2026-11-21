@@ -15,3 +15,7 @@ tiles   = ["970jba07.22d", "970jba08.23d", "970jba09.25d", "970jba10.27d"]
 [hdd]
 chd = "970jba11"
 chs = "12316,16,32"       # its geometry (cylinders, heads, sectors), as the CHD gives it to MAME's drive
+
+[smooth]
+# smooth motion in songs only (docs/SMOOTH.md): the song's clock (16.16, +1.0 a frame) from the notes' first frame to the song's end; open in the attract's demo play too
+while_changing = 0x404508

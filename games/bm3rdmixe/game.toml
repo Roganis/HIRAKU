@@ -16,3 +16,7 @@ tiles   = ["825eaa07.22d", "825eaa08.23d", "825eaa09.25d", "825eaa10.27d"]
 [hdd]
 chd = "825jab11"
 chs = "4200,16,63"       # its geometry (cylinders, heads, sectors), as the CHD gives it to MAME's drive
+
+[smooth]
+# smooth motion in songs only (docs/SMOOTH.md): the stage's clock (16.16, +1.0 a frame) from the play screen's first frame to the stage's end; open in the attract's demo play too
+while_changing = 0x4079d4

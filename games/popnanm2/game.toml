@@ -22,3 +22,7 @@ rom = "a02jaa04.3q"     # 68000 program, from the MAME set
 [recomp]
 # Functions Ghidra cannot find (from the runtime's interpreter-fallback log)
 extra_entries = [0x8003ee20, 0x8003e60c]
+
+[smooth]
+# smooth motion in songs only (docs/SMOOTH.md): changes every frame from the stage's start (after READY) to the song's end (what it is not known: a frame or two still now and then, which the rule rides over)
+while_changing = 0x802b3d7c

@@ -21,3 +21,9 @@ cabinet = 0x9           # ParaPara cabinet, overseas region (MAME init_ppp_overs
 [recomp]
 # Functions Ghidra cannot find (from the runtime's interpreter-fallback log)
 extra_entries = [0x800450f4, 0x800449c8]
+
+[smooth]
+# smooth motion in songs only (docs/SMOOTH.md): a counter of the stage's frames (+1 a frame, from the song's title on), and the play screen's flag, which drops as STAGE CLEAR (the result) comes over it
+while_changing = 0x80101ac8
+while_equal = 0x80102e84   # 1 from the stage's start to its last frame, 0 from STAGE CLEAR on
+value = 1

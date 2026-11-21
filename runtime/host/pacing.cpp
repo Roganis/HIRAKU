@@ -13,6 +13,7 @@
 #include <vector>
 
 #include "../core/prof.h"
+#include "../shell/smoothgate.h"
 #ifdef _WIN32
 #include "dwm.h"
 #include "swapchain.h"
@@ -38,6 +39,10 @@ bool g_dwm = false;            // Windows: DWM says when the display refreshes (
 double g_frame_at = 0;         // exact speed: when the current frame's moment is, on the steady clock (ns)
 double g_period_ns = 0;        // exact speed: the game's frame period (ns), the last one seen
 double g_max_skew = 0.03;   // the most the game's speed may change (pop'n at 60 Hz: 2.6 %); HK_DISPLAY_SYNC_SKEW
+bool g_smooth_asked = false;   // set_smooth_asked: --smooth-motion songs (g_smooth_motion: in a song now)
+bool g_far = false;            // ... locking would change the game's speed more than 0.5 % (smoothgate.h): exact outside songs too
+double g_lock_change = 0;      // ... that change, the last frame's
+uint64_t n_outside_exact = 0, n_outside_locked = 0;   // frames outside songs at exact speed, locked
 constexpr int64_t MS = 1'000'000;
 
 SDL_Window *g_win = nullptr;
@@ -574,8 +579,13 @@ void pump() {
 // on the display's grid, its moment at its first refresh; carried over, a frame's moment from before a
 // song gave its refreshes to the past, none shown)
 void set_smooth_motion(bool on) {
-    if (on != g_smooth_motion) g_fresh = true;
+    // (from exact speed with its pictures to exact speed without, or back: the frames' moments go on)
+    if (on != g_smooth_motion && !(g_smooth_asked && g_far && g_exact)) g_fresh = true;
     g_smooth_motion = on;
+}
+void set_smooth_asked(bool on) { g_smooth_asked = on; }
+void outside_songs(uint64_t &exact, uint64_t &locked, double &change) {
+    exact = n_outside_exact, locked = n_outside_locked, change = g_lock_change;
 }
 void set_whole_refreshes(bool on) { g_whole = on; }
 
@@ -590,9 +600,12 @@ static bool frame_exact(double period, double hz) {
     g_speed = 1.0;
     g_period_ns = period * 1e9;
     char b[256];
-    snprintf(b, sizeof b, "on: %.2f Hz display, smooth motion: every refresh a picture of its own moment, the game at its "
-             "own %.2f Hz (exact speed)", hz, 1.0 / period);
-    announce("exact " + std::to_string(std::lround(hz * 10)) + " " + std::to_string(std::lround(2.0 / period)), b);
+    snprintf(b, sizeof b, "on: %.2f Hz display, %s, the game at its own %.2f Hz (exact speed)", hz,
+             g_smooth_motion ? "smooth motion: every refresh a picture of its own moment"
+                             : "outside a song: each frame held for its refreshes (locking would change its speed more than 0.5 %)",
+             1.0 / period);
+    announce(std::string(g_smooth_motion ? "exact " : "held ") + std::to_string(std::lround(hz * 10)) + " " +
+                 std::to_string(std::lround(2.0 / period)), b);
     const int64_t now = (int64_t)prof::now_ns();
     if (!g_lead_set) g_lead = g_T / 2, g_lead_set = true;
     // the first refresh this frame can make: the one after the last frame's (g_target + g_k * T)
@@ -639,6 +652,12 @@ bool frame(double period) {
     double hz = 1e9 / (double)g_T;
     int k = std::max(1, (int)std::lround(period * 1e9 / (double)g_T));
     double f = period * 1e9 / ((double)k * (double)g_T);
+    // --smooth-motion songs, outside a song: the game at its exact speed too where locking it to the
+    // display would change that more than 0.5 % (shell/smoothgate.h): no step in speed at a song's ends
+    g_lock_change = smoothgate::lock_change(period, (double)g_T * 1e-9);
+    g_far = smoothgate::exact_outside_songs(period, (double)g_T * 1e-9);
+    const bool exact_pacing = g_smooth_motion || (g_smooth_asked && g_far);
+    (void)exact_pacing;   // (a build with neither fifo-v1 nor DWM: never exact)
     // smoothed, so the sound's rate doesn't flutter with each frame's jitter; but a jump of more than
     // 5 % is the game's rate changing (a mod's [[rate]]: 59.94 Hz <-> the display's), taken at once:
     // smoothed, the sound played at a fraction of its speed (a quarter, 240 -> 60 Hz) until it caught
@@ -647,7 +666,7 @@ bool frame(double period) {
     if (g_game_hz <= 0 || std::fabs(game_hz - g_game_hz) > 0.05 * g_game_hz) g_game_hz = game_hz;
     else g_game_hz += (game_hz - g_game_hz) / 64;
 #ifdef HK_WITH_WAYLAND
-    g_exact = g_smooth_motion && g_fifo && g_pres;
+    g_exact = exact_pacing && g_fifo && g_pres;
 #endif
 #ifdef _WIN32
     // DWM's vblank: the refresh period, and the grid's phase (the commits' targets on it)
@@ -656,14 +675,17 @@ bool frame(double period) {
         if (g_target > 0) g_target -= (g_target - v) - std::llround((double)(g_target - v) / (double)p) * p;
         else g_target = v;
     }
-    g_exact = g_smooth_motion && g_dwm;
+    g_exact = exact_pacing && g_dwm;
 #endif
     // the CRT beam: the same refreshes every frame where display sync would (within its skew: 59.94 Hz
     // games 0.1 % faster at 120 or 240 Hz, pop'n music's 58.49 Hz 2.6 %); at exact speed the light's
     // split over the refreshes drifts, and the display's own response (its curve, its slow dark
     // transitions) turns that into a slow wave of brightness in the darker parts
     if (g_exact && g_whole && k >= 2 && std::fabs(f - 1.0) <= g_max_skew) g_exact = false;
-    if (g_exact) return frame_exact(period, hz);
+    if (g_exact) {
+        if (g_smooth_asked && !g_smooth_motion) n_outside_exact++;
+        return frame_exact(period, hz);
+    }
     if (std::fabs(f - 1.0) > g_max_skew) {
         if (g_active) g_active = false;
         g_fresh = true;
@@ -683,6 +705,7 @@ bool frame(double period) {
     if (g_active && k != g_k) g_best = 0, g_window.clear(), g_skip = std::max(g_skip, 5);
     g_active = true;
     g_k = k;
+    if (g_smooth_asked && !g_smooth_motion) n_outside_locked++;
     g_speed = 1e9 / (g_game_hz * (double)k * (double)g_T);   // smoothed: the sound's rate shouldn't flutter
     // said again when the game changes its video mode (pop'n boots at 59.94 Hz, then runs at 58.49)
     snprintf(b, sizeof b, "on: %.2f Hz display, %d refresh%s per frame, the game's %.2f Hz at %+.1f %% speed", hz, k,

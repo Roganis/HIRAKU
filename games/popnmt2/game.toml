@@ -22,3 +22,7 @@ rom = "a02jaa04.3q"     # 68000 program, from the MAME set
 
 [recomp]
 extra_entries = [0x8003e438]   # called through a pointer Ghidra did not follow (boot)
+
+[smooth]
+# smooth motion in songs only (docs/SMOOTH.md): the notes' scroll position (a float), changing every frame from the notes' first frame to the song's end
+while_changing = 0x802af674

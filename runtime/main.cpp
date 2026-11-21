@@ -694,6 +694,7 @@ int main(int argc, char **argv) {
             return 2;
         }
         g.has = has && smooth_where == "songs";
+        g.big_endian = machine.mod_big_endian();   // (while_equal's value in the machine's own order)
         if (g.has)
             printf("smooth motion: in songs only (while the word at 0x%08x changes, games/%s/game.toml [smooth]); the "
                    "other screens each frame held for its refreshes\n", g.cond.address, game.c_str());

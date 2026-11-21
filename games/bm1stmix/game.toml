@@ -17,3 +17,7 @@ tiles   = ["753jaa07.22d", "753jaa08.23d", "753jaa09.25d", "753jaa10.27d"] # K05
 [hdd]
 chd = "753jaa11"        # IDE hard disk; no ATA password before complete MIX
 chs = "2796,16,63"       # its geometry (cylinders, heads, sectors), as the CHD gives it to MAME's drive
+
+[smooth]
+# smooth motion in songs only (docs/SMOOTH.md): the stage's clock (16.16, +1.0 a frame) from the play screen's first frame to the stage's end, the practice stage too; open in the attract's demo play too
+while_changing = 0x4071d8

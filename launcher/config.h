@@ -48,6 +48,7 @@ QString logsDir();
 // and the player's own as the menu reads them)
 QString menuPicturesDir();
 QString recordingsDir();                    // the games' video recordings (F6: --record-folder; runtime/host/record.h)
+QString screenshotsDir();                   // the games' screenshots (F5: --screenshot-folder; runtime/host/screenshot.h)
 // The launcher's music (launcher/music.h) when Settings > Audio names no folder: <data>/music
 QString musicDir();
 constexpr int kRunLogs = 10;

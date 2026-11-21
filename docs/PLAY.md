@@ -85,6 +85,7 @@ The keys, with beatmania III as the example (each game's own are in its section)
 | F8 | the CRT shader's settings, changed while you play |
 | F7 | how the game runs on this PC: one line, a panel, everything, off |
 | F6 | record the game to a video file; again to stop ([below](#recording-video-f6)) |
+| F5 | save a screenshot ([below](#screenshots-f5)) |
 | Ctrl+1 … Ctrl+9 | type one of the game's codes |
 | Esc | quit |
 
@@ -366,6 +367,18 @@ records for sharing, `--record-encoder auto|gpu|x264` and `--record-scale auto|1
 Settings, and `hiraku-menu --convert-recording IN.mkv [OUT.mp4]` converts one (any HIRAKU program
 does it). A run with no window (or the fast start-up) always takes x264, so its file is the same
 every time.
+
+## Screenshots (F5)
+
+**F5** saves a screenshot: the game's own picture, as the recording has it, without the picture
+mode, the lights or the performance overlay, as a PNG in `screenshots/` in the saves' folder
+(`user/data/screenshots/` in a release package, **File > Open the screenshots folder**), named by
+the game and the time (`bm1stmix-20261121-201502.png`; `-2`, `-3` for more in the same second).
+It has the shape of the game's screen: where the game's pixels aren't square, the picture is made
+taller or wider (never smaller), so a beatmania IIDX screen of 640x240 on its 16:9 tube is saved
+as 640x360 and pop'n music 9–14's 512x448 as 576x448. Games with square pixels (beatmania's
+512x384) are saved as they are. **F12** still makes the screen the game's picture in the game
+menu. `--screenshot-folder DIR` sets the folder.
 
 ## The last runs' logs
 

@@ -191,6 +191,17 @@ if(HK_FFMPEG_FOUND)
   add_test(NAME host_record COMMAND test_record ${CMAKE_CURRENT_BINARY_DIR}/record)
   set_tests_properties(host_record PROPERTIES SKIP_RETURN_CODE 77)   # (an FFmpeg without the recorder's parts)
 endif()
+# Screenshots (runtime/host/screenshot.h, F5) and the PNG writer (runtime/host/png.h, encode): made-up
+# pictures encoded and decoded back, the files' names and no file written over, a folder that is a
+# file, one with letters outside ASCII, the saver's thread; then the files read by Python's own zlib
+add_executable(test_screenshot host/test_screenshot.cpp)
+target_link_libraries(test_screenshot PRIVATE hiraku_shell)
+add_test(NAME host_screenshot COMMAND test_screenshot ${CMAKE_CURRENT_BINARY_DIR}/screenshot)
+set_tests_properties(host_screenshot PROPERTIES FIXTURES_SETUP screenshot_files)
+if(Python3_Interpreter_FOUND AND NOT CMAKE_CROSSCOMPILING)
+  add_test(NAME host_screenshot_png COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/host/check_png.py ${CMAKE_CURRENT_BINARY_DIR}/screenshot)
+  set_tests_properties(host_screenshot_png PROPERTIES FIXTURES_REQUIRED screenshot_files)
+endif()
 
 # The breaks in the sound sorted by what their frame shows (runtime/host/breaks.h: the exit report's
 # classes and the slow-frame lines' late-burst causes) from made-up frames, and the log's line of test

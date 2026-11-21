@@ -277,6 +277,7 @@ auto g_last_poll = std::chrono::steady_clock::now();
 uint64_t g_pointer_until = 0;     // full screen: the pointer shown until then (the mouse moved with the performance overlay up)
 std::atomic<bool> g_picture_asked{false};   // F12 (window_picture_asked)
 std::atomic<bool> g_record_asked{false};    // F6 (window_record_asked)
+std::atomic<bool> g_screenshot_asked{false};   // F5 (window_screenshot_asked)
 
 // The mouse on a touched screen (Core::input_position("Pointer") >= 0: the C33 cabinet's small
 // display): the left button's presses, and moves while it's down, as "Pointer X"/"Pointer Y" (the
@@ -404,6 +405,11 @@ void poll() {
             g_record_asked = true;
             continue;
         }
+        // F5: a screenshot of the game's own picture (host/screenshot.h), likewise unless a control has it
+        if (e.type == SDL_EVENT_KEY_DOWN && !e.key.repeat && e.key.key == SDLK_F5 && !input_key_bound(e)) {
+            g_screenshot_asked = true;
+            continue;
+        }
         if (e.type == SDL_EVENT_KEY_DOWN && !e.key.repeat && e.key.key == SDLK_F10 && g_gl)   // F10: off, light, full, lola
             g_mode = g_mode == picture::Mode::off     ? picture::Mode::light
                    : g_mode == picture::Mode::light ? picture::Mode::full
@@ -491,6 +497,7 @@ void window_set_display_sync(bool on) { g_display_sync = on; }
 void window_set_lights_overlay(bool on) { lampview::set_shown(on); }
 bool window_picture_asked() { return g_picture_asked.exchange(false); }
 bool window_record_asked() { return g_record_asked.exchange(false); }
+bool window_screenshot_asked() { return g_screenshot_asked.exchange(false); }
 bool window_set_stats_overlay(const std::string &level, const std::string &store) {
     statsview::Level l;
     if (!statsview::parse_level(level, l)) return false;

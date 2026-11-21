@@ -581,6 +581,10 @@ MainWindow::MainWindow() {
         QDir().mkpath(cfg::recordingsDir());
         QDesktopServices::openUrl(QUrl::fromLocalFile(cfg::recordingsDir()));
     });
+    file->addAction("Open the screenshots folder", this, [] {   // (F5's: runtime/host/screenshot.h)
+        QDir().mkpath(cfg::screenshotsDir());
+        QDesktopServices::openUrl(QUrl::fromLocalFile(cfg::screenshotsDir()));
+    });
     file->addSeparator();
     file->addAction("Open the HIRAKU folder", this, [] { QDesktopServices::openUrl(QUrl::fromLocalFile(cfg::rootDir())); });
     file->addAction("Open the settings folder", this, [] {
@@ -1477,6 +1481,7 @@ QStringList MainWindow::arguments(const Game &g) const {
     a << "--record-folder" << cfg::recordingsDir()
       << recording::arguments(s.value("record/format", "ffv1").toString(), s.value("record/encoder", "auto").toString(),
                               s.value("record/scale", 0).toInt());
+    a << "--screenshot-folder" << cfg::screenshotsDir();   // F5's screenshots (runtime/host/screenshot.h), beside them
     if (s.value("game/fastBoot", true).toBool() && g.core != "pc") {   // runtime/host/warp.h
         // a start that installs the game's data (minutes): fast to the install's end instead
         if (g.installSeconds > 0 && (firstBoot(g) || installCassette(g) || installCd(g)))

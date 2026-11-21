@@ -60,6 +60,8 @@ void window_set_lights_overlay(bool on);
 bool window_picture_asked();
 // F6 pressed since the last call: a recording asked for, or its end (main.cpp, host/record.h)
 bool window_record_asked();
+// F5 pressed since the last call: a screenshot asked for (main.cpp, host/screenshot.h)
+bool window_screenshot_asked();
 // --stats-overlay LEVEL: the performance overlay (host/statsview.h) from the start: "off", "line",
 // "panel" or "full" (F7 goes through them). store: the file its place on the picture is kept in
 // ("": not kept). False: no such level.

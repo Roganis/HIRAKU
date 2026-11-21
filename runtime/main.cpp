@@ -36,6 +36,7 @@ extern char **environ;   // (the run's test switches, for its log: shell/switche
 #include "host/mods.h"
 #include "host/modscript.h"
 #include "host/record.h"
+#include "host/screenshot.h"
 #include "host/script.h"
 #include "shell/cabinet.h"
 #include "shell/built.h"
@@ -73,6 +74,8 @@ static const char COMMON_OPTIONS[] = R"HK(  --frames N        stop after N video
                     folder or none: a file named by the game and the time in it, or in
                     --record-folder's. With --window, F6 starts and stops it. host/record.h
   --record-folder DIR  where F6's recordings go (default: <saves' folder>/recordings, as --nvram's)
+  --screenshot-folder DIR  where F5's screenshots go (PNG, the game's own picture; default:
+                    <saves' folder>/screenshots). host/screenshot.h
   --record-format F ffv1 (the default) or h264 (.mp4, H.264 and AAC: for sharing, about a sixth of
                     the size; where this build's FFmpeg has an H.264 encoder)
   --record-encoder E  h264's encoder: auto (the default: the graphics card's when one works here,
@@ -396,6 +399,7 @@ int main(int argc, char **argv) {
     double menu_picture_at = 0;
     bool record_at_start = false;   // --record: host/record.h
     std::string record_path, record_folder, record_format = "ffv1";
+    std::string screenshot_folder;   // --screenshot-folder: F5's (host/screenshot.h)
     std::string record_encoder = "auto", convert_in, convert_out;   // --record-encoder, --convert-recording
     int record_scale = 0;   // --record-scale (0: auto)
     for (int k = 1; k < argc; k++) {
@@ -419,6 +423,7 @@ int main(int argc, char **argv) {
         else if (a == "--wav") wav_path = val();
         else if (a == "--record") record_at_start = true, record_path = (k + 1 < argc && argv[k + 1][0] != '-') ? val() : "";
         else if (a == "--record-folder") record_folder = val();
+        else if (a == "--screenshot-folder") screenshot_folder = val();
         else if (a == "--record-format") record_format = val();
         else if (a == "--record-encoder") record_encoder = val();
         else if (a == "--record-scale") { const std::string v = val(); record_scale = v == "auto" ? 0 : std::max(1, std::stoi(v)); }
@@ -542,6 +547,7 @@ int main(int argc, char **argv) {
     if (!digest_path.empty() && !digest) { fprintf(stderr, "cannot write %s\n", digest_path.c_str()); return 1; }
     uint64_t audio_hash = HASH_SEED;
     static host::record::Capture capture;   // --record, F6 (host/record.h): nothing while it doesn't record
+    static host::screenshot::Saver screenshots;   // F5 (host/screenshot.h): a thread of its own once one is taken
     // the sink goes in before init(): machines make sound while the skipped BIOS time passes
     machine.set_audio_sink([&](const float *lr, int n) {
         capture.sound(lr, n);
@@ -613,6 +619,7 @@ int main(int argc, char **argv) {
         close_wav();
         // (the file finished, and any F6 ended still being finished: every way out comes here)
         if (const std::string line = capture.stop(); !line.empty()) printf("%s\n", line.c_str());
+        screenshots.wait();   // (and any F5 still being written)
         if (digest) { fclose(digest); digest = nullptr; }
 #ifdef HK_WITH_SDL
         if (window_scale) printf("%s\n", host::audio_describe().c_str());
@@ -799,6 +806,44 @@ int main(int argc, char **argv) {
 #endif
         capture.picture(rgb, w, h, machine.seconds());
     };
+    // F5 (host/screenshot.h): the picture the recorder takes, in the screen's shape, as a PNG in
+    // --screenshot-folder's.
+    // HK_SCREENSHOT_FRAMES=F1,F2,... (tests): one asked for at those frames of the frame hook (with
+    // a window, where the picture comes at the end of vertical blank: the frame before's number)
+    if (screenshot_folder.empty()) screenshot_folder = hk::user_data_dir(opt.root) + "/screenshots";
+    std::vector<uint64_t> screenshot_frames;
+    if (const char *e = getenv("HK_SCREENSHOT_FRAMES"))
+        for (const char *p = e; *p;) {
+            char *end = nullptr;
+            const unsigned long long v = strtoull(p, &end, 10);
+            if (end == p) break;
+            screenshot_frames.push_back(v);
+            p = *end == ',' ? end + 1 : end;
+        }
+    uint64_t hook_frame = 0;   // the frame hook's last frame (set there)
+    auto screenshot_picture = [&](const uint32_t *rgb, int w, int h) {
+        bool asked = false;
+        for (uint64_t &at : screenshot_frames)
+            if (at == hook_frame) asked = true, at = UINT64_MAX;
+#ifdef HK_WITH_SDL
+        if (window_scale && host::window_screenshot_asked()) asked = true;
+#endif
+        if (!asked) return;
+        // the pixels' shape as a recording of this frame has it (record_setup: the screen's, and the
+        // part of it the frame covers, asked now)
+        double cw = 1, ch = 1;
+        machine.display_cover(w, h, cw, ch);
+        const double shape = host::screenshot::pixel_shape(machine.display_aspect(), cw, ch, w, h);
+        screenshots.take(rgb, w, h, shape, screenshot_folder, game, [notify = window_scale != 0](bool ok, const std::string &said) {
+            if (ok) printf("screenshot: %s\n", said.c_str());
+            else fprintf(stderr, "screenshot: none kept: %s\n", said.c_str());
+#ifdef HK_WITH_SDL
+            if (notify) host::notice::hint({ok ? "Screenshot kept" : "No screenshot", said}, 4, ok ? host::ui::Icon::picture : host::ui::Icon::alert);
+#else
+            (void)notify;
+#endif
+        });
+    };
 #ifdef HK_WITH_SDL
     // a core that can show the window its picture at the end of vertical blank does: the picture
     // the monitor then shows, the game's flip during the blank included, which the frame hook's
@@ -809,6 +854,7 @@ int main(int argc, char **argv) {
             host::window_present(rgb, w, h, machine.seconds());
             title_picture(rgb, w, h);
             record_picture(rgb, w, h);
+            screenshot_picture(rgb, w, h);
         });
 #endif
     // HK_BETWEEN_BENCH: the in-between pictures where a window asks for them (with the picture at
@@ -839,6 +885,7 @@ int main(int argc, char **argv) {
     bool told_picture = false, told_hold = false;
     machine.set_frame_hook([&](uint64_t f, const uint32_t *rgb, int w, int h) {
         frame_times.frame(f);
+        hook_frame = f;
         // the machine's saved memories, every so often (the core hands what changed to another thread)
         if (save_every > 0)
             if (const auto t = std::chrono::steady_clock::now(); std::chrono::duration<double>(t - last_save).count() >= save_every) {
@@ -908,6 +955,7 @@ int main(int argc, char **argv) {
         {
             title_picture(rgb, w, h);
             record_picture(rgb, w, h);
+            screenshot_picture(rgb, w, h);
         }
         if (between_at_frame) between_draw(w, h);
         if (prof::g_sample_frame) prof::g_sample_frame(f);   // HK_PROFILE_FRAMES

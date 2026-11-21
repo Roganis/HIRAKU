@@ -1107,3 +1107,10 @@ The launcher's Mods dialog has **Settings…** for the chosen mod (on or not), a
 **Open**
 - (owner) a mod with two sets of files on a real game and on Windows itself: only the tests have chosen files.
 - (later) choices from the cabinet's game menu (the Mods dialog isn't there).
+
+## 49. Screenshots (F5)
+
+A player's request (2026-11-21): **F5** in the game's window saves the game's own picture as a PNG, the frame the recorder takes (F6, `runtime/host/record.h`), without the picture mode, the window's scaling or anything drawn over it, in `screenshots/` beside `recordings/` in the saves' folder (`--screenshot-folder`, which the launcher passes; File > Open the screenshots folder), named `<game>-YYYYMMDD-HHMMSS.png` with `-2`, `-3` in the same second, the folder made with the first one. `runtime/host/screenshot.h`: the frame is copied on the machine's thread (0.1-0.3 ms up to 1280x720), and a thread of its own makes the PNG (`hk::png::encode`, 8-bit RGB; 6-11 ms for 512x384 to 640x480, 39 ms for 1280x720, 88 ms for 1920x1080) and writes it beside its name first (`sys::write_file`). The log says `screenshot: PATH` (or why none was kept) and the window a notice, as F6 does. Every core goes through `runtime/main.cpp`, so every core has it; F12 still keeps the screen as the game menu's picture. Since the owner's decision the same day it has the screen's shape: the pixels' shape a recording of the frame has (`Core::display_aspect` with `Core::display_cover`, the recorder's sample aspect ratio), and where it isn't square the picture is enlarged along one axis only, each new pixel the mean of the source it covers (a whole-number factor repeats lines exactly), on the saver's thread: Twinkle's 640x240 on its 16:9 tube is saved as 640x360, the Python pop'n's 512x448 (its display area inside the TV's raster) as 576x448, square pixels (DJ Main's 512x384) untouched. A two-screen game's frame holds both screens side by side, as its recording does. Tests: `host_screenshot`, `host_screenshot_png`.
+
+**Open**
+- (owner) F5 in a real window, on Windows itself, and from the Python core and hiraku-pc (built and run headless only for DJ Main and Twinkle).

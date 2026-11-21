@@ -645,10 +645,24 @@ void audio_release() {
     g_audio_held.clear();
 }
 
+// Between: what the card has already made of it, handed on at each 2 ms tick, not a frame later
+// (Keyboardmania's keysounds came 3-4 ms later than they need to: the frame's first sound waited
+// for the whole frame's run and the card's last part). The same samples and sums, in the same
+// order; only some go sooner. HK_XT446_EARLY=0: all at the frame's end, as before
+void audio_release_ready() {
+    static const bool early = !getenv("HK_XT446_EARLY") || strcmp(getenv("HK_XT446_EARLY"), "0") != 0;
+    if (!early || g_audio_held.empty() || !g_audio_sink) return;
+    const int n = synth::collect_ready(g_audio_held.data(), (int)(g_audio_held.size() / 2), 1.0f);
+    if (n <= 0) return;
+    g_audio_sink(g_audio_held.data(), n);
+    g_audio_held.erase(g_audio_held.begin(), g_audio_held.begin() + 2 * (std::ptrdiff_t)n);
+}
+
 void ymz_tick_fire();
 Timer g_ymz_tick("ymz", ymz_tick_fire);
 void ymz_tick_fire() {
     ymz_render_until(now());
+    if (synth::deferred()) audio_release_ready();
     g_ymz_tick.again(ticks_from_us(2000));
 }
 

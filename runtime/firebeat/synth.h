@@ -25,9 +25,13 @@ void render(float *lr, int frames, float gain);   // add 44.1 kHz stereo
 // board asks for samples with request() as it goes, in the same order as its
 // midi() calls, and adds them all to its own audio with collect() once a frame:
 // collect(lr, n, gain) waits for the n samples requested since the last collect.
+// collect_ready(lr, n, gain) adds, without waiting, those of the next n the card has
+// already made, and says how many (the board hands its sound on as it comes, not a
+// frame later); collect() then waits for the rest.
 bool deferred();
 void request(int frames);
 void collect(float *lr, int frames, float gain);
+int collect_ready(float *lr, int frames, float gain);
 void stop();                                   // ends the thread (before describe() at exit)
 std::string describe();
 

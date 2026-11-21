@@ -53,6 +53,12 @@ public:
         out.swap(out_);
         out_.clear();
     }
+    // the samples made so far, added to `out` (no wait)
+    void take_ready(std::vector<float> &out) {
+        std::lock_guard<std::mutex> lk(mu_);
+        out.insert(out.end(), out_.begin(), out_.end());
+        out_.clear();
+    }
     uint64_t requested() const { return requested_; }
 
 private:
@@ -89,6 +95,7 @@ private:
 };
 std::unique_ptr<Worker> g_worker;
 std::vector<float> g_collected;
+std::vector<float> g_ready;   // made, taken by collect_ready, not yet added (past the board's n)
 }
 
 namespace fluid {
@@ -273,9 +280,24 @@ void request(int frames) {
 void collect(float *lr, int frames, float gain) {
     if (!g_worker) return;
     g_worker->wait_all(g_collected);
+    // (what collect_ready took out and left for later comes first)
+    if (!g_ready.empty()) {
+        g_ready.insert(g_ready.end(), g_collected.begin(), g_collected.end());
+        g_collected.swap(g_ready);
+        g_ready.clear();
+    }
     // the board collects exactly what it requested since the last collect
     const size_t n = std::min(g_collected.size(), 2 * (size_t)frames);
     for (size_t k = 0; k < n; k++) lr[k] += g_collected[k] * gain;
+}
+
+int collect_ready(float *lr, int frames, float gain) {
+    if (!g_worker) return 0;
+    g_worker->take_ready(g_ready);
+    const size_t n = std::min(g_ready.size(), 2 * (size_t)frames);
+    for (size_t k = 0; k < n; k++) lr[k] += g_ready[k] * gain;   // (the same sums as collect's)
+    g_ready.erase(g_ready.begin(), g_ready.begin() + (std::ptrdiff_t)n);
+    return (int)(n / 2);
 }
 
 void stop() { g_worker.reset(); }

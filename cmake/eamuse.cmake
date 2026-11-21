@@ -6,5 +6,5 @@ set(HK_EAMUSE_SOURCES
     runtime/eamuse/store.cpp runtime/eamuse/server.cpp runtime/eamuse/games.cpp runtime/eamuse/server_rank.cpp runtime/eamuse/server_share.cpp
     runtime/eamuse/server_popn.cpp runtime/eamuse/server_pc.cpp runtime/eamuse/server_hc.cpp
     runtime/eamuse/server_p24.cpp runtime/eamuse/server_iidx.cpp runtime/eamuse/server_gfdmv.cpp
-    runtime/eamuse/server_gfdm.cpp runtime/eamuse/readers.cpp
+    runtime/eamuse/server_gfdm.cpp runtime/eamuse/server_eemall.cpp runtime/eamuse/readers.cpp
     runtime/eamuse/kbin.cpp runtime/eamuse/lobby.cpp runtime/eamuse/netrelay.cpp)

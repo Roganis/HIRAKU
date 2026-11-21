@@ -277,6 +277,8 @@ bool read_request(const std::function<long(char *, size_t)> &recv, std::string &
             if (body > (1u << 20)) return false;
             if (req.size() >= he + 4 + body) return true;
         }
+        // a GET whose lines end in LF alone (the ee'MALL station's downloads from its shop server)
+        if (req.compare(0, 4, "GET ") == 0 && req.find("\n\n") != std::string::npos) return true;
         if (req.size() > (1u << 21)) return false;
         const long n = recv(buf, sizeof buf);
         if (n <= 0) return false;

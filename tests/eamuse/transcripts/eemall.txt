@@ -1,0 +1,64 @@
+# ee'MALL 1st Avenue (C33): the station's start-up, as the program sends it (services and pcbtracker
+# encrypted, package and shopinf in the clear); no shop server named
+model C33:J:A:E
+>e <services method="get" model="C33:J:A:E"/>
+< 200 info=1-484b0001-0001 <response><services expire="600" status="0"><item name="pcbtracker" url="http://cabinet.test:8080/"/><item name="posevent" url="http://cabinet.test:8080/"/><item name="numbering" url="http://cabinet.test:8080/"/><item name="package" url="http://cabinet.test:8080/"/><item name="userdata" url="http://cabinet.test:8080/"/><item name="local" url="http://cabinet.test:8080/"/><item name="shopinf" url="http://cabinet.test:8080/"/><item name="userid" url="http://cabinet.test:8080/"/></services></response>
+>e <pcbtracker method="alive" model="C33:J:A:E"/>
+< 200 info=1-484b0002-0002 <response><pcbtracker status="0" expire="600"></pcbtracker></response>
+> <package method="list" model="C33:J:A:E" pkgtype="auto"/>
+< 200 <response><package status="0"></package></response>
+> <shopinf method="getsservip" model="C33:J:A:E" srcip="192.168.0.2"/>
+< 200 <response><shopinf status="0"><sservip ipaddr="127.0.0.1"/></shopinf></response>
+get /sum/file.xml
+< 200 <datasync><list url="/file.xml" path="file.xml" size="21" sum="cadefd108db93db56ef7dd2cdb5b16fa"/></datasync>
+get /file.xml
+< 200 <datasync></datasync>
+
+# A visit (made-up cards: pop'n music 9's registered card header, the number in bytes 6-13 backwards).
+# The card has no KONAMI ID yet: konami_id is empty; the station makes one (userid.adduser), reads
+# the card again (the password's MD5 now with it), the ID's cards (clist) and their points elsewhere
+# (playnum), then coins become tickets, the visit ends (write, and its inventory i_set)
+mask time="\d{4}-\d\d-\d\d \d\d:\d\d:(\d\d)\+9"
+> <personaldata method="read" model="C33:J:A:E" card_header="68234101e9" card_data="00100000000001032000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000" ipg="0"/>
+< 200 <response><personaldata status="0" konami_id="" pass="" date="2003-06-01" model="C00:J:A:A" play_num="0" point="0" chara_num="0" chara_model="" post_num="0" item_num="0" ticket_num="0" card_id="2003010000000010" seq="1" id_s="1" record_shop="1" userdata_flag="0" id_limit="0" time="2003-06-01 12:00:*+9"></personaldata></response>
+>e <userid method="adduser" model="C33:J:A:E" user="hiraku33" pass="1234" card="2003010000000010"/>
+< 200 info=1-484b0003-0003 <response><userid status="0" alter=""></userid></response>
+> <personaldata method="read" model="C33:J:A:E" card_header="68234101e9" card_data="00100000000001032000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000" ipg="0"/>
+< 200 <response><personaldata status="0" konami_id="hiraku33" pass="81dc9bdb52d04dc20036dbd8313ed055" date="2003-06-01" model="C00:J:A:A" play_num="0" point="0" chara_num="0" chara_model="" post_num="0" item_num="0" ticket_num="0" card_id="2003010000000010" seq="2" id_s="1" record_shop="1" userdata_flag="0" id_limit="0" time="2003-06-01 12:00:*+9"></personaldata></response>
+> <personaldata method="clist" user_id="hiraku33"/>
+< 200 <response><personaldata status="0" card_num="1"><item card_id="2003010000000010" model="C00:J:A:A"/></personaldata></response>
+> <personaldata method="playnum" card_id="2003010000000010" user_id="hiraku33" model="C00:J:A:A" seq="2"/>
+< 200 <response><personaldata status="0" point="0"></personaldata></response>
+> <personaldata method="ticket" user_id="hiraku33" ticket_num="5" ipg="0" card_id="2003010000000010" seq="2" time="2003-06-01 21:00:00+9" date="2003-06-01" ofs="0000000000002710"/>
+< 200 <response><personaldata status="0"></personaldata></response>
+> <posevent method="income" slot1="00000001"/>
+< 200 <response><posevent status="0"></posevent></response>
+> <restrant method="get"/>
+< 200 <response><restrant status="0" sub_code="0"></restrant></response>
+> <lostdata method="read"/>
+< 200 <response><lostdata status="0" lost_num="0"></lostdata></response>
+> <postdata2 method="get" user_id="hiraku33" seq="2"/>
+< 200 <response><postdata2 status="0" post_num="0"></postdata2></response>
+> <recieved method="get" user_id="hiraku33" seq="2"/>
+< 200 <response><recieved status="0"></recieved></response>
+> <address method="get" user_id="hiraku33" seq="2"/>
+< 200 <response><address status="0"></address></response>
+> <userinfo method="get" model="C33:J:A:E" card_id="2003010000000010"/>
+< 200 <response><userinfo status="0" length="0" data=""></userinfo></response>
+> <personaldata method="write" user_id="hiraku33" src_id="01201000000000C33001" play_num="1" item_num="1" point="120" chara_num="0" chara_model="" ticket_num="3" ipg="0" card_id="2003010000000010" card_model="C00:J:A:A" seq="2" time="2003-06-01 21:00:00+9" date="2003-06-01" ofs="0000000000020000" last="1"/><personaldata method="i_set" user_id="hiraku33" seq="2" item_num="1" model0="C00:J:A:A" item_no0="7"/>
+< 200 <response><personaldata status="0"></personaldata><personaldata status="0"></personaldata></response>
+# the second visit: the points, tickets and the item are back
+> <personaldata method="read" model="C33:J:A:E" card_header="68234101e9" card_data="00100000000001032000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000" ipg="0"/>
+< 200 <response><personaldata status="0" konami_id="hiraku33" pass="81dc9bdb52d04dc20036dbd8313ed055" date="2003-06-01" model="C00:J:A:A" play_num="1" point="120" chara_num="0" chara_model="" post_num="0" item_num="1" ticket_num="3" card_id="2003010000000010" seq="3" id_s="1" record_shop="1" userdata_flag="0" id_limit="0" time="2003-06-01 12:00:*+9"><item num="7" model="C00:J:A:A"/></personaldata></response>
+
+# a card last seen more than 60 days ago: its points and tickets are gone; a card with no number
+file player-C33-2003010000000028 date=2003-03-01\tpoint=500\tticket=9\tseq=4
+> <personaldata method="read" model="C33:J:A:E" card_header="68234101e9" card_data="00280000000001032000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000" ipg="0"/>
+< 200 <response><personaldata status="0" konami_id="" pass="" date="2003-03-01" model="C00:J:A:A" play_num="0" point="0" chara_num="0" chara_model="" post_num="0" item_num="0" ticket_num="0" card_id="2003010000000028" seq="5" id_s="1" record_shop="1" userdata_flag="0" id_limit="0" time="2003-06-01 12:00:*+9"></personaldata></response>
+> <personaldata method="read" model="C33:J:A:E" card_header="68234101e9" card_data="00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000" ipg="0"/>
+< 200 <response><personaldata status="300"></personaldata></response>
+= 10159baf262b43a92d95db59dae1f72c645127301661e0a3ce4e38b295a97c58 2 eemall-2003010000000010
+= 4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865 2 format
+= 2c7da982e86faf7bf6d86db11da9775b8b3d2fb220c1bc9b2145072d311a9ac5 108 player-C33-2003010000000010
+= 1ef271550746edaee14d13e5eca04534d369bb82f1625f95e360d2e5b8cf4e96 55 player-C33-2003010000000028
+= 287054c25f563b0d0f096521c3b77e0845b0564078bd3d0aaa5aa329facf4876 56 users

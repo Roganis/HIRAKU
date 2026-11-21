@@ -31,6 +31,7 @@ enum class Family {
     gfdm_v,           // GuitarFreaks and DrumMania V (Konami Python 2)
     gfdm_573,         // the System 573 GuitarFreaks and DrumMania
     unknown,          // a model the table doesn't name
+    eemall,           // Konami's ee'MALL station (1st Avenue, C33: a Windows PC, pop'n music 9's library)
 };
 
 // A setting the owner may give (a file of the data folder): what it is, its range, and the value

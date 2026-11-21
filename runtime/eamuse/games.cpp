@@ -205,6 +205,7 @@ const std::vector<Game> &games() {
         {"", "GuitarFreaks V2", "F03", Family::gfdm_v, {&S::answer_gfdmv, later, shared, popn9}, {}, &GFDMV_READERS},
         {"gfdm573-gf", "GuitarFreaks (System 573)", "?39", Family::gfdm_573, {&S::answer_gfdm, shared}, {}, &GFDM573_READERS},
         {"gfdm573-dm", "DrumMania (System 573)", "?40", Family::gfdm_573, {&S::answer_gfdm, shared}, {}, &GFDM573_READERS},
+        {"eemall", "ee'MALL 1st Avenue", "C33", Family::eemall, {&S::answer_eemall, shared, popn9}, {}},
         // last: a model no row above names, answered as a later pop'n (its phase by the call's model: phase-Z99)
         {"", "a game the table doesn't name", "", Family::unknown, {later, shared, popn9}, {phase(-1)}},
     };

@@ -145,6 +145,12 @@ private:
     std::string answer_lobby24(const Request &r);   // its NET TAISEN lobby
     // beatmania IIDX 9th style (C02: runtime/pc/): its module "C02" (music, weekly, ranking, grade)
     std::string answer_c02(const Game &, const Call &, const Request &r, const std::string &);
+    // Konami's ee'MALL 1st Avenue station (C33: runtime/pc/ezusb_c33.c): its start-up's calls (server_eemall.cpp)
+    std::string answer_eemall(const Game &, const Call &, const Request &r, const std::string &host);
+    // ... a visit's calls: the card's player, its KONAMI ID, tickets, points and items ("": not one)
+    std::string eemall_visit(const Game &, const Call &, const Request &r);
+    // ... and the shop server it then downloads from by plain GETs: the file at path, or false
+    static bool eemall_shop_file(const std::string &path, std::string &body);
     // beatmania IIDX 10th style, RED, HAPPY SKY and DistorteD (D01, E11, ECO, FDD): their module named
     // after the model (pc, music, ranking, weekly, grade, shop), 9th style's way with the player's
     // record added
@@ -178,6 +184,7 @@ private:
     std::unique_ptr<Store> store_;
     uint32_t serial_ = 0;   // for the answers' X-Eamuse-Info: deterministic
     std::string src_;       // the asking cabinet (the call's srcid)
+    std::string eemall_card_;   // the ee'MALL station's card of the call's personaldata.write, for the i_set after it
     Cabinet cab_;           // ... and its arcade (cabinet)
     std::string self_;      // this server, among those sharing its data folder (a random number)
     // What a server others can reach keeps is bounded (a call registers a card, writes a card's file):

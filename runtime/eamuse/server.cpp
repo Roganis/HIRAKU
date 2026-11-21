@@ -276,6 +276,10 @@ std::string Server::handle(const std::string &req) try {
     if (req.compare(0, 4, "GET ") == 0) {   // a package's download: the message
         const size_t sp = req.find(' ', 4);
         const std::string path = req.substr(4, sp == std::string::npos ? std::string::npos : sp - 4);
+        if (std::string shop; eemall_shop_file(path, shop)) {   // the ee'MALL station's shop server (server_eemall.cpp)
+            if (log) log("GET " + path + " -> the shop's list, " + std::to_string(shop.size()) + " bytes");
+            return "HTTP/1.0 200 OK\r\nContent-Type: text/xml\r\nContent-Length: " + std::to_string(shop.size()) + "\r\n\r\n" + shop;
+        }
         const std::string text = message();
         const bool ok = !text.empty() && path.size() >= 8 && path.compare(path.size() - 8, 8, "/message") == 0;
         if (log) log("GET " + path + (ok ? " -> the message, " + std::to_string(text.size()) + " bytes" : " -> 404"));

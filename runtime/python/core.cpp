@@ -1021,7 +1021,32 @@ public:
     static PythonCore *self_;
 
 private:
+    // The MagicGate key files the arcade BIOS needs, each of its size (Python 2 boots the retail way:
+    // not the two arcade KELF overrides). One missing or of another size and the BIOS stops at its
+    // blue "Boot Program Error" screen, which says nothing of which file: said here, by name, instead
+    struct KeyFile { const char *setting, *name; s64 size; };
+    static constexpr KeyFile key_files[] = {
+        {"MgChallengeIvFile", "civ", 8}, {"MgCardKeyStoreFile", "cks", 96}, {"MgEncryptedKeyStoreFile", "eks", 1024},
+        {"MgKeyStoreKeyFile", "kek", 16}, {"ArcadeKelfOverrideKbitFile", "arcade_kelf_override_kbit", 16},
+        {"ArcadeKelfOverrideKcFile", "arcade_kelf_override_kc", 16}};
+    bool keys_whole(const std::string &keys) const {
+        std::string wrong;
+        for (const KeyFile &k : key_files) {
+            if (python2_ && strstr(k.setting, "Arcade")) continue;
+            const s64 size = FileSystem::GetPathFileSize((keys + "/" + k.name + ".bin").c_str());   // (UTF-8 paths on Windows too)
+            if (size == k.size) continue;
+            wrong += std::string("\n  ") + k.name + ".bin: " +
+                     (size < 0 ? std::string("missing") : std::to_string(size) + " bytes, not " + std::to_string(k.size));
+        }
+        if (wrong.empty()) return true;
+        fprintf(stderr, "python: MagicGate key files missing or of the wrong size in %s (the arcade BIOS would stop at "
+                        "\"Boot Program Error\"):%s\nPut the right files there, or add the game again with a complete keys folder beside it "
+                        "(docs/PLAY-NOTES.md)\n", keys.c_str(), wrong.c_str());
+        return false;
+    }
+
     bool init_emulator(const std::string &bios, const std::string &keys) {
+        if (!keys_whole(keys)) return false;
         EmuFolders::SetAppRoot();
         if (!EmuFolders::SetResourcesDirectory()) { fprintf(stderr, "python: no emulator resources next to the binary\n"); return false; }
         // not EmuFolders::SetDataDirectory(): it would create the user's own ~/.config/PCSX2
@@ -1049,13 +1074,9 @@ private:
         si.SetStringValue("Folders", "Bios", std::string(Path::GetDirectory(bios)).c_str());
         si.SetStringValue("Filenames", "BIOS", base_name(bios).c_str());
         si.SetStringValue("Filenames", "ArcadeBIOS", base_name(bios).c_str());
-        const std::pair<const char *, const char *> key_files[] = {
-            {"MgChallengeIvFile", "civ"}, {"MgCardKeyStoreFile", "cks"}, {"MgEncryptedKeyStoreFile", "eks"},
-            {"MgKeyStoreKeyFile", "kek"}, {"ArcadeKelfOverrideKbitFile", "arcade_kelf_override_kbit"},
-            {"ArcadeKelfOverrideKcFile", "arcade_kelf_override_kc"}};
-        for (const auto &[k, f] : key_files)
-            if (!python2_ || !strstr(k, "Arcade"))   // Python 2 boots the retail way: no arcade KELF overrides
-                si.SetStringValue("Security", k, (keys + "/" + f + ".bin").c_str());
+        for (const KeyFile &k : key_files)
+            if (!python2_ || !strstr(k.setting, "Arcade"))   // Python 2 boots the retail way: no arcade KELF overrides
+                si.SetStringValue("Security", k.setting, (keys + "/" + k.name + ".bin").c_str());
         si.SetBoolValue("EmuCore", "EnablePatches", false);
         si.SetBoolValue("EmuCore", "EnableCheats", false);
         si.SetBoolValue("EmuCore", "EnablePINE", false);

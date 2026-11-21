@@ -661,7 +661,9 @@ pop'n music 9 to 14 FEVER! run on PCSX2 Reliquary's emulator inside HIRAKU.
 
 **Adding them:** drop the `.py1` (or the set's folder) on the launcher's window. Drop the arcade
 BIOS (`bios`) and MagicGate key (`keys`) folders once, for every Python game. The CHD stays where it
-is. On another PC, `tools/pack-data.py DEST popn9` copies a game's data.
+is. On another PC, `tools/pack-data.py DEST popn9` copies a game's data. A game that stops at a
+blue "Boot Program Error" or a SECURITY ERROR screen at start-up has a file missing or wrong:
+[which one to check](PLAY-NOTES.md#a-python-game-stops-at-an-error-screen-at-start-up).
 
 **From source:** unpack Reliquary's source (`pcsx2-reliquary-1.9.4-reliquary.zip`) to
 `Python-work/pcsx2-reliquary` beside the checkout, then:

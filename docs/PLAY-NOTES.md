@@ -1405,6 +1405,22 @@ In test mode, blue (buttons 4/6) moves and red (5) selects; I/O CHECK > INPUT CH
 
 **Not yet:** the board's own CPU (Reliquary answers its FireWire commands directly), Python games other than pop'n 9–14 (they need their own `games/<id>/game.toml`; the ingester tells you the program's SHA-1).
 
+### A Python game stops at an error screen at start-up
+
+The arcade BIOS checks the game's files before it starts it, and when one is missing or wrong it stops at a screen that doesn't say which. What the screen says, and the file to check in the game's folder (`dumps/<game>/`):
+
+| The screen says | Check |
+|---|---|
+| Boot Program Error / Boot File Is Not Right. | `keys/arcade_kelf_override_kbit.bin` and `keys/arcade_kelf_override_kc.bin` (Python 1: missing, or both there but wrong) |
+| Boot Program Error / Boot File Not Exit. | `keys/kek.bin`, and the memory card file (`rom/*.ps2`): a blank one stops here too |
+| 5-1504-000 SECURITY ERROR (PLUG IS NOT CORRECT) | the black dongle, `rom/ds2430_black_*.u3`: another game's |
+| 5-1504-000 SECURITY ERROR (INTERNAL) | `rom/b22a01.u42`, the interface board's boot ROM: cut short |
+| SECURITY ERROR / MAC ADDRESS ERROR | `rom/b22a01.u42`: blank |
+
+The MagicGate key files are looked at before the BIOS runs: a Python 1 game needs six (`civ.bin` 8 bytes, `cks.bin` 96, `eks.bin` 1024, `kek.bin` 16, `arcade_kelf_override_kbit.bin` 16, `arcade_kelf_override_kc.bin` 16), a Python 2 game the first four. When one is missing or of another size, the game doesn't start: its log says which ("MagicGate key files missing or of the wrong size in ..."), instead of the blue screen. Adding a game takes a keys folder only when it is whole; otherwise it says which files are missing or of the wrong size, and the game waits for them. A file of the right size can still be wrong: that one only the screen above tells.
+
+**The way out:** put the complete `keys` folder beside the game's folder (or its `.py1`) and add the game again: its copy in `dumps/<game>/keys` is replaced. Dropping the key files on HIRAKU's window also finishes a game that is waiting for them.
+
 ## BEMANI PC: pop'n music 15–18, beatmania IIDX 9th style to EMPRESS
 
 From pop'n music 15 on, the games are Windows programs. HIRAKU runs Konami's own program as it is, under Wine on Linux and directly on Windows, and puts its cabinet around it with `hiraku-pc` and two DLLs of its own (`bin/pc/`): the controls, the lamps, the card, and HIRAKU's own window for the pictures.

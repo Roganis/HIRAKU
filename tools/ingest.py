@@ -535,6 +535,9 @@ PY1_FILES = (   # .py1 key -> machine.txt key; the disk is linked, the rest copi
     ("InternalDonglePath", "internal_dongle"), ("ExternalDonglePath", "external_dongle"),
     ("MemoryCardDonglePath", "memcard"), ("MemoryCardIdPath", "memcard_id"))
 PY_KEYS = ("civ", "cks", "eks", "kek", "arcade_kelf_override_kbit", "arcade_kelf_override_kc")
+# Each key file's size (bytes): a file missing or of another size and the arcade BIOS stops at its
+# blue "Boot Program Error" screen (docs/PLAY-NOTES.md). Python 1 needs all six, Python 2 the first four
+PY_KEY_SIZES = {"civ": 8, "cks": 96, "eks": 1024, "kek": 16, "arcade_kelf_override_kbit": 16, "arcade_kelf_override_kc": 16}
 
 
 def find_near(start: str, rel: str, levels: int = 3) -> str | None:
@@ -763,6 +766,39 @@ def python_support(args, base: str, what: str, has: str) -> str | None:
     return None
 
 
+def key_problems(folder: str | None, need) -> list[str]:
+    """What is wrong with a keys folder for a game needing the key files `need` (PY_KEYS' names):
+    each file missing or of the wrong size, said plainly; [] when all are there"""
+    out = []
+    for k in need:
+        f = os.path.join(folder, k + ".bin") if folder else ""
+        if not f or not os.path.isfile(f):
+            out.append(f"{k}.bin is missing")
+        elif os.path.getsize(f) != PY_KEY_SIZES[k]:
+            out.append(f"{k}.bin is {os.path.getsize(f)} bytes, not {PY_KEY_SIZES[k]}")
+    return out
+
+
+def python_keys(args, base: str, board: int) -> tuple[str | None, list[str]]:
+    """The MagicGate keys' folder for a game (python_support's places, in its order): the first
+    with every file the board needs, each of its size (Python 1 six, Python 2 four). Without one,
+    (the folder closest to it, what is wrong there), or (None, every file) when no folder has any"""
+    need = PY_KEYS if board == 1 else PY_KEYS[:4]
+    places = [args.keys, find_near(base, "keys")] + sorted(glob.glob(os.path.join(args.out, "*", "keys")))
+    if board == 2:   # Python 2 sets beside a Python 1 collection: its keys
+        places.append(find_near(os.path.join(base, "..", "konami-python-1-collection"), "keys"))
+    best = (None, key_problems(None, need))
+    for d in places:
+        if not d or not os.path.isdir(d):
+            continue
+        wrong = key_problems(d, need)
+        if not wrong:
+            return d, []
+        if len(wrong) < len(best[1]):
+            best = (d, wrong)
+    return best
+
+
 def ingest_python1(args, g: dict, base: str) -> int:
     """A Konami Python 1 game from its .py1's keys (paths relative to base)."""
     import pythonfs
@@ -849,6 +885,12 @@ def keep_python_support(args, inputs: list[str]) -> list[str]:
         for x, k in zip(files, kinds):
             if not k:
                 continue
+            name = os.path.basename(x).lower()[:-4]
+            if k == "keys" and os.path.getsize(x) != PY_KEY_SIZES[name]:   # (not over a good one kept before)
+                print(f"ERROR    {os.path.basename(x)} is {os.path.getsize(x)} bytes, not {PY_KEY_SIZES[name]}: "
+                      "not a MagicGate key file as the arcade BIOS needs it, not kept")
+                args.keys_refused = True
+                continue
             to = os.path.join(args.out, PY_STORE, k, os.path.basename(x))
             os.makedirs(os.path.dirname(to), exist_ok=True)
             if not (os.path.exists(to) and os.path.samefile(x, to)):
@@ -883,19 +925,18 @@ def finish_python(args, base: str, outdir: str, machine: dict, order: list[str],
     import json
     bios = python_bios(args, base, board)
     need = PY_KEYS if board == 1 else PY_KEYS[:4]
-    keys = python_support(args, base, "keys", "kek.bin")
-    if not keys and board == 2:   # Python 2 sets beside a Python 1 collection: its keys
-        keys = find_near(os.path.join(base, "..", "konami-python-1-collection"), "keys")
-    missing = [k + ".bin" for k in need if not keys or not os.path.exists(os.path.join(keys, k + ".bin"))]
-    if not bios or missing:
+    keys, wrong = python_keys(args, base, board)
+    if not bios or wrong:
         with open(os.path.join(outdir, "machine.pending"), "w", newline="\n") as fh:
             json.dump({"machine": machine, "order": order, "board": board}, fh)
         what = []
         if not bios:
             what.append("the arcade BIOS (COH-H31000.BIN with its .NVM and .MEC)" if board == 1 else
                         "the BIOS ps2-0190j-20030822.bin (the SCPH-50000's v1.90)")
-        if missing:
-            what.append("the MagicGate key files " + ", ".join(missing))
+        if wrong and not keys:
+            what.append("the MagicGate key files " + ", ".join(k + ".bin" for k in need))
+        elif wrong:   # a keys folder with some of them: the BIOS would stop at "Boot Program Error"
+            what.append(f"all {len(need)} MagicGate key files (the keys folder {keys}: {'; '.join(wrong)})")
         print(f"ERROR    {machine.get('name', os.path.basename(outdir))} needs {' and '.join(what)}: drop them on "
               "HIRAKU's window (the files, or their folder) and the game is added")
         return 1
@@ -1349,6 +1390,7 @@ def main() -> int:
         args.inputs = rest
         waiting = glob.glob(os.path.join(args.out, "*", "machine.pending"))
         rc = complete_pending(args) if waiting else 0
+        rc |= 1 if getattr(args, "keys_refused", False) else 0
         if not args.inputs:
             if not waiting:
                 print("NEXT     add a Konami Python game: it will use them")

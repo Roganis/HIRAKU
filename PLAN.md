@@ -531,7 +531,7 @@ GPL-3.0-or-later.
 | PY-1 | Reliquary hosted, pop'n 9 playable (`popn9-play`) | done (3e604f9) |
 | PY-1b | lamps (family `pypopn`), launcher, NVRAM, packaging, the pin | done (abe089f) |
 | PY-2 | cost on low-end hardware | open |
-| PY-3 | efficiency: picture handoff −7.3 % CPU; PGO −3.2 % (`build-reliquary.sh pgo`, optional); Partial texture preloading +11.4 %, dropped | first steps (59a6322) |
+| PY-3 | efficiency: picture handoff −7.3 % CPU; PGO −3.2 % (`build-reliquary.sh pgo`, optional); Partial texture preloading +11.4 %, dropped; the software GS's threads without their spin −16–20 %; the Vulkan GS's 16-bit textures hashed as they are −9–28 %, their blocks hashed in place −10–12 % (2026-11-19) | first steps (59a6322) |
 | PY-4 | latency: each vsync's own picture by default (`--picture-overlap`: the old way) | done (59a6322, e1891ec) |
 | PY-5 | pop'n 10–14 | done (0b0ef83) |
 | PY-6 | Python 2: DrumMania V and V2, steps 1–3 | done (eb772d9, 6e2c841, af67f55) |
@@ -557,6 +557,72 @@ GPL-3.0-or-later.
 - The core exits through `on_exit` → `_exit` (PCSX2's static destructors assert) and never calls
   `EmuFolders::SetDataDirectory()`. Unlocks: pop'n 9's event phase is in the board's BBSRAM
   (`tools/unlock.py` kind `mirror`); 10–14 followed (414fd68..ffd1a96).
+
+**A frame by part (2026-11-19).** `HK_PY_THREADS=FILE` writes each frame's processor time by thread
+(the CPU thread: EE, IOP, SPU2, the board; the GS thread; the software renderer's GS-SW workers; the
+rest) and prints the mean and 99th percentile at the end; `HK_PY_PACE=1 HK_PY_PACE_FROM=F` runs headless
+at the cabinet's 59.94 Hz from frame F, as a player's frames are run. A release-like build (SSE4.1 base,
+the GS in SSE4/AVX/AVX2 copies, no PGO), the development PC, the software GS, ms of processor a frame,
+three runs each:
+
+| at 59.94 Hz | CPU thread | GS thread | GS-SW workers | all | before: all |
+|---|---|---|---|---|---|
+| pop'n 9, a song | 1.23 | 1.00 | 2.78 | 5.01–5.03 | 6.27–6.30 |
+| pop'n 12, a song | 1.33 | 0.84 | 2.65 | 4.82 | 5.55–5.69 |
+| DrumMania V, attract | 2.03 | 0.40 | 1.39 | 3.95–3.96 | 4.26–4.27 |
+
+PCSX2 gives the software GS three rasterizer threads on any CPU with more than three cores (VMManager),
+so four GS threads and the CPU thread take turns at a frame; on four cores that is more threads than
+cores. Each thread spun 50 µs before sleeping, at every point the GS waits for its threads (many a
+frame): a quarter of the process's samples were that spin (`perf`, pop'n 12). The core now sets the
+spin to none (`SPIN_TIME_NS`, made settable in the patch; `WAIT_SPIN_MICROSECONDS` still overrides):
+16–20 % less processor for the pop'n songs, 7 % for DrumMania's attract. Only when the threads wake
+changes, so the pictures are the same: all 23 Python cases identical, and the same digests before and
+after with the GS's SSE4 and AVX copies forced. The time from a frame's start to its picture
+(unpaced) went from 1.95 to 2.17 ms for pop'n 9 (99th percentile 3.5 to 3.9) and 1.85 to 2.02 for
+pop'n 12 on this 16-thread PC; with the process held to four cores (`taskset`) it was the same or
+shorter (pop'n 12 2.50 to 2.39, 99th percentile 3.23 to 3.17) and the processor saving larger (18–23 %).
+The rest of the CPU thread is SPU2 (about 40 %, `spu2Mix` and reverb) and the EE/IOP code (about 25 %).
+Seen and left: one rasterizer thread fewer, or none, saves more (none: 3.8 ms for pop'n 12) but the
+picture comes later on this PC (none: 2.8 ms a frame against 1.9); the Vulkan GS (the launcher's
+default) takes 2.95 ms a frame for pop'n 12. With the GS's SSE4 copy DrumMania V's `drmnvj-attract`
+once gave another picture at frame 6876 (one run in seven, with the old spin): a flaky frame of that
+copy, not seen with AVX2.
+
+**The Vulkan GS by part (2026-11-19).** The same build and windows, `--renderer vk` (the launcher's
+default), the development PC's discrete card (RADV), ms of processor a frame, three runs each:
+
+| at 59.94 Hz | CPU thread | GS thread | all, before | all, after |
+|---|---|---|---|---|
+| pop'n 9, a song | 1.22 | 2.57–2.59 → 1.53–1.67 | 3.79–3.80 | 2.74–2.96 |
+| pop'n 12, a song | 1.31–1.32 | 1.64–1.66 → 1.31–1.36 | 2.95–2.99 | 2.60–2.70 |
+| DrumMania V, attract | 2.03–2.05 | 0.31–0.32 | 2.49–2.50 | 2.46–2.55 |
+
+No driver threads to speak of; the CPU thread costs what it does with the software GS. A pop'n frame
+is 70–80 draws, 8–12 render passes, 0.1–0.2 texture uploads (140–190 KB), no new pipelines, and one
+readback: the picture for HIRAKU's window. The game rewrites its 16-bit textures in GS memory every
+frame and the texture cache finds them again by their hash; expanding them to 32 bits to hash them
+was three quarters of the GS thread (`ReadTexture16` + XXH3). The patch hashes 16-bit formats as they
+are in memory (`GSTextureCache.cpp`, `HK_GS_HASH16_EXPAND=1` for the old way): pop'n 9 −23–28 %,
+pop'n 12 −9–12 %, pop'n 10, 11, 13, 14 −14–18 % (whole runs, unpaced), the same with the process held
+to four cores (pop'n 9 3.72 → 2.73, pop'n 12 2.90 → 2.59). Same pictures: all 23 Python cases
+identical, and pop'n 9–14's play scripts and DrumMania V's attract give the same digests on the
+Vulkan GS before and after (runs repeat exactly on this PC). The window's picture is read back from
+the GPU every frame (Reliquary runs surfaceless) and handed to the shell: 0.12–0.23 ms a frame
+(`--no-picture`). Then the blocks hashed in place: XXH3's streaming update copied every 256-byte
+block into its buffer before reading it (libc `memcpy`, a fifth of the GS thread). The texture
+cache now hands it batches of block pointers (`GSXXH3_64bits_update_blocks`, `GSXXH.cpp`), which
+run XXH3's own stripes on the blocks where they are and keep only the last one buffered: the same
+hash bit for bit (20,000 random mixes of rows and blocks checked against the streaming update), so
+dumped and replaced textures keep their names; `HK_GS_HASH_STREAM=1` for the old way. Paced, three
+runs each: pop'n 9 2.70–2.72 → 2.39 ms (GS thread 1.52 → 1.20), pop'n 12 2.57–2.59 → 2.31–2.33
+(1.29–1.30 → 1.04–1.05); unpaced once, pop'n 9 2.42 → 2.07, pop'n 12 2.27 → 2.02; on four cores
+pop'n 9 2.71 → 2.41. All 23 Python cases identical, the seven digests the same old/new and as
+before. Left, by size: XXH3's own work (about a third of the GS thread: every 16-bit texture
+rehashed each frame; hashing only what the game rewrote would be the next step), `WriteImage`
+(a fifth, the game's uploads), the hand-over's three passes over the picture and its per-frame
+download buffer, and SPU2 on the CPU thread. Not measured: an N100 or Intel graphics (the saving is processor work, so it carries; the
+driver's own cost and the readback's wait on an integrated GPU do not show here).
 
 ### e-AMUSEMENT (pop'n 9–14)
 

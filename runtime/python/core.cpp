@@ -60,6 +60,7 @@
 #include "common/Console.h"
 #include "common/Error.h"
 #include "common/FileSystem.h"
+#include "common/HostSys.h"
 #include "common/MemorySettingsInterface.h"
 #include "common/Path.h"
 #include "common/ProgressCallback.h"
@@ -346,6 +347,94 @@ void report() {
 }
 }  // namespace prof
 #endif
+
+// HK_PY_THREADS=FILE: each frame's processor time by thread, "frame wall cpu gs sw other gs_wait" in
+// ms: the CPU thread (EE, IOP, SPU2, the board), the GS thread, the software renderer's workers
+// (GS-SW-n) and the rest; the frame's mean and 99th percentile of each at the end ("profile:" lines).
+// Read from each thread's own clock at the vsync, after the CPU thread has its picture, so a frame's
+// GS work is in its own line. Linux only.
+namespace threads {
+#ifdef _WIN32
+struct Log {
+    bool open(const char *) { fprintf(stderr, "HK_PY_THREADS: Linux only\n"); return false; }
+    void frame(uint64_t, double) {}
+    void report() const {}
+};
+#else
+struct Log {
+    enum { CPU, GS, SW, OTHER, N };
+    struct T { pid_t tid; int kind; double last; };
+    FILE *f = nullptr;
+    pid_t self = 0;
+    std::vector<T> ts;
+    uint64_t frames = 0;
+    std::chrono::steady_clock::time_point last_wall{};
+    double last_wait = 0;
+    std::vector<double> per[N + 2];   // each kind, all threads, the wall time
+
+    static double clock_ms(pid_t tid) {
+        timespec t{};
+        if (clock_gettime((~(clockid_t)tid << 3) | 6, &t) != 0) return -1;   // the thread's own CPU clock
+        return t.tv_sec * 1e3 + t.tv_nsec / 1e6;
+    }
+    bool open(const char *path) {
+        f = fopen(path, "w");
+        if (f) fprintf(f, "# frame wall cpu gs sw other gs_wait (ms)\n");
+        return f != nullptr;
+    }
+    void scan() {   // the process's threads, by their names
+        std::vector<T> now;
+        for (const auto &e : std::filesystem::directory_iterator("/proc/self/task")) {
+            const pid_t tid = (pid_t)atoi(e.path().filename().c_str());
+            auto it = std::find_if(ts.begin(), ts.end(), [&](const T &t) { return t.tid == tid; });
+            if (it != ts.end()) { now.push_back(*it); continue; }
+            std::ifstream in(e.path() / "comm");
+            std::string name;
+            std::getline(in, name);
+            const int kind = tid == self ? CPU : name == "GS" ? GS : name.rfind("GS-SW-", 0) == 0 ? SW : OTHER;
+            now.push_back({tid, kind, clock_ms(tid)});
+        }
+        ts = std::move(now);
+    }
+    void frame(uint64_t n, double gs_wait_ms) {
+        const auto wall = std::chrono::steady_clock::now();
+        if (!self) self = (pid_t)syscall(SYS_gettid);
+        if (frames % 60 == 0) scan();
+        double kind[N] = {};
+        for (T &t : ts) {
+            const double c = clock_ms(t.tid);
+            if (c < 0) continue;   // ended
+            kind[t.kind] += c - t.last;
+            t.last = c;
+        }
+        if (frames++) {
+            const double w = std::chrono::duration<double, std::milli>(wall - last_wall).count();
+            fprintf(f, "%llu %.3f %.3f %.3f %.3f %.3f %.3f\n", (unsigned long long)n, w, kind[CPU], kind[GS], kind[SW],
+                    kind[OTHER], gs_wait_ms - last_wait);
+            for (int k = 0; k < N; k++) per[k].push_back(kind[k]);
+            per[N].push_back(kind[CPU] + kind[GS] + kind[SW] + kind[OTHER]);
+            per[N + 1].push_back(w);
+        }
+        last_wall = wall;
+        last_wait = gs_wait_ms;
+    }
+    void report() const {
+        if (!f) return;
+        fflush(f);
+        static const char *names[N + 2] = {"CPU thread", "GS thread", "GS-SW workers", "other threads", "all threads", "wall"};
+        for (int k = 0; k < N + 2; k++) {
+            std::vector<double> v = per[k];
+            if (v.empty()) continue;
+            double sum = 0;
+            for (double x : v) sum += x;
+            std::sort(v.begin(), v.end());
+            printf("profile: threads: %-14s mean %.2f ms a frame, p99 %.2f, max %.2f (%zu frames)\n", names[k], sum / v.size(),
+                   v[std::min(v.size() - 1, (size_t)(0.99 * v.size()))], v.back(), v.size());
+        }
+    }
+};
+#endif
+}  // namespace threads
 
 
 class PythonCore final : public hk::Core {
@@ -681,6 +770,10 @@ public:
         // HK_PY_DISK_LOG=FILE: every read of the board's disk and CF card, "frame medium offset
         // size" (medium 0 the disk, 1 the CF card): where a game keeps what it reads
         if (const char *f = getenv("HK_PY_DISK_LOG")) disk_log_ = fopen(f, "w");
+        if (const char *f = getenv("HK_PY_THREADS"); f && *f) {
+            thread_log_ = std::make_unique<threads::Log>();
+            if (!thread_log_->open(f)) thread_log_.reset();
+        }
         if (hdd_overlay_ || cf_overlay_ || disk_log_)   // mods' replaced bytes, laid over the board's disk reads
             Hiraku::disk_read = [](u32 medium, u64 off, u8 *data, u32 size) {
                 if (self_->disk_log_) {
@@ -793,6 +886,7 @@ public:
                interp_ ? ", interpreters" : "", run_dir_.c_str());
         if (gs_waits_)   // host timing: "profile:" lines are not compared by tools/regress.py
             printf("profile: python: waited for the GS on %llu frames, %.1f ms in all\n", (unsigned long long)gs_waits_, gs_wait_ms_);
+        if (thread_log_) thread_log_->report();
     }
     void debug_line(uint64_t f) override {
         printf("frame %llu: EE pc %08x, cycle %llu\n", (unsigned long long)f, cpuRegs.pc, (unsigned long long)cpuRegs.cycle);
@@ -977,6 +1071,13 @@ private:
         si.SetIntValue("EmuCore", "RtcMinute", 0);
         si.SetIntValue("EmuCore", "RtcSecond", 0);
         si.SetBoolValue("EmuCore/Speedhacks", "vuThread", false);
+        // The software GS's rasterizer threads sleep as soon as they have nothing to do, and the GS
+        // thread as soon as it waits for them (PCSX2 spins 50 us first, at each of the many points a
+        // frame where the GS waits for its threads). The spin was a quarter of the process's time
+        // in a pop'n song (pop'n 12, 5.7 ms of processor a frame); without it 4.8, and on four cores
+        // the picture is ready sooner too. Only when the threads wake changes: the same pictures.
+        // WAIT_SPIN_MICROSECONDS (PCSX2's own) still sets it.
+        if (!getenv("WAIT_SPIN_MICROSECONDS")) SPIN_TIME_NS = 0;
         // as Reliquary's game list sets up every Python 1 game (GameList.cpp), but Perfect Pool
         si.SetBoolValue("EmuCore/Gamefixes", "OPHFlagHack", io_mode_ != "PPOOL");
         for (const char *cpu : {"EnableEE", "EnableIOP", "EnableVU0", "EnableVU1"})
@@ -1111,8 +1212,10 @@ private:
         }
         // HK_PY_PACE=N: frames at N times the cabinet's 59.94 Hz, for runs without a window that
         // must keep time with something outside (NET TAISEN online between headless cabinets)
+        // (HK_PY_PACE_FROM=F: from frame F on, for measuring a game's frames as it would run them)
         static const double pace = getenv("HK_PY_PACE") ? atof(getenv("HK_PY_PACE")) : 0.0;
-        if (pace > 0) {
+        static const uint64_t pace_from = getenv("HK_PY_PACE_FROM") ? strtoull(getenv("HK_PY_PACE_FROM"), nullptr, 10) : 0;
+        if (pace > 0 && frame_ >= pace_from) {
             static auto next = std::chrono::steady_clock::now();
             next += std::chrono::nanoseconds((int64_t)(1e9 / (59.94 * pace)));
             hk::sys::sleep_until(next);
@@ -1185,6 +1288,7 @@ private:
                 pic_w_ = gs_w_, pic_h_ = gs_h_;
             }
         }
+        if (thread_log_) thread_log_->frame(frame_, gs_wait_ms_);
         if (frame_hook_) frame_hook_(frame_, pic_.data(), pic_w_, pic_h_);
     }
 
@@ -1401,6 +1505,7 @@ private:
     bool python2_ = false;   // a Konami Python 2 (write_py2)
     int hdd_overlay_ = 0, cf_overlay_ = 0;   // mods' replaced bytes on the disk, the CF card (shell/overlay.h)
     FILE *disk_log_ = nullptr;               // HK_PY_DISK_LOG
+    std::unique_ptr<threads::Log> thread_log_;   // HK_PY_THREADS
     std::deque<uint8_t> sci_in_;   // the card reader's bytes for the game (P2IO serial port 0)
     uint8_t p2io_lamps_[4] = {0, 0, 0x01, 0x1f};   // the P2IO's lamp banks: all lamps off till the game writes them
     std::unique_ptr<hk::py::EtherNet> eth_;

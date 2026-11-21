@@ -690,3 +690,176 @@
  	dest->resize(std::max<size_t>(static_cast<size_t>(wlen) + (IsUNCPath(str) ? 9 : 5), 16));
  	for (;;)
  	{
+--- a/common/HostSys.h
++++ b/common/HostSys.h
+@@ -178,7 +178,8 @@
+ /// Returns the approximate number of ns that passed
+ extern u32 ShortSpin();
+ /// Number of ns to spin for before sleeping a thread
+-extern const u32 SPIN_TIME_NS;
++/// HIRAKU: not const, so a host can set it before the GS starts
++extern u32 SPIN_TIME_NS;
+ /// Like C abort() but adds the given message to the crashlog
+ [[noreturn]] void AbortWithMessage(const char* msg);
+ 
+--- a/common/HostSys.cpp
++++ b/common/HostSys.cpp
+@@ -110,7 +110,7 @@
+ 	}
+ }
+ 
+-const u32 SPIN_TIME_NS = GetSpinTime();
++u32 SPIN_TIME_NS = GetSpinTime();
+ 
+ #ifdef __APPLE__
+ // https://alastairs-place.net/blog/2013/01/10/interesting-os-x-crash-report-tidbits/
+--- a/pcsx2/GS/Renderers/HW/GSTextureCache.cpp
++++ b/pcsx2/GS/Renderers/HW/GSTextureCache.cpp
+@@ -9046,7 +9046,18 @@
+ 	// the texture data with other textures/framebuffers/etc (which is common).
+ 	// Even though you might think this would be slower than just hashing for the hash
+ 	// cache, it actually ends up faster (unswizzling is faster than hashing).
+-	if (tw < bs.x || th < bs.y || psm.fmsk != 0xFFFFFFFFu || region.GetMaxX() > 0 || region.GetMinY() > 0)
++	// HIRAKU: 16-bit formats hashed as they are in memory, without expanding them to 32 bits
++	// first. Their blocks hold only their own pixels, all bits used, and TEXA (the expansion's
++	// only input) is in the hash cache's key, so equal blocks mean an equal texture and the
++	// same textures are used. A pop'n music song rehashes its 16-bit textures every frame (the
++	// game rewrites them, the cache finds them again): the expansion and its hashing were about
++	// three quarters of the GS thread (pop'n 9: 2.3 ms a frame, 1.4 without). Not when dumping or
++	// replacing textures, whose file names are these hashes; HK_GS_HASH16_EXPAND=1 hashes the
++	// expanded texture again (to compare).
++	static const bool expand16 = getenv("HK_GS_HASH16_EXPAND") != nullptr;
++	const bool raw16 = (TEX0.PSM == PSMCT16 || TEX0.PSM == PSMCT16S || TEX0.PSM == PSMZ16 || TEX0.PSM == PSMZ16S) &&
++	                   !expand16 && !GSConfig.DumpReplaceableTextures && !GSConfig.LoadTextureReplacements;
++	if (tw < bs.x || th < bs.y || (psm.fmsk != 0xFFFFFFFFu && !raw16) || region.GetMaxX() > 0 || region.GetMinY() > 0)
+ 	{
+ 		// Expand texture indices. Align to 32 bytes for AVX2.
+ 		const bool palette = (psm.pal > 0);
+@@ -9077,6 +9088,35 @@
+ 		const int bottom = block_rect.bottom >> off.blockShiftY();
+ 		const int xAdd = (1 << off.blockShiftX()) * (psm.bpp / 8);
+ 
++		// HIRAKU: the blocks are handed to XXH3 a batch at a time and read where they are in GS
++		// memory (GSXXH3_64bits_update_blocks), not each copied through the streaming state's
++		// buffer first. The hash is the very same XXH3 of the same bytes in the same order, bit for
++		// bit, so the cache's keys and the dumped/replaced textures' names do not change. The copies
++		// were about a fifth of the GS thread's samples in a pop'n song (libc memcpy, with the
++		// state's buffer read straight after); without them pop'n 9's GS thread takes 1.20 ms a frame
++		// instead of 1.52. HK_GS_HASH_STREAM=1 feeds blocks one at a time (to compare).
++		static const bool stream = getenv("HK_GS_HASH_STREAM") != nullptr;
++		if (!stream)
++		{
++			constexpr u32 batch_size = 64;
++			const u8* batch[batch_size];
++			u32 n = 0;
++			for (; bn.blkY() < bottom; bn.nextBlockY())
++			{
++				for (; bn.blkX() < right; bn.nextBlockX())
++				{
++					batch[n++] = mem.BlockPtr(bn.value());
++					if (n == batch_size)
++					{
++						GSXXH3_64bits_update_blocks(&hash_st, batch, n);
++						n = 0;
++					}
++				}
++			}
++			GSXXH3_64bits_update_blocks(&hash_st, batch, n);
++			return;
++		}
++
+ 		for (; bn.blkY() < bottom; bn.nextBlockY())
+ 		{
+ 			for (int x = 0; bn.blkX() < right; bn.nextBlockX(), x += xAdd)
+--- a/pcsx2/GS/GSXXH.h
++++ b/pcsx2/GS/GSXXH.h
+@@ -14,6 +14,7 @@
+ MULTI_ISA_DEF(u64 GSXXH3_64_Long(const void* data, size_t len);)
+ MULTI_ISA_DEF(u32 GSXXH3_64_Update(void* state, const void* data, size_t len);)
+ MULTI_ISA_DEF(u64 GSXXH3_64_Digest(void* state);)
++MULTI_ISA_DEF(u32 GSXXH3_64_UpdateBlocks(void* state, const u8* const* blocks, size_t count);)
+ 
+ static inline u64 __forceinline GSXXH3_64bits(const void* data, size_t len)
+ {
+@@ -29,6 +30,12 @@
+ 	return static_cast<XXH_errorcode>(MultiISAFunctions::GSXXH3_64_Update(static_cast<void*>(state), input, len));
+ }
+ 
++// HIRAKU: count 256-byte blocks fed to the state in turn, read in place (GSXXH.cpp).
++static inline XXH_errorcode __forceinline GSXXH3_64bits_update_blocks(XXH3_state_t* state, const u8* const* blocks, size_t count)
++{
++	return static_cast<XXH_errorcode>(MultiISAFunctions::GSXXH3_64_UpdateBlocks(static_cast<void*>(state), blocks, count));
++}
++
+ static inline u64 __forceinline GSXXH3_64bits_digest(XXH3_state_t* state)
+ {
+ 	return MultiISAFunctions::GSXXH3_64_Digest(static_cast<void*>(state));
+--- a/pcsx2/GS/GSXXH.cpp
++++ b/pcsx2/GS/GSXXH.cpp
+@@ -6,6 +6,7 @@
+ // These get pulled in by xxhash.h in non-PCH mode, so we need to include them in global namespace scope.
+ #include <cmath>
+ #include <cstdlib>
++#include <cstring>
+ 
+ #define XXH_STATIC_LINKING_ONLY 1
+ #define XXH_INLINE_ALL 1
+@@ -34,3 +35,43 @@
+ {
+ 	return XXH3_64bits_digest(static_cast<XXH3_state_t*>(state));
+ }
++
++// HIRAKU: the same streaming XXH3 as GSXXH3_64_Update fed each 256-byte block in turn, but the
++// blocks are read where they are instead of being copied through the state's buffer first (only
++// the last block is kept there, as the streaming update would). The stripes, their order and the
++// secret offsets are XXH3's own, so the state, and the digest, end up bit for bit the same.
++u32 CURRENT_ISA::GSXXH3_64_UpdateBlocks(void* state_ptr, const u8* const* blocks, size_t count)
++{
++	constexpr size_t block_size = 256;
++	static_assert(block_size == XXH3_INTERNALBUFFER_SIZE && block_size % XXH_STRIPE_LEN == 0);
++	XXH3_state_t* const state = static_cast<XXH3_state_t*>(state_ptr);
++	if (count == 0)
++		return XXH_OK;
++	if (state->bufferedSize % XXH_STRIPE_LEN != 0)
++	{
++		// Buffered bytes that end mid-stripe (an odd-sized row before): blocks would not be stripes.
++		for (size_t i = 0; i < count; i++)
++			XXH3_64bits_update(state, blocks[i], block_size);
++		return XXH_OK;
++	}
++	const xxh_u8* const secret = (state->extSecret == nullptr) ? state->customSecret : state->extSecret;
++	XXH_ALIGN(XXH_ACC_ALIGN) xxh_u64 acc[XXH_ACC_NB];
++	std::memcpy(acc, state->acc, sizeof(acc));
++	// Whole stripes already buffered come first in the input, so they can be taken now.
++	if (state->bufferedSize != 0)
++	{
++		XXH3_consumeStripes(acc, &state->nbStripesSoFar, state->nbStripesPerBlock, state->buffer,
++			state->bufferedSize / XXH_STRIPE_LEN, secret, state->secretLimit, XXH3_accumulate, XXH3_scrambleAcc);
++	}
++	for (size_t i = 0; i + 1 < count; i++)
++	{
++		XXH3_consumeStripes(acc, &state->nbStripesSoFar, state->nbStripesPerBlock, blocks[i],
++			block_size / XXH_STRIPE_LEN, secret, state->secretLimit, XXH3_accumulate, XXH3_scrambleAcc);
++	}
++	// The last block stays buffered: XXH3 always holds back the input's end for the digest's last stripe.
++	std::memcpy(state->buffer, blocks[count - 1], block_size);
++	state->bufferedSize = static_cast<XXH32_hash_t>(block_size);
++	state->totalLen += static_cast<XXH64_hash_t>(block_size) * count;
++	std::memcpy(state->acc, acc, sizeof(acc));
++	return XXH_OK;
++}
+--- a/pcsx2/GS/MultiISA.h
++++ b/pcsx2/GS/MultiISA.h
+@@ -84,4 +84,5 @@
+ 	extern u64 (&GSXXH3_64_Long)(const void* data, size_t len);
+ 	extern u32 (&GSXXH3_64_Update)(void* state, const void* data, size_t len);
+ 	extern u64 (&GSXXH3_64_Digest)(void* state);
++	extern u32 (&GSXXH3_64_UpdateBlocks)(void* state, const u8* const* blocks, size_t count);
+ }
+--- a/pcsx2/GS/MultiISA.cpp
++++ b/pcsx2/GS/MultiISA.cpp
+@@ -111,3 +111,4 @@
+ u64 (&MultiISAFunctions::GSXXH3_64_Long)(const void* data, size_t len) = MULTI_ISA_SELECT(GSXXH3_64_Long);
+ u32 (&MultiISAFunctions::GSXXH3_64_Update)(void* state, const void* data, size_t len) = MULTI_ISA_SELECT(GSXXH3_64_Update);
+ u64 (&MultiISAFunctions::GSXXH3_64_Digest)(void* state) = MULTI_ISA_SELECT(GSXXH3_64_Digest);
++u32 (&MultiISAFunctions::GSXXH3_64_UpdateBlocks)(void* state, const u8* const* blocks, size_t count) = MULTI_ISA_SELECT(GSXXH3_64_UpdateBlocks);

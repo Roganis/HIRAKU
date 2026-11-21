@@ -5,6 +5,7 @@
 
 #include <cstddef>   // offsetof
 #include <cstdint>
+#include <memory>
 #include <utility>
 #include <vector>
 
@@ -93,11 +94,14 @@ struct Step {
 };
 static_assert(sizeof(Step) <= 32, "the executor's step: two to a cache line");
 
+struct Made;   // exec_jit.cpp
+
 struct Code {
     uint32_t entry = 0;   // where it's entered (a function's entry, or a secondary one)
     std::vector<Step> steps;
     // table steps' cases, by step: (value, step to go to, or ~0u: hk_jump(c, value))
     std::vector<std::vector<std::pair<uint32_t, uint32_t>>> tables;
+    Made *made = nullptr;   // the steps as the host's code (exec_jit.cpp), where there is some
 };
 
 // the instruction a step of kind k does: Op::invalid for control flow
@@ -115,6 +119,16 @@ constexpr Op op_of(uint16_t k) {
 
 const Code *find(uint32_t addr);        // the function entered at addr, or null
 void run(hk_ctx *c, const Code *k);     // a recompiled function's body, run (exec.cpp)
+
+// The steps made into the host's code (exec_jit.cpp): each function's, once the steps are settled
+// (none where this processor has no stencils, or with HK_JIT=0 or HK_403_JIT=0); forgotten with
+// the steps; a function's made code run in place of its steps (run() does, where there is some
+// and jit_off_now() is false: the tests' switch, interpret_only() in exec.h)
+void jit_make(const std::vector<std::unique_ptr<Code>> &codes);
+void jit_forget();
+void jit_enter(hk_ctx *c, const Code *k);
+extern bool g_jit_off;
+inline bool jit_off_now() { return g_jit_off; }
 
 // ---------------------------------------------------------------------------------------------
 // A run remembered. What a run of a function does is decided by the registers it starts with and

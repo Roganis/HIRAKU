@@ -596,6 +596,7 @@ add_library(hiraku_rt STATIC
   runtime/core/glue.cpp
   runtime/core/exec.cpp
   runtime/core/exec_rec.cpp
+  runtime/core/exec_jit.cpp
   runtime/core/hooks.cpp
   runtime/dev/k057714.cpp
   runtime/dev/rtc65271.cpp
@@ -614,7 +615,8 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   set_source_files_properties(runtime/core/exec.cpp PROPERTIES COMPILE_OPTIONS "-mllvm;-enable-tail-merge=false")
 endif()
 target_include_directories(hiraku_rt PUBLIC runtime)
-target_link_libraries(hiraku_rt PUBLIC hiraku_ppc musashi hiraku_ata hiraku_cabinet hiraku_xt446)
+target_link_libraries(hiraku_rt PUBLIC hiraku_ppc musashi hiraku_ata hiraku_cabinet hiraku_xt446 hiraku_jit)
+hk_stencils(ppc403 hiraku_rt)   # the executor's functions made at run time (exec_jit.cpp)
 hk_pgo(firebeat hiraku_rt musashi hiraku_xt446)   # not the game code: see hk_pgo above
 
 # --- the DJ Main core: an interpreted 68EC020 and the DJ Main board -----------------

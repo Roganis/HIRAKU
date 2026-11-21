@@ -12,6 +12,7 @@
 //                     runs the scheduler, a system call, code outside the executor): nothing in
 //                     exec.cpp
 //   HK_RUN_CALL_DYN(c, t), HK_RUN_JUMP(c, t)   hk_call_dyn, hk_jump
+//   HK_RUN_MADE(c, k) (exec.cpp only) a function with made code (exec_jit.cpp) runs that instead
 
 // A handler's entry. Fast: two labels, the first for a step with cycles folded into it (charged,
 // then on into the second), so that a step without any doesn't touch the budget.
@@ -70,6 +71,15 @@ void HK_RUN(hk_ctx *c, const Code *k) {
         hk_interp_function(c, k->entry);
         return;
     }
+#ifdef HK_RUN_MADE
+    if (k->made && !jit_off_now()) {
+        HK_RUN_MADE(c, k);
+        return;
+    }
+#define HK_MADE_TOO() do { if (k->made && !jit_off_now()) { HK_RUN_MADE(c, k); return; } } while (0)
+#else
+#define HK_MADE_TOO() ((void)0)
+#endif
     const Step *s = k->steps.data(), *st;
 #define HK_STEP() do { st = s++; HK_DISPATCH(); } while (0)
 #define HK_AT(n) do { s = k->steps.data() + (n); HK_STEP(); } while (0)
@@ -234,6 +244,7 @@ void HK_RUN(hk_ctx *c, const Code *k) {
             hk_interp_function(c, k->entry);
             return;
         }
+        HK_MADE_TOO();
         HK_AT(0);
     HK_E(jump)
         HK_RUN_JUMP(c, st->a);
@@ -251,6 +262,7 @@ void HK_RUN(hk_ctx *c, const Code *k) {
             hk_interp_function(c, k->entry);
             return;
         }
+        HK_MADE_TOO();
         HK_AT(0);
     HK_E(call_dyn)
         c->lr = st->a;
@@ -373,6 +385,7 @@ void HK_RUN(hk_ctx *c, const Code *k) {
 #undef HK_Z_dcr
 #undef HK_Z_addr
 #undef HK_POLL_AT
+#undef HK_MADE_TOO
 #undef HK_STEP
 #undef HK_AT
 #undef HK_E

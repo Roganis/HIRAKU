@@ -34,4 +34,12 @@ bool call(hk_ctx *c, uint32_t addr);     // run it, as a recompiled function is 
 // done in its place (exec.cpp, "runs remembered"). False: none there, or not this way (call())
 bool call_memo(hk_ctx *c, uint32_t addr);
 
+// The functions made into the host's code at load (exec_jit.cpp; PLAN.md section 45): whether
+// this build and its settings make any (not on ARM, nor with HK_JIT=0 or HK_403_JIT=0), how many
+// were made and their bytes. interpret_only(true) runs every call by the steps instead (tests).
+bool made_available();
+size_t made_count();
+size_t made_bytes();
+void interpret_only(bool on);
+
 }  // namespace hk::exec

@@ -373,8 +373,10 @@ const void *g_plain[KINDS], *g_ticked[KINDS];
 #define HK_RUN_OUTSIDE() ((void)0)
 #define HK_RUN_CALL_DYN(c, t) hk_call_dyn((c), (t))
 #define HK_RUN_JUMP(c, t) hk_jump((c), (t))
+#define HK_RUN_MADE(c, k) jit_enter((c), (k))
 #include "exec_run.inc"
 #undef HK_RUN
+#undef HK_RUN_MADE
 #undef HK_RUN_FAST
 #undef HK_RUN_OUTSIDE
 #undef HK_RUN_CALL_DYN
@@ -396,6 +398,7 @@ namespace {
 // the loaded spec's functions turned into steps
 std::string prepare() {
     forget();
+    jit_forget();
     g_codes.clear();
     g_entry.clear();
     g_loaded = false;
@@ -427,6 +430,7 @@ std::string prepare() {
     // for another program): refused, as the program's functions are
     hooks::loaded(true);
     if (std::string e = hooks::unplaced(); !e.empty()) return "mods: " + e;
+    jit_make(g_codes);   // (the hooks' probe steps in: made code runs them too)
     g_loaded = true;
     return "";
 }

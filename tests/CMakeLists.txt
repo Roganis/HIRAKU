@@ -586,6 +586,11 @@ add_test(NAME meg_jit COMMAND test_meg_jit)
 add_executable(test_r3000_jit jit/test_r3000_jit.cpp)
 target_link_libraries(test_r3000_jit PRIVATE hiraku_sys573 hiraku_sys573_blocks)   # (the blocks no game has: empty tables)
 add_test(NAME r3000_jit COMMAND test_r3000_jit)
+# ... and Firebeat's PowerPC 403: the executor's functions made at load (runtime/core/exec_jit.cpp)
+# against its interpreter of steps, on random made-up programs
+add_executable(test_ppc403_jit jit/test_ppc403_jit.cpp ${CMAKE_SOURCE_DIR}/runtime/core/no_table.c)
+target_link_libraries(test_ppc403_jit PRIVATE hiraku_rt)
+add_test(NAME ppc403_jit COMMAND test_ppc403_jit ${CMAKE_CURRENT_BINARY_DIR}/ppc403-jit-test)
 
 # The GCU's rows (runtime/dev/k057714_rows.h): copied, blended and filled eight pixels at a time,
 # against the pixel-by-pixel loops, on runs drawn at random

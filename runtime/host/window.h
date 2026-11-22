@@ -27,6 +27,10 @@ void window_set_audio_asio(const std::string &driver);
 // loses any steady offset (a DC blocker, as a cabinet's amplifier's coupling capacitors), so a chip
 // stuck at full scale can't push the rest into clipping. Neither changes --wav or --digest.
 void window_set_volume(double db);
+// Before window_open: the game's level, its family's trim in dB (shell/level.h, --even-volume), on
+// top of the volume: the two multiply the sound at the same place, so neither changes --wav,
+// --digest or a recording either
+void window_set_level(double db);
 // Before window_open: the audio queue target stays where window_open set it (no self-tuning)
 void window_set_audio_fixed(bool on);
 // Before the machine starts its threads (they inherit it): the game ahead of other programs.

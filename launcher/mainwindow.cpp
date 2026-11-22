@@ -1402,6 +1402,7 @@ static void audioArguments(QStringList &a) {
     a << "--audio-ms" << QString::number(s.value("audio/ms", 8).toInt());
     if (s.value("audio/fixed", false).toBool()) a << "--audio-fixed";
     if (int v = s.value("audio/volumeDb", 0).toInt(); v) a << "--volume" << QString::number(v);
+    if (!s.value("audio/evenVolume", true).toBool()) a << "--even-volume" << "off";   // (on by default: runtime/shell/level.h)
     if (QString d = s.value("audio/device").toString(); d.startsWith("asio:")) a << "--audio-asio" << d.mid(5);   // Windows
     else {
         if (!d.isEmpty()) a << "--audio-device" << d;

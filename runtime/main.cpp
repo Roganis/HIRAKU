@@ -43,6 +43,7 @@ extern char **environ;   // (the run's test switches, for its log: shell/switche
 #include "shell/core.h"
 #include "shell/userdir.h"
 #include "shell/saves.h"
+#include "shell/level.h"
 #include "shell/smoothgate.h"
 #include "shell/sys.h"
 #include "shell/switches.h"
@@ -187,6 +188,11 @@ static const char COMMON_OPTIONS[] = R"HK(  --frames N        stop after N video
                     player's own: the launcher's menu-pictures/<id>.bmp), whatever it shows
   --volume DB       the sound out of the window, louder or quieter (e.g. 6 or -3; 0 by default):
                     what the speakers get, not what --wav and --digest record
+  --even-volume on|off  on (the default): every game about as loud as the others, by a trim
+                    for its family on top of --volume (System 573 -5 dB, Twinkle -4, PC IIDX -4,
+                    PC pop'n -1, Firebeat 0, Python +1, DJ Main +3; a game.toml's [sound]
+                    level_db its own); off: each machine's own level. The speakers' sound
+                    only, as --volume (runtime/shell/level.h)
   --audio-exclusive Windows: the output (--audio-device's, else the default one) in WASAPI exclusive
                     mode: no system mixer in between, other programs silent meanwhile
   --audio-asio NAME Windows: the sound card through its ASIO driver (the name its control panel and
@@ -391,6 +397,7 @@ int main(int argc, char **argv) {
     std::string audio_device;
     bool audio_exclusive = false;
     double volume_db = 0;
+    bool even_volume = true;   // --even-volume (shell/level.h)
     bool split_screens = false;
     std::vector<std::string> mod_dirs;   // --mod: docs/MODS.md
     std::string audio_asio;
@@ -466,6 +473,11 @@ int main(int argc, char **argv) {
         else if (a == "--audio-device") audio_device = val();
         else if (a == "--audio-exclusive") audio_exclusive = true;
         else if (a == "--volume") volume_db = std::stod(val());
+        else if (a == "--even-volume") {
+            const std::string v = val();
+            if (v != "on" && v != "off") { fprintf(stderr, "--even-volume %s: on (the default) or off\n", v.c_str()); return 2; }
+            even_volume = v == "on";
+        }
         else if (a == "--split-screens") split_screens = true;
         else if (a == "--fast-boot") fast_boot = true;
         else if (a == "--fast-boot-seconds") fast_boot = true, fast_boot_seconds = std::stod(val());
@@ -618,6 +630,7 @@ int main(int argc, char **argv) {
     static int between_bench = 0;
     static uint64_t between_n = 0, between_ticks = 0, between_max = 0, between_hash = 0xcbf29ce484222325ull;
     if (const char *bb = getenv("HK_BETWEEN_BENCH"); bb && atoi(bb) >= 2) between_bench = atoi(bb);
+    std::string level_line;   // --even-volume's (shell/level.h): in the log at the start and in the report
     auto report = [&]() {
         frame_times.print();
         if (between_n)
@@ -637,6 +650,7 @@ int main(int argc, char **argv) {
         if (digest) { fclose(digest); digest = nullptr; }
 #ifdef HK_WITH_SDL
         if (window_scale) printf("%s\n", host::audio_describe().c_str());
+        if (!level_line.empty()) printf("%s\n", level_line.c_str());
 #endif
     };
     // --lights-log: each lamp's changes, as the frame hook sees them (lamps all off at first)
@@ -680,13 +694,17 @@ int main(int argc, char **argv) {
 
     // --smooth-motion songs: the game's [smooth] (its game.toml) says when a song is played; the
     // in-between pictures only then (shell/smoothgate.h)
-    if (smooth_motion) {
-        std::string text, err;
+    auto game_toml = [&]() {   // games/<game>/game.toml's text ("" if none: the game menu)
+        std::string text;
         if (FILE *f = fopen((opt.root + "/games/" + game + "/game.toml").c_str(), "rb")) {
             char b[4096];
             for (size_t n; (n = fread(b, 1, sizeof b, f)) > 0;) text.append(b, n);
             fclose(f);
         }
+        return text;
+    };
+    if (smooth_motion) {
+        std::string text = game_toml(), err;
         hk::smoothgate::State &g = hk::smoothgate::state();
         bool has = false;
         if (!hk::smoothgate::parse(text, g.cond, has, err)) {
@@ -718,6 +736,28 @@ int main(int argc, char **argv) {
     host::window_set_audio_output(audio_device, audio_buffer, audio_exclusive);
     host::window_set_audio_asio(audio_asio);
     host::window_set_volume(volume_db);
+    if (window_scale) {   // --even-volume: the game's family's trim on top (shell/level.h)
+        std::string err;
+        const hk::level::Trim t = hk::level::for_game(game_toml(), even_volume, err);
+        if (!err.empty()) fprintf(stderr, "games/%s/%s; its family's level instead\n", game.c_str(), err.c_str());
+        host::window_set_level(t.db);
+        char b[512];
+        if (!even_volume)
+            snprintf(b, sizeof b, "audio: the machine's own level (--even-volume off: no trim for its family)");
+        else if (t.own)
+            snprintf(b, sizeof b, "audio: level evened out: this game's own %+.1f dB (games/%s/game.toml [sound] level_db); "
+                     "--even-volume off for the machine's own level (the launcher: Settings > Audio)", t.db, game.c_str());
+        else if (t.known) {
+            char trim[64];
+            if (t.db == 0) snprintf(trim, sizeof trim, "as the machine makes them (0 dB)");
+            else snprintf(trim, sizeof trim, "%+.0f dB", t.db);
+            snprintf(b, sizeof b, "audio: level evened out: %s's games %s (runtime/shell/level.h); --even-volume off "
+                     "for the machine's own level (the launcher: Settings > Audio)", t.what.c_str(), trim);
+        } else
+            snprintf(b, sizeof b, "audio: the machine's own level (no family's trim for this game)");
+        level_line = b;
+        printf("%s\n", b);
+    }
     host::window_set_audio_fixed(audio_fixed);
     host::window_set_split(split_screens);
     if (fast_boot && window_scale) {   // the ready point: --fast-boot-seconds, else the game's

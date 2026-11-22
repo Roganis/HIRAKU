@@ -534,11 +534,14 @@ void window_set_audio_output(const std::string &device, int frames, bool exclusi
 void window_set_audio_asio(const std::string &driver) { g_audio_asio = driver; }
 
 namespace {
-float g_volume = 1.0f;
+float g_volume = 1.0f;   // the player's volume and the game's level together (audio_push)
+double g_volume_db = 0, g_level_db = 0;
 std::vector<float> g_out;   // audio_push's samples after the DC blocker and the volume
 double g_dc_x[2], g_dc_y[2];
+void volume_again() { g_volume = (float)std::pow(10.0, (g_volume_db + g_level_db) / 20.0); }
 }
-void window_set_volume(double db) { g_volume = (float)std::pow(10.0, db / 20.0); }
+void window_set_volume(double db) { g_volume_db = db, volume_again(); }
+void window_set_level(double db) { g_level_db = db, volume_again(); }
 void window_set_audio_fixed(bool on) { g_audio_fixed = on; }
 void window_set_split(bool on) { g_split_wanted = on; }
 

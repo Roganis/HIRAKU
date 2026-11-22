@@ -277,6 +277,28 @@ nothing on Windows) is set back to the middle once, and the panel says so.
 
 Details: [PLAY-NOTES.md](PLAY-NOTES.md#music-in-the-launcher)
 
+## Sound levels
+
+The machines make their sound at very different levels (a System 573 song about 8 dB louder than a
+DJ Main one), so HIRAKU evens them out: a trim for each family of games brings their songs to about
+the same loudness (about -18 LUFS), and **Settings > Audio > Volume** works on top of it. Only the
+speakers get it: recordings (F6), `--wav` and `--digest` keep the machine's own level. **Every game
+about as loud as the others** (Settings > Audio, on by default; `--even-volume off`) turns it off.
+
+| family | trim |
+|---|---|
+| System 573 | -5 dB |
+| Twinkle (beatmania IIDX 1st to 8th style) | -4 dB |
+| PC beatmania IIDX (9th style to EMPRESS) | -4 dB |
+| PC pop'n music (15 to 18, and the last 32-bit one) | -1 dB |
+| Firebeat | 0 |
+| Konami Python | +1 dB |
+| DJ Main | +3 dB |
+| the others (the 64-bit pop'n music, ee'MALL) | 0 |
+
+A game that stands apart from its family can have its own in its `game.toml`: `[sound]` with
+`level_db = -2.5` (dB, replacing the family's). The log says which applies (`audio: level evened out: ...`).
+
 ## Latency
 
 The games read their keys once a frame, as on the cabinet. What the PC adds is set here:

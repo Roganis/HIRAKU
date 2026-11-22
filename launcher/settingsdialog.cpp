@@ -743,6 +743,14 @@ void SettingsDialog::audioPage(QVBoxLayout *v) {
                               "sooner, until it crackles; the audio queue above tunes itself to it. Times at 48 kHz.");
     fa->addRow("Device buffer:", m_audioBuffer);
     fa->addRow("Volume:", m_volume);
+    m_evenVolume = new QCheckBox("Every game about as loud as the others");
+    m_evenVolume->setChecked(s.value("audio/evenVolume", true).toBool());
+    m_evenVolume->setToolTip("The machines make their sound at very different levels: System 573 and Twinkle games "
+                             "play about 8 dB louder than DJ Main's. On: a trim for each family of games brings their "
+                             "songs to about the same loudness (System 573 -5 dB, Twinkle -4, PC IIDX -4, PC pop'n -1, "
+                             "Firebeat 0, Python +1, DJ Main +3), and the volume above on top. Off: each machine's own "
+                             "level (--even-volume off; docs/PLAY.md, Sound levels).");
+    fa->addRow("", m_evenVolume);
     m_fineSound = new QCheckBox("Sound every millisecond on System 573 and Twinkle (not MAME's)");
     m_fineSound->setChecked(s.value("audio/soundEveryMs", true).toBool());
     m_fineSound->setToolTip("MAME hands these machines' sound on 50 times a second, which adds up to 20 ms of "
@@ -1110,6 +1118,7 @@ void SettingsDialog::accept() {
     if (m_powerPlan) s.setValue("system/highPerformance", m_powerPlan->isChecked());
     s.setValue("audio/volumeDb", m_volume->value());
     s.setValue("audio/soundEveryMs", m_fineSound->isChecked());
+    s.setValue("audio/evenVolume", m_evenVolume->isChecked());
     s.setValue("audio/device", m_audioDevice->currentData().toString());
     if (m_audioExclusive) s.setValue("audio/exclusive", m_audioExclusive->isChecked());
     s.setValue("audio/buffer", m_audioBuffer->currentData().toInt());

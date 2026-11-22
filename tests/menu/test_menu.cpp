@@ -177,6 +177,8 @@ static void test_cabinets(const std::string &games_dir) {
         CHECK(menu::action(f, "Keypad 5") == menu::Act::none && menu::action(f, "Coin 1") == menu::Act::none);
     }
     CHECK(menu::turntable("iidx") && menu::turntable("djbm") && !menu::turntable("popn"));
+    // the ee'MALL station: a dial and two buttons
+    CHECK(menu::turntable("eemall") && menu::action("eemall", "A") == menu::Act::start && menu::action("eemall", "B") == menu::Act::shelf_next);
     CHECK(menu::lamp_for("iidx", "P2 Button 4") == "P2 Key Lamp 4" && menu::lamp_for("djbm", "P1 Button 2") == "P1 Button Lamp 2");
     CHECK(menu::legend("a family not yet made").size() == 3);   // the 10-key's, at least
 }

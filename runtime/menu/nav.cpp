@@ -145,6 +145,15 @@ const std::map<std::string, Family> &families() {
         m["ppp"] = {{{"P1 Button 1", A::prev}, {"P1 Button 2", A::next}, {"P1 Button 3", A::shelf_prev},
                      {"P1 Button 7", A::shelf_next}, {"1 Player Start", A::start}},
                     {{"Left / Right buttons", "choose a game"}, {"Outer sensor bars", "change shelf"}, {"Start", "play"}}};
+        // Konami's ee'MALL station: its dial chooses, as in its own lists (the shell's turntable); of
+        // its two buttons A is its "decide" and plays, B changes shelf (one way round)
+        {
+            Family f;
+            f.turntable = true;
+            f.rules = {{"P1 Turntable -", A::prev}, {"P1 Turntable +", A::next}, {"B", A::shelf_next}, {"A", A::start}};
+            f.hints = {{"Dial", "choose a game"}, {"B button", "change shelf"}, {"A button", "play"}};
+            m["eemall"] = f;
+        }
         return m;
     }();
     return all;

@@ -78,6 +78,120 @@ static void test_hold() {
     mk::set(false);
 }
 
+// A reader's 10-key (host/readers.h): its keys reach the hold with the reader's number and count
+// only while its readings are fresh; any key let go ends the hold, however briefly
+static void hold3(int reader, int v) {
+    mk::input("Keypad 5", v, reader), mk::input("Keypad 7", v, reader), mk::input("Keypad 3", v, reader);
+}
+// Frames every 1/60 s from t0 to t1 with a reading of reader 0 each `every` seconds (0: none):
+// whether the hold completed, and at what time
+static bool run_frames(double t0, double t1, double every, double *at = nullptr) {
+    double last = t0;
+    for (double t = t0; t <= t1 + 1e-9; t += 1.0 / 60) {
+        if (every > 0 && t - last >= every - 1e-9) mk::reading(0, t), last = t;
+        if (mk::frame(t)) {
+            if (at) *at = t;
+            return true;
+        }
+    }
+    return false;
+}
+
+static void test_hold_reader() {
+    // held the whole two seconds with fresh readings: completes at 2 s
+    for (double early : {0.05, 0.5, 1.0, 1.5, 1.95}) {   // ... and let go at any of these: never
+        mk::set(true, 2.0);
+        mk::reading(0, 0);
+        hold3(0, 1);
+        CHECK(!run_frames(0, early, 1.0 / 60));
+        mk::input("Keypad 7", 0, 0);   // the reader says one is up
+        CHECK(!run_frames(early + 0.01, 10, 1.0 / 60));
+        CHECK(mk::progress(10) == 0);
+        CHECK(mk::report().find("1 hold begun, 1 let go") != std::string::npos);
+        CHECK(mk::report().find("none completed") != std::string::npos);
+    }
+    mk::set(true, 2.0);
+    mk::reading(0, 0);
+    hold3(0, 1);
+    double at = 0;
+    CHECK(run_frames(0, 3, 1.0 / 60, &at) && at > 1.99 && at < 2.05);
+    CHECK(mk::report().find("1 completed") != std::string::npos);
+
+    // keys pressed one after another, each let go before the next: never whole
+    mk::set(true, 2.0);
+    for (const char *k : {"Keypad 5", "Keypad 7", "Keypad 3"}) {
+        mk::reading(0, 0);
+        mk::input(k, 1, 0);
+        mk::input(k, 0, 0);
+    }
+    CHECK(!run_frames(0, 5, 1.0 / 60));
+    // ... and pressed one after another, all three kept down: from the third, two seconds
+    mk::set(true, 2.0);
+    mk::input("Keypad 5", 1, 0);
+    CHECK(!run_frames(0, 0.5, 1.0 / 60));
+    mk::input("Keypad 7", 1, 0);
+    CHECK(!run_frames(0.51, 1.0, 1.0 / 60));
+    mk::input("Keypad 3", 1, 0);
+    CHECK(run_frames(1.01, 4, 1.0 / 60, &at) && at > 3.0 && at < 3.06);
+
+    // let go and pressed again between two frames (the release is still seen): starts again
+    mk::set(true, 2.0);
+    hold3(0, 1);
+    CHECK(!run_frames(0, 1.5, 1.0 / 60));
+    mk::input("Keypad 3", 0, 0), mk::input("Keypad 3", 1, 0);
+    CHECK(!run_frames(1.51, 3.4, 1.0 / 60));
+    CHECK(run_frames(3.41, 4, 1.0 / 60));
+
+    // the reader goes quiet mid-hold, its keys "down" (no release ever comes): dropped once stale,
+    // never completed, not even long after
+    mk::set(true, 2.0);
+    mk::reading(0, 0);
+    hold3(0, 1);
+    CHECK(!run_frames(0, 1.0, 1.0 / 60));       // fresh until 1.0
+    CHECK(mk::progress(0.9) > 0.4);
+    CHECK(!run_frames(1.0 + 1.0 / 60, 30, 0));  // then nothing: stale after 0.25 s
+    CHECK(mk::progress(30) == 0);
+    CHECK(mk::report().find("by a reader gone quiet") != std::string::npos);
+    // ... the readings come back with the three still down: a new hold from then
+    CHECK(run_frames(30, 33, 1.0 / 60, &at) && at > 31.99 && at < 32.05);
+
+    // a stretch of failed polls (0.5 s with no reading) mid-hold: dropped, then begun again
+    mk::set(true, 2.0);
+    hold3(0, 1);
+    mk::reading(0, 0);
+    CHECK(!run_frames(0, 1.5, 1.0 / 60));
+    CHECK(!run_frames(1.5 + 1.0 / 60, 2.0, 0));
+    CHECK(!run_frames(2.0, 3.9, 1.0 / 60));
+    CHECK(run_frames(3.9, 5, 1.0 / 60, &at) && at > 3.99 && at < 4.1);
+    // ... short gaps (a few answers lost, under 0.25 s) change nothing
+    mk::set(true, 2.0);
+    hold3(0, 1);
+    mk::reading(0, 0);
+    CHECK(run_frames(0, 3, 0.2, &at) && at > 1.99 && at < 2.05);
+
+    // a reader's keys with no reading at all yet: not held
+    mk::set(true, 2.0);
+    hold3(1, 1);
+    CHECK(!mk::frame(0) && !mk::frame(5));
+    // ... the other reader's readings don't freshen them
+    mk::reading(0, 5);
+    CHECK(!mk::frame(5.1) && !mk::frame(9));
+
+    // the keyboard's and a script's Keypad 5/7/3 (no reader) need no readings, as before
+    mk::set(true, 2.0);
+    hold3(-1, 1);
+    CHECK(!mk::frame(100) && mk::frame(102));
+    // ... nor Test and Service, nor the own key
+    mk::set(true, 1.0);
+    mk::input("Test", 1), mk::input("Service", 1);
+    CHECK(!mk::frame(100) && mk::frame(101));
+    mk::set(true, 1.0);
+    mk::input(mk::OWN_KEY, 1);
+    CHECK(!mk::frame(100) && mk::frame(101));
+    mk::set(false);
+    CHECK(mk::report().empty());
+}
+
 static const char *kList = "hiraku-menu-list 1\n"
                            "current\tbm7thmix\n"
                            "game\tbm1stmix\tbeatmania\tbeatmania\t1997  DJ Main\n"
@@ -584,6 +698,7 @@ int main(int argc, char **argv) {
     host::menukey::input("P1 Button 1", 1);
     CHECK(host::menukey::touched());   // with the way out off too: a picture isn't taken from a game someone plays
     test_hold();
+    test_hold_reader();
     test_list();
     test_state();
     test_cabinets(argv[1]);

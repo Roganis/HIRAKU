@@ -233,7 +233,10 @@ Details: [PLAY-NOTES.md](PLAY-NOTES.md#controllers), [readers](PLAY-NOTES.md#car
 
 **Leaving a game:** hold **5, 7 and 3** together on an e-AMUSEMENT reader's 10-key for two
 seconds. A "GAME MENU" bar fills; let go before it's full and nothing happens. The game ends with
-its saves written. A cabinet with no 10-key holds **Test and Service** together, and you can add a
+its saves written. All three must stay down the whole time: letting go of any one, even for a
+moment, empties the bar, and the next hold starts from the beginning. A real reader whose answers
+stop coming for a quarter of a second counts as let go too. The game's log ends with a line
+`game menu: N holds begun, ...` and, for a serial reader, how often its 10-key was read. A cabinet with no 10-key holds **Test and Service** together, and you can add a
 key of your own (**Settings > General > Game menu**).
 
 **The menu** shows the games ready to play, a shelf per series, driven by the cabinet's controls:

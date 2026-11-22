@@ -32,10 +32,16 @@ std::string readers_help();
 
 void readers_start();   // the readers asked for, each on a thread
 // Once a frame on the core's thread: each card read goes to card(player, number) (Core::card_read),
-// the 10-keys to input(name, value) (Core::set_input); both false for what the game hasn't
+// the 10-keys to input(name, value) (Core::set_input); both false for what the game hasn't. The
+// 10-keys' presses and releases go to the way out to the game menu too (menukey.h), with each
+// reader's last reading, whatever the game takes. A reader with no reading for
+// menukey::STALE_SECONDS has its keys let go
 void readers_frame(const std::function<bool(int, const std::string &)> &card,
                    const std::function<bool(const std::string &, int)> &input);
 void readers_stop();
+// The exit report's lines for the serial readers' 10-keys (each ends in a newline; empty with none):
+// how often each was read, the longest gap, the answers that failed
+std::string readers_report();
 
 // The serial reader's dialogue, for tests (tests/readers_test.cpp): the reader's status block
 // (18 bytes, 16 and a CRC) as the reader encrypts it, decrypted in place with the session's keys

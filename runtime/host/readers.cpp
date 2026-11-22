@@ -5,6 +5,7 @@
 #include "readers.h"
 
 #include "acio.h"
+#include "menukey.h"
 #include "../shell/cardmedia.h"
 #include "../shell/sys.h"
 
@@ -20,6 +21,7 @@
 #include <atomic>
 #include <chrono>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <fstream>
 #include <iterator>
@@ -64,9 +66,54 @@ std::vector<std::thread> g_threads;
 // What the threads read, for readers_frame
 std::mutex g_mutex;
 std::vector<std::pair<int, std::string>> g_cards;   // (player, number), in the order read
-uint16_t g_keys[2] = {0, 0};                         // the serial readers' 10-keys (the reader's bits)
 std::string g_last[2];                               // the card each player last held, for the 3 s
 Clock::time_point g_last_seen[2];
+
+// Each player's serial 10-key as its reader thread reads it (the reader's bits), and how it went
+struct Pad {
+    uint16_t keys = 0;        // held at the last reading
+    uint16_t down = 0, up = 0;   // seen down / up at some reading since readers_frame last took them
+    bool any = false;         // a reading yet
+    Clock::time_point seen;   // the last reading
+    std::string path;         // its port, for the lines
+    // for the lines: readings, the longest time between two, what failed
+    uint64_t readings = 0, timeouts = 0, bad = 0, idle = 0, lost = 0;
+    double worst_gap = 0;
+    Clock::time_point first;
+    bool period_told = false;
+};
+Pad g_pad[2];
+// The keypad is read this often (each reader on a bus in turn, then a wait to the next period): a
+// frame's time, as a game asks its own reader
+constexpr auto kPollPeriod = std::chrono::milliseconds(16);
+constexpr auto kCardEvery = std::chrono::milliseconds(200);   // the card read asked again (spice2x waits 200 ms after it)
+constexpr int kStatusWaitMs = 100;                            // an answer is ~26 bytes: 5 ms at 57600 baud, 27 at 9600
+constexpr int kLostAfter = 10;                                // this many unanswered in a row: the reader is lost
+
+// A fresh reading of player p's 10-key
+void keys_read(int p, uint16_t keys) {
+    std::lock_guard<std::mutex> l(g_mutex);
+    Pad &d = g_pad[p];
+    const auto now = Clock::now();
+    if (d.any) d.worst_gap = std::max(d.worst_gap, std::chrono::duration<double>(now - d.seen).count());
+    else d.first = now;
+    d.any = true;
+    d.seen = now;
+    d.readings++;
+    d.keys = keys;
+    d.down |= keys;
+    d.up |= (uint16_t)~keys;
+    if (!d.period_told && now - d.first >= std::chrono::seconds(3)) {
+        d.period_told = true;
+        fprintf(stderr, "reader %s: player %d's 10-key read every %.1f ms over its first 3 s (the longest gap %.1f ms)\n", d.path.c_str(),
+                p + 1, std::chrono::duration<double, std::milli>(now - d.first).count() / (double)(d.readings - 1), d.worst_gap * 1000);
+    }
+}
+
+void pad_count(int p, uint64_t Pad::*what) {
+    std::lock_guard<std::mutex> l(g_mutex);
+    g_pad[p].*what += 1;
+}
 
 void card_read(int player, const uint8_t uid[8]) {
     char hex[17];
@@ -106,8 +153,12 @@ public:
                 told = true;
             } else if (connect()) {
                 told = false;
-                while (g_running && poll_card()) {}
+                poll();
+                for (const Node &n : nodes_) pad_count(n.player, &Pad::lost);
                 if (g_running) fprintf(stderr, "reader %s: lost; connecting again\n", port_.path().c_str());
+                port_.close();
+                sleep_ms(500);   // (its keys count as let go meanwhile: no fresh reading, menukey.h)
+                continue;
             }
             port_.close();
             sleep_ms(5000);
@@ -119,6 +170,7 @@ private:
         uint8_t addr;
         int player;
         ReaderCrypt crypt;
+        int unanswered = 0;   // statuses asked for in a row with no answer
     };
 
     bool connect() {
@@ -138,6 +190,10 @@ private:
             }
             Node n{(uint8_t)addr, player, {}};
             if (!start(n)) return false;
+            {
+                std::lock_guard<std::mutex> l(g_mutex);
+                g_pad[player].path = port_.path() + (addr > 1 ? " (node 2)" : "");
+            }
             nodes_.push_back(n);
         }
         return !nodes_.empty();
@@ -160,30 +216,52 @@ private:
         return true;
     }
 
-    // Read whatever card is there, then the status: 0 2 when there is a card, 2-9 its id, 11 the
-    // 10-key's, 14-15 the keys held. spice2x waits 200 ms after the read for one status, so a key
-    // is seen every ~220 ms (the 10-key's lag a tester found); here the status is asked every
-    // 20 ms through those 200 ms, the keys with it (each reader on the bus in turn)
-    bool poll_card() {
+    // A card read asked for every 200 ms, and the status every 16 ms: 0 2 when there is a card, 2-9
+    // its id, 11 the 10-key's started, 14-15 the keys held (bemanitools' ac_io_icca_state; 12-13 are
+    // key events, not read). spice2x waits 200 ms after the read for one status, so a key is seen
+    // every ~220 ms (the 10-key's lag a tester found). Each answer is taken as soon as it is in
+    // (AcioPort::receive_answer): waiting for the line to go quiet 30 ms after each, as receive()
+    // does, made a status ~55 ms apart, 90+ with a cabinet's two readers on one bus, a USB serial
+    // adapter's and Windows' timer rounding on top (HK_READER_WAIT_QUIET=1: that way again). One not
+    // answered is counted and the next asked; kLostAfter in a row, and the reader is connected again.
+    // Returns when the reader is lost.
+    void poll() {
+        const bool quiet = getenv("HK_READER_WAIT_QUIET") != nullptr;
+        auto ask = [&](uint8_t addr, uint16_t cmd, const std::vector<uint8_t> &payload, AcioPort::Message &m, int wait_ms) {
+            return quiet ? port_.ask(addr, cmd, payload, m, std::max(wait_ms, 500)) : port_.ask_answer(addr, cmd, payload, m, wait_ms);
+        };
         AcioPort::Message m;
-        for (Node &n : nodes_)
-            if (!port_.ask(n.addr, 0x0161, {0x00, 0x03, 0xff, 0xff}, m)) return false;
-        for (int i = 0; i < 10 && g_running; i++) {
-            sleep_ms(20);
+        auto next = Clock::now(), card_at = next;
+        for (Node &n : nodes_) n.unanswered = 0;
+        while (g_running) {
+            if (Clock::now() >= card_at) {
+                for (Node &n : nodes_)
+                    if (!ask(n.addr, 0x0161, {0x00, 0x03, 0xff, 0xff}, m, 200)) pad_count(n.player, &Pad::timeouts), n.unanswered++;
+                card_at = Clock::now() + kCardEvery;
+            }
             for (Node &n : nodes_) {
-                if (!port_.ask(n.addr, 0x0164, {0x10}, m)) return false;
+                if (!ask(n.addr, 0x0164, {0x10}, m, kStatusWaitMs)) {
+                    pad_count(n.player, &Pad::timeouts);
+                    if (++n.unanswered >= kLostAfter) return;
+                    continue;
+                }
+                n.unanswered = 0;
                 if (m.payload.size() != 18) continue;
                 n.crypt.crypt(m.payload.data(), 18);
-                if (ReaderCrypt::crc(m.payload.data(), 16) != (m.payload[16] << 8 | m.payload[17])) return false;   // out of step
-                const uint8_t *s = m.payload.data();
-                if (s[11]) {
-                    std::lock_guard<std::mutex> l(g_mutex);
-                    g_keys[n.player] = (uint16_t)(s[14] << 8 | s[15]);
+                if (ReaderCrypt::crc(m.payload.data(), 16) != (m.payload[16] << 8 | m.payload[17])) {   // out of step
+                    pad_count(n.player, &Pad::bad);
+                    return;
                 }
+                const uint8_t *s = m.payload.data();
+                if (s[11]) keys_read(n.player, (uint16_t)(s[14] << 8 | s[15]));
+                else pad_count(n.player, &Pad::idle);   // (not a reading of its keys: spice2x passes over them too)
                 if (s[0] == 2) card_read(n.player, s + 2);
             }
+            next += kPollPeriod;
+            const auto now = Clock::now();
+            if (next < now) next = now;   // behind (a slow line, an answer waited for): from now
+            else hk::sys::sleep_until(next);
         }
-        return true;
     }
 
     AcioPort port_;
@@ -446,7 +524,8 @@ constexpr Key KEYS[] = {{0x0001, "Keypad 0", nullptr}, {0x0002, "Keypad 1", null
                         {0x0400, "Keypad 6", nullptr}, {0x0008, "Keypad 7", nullptr}, {0x0080, "Keypad 8", nullptr},
                         {0x0800, "Keypad 9", nullptr}, {0x0100, "Keypad .", nullptr},
                         {0x0010, "Keypad 00", "Keypad Enter"}};
-uint16_t g_applied[2] = {0, 0};
+uint16_t g_applied[2] = {0, 0};      // the keys given to the game as held
+uint16_t g_mk_applied[2] = {0, 0};   // ... and to the way out to the game menu (menukey.h)
 const char *g_used[2][std::size(KEYS)];   // the input each held key went to
 
 }  // namespace
@@ -524,23 +603,48 @@ void readers_frame(const std::function<bool(int, const std::string &)> &card,
                    const std::function<bool(const std::string &, int)> &input) {
     if (!g_running) return;
     std::vector<std::pair<int, std::string>> cards;
-    uint16_t keys[2];
+    uint16_t keys[2], down[2], up[2];
+    bool any[2];
+    Clock::time_point seen[2];
     {
         std::lock_guard<std::mutex> l(g_mutex);
         cards.swap(g_cards);
-        keys[0] = g_keys[0];
-        keys[1] = g_keys[1];
+        for (int p = 0; p < 2; p++) {
+            Pad &d = g_pad[p];
+            keys[p] = d.keys, down[p] = d.down, up[p] = d.up, any[p] = d.any, seen[p] = d.seen;
+            d.down = d.up = 0;
+        }
     }
+    const auto now = Clock::now();
     for (auto &[player, number] : cards)
         // (its last four digits only: a card's number is the player's own, and a log goes round)
         if (card(player, number)) printf("card: %s held to player %d's reader\n", cardmedia::shown(number).c_str(), player + 1);
         else printf("card: %s held to player %d's reader, but this game has no card reader there\n", cardmedia::shown(number).c_str(), player + 1);
     for (int p = 0; p < 2; p++) {
-        const uint16_t changed = keys[p] ^ g_applied[p];
+        // the keys as the last reading has them while it is fresh; none once the reader has gone
+        // quiet (lost answers, starting again): no key stays down on a state nobody refreshes
+        const double at = std::chrono::duration<double>(seen[p].time_since_epoch()).count();
+        const bool fresh = any[p] && std::chrono::duration<double>(now - seen[p]).count() <= menukey::STALE_SECONDS;
+        if (any[p]) menukey::reading(p, at);
+        // a key down and up again between two frames (a reading each): down for this frame, up at
+        // the next, so the game sees the press; up and down again: up for this frame
+        auto target_of = [&](uint16_t want, uint16_t applied) {
+            const uint16_t flash_down = down[p] & ~want & ~applied, flash_up = up[p] & want & applied;
+            return (uint16_t)((want | flash_down) & ~flash_up);
+        };
+        const uint16_t target = fresh ? target_of(keys[p], g_applied[p]) : 0;
         const std::string prefix = p ? "P2 " : "";
+        // The way out to the game menu sees each press and each release the reader reports,
+        // whether the game has the key or not (a beatmania with no 10-key: a release it refused
+        // must still reach it), and judges a reader gone quiet itself (menukey::reading)
+        const uint16_t mk_target = any[p] ? target_of(keys[p], g_mk_applied[p]) : 0;
+        for (size_t k = 0; k < std::size(KEYS); k++)
+            if ((mk_target ^ g_mk_applied[p]) & KEYS[k].bit) menukey::input(prefix + KEYS[k].name, mk_target & KEYS[k].bit ? 1 : 0, p);
+        g_mk_applied[p] = mk_target;
+        const uint16_t changed = target ^ g_applied[p];
         for (size_t k = 0; k < std::size(KEYS); k++) {
             if (!(changed & KEYS[k].bit)) continue;
-            if (keys[p] & KEYS[k].bit) {
+            if (target & KEYS[k].bit) {
                 g_used[p][k] = input(prefix + KEYS[k].name, 1)                                   ? KEYS[k].name
                                : KEYS[k].instead && input(prefix + KEYS[k].instead, 1) ? KEYS[k].instead
                                                                                        : nullptr;
@@ -549,8 +653,27 @@ void readers_frame(const std::function<bool(int, const std::string &)> &card,
                 g_used[p][k] = nullptr;
             }
         }
-        g_applied[p] = keys[p];
+        g_applied[p] = target;
     }
+}
+
+std::string readers_report() {
+    std::string out;
+    std::lock_guard<std::mutex> l(g_mutex);
+    for (int p = 0; p < 2; p++) {
+        const Pad &d = g_pad[p];
+        if (d.path.empty()) continue;
+        const double span = d.any ? std::chrono::duration<double>(d.seen - d.first).count() : 0;
+        char b[400];
+        snprintf(b, sizeof b,
+                 "reader %s: player %d's 10-key read %llu times, %.1f a second, the longest gap %.0f ms; %llu unanswered, "
+                 "%llu out of step, %llu with its 10-key not started, lost %llu times\n",
+                 d.path.c_str(), p + 1, (unsigned long long)d.readings, span > 0 ? (double)(d.readings - 1) / span : 0.0,
+                 d.worst_gap * 1000, (unsigned long long)d.timeouts, (unsigned long long)d.bad, (unsigned long long)d.idle,
+                 (unsigned long long)d.lost);
+        out += b;
+    }
+    return out;
 }
 
 void readers_stop() {

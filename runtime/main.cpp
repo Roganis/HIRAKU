@@ -652,6 +652,8 @@ int main(int argc, char **argv) {
         if (window_scale) printf("%s\n", host::audio_describe().c_str());
         if (!level_line.empty()) printf("%s\n", level_line.c_str());
 #endif
+        printf("%s", host::readers_report().c_str());
+        if (const std::string line = host::menukey::report(); !line.empty()) printf("%s\n", line.c_str());
     };
     // --lights-log: each lamp's changes, as the frame hook sees them (lamps all off at first)
     std::function<void(uint64_t)> lights_log;
@@ -1049,11 +1051,10 @@ int main(int argc, char **argv) {
             for (std::string said = machine.take_notice(); !said.empty(); said = machine.take_notice())
                 host::notice::hint({said}, 3, host::ui::Icon::disk);
 #endif
+        // (the readers' 10-keys go to the way out to the game menu from readers_frame itself, each
+        // press and release, whatever the game has)
         host::readers_frame([&](int p, const std::string &n) { return machine.card_read(p, n); },
-                            [&](const std::string &name, int v) {
-                                host::menukey::input(name, v);   // (a 10-key's 5, 7 and 3, whatever the game has)
-                                return machine.set_input(name, v);
-                            });
+                            [&](const std::string &name, int v) { return machine.set_input(name, v); });
         host::bio2_frame(machine);
         host::popnio_frame(machine);
         if (tell_launcher) {

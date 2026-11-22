@@ -10,6 +10,11 @@
 // The inputs are watched as they go to the game, by the cabinet's names for them, whatever the
 // game: one with no 10-key of its own (a DJ Main or Twinkle beatmania on an IIDX cabinet) still
 // leaves by the readers'. The game gets them too (the digits at a PIN prompt, a credit from Service).
+//
+// A hold needs all its keys down the whole time: one let go (even for less than a frame) ends it,
+// and the next is a new hold from the start. A real reader's 10-key is known only by asking it
+// (host/readers.h): its keys count as held only while its readings are fresh, so a reader that goes
+// quiet with the three down (lost answers, a cable, a reader starting again) never completes one.
 #pragma once
 
 #include <string>
@@ -19,12 +24,19 @@ namespace hk::host::menukey {
 constexpr int EXIT_CODE = 73;
 // Its name here for the player's own key or button (the window gives its presses, host/window.cpp)
 constexpr const char *OWN_KEY = "\x01menu key";
+// A reader's 10-key counts as held for this long after its last reading (seconds): ten and more of
+// the reader's poll periods (16-25 ms, host/readers.cpp), so a few answers lost in a row change
+// nothing, and well short of both the hold and what a player feels as "I let go"
+constexpr double STALE_SECONDS = 0.25;
 
 // Off until this: the holds are watched, and how long they take (seconds)
 void set(bool on, double hold_seconds = 2.0);
 bool on();
-// An input as the game is given it (any thread): its cabinet name, 1 held, 0 let go
-void input(const std::string &name, int value);
+// An input as the game is given it (any thread): its cabinet name, 1 held, 0 let go. `reader`: 0
+// or 1 for a reader's 10-key (host/readers.h), held only while reading(reader, ...) is fresh
+void input(const std::string &name, int value, int reader = -1);
+// A fresh reading of reader `reader`'s 10-key, taken at that time (now()'s clock)
+void reading(int reader, double at_seconds);
 // Whether any control at all was given pressed since the program started (the menu's picture of a
 // game is taken only from one nobody has touched yet: host/menupic.h)
 bool touched();
@@ -41,5 +53,7 @@ void hand_screen_to_launcher();
 // ... and once its window is up: that window will go at once, with no fading out, however the
 // program ends (a crash too: Windows would draw the fading over the launcher's black)
 void window_up_for_launcher();
+// The exit report's line: "game menu: N holds begun, ..." (empty while off)
+std::string report();
 
 }  // namespace hk::host::menukey

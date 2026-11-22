@@ -59,6 +59,16 @@ public:
     }
     void tag_zero(bool on) { tag_zero_ = on; }   // every packet's ID 0, as IIDX 27 sends them to the BIO2
 
+    // The card readers' way (readers.cpp): the answer to `cmd`, the first packet with a good sum for
+    // that command, as soon as it is in (up to wait_ms), not after the line has been quiet 30 ms as
+    // receive() waits. What is read past it, and packets for other commands, are kept for the next
+    // calls: an answer that comes late is taken by the next ask for its command, never lost (a
+    // reader's statuses are encrypted one after another, and one lost puts the two ends out of step)
+    bool receive_answer(uint16_t cmd, Message &m, int wait_ms);
+    bool ask_answer(uint8_t node, uint16_t cmd, const std::vector<uint8_t> &payload, Message &m, int wait_ms) {
+        return send(node, cmd, payload) && receive_answer(cmd, m, wait_ms);
+    }
+
 private:
     bool set_rate(int baud);
     bool write_all(const uint8_t *d, size_t n);
@@ -73,6 +83,8 @@ private:
     bool tag_zero_ = false;
     std::vector<uint8_t> last_sent_;   // receive_one passes over an echo of it
     bool log_ = false;
+    std::vector<uint8_t> in_;          // receive_answer: bytes read and not yet a whole packet
+    std::vector<Message> aside_;       // ... and packets that answered another command
 };
 
 }  // namespace hk::host

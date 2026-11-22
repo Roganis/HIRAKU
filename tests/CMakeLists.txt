@@ -56,6 +56,10 @@ if(NOT WIN32)
   target_link_libraries(test_readers PRIVATE hiraku_shell)
   add_test(NAME card_readers COMMAND test_readers)
   add_test(NAME card_readers_one_bus COMMAND test_readers 2)   # a cabinet's two readers on one port
+  # the 10-key's 5, 7 and 3 held at known times: when the game and the way out to the game menu see
+  # them, a reader gone quiet, late answers; and a game with no 10-key of its own
+  add_test(NAME card_readers_hold COMMAND test_readers hold)
+  add_test(NAME card_readers_hold_nokeys COMMAND test_readers hold nokeys)
   # beatmania IIDX's BIO2 I/O board against a pretend BI2A and a pretend machine
   add_executable(test_bio2 acio/test_bio2.cpp)
   target_link_libraries(test_bio2 PRIVATE hiraku_shell)

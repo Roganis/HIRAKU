@@ -219,6 +219,8 @@ void AcioPort::dump(const char *dir, const std::vector<uint8_t> &bytes) const {
 }
 
 int AcioPort::handshake(const std::vector<int> &rates, const std::function<bool()> &keep_going) {
+    in_.clear();
+    aside_.clear();
     std::vector<uint8_t> hello(525, 0x00);
     hello.insert(hello.end(), 40, 0xaa);
     for (int rate : rates) {
@@ -327,6 +329,40 @@ bool AcioPort::send(uint8_t node, uint16_t cmd, const std::vector<uint8_t> &payl
         }
     }
     return write_all(out.data(), out.size());
+}
+
+bool AcioPort::receive_answer(uint16_t cmd, Message &m, int wait_ms) {
+    for (auto it = aside_.begin(); it != aside_.end(); ++it)
+        if (it->cmd == cmd) {
+            m = std::move(*it);
+            aside_.erase(it);
+            return true;
+        }
+    const auto end = std::chrono::steady_clock::now() + std::chrono::milliseconds(wait_ms);
+    for (;;) {
+        // the whole packets in what has come so far; the rest (a packet begun) waits for more
+        Unframe u;
+        size_t used = 0;
+        bool found = false;
+        for (size_t i = 0; i < in_.size() && !found; i++) {
+            if (!u.feed(in_[i])) continue;
+            used = i + 1;
+            const bool ok = u.sum_ok();
+            dump(ok ? "<" : "< (bad sum)", u.d);
+            if (!ok || u.d == last_sent_) continue;
+            Message got;
+            u.to(got);
+            if (got.cmd == cmd) m = std::move(got), found = true;
+            else if (aside_.size() < 8) aside_.push_back(std::move(got));
+        }
+        in_.erase(in_.begin(), in_.begin() + (ptrdiff_t)used);
+        if (in_.size() > 4096) in_.erase(in_.begin(), in_.end() - 4096);
+        if (found) return true;
+        const int left = (int)std::chrono::duration_cast<std::chrono::milliseconds>(end - std::chrono::steady_clock::now()).count();
+        if (left <= 0) return false;
+        const std::vector<uint8_t> c = read_chunk(left);
+        in_.insert(in_.end(), c.begin(), c.end());
+    }
 }
 
 bool AcioPort::receive(Message &m, int wait_ms) {

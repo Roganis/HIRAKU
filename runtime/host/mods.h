@@ -52,6 +52,9 @@ std::vector<RatePatch> rate_patches();
 // The words of the game's memory the [[rate]]s look at (while_changing, while_equal): such a core
 // reads them for frame() through core().mem(address, 4)
 std::vector<uint32_t> rate_words();
+// A [[rate]]'s chart_times: the game's chart files read with their times this many times as many
+// frames (beatmania IIDX 9th style to GOLD, whose charts are in frames: runtime/pc/cabinet.c); 1: none
+int chart_times();
 std::vector<std::pair<std::string, std::string>> folder_files();
 // - the files a mod's folder (or a [[file]] at medium = "data") has that the folder medium "data"
 //   lacks: new files there, the path they'd have (the folder's case for the folders it has) -> the

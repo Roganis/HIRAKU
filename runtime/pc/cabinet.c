@@ -498,6 +498,79 @@ static const char *mapped(const char *p, char *buf) {
 // The same for a DLL of the cabinet's that hooks more of the game's file calls (ezusb_c33.c)
 const char *hk_map_path(const char *p, char *buf) { return mapped(p, buf); }
 
+// beatmania IIDX 9th style to GOLD keep their charts' times in frames, in the chart files
+// (sd_data\NNNN\NNNN.1: twelve charts, an offset and a length each, each chart a list of 8-byte
+// events, an int32 time first, 0x7fffffff its end). A high frame rate's mod ([[rate]] chart_times,
+// HK_PC_CHART_TIMES = k) has the game run k times as fast while a chart plays and read every time
+// as k times as many frames: a copy made in the save folder (charts-xK, beside pc.log) and opened
+// instead (made again only when the chart is newer). The longest chart of any of them (8,637 frames)
+// still fits the 16 bits they keep a note's time in, doubled
+static int is_chart_file(const char *p) {
+    const size_t n = p ? strlen(p) : 0;
+    if (n < 3 || p[n - 2] != '.' || p[n - 1] != '1') return 0;
+    for (const char *q = p; *q; q++)
+        if (!_strnicmp(q, "sd_data", 7)) return 1;   // the songs' folder's (settings.bin.1 is 9th style's saves)
+    return 0;
+}
+static int g_chart_times = 1;
+static const char *chart_times_file(const char *p, const char *real, DWORD acc, char *buf) {
+    if (g_chart_times < 2 || !p || !real || (acc & GENERIC_WRITE)) return NULL;
+    if (!is_chart_file(p)) return NULL;
+    const size_t n = strlen(p);
+    const char *base = p + n;
+    while (base > p && base[-1] != '\\' && base[-1] != '/') base--;
+    const char *log = getenv("HK_PC_LOG"), *slash = log ? strrchr(log, '\\') : NULL;
+    if (!slash || (size_t)(slash - log) + strlen(base) + 32 >= MAX_PATH) return NULL;
+    uint32_t from = 2166136261u;   // which file it's a copy of (a mod's chart, the game's): in its name
+    for (const char *q = real; *q; q++) from = (from ^ (uint8_t)*q) * 16777619u;
+    snprintf(buf, MAX_PATH, "%.*s\\charts-x%d\\%08x-%s", (int)(slash - log), log, g_chart_times, (unsigned)from, base);
+    WIN32_FILE_ATTRIBUTE_DATA was, copy;   // a copy made before, as long and newer than the chart: as it is
+    if (GetFileAttributesExA(real, GetFileExInfoStandard, &was) && GetFileAttributesExA(buf, GetFileExInfoStandard, &copy) &&
+        was.nFileSizeLow == copy.nFileSizeLow && !was.nFileSizeHigh && !copy.nFileSizeHigh &&
+        CompareFileTime(&copy.ftLastWriteTime, &was.ftLastWriteTime) >= 0)
+        return buf;
+    HANDLE h = CreateFileA(real, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (h == INVALID_HANDLE_VALUE) return NULL;
+    const DWORD size = GetFileSize(h, NULL);
+    uint8_t *d = size >= 96 && size < (16u << 20) ? malloc(size) : NULL;
+    DWORD got = 0;
+    const BOOL ok = d && ReadFile(h, d, size, &got, NULL) && got == size;
+    CloseHandle(h);
+    const char *why = !ok ? "can't read it" : NULL;
+    int events = 0;
+    for (int k = 0; !why && k < 12; k++) {   // the twelve charts' places: all inside, whole events
+        uint32_t off, len;
+        memcpy(&off, d + k * 8, 4), memcpy(&len, d + k * 8 + 4, 4);
+        if (len && (off < 96 || len % 8 || off > size || len > size - off)) why = "not a chart file";
+    }
+    for (int k = 0; !why && k < 12; k++) {
+        uint32_t off, len;
+        memcpy(&off, d + k * 8, 4), memcpy(&len, d + k * 8 + 4, 4);
+        for (uint32_t i = off; i < off + len; i += 8) {
+            int32_t t;
+            memcpy(&t, d + i, 4);
+            if (t == 0x7fffffff) break;   // the chart's end
+            if (t < 0 || t > 0x7fffffff / g_chart_times) { why = "a time out of range"; break; }
+            t *= g_chart_times, events++;
+            memcpy(d + i, &t, 4);
+        }
+    }
+    if (!why) {
+        char dir[MAX_PATH];
+        snprintf(dir, sizeof dir, "%.*s\\charts-x%d", (int)(slash - log), log, g_chart_times);
+        CreateDirectoryA(dir, NULL);
+        h = CreateFileA(buf, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+        DWORD put = 0;
+        if (h == INVALID_HANDLE_VALUE || !WriteFile(h, d, size, &put, NULL) || put != size) why = "can't write its copy";
+        if (h != INVALID_HANDLE_VALUE) CloseHandle(h);
+    }
+    free(d);
+    static int said;
+    if (why) hk_log("hiraku-pc: mods: %s left as it is (%s)", p, why);
+    else if (said++ < 3) hk_log("hiraku-pc: mods: %s read in frames %d times shorter (%d events)", p, g_chart_times, events);
+    return why ? NULL : buf;
+}
+
 // HIRAKU's RtEffect.dll is the game's way in (rteffect.c); read as a file (10th style checks its
 // folder's files), it is Konami's (HK_PC_RTEFFECT_FILE)
 static const char *konami_file(const char *p) {
@@ -514,7 +587,9 @@ static HANDLE WINAPI my_CreateFileA(LPCSTR p, DWORD acc, DWORD share, LPSECURITY
                                     HANDLE t) {
     char b[MAX_PATH];
     const char *to = konami_file(p) ? konami_file(p) : mapped(p, b);
-    const HANDLE h = CreateFileA(to, acc, share, sa, cd, fl, t);
+    char c[MAX_PATH];
+    const char *chart = chart_times_file(p, to, acc, c);
+    const HANDLE h = CreateFileA(chart ? chart : to, acc, share, sa, cd, fl, t);
     static int log = -1;
     if (log < 0) log = getenv("HK_PC_FILELOG") != NULL;
     if (log && h == INVALID_HANDLE_VALUE) hk_log("hiraku-pc: can't open %s (%s): %lu", p ? p : "(null)", to ? to : "(null)", GetLastError());
@@ -2163,6 +2238,11 @@ void hk_cabinet_start(void) {
     hk_link();
     if (host_shows()) unlimit_frames();
     chart_frame();
+    const char *ct = getenv("HK_PC_CHART_TIMES");   // (chart_times_file)
+    if (ct && atoi(ct) >= 2 && atoi(ct) <= 8 && hk_chart_scale <= 1) {
+        hk_chart_scale = g_chart_times = atoi(ct);
+        hk_log("hiraku-pc: mods: the charts' files read in frames %d times shorter", g_chart_times);
+    }
     hk_vsock_patch_program();
     hk_press_patch_program();
     if (g_npatches) apply_patches();   // the program's own code and data, as it's loaded

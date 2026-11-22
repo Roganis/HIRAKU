@@ -226,6 +226,7 @@ hz = "display"                  # the display's refresh rate (no window: 119.88)
 while_changing = 0x018ff668     # ... while this word of its memory changes from frame to frame
 # while_equal = 0x00f898d8      # ... and (optional) while this word (4 bytes) holds `value`
 # value = 4
+# chart_times = 2               # PC IIDX 9th style to GOLD: the chart files' times read this many times (= hz's "x")
 
 [[bytes]]                       # bytes the game reads from one of its media
 medium = "hdd"                  # the medium's key in dumps/<game>/machine.txt
@@ -571,7 +572,9 @@ two still: back to the machine's rate). `hz = "display"` follows the display's r
 the game's frames meet the display's one for one (display pacing then shows each for one
 refresh). `hz = "x2"` (to `"x8"`) is a whole multiple of the machine's own rate as it is (a PC
 IIDX's display type: 59.935 or 60.035 Hz), for a game whose mod counts in shorter frames itself
-(beatmania IIDX EMPRESS, below), where only an exact multiple keeps its music with its notes. The CPUs keep their clocks, so each frame has less time; a game that keeps up draws
+(beatmania IIDX EMPRESS, below), where only an exact multiple keeps its music with its notes.
+`chart_times = 2` (with `hz = "x2"`) has a PC IIDX of 9th style to GOLD read its chart files with
+every time doubled (below). The CPUs keep their clocks, so each frame has less time; a game that keeps up draws
 more pictures a second. What it computes from a clock (a song's position, timing windows) stays
 right and moves more smoothly; what it counts in frames (animations, effects, menu timers) would
 run faster, which is why the rate is tied to a condition, and what `between_ticks` is for.
@@ -755,6 +758,32 @@ and gauge at the same moment; a song played to its end in 6,766 frames at both r
 ended at the same moment (2,555 and 2,557 frames); the judging windows the same in both
 (0x298d8e0: ±2, ±7, ±15 frames for the keys); the demo the same length and combos. Then played by
 the owner on a 240 Hz display (2026-11-10, display type B: 119.87 Hz): nothing found wrong.
+
+beatmania IIDX 9th style to GOLD on the PC (`games/iidx9` to `iidx14/mods/high-frame-rate`, 2026-11-14;
+the programs 9th style JAH, 10th style JAE, RED JAD, HAPPY SKY JAD, DistorteD JAG, GOLD 2007072301)
+count their charts in frames: an event's time in a chart file (`sd_data/NNNN/NNNN.1`) is a frame
+number, not milliseconds as from DJ TROOPERS on. Their mods have the charts read with every time
+doubled instead of halving a frame: `chart_times = 2` in the `[[rate]]` table has HIRAKU's DLL
+give the game, for each chart file it opens, a copy with its events' times doubled (made in the
+save folder's `charts-x2` once, about 40 MB for GOLD's 464 songs). Each game's notes move down by a step a frame worked out from the BPM
+(its scroll ring's speed): halved, so they move as far a second; what the chart code counts in
+frames is doubled (a note looked for 60 frames late, let go 60 after, drawn 4 after; a failed
+stage's end; the turntable's samples; the gauge graph's every 32 frames; the longest chart,
+10,800 frames, past which the chart code doesn't look for its end); and the screens' counters,
+lamps, lanes' beams and the ticker are held to the cabinet's pace. A note's time is kept in 16
+bits; the longest chart of the six (8,637 frames) fits doubled, so no song is too long. The
+judging goes through HIRAKU's DLL as EMPRESS's does (the lanes' distances taken back to whole
+cabinet frames). Where a change needed more bytes than an instruction had (a window's late edge
+doubled, a 122-frame end past its byte), the instruction calls a few bytes written in the padding
+after a routine. Checked under Wine against the same runs at 60 Hz: GOLD's song left untouched
+lasted the same to the frame (18,240 to 25,300) and ended with the same 70 POORs, FAILED, and the
+same gauge graph; the attract demos of GOLD, DistorteD and 10th style the same length to the
+frame (2,790, 2,070 and 3,390 frames), the next one starting at the same frame; RED's played
+song failed at the same point with the same judgements to within a few notes (99 against 103
+judged, nearly all POOR); 9th style's played song the same length (7,110 and 7,140
+frames, a snapshot apart); the notes, bar lines and movie the same at the same moment in HAPPY SKY,
+10th and 9th style. Before the screens' counters were held, the demos ended early (RED's at
+1,630 frames of 2,620). Not yet played on a 240 Hz display, nor judged with real presses.
 
 The Firebeat pop'n music (4-8) are another case (checked on pop'n 4, 2026-10-19, with the
 Firebeat core's frame period halved by hand): the attract demo's song lasts the same number of

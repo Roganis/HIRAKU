@@ -1,0 +1,266 @@
+name = "High frame rate (120 Hz)"
+version = "0.1"
+game = "iidx11"
+description = "While a song plays (and the attract demo), the game runs at twice its rate (120 Hz on a 120 or 240 Hz display): its notes and bar lines move twice as often, its presses are read twice as often, and it judges as on the cabinet. The charts are read in half frames; the judging takes them back to the cabinet's frames, so every window is as long as before. The animations, the effects and the timers keep the cabinet's pace. For the program JAD."
+
+# As GOLD's (games/iidx14/mods/high-frame-rate, the same design): the chart files' times read doubled
+# (chart_times), the notes' step a frame halved, what the chart code counts in frames doubled, the
+# rest held to the cabinet's pace.
+
+[[rate]]
+hz = "x2"                      # exactly twice the cabinet's rate
+while_changing = 0x0155a960    # the chart's position (frames from its start): while a chart plays
+chart_times = 2                # the chart files' times read doubled: the charts in half frames
+
+# --- the notes' step a frame, halved
+
+[[patch]]
+# the scroll ring's speed, set by a BPM change in one of five ways (the HI-SPEED's), all ending where
+# the ring moves on: a call there to the few instructions below (in the padding after a routine)
+address = 0x0041d7a1
+original = "8b7d0083c504"
+replace = "e8edf8ffff90"
+
+[[patch]]
+# sar dword [edi], 1 (the speed just set, halved); mov edi, [ebp]; add ebp, 4; ret
+address = 0x0041d093
+original = "909090909090909090"
+replace = "d13f8b7d0083c504c3"
+
+# --- what the chart code counts in frames, doubled
+
+[[patch]]
+# a lane's nearest note looked for up to 60 frames late -> 121
+address = 0x0041f106
+original = "83fe3c"
+replace = "83fe79"
+
+[[patch]]
+# a note let go 60 frames after its time -> 121
+address = 0x0041eff3
+original = "83c23c"
+replace = "83c279"
+
+[[patch]]
+# a note drawn up to 4 frames after its time -> 9
+address = 0x0041f31f
+original = "83c104"
+replace = "83c109"
+
+[[patch]]
+# a note missed when the BAD window's late edge (0x0157aed0, in the cabinet's frames) has passed:
+# in half frames, the note's time + the edge x 2 + 1. Its load made a call to the few instructions
+# below
+address = 0x0041f20c
+original = "8b15d0ae5701"
+replace = "e8d2feffff90"
+
+[[patch]]
+# mov edx, [0x0157aed0]; lea edx, [edx + edx + 1]; ret
+address = 0x0041f0e3
+original = "9090909090909090909090"
+replace = "8b15d0ae57018d541201c3"
+
+[[patch]]
+# the turntable sampled every other frame (a toggle 1, 0) -> every fourth half frame (3 to 0)
+address = 0x0041eb1d
+original = "2401"
+replace = "2403"
+
+[[patch]]
+# a turntable turned back within 4 frames is the same scratch -> 8
+address = 0x0041eda1
+original = "83ff04"
+replace = "83ff08"
+
+[[patch]]
+# a failed stage's counts (frames of the chart's position after the failure): something at 16 -> 32
+address = 0x004259d8
+original = "83f810"
+replace = "83f820"
+
+[[patch]]
+# ... something at 18 -> 36
+address = 0x004259f1
+original = "83f812"
+replace = "83f824"
+
+[[patch]]
+# ... something after 20 -> 41
+address = 0x00425a26
+original = "83f814"
+replace = "83f829"
+
+[[patch]]
+# ... the stage ends after 122 -> 245, more than its byte holds: the compare made a call to one below
+address = 0x00425a3c
+original = "833d94c657017a"
+replace = "e8a1f6ffff9090"
+
+[[patch]]
+# cmp dword [0x0157c694], 245; ret
+address = 0x004250e2
+original = "9090909090909090909090"
+replace = "813d94c65701f5000000c3"
+
+[[patch]]
+# the gauge's graph (the result screen's) sampled every 32 frames of the chart's position, 384 at
+# most -> every 64 half frames
+address = 0x00422f64
+original = "1f"
+replace = "3f"
+
+# --- the longest chart, 10,800 frames (3 minutes) -> 21,600: where the chart code looks for its end
+# event, and the end it takes when there's none (doubled, a song past 90 s ended there)
+
+[[patch]]
+# cmp ecx,0x2a30
+address = 0x0041dfad
+original = "302a0000"
+replace = "60540000"
+
+[[patch]]
+# cmp edx,0x2a30
+address = 0x0041dfca
+original = "302a0000"
+replace = "60540000"
+
+[[patch]]
+# cmp eax,0x2a30
+address = 0x0041dfec
+original = "302a0000"
+replace = "60540000"
+
+[[patch]]
+# cmp eax,0x2a30
+address = 0x0041e18b
+original = "302a0000"
+replace = "60540000"
+
+[[patch]]
+# cmp eax,0x2a30
+address = 0x0041e1cb
+original = "302a0000"
+replace = "60540000"
+
+[[patch]]
+# cmp eax,0x2a30
+address = 0x0041e201
+original = "302a0000"
+replace = "60540000"
+
+[[patch]]
+# push 0x2a30
+address = 0x0041e235
+original = "302a0000"
+replace = "60540000"
+
+# --- held to the cabinet's pace: found from GOLD's mod by the code around them
+
+[[patch]]
+# a counter beside the 180-frame timer
+address = 0x0040dc89
+original = "42"
+replace = "90"
+between_ticks = true
+
+[[patch]]
+# every animated object in the engine's list, its frame stepped after it's drawn
+address = 0x00428f5f
+original = "40"
+replace = "90"
+between_ticks = true
+
+# --- held to the cabinet's pace: found in RED itself (the words still counting every picture at
+# 120 Hz in its attract demo, in memory dumps of four pictures in a row)
+
+[[patch]]
+# the attract and play screens' frame counter (0x0157c918), its steps: one phase
+address = 0x00425b5f
+original = "40"
+replace = "90"
+between_ticks = true
+
+[[patch]]
+# ... another
+address = 0x00425c19
+original = "40"
+replace = "90"
+between_ticks = true
+
+[[patch]]
+# ... another
+address = 0x00425d8d
+original = "42"
+replace = "90"
+between_ticks = true
+
+[[patch]]
+# ... another
+address = 0x00425ec2
+original = "40"
+replace = "90"
+between_ticks = true
+
+[[patch]]
+# ... another
+address = 0x00427620
+original = "40"
+replace = "90"
+between_ticks = true
+
+[[patch]]
+# ... another
+address = 0x004279e1
+original = "40"
+replace = "90"
+between_ticks = true
+
+[[patch]]
+# ... another
+address = 0x00427b82
+original = "40"
+replace = "90"
+between_ticks = true
+
+[[patch]]
+# the play screen's counter (0x0157c728)
+address = 0x00425fe5
+original = "40"
+replace = "90"
+between_ticks = true
+
+[[patch]]
+# the frames since each lane's key was last pressed (0x0157c814, 15 of them: its beam and picture)
+address = 0x004277f6
+original = "42"
+replace = "90"
+between_ticks = true
+
+[[patch]]
+# a screen's fade counter (0x0157cdac)
+address = 0x00425eee
+original = "40"
+replace = "90"
+between_ticks = true
+
+[[patch]]
+# ... its other step
+address = 0x00427bb5
+original = "ff05accd5701"
+replace = "909090909090"
+between_ticks = true
+
+[[patch]]
+# the chart's frame counter (from its start, 0x015629e4)
+address = 0x0041db70
+original = "ff05e4295601"
+replace = "909090909090"
+between_ticks = true
+
+[[patch]]
+# the lamps' frame counter (0x004f9850)
+address = 0x004014ca
+original = "42"
+replace = "90"
+between_ticks = true

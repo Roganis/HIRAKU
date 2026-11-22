@@ -110,6 +110,7 @@ struct Rate {
     int times = 0;            // hz = "x2"...: that many times the machine's own rate (as it is: a PC IIDX's display type)
     WordCondition when;       // while_changing, while_equal (shell/wordcond.h)
     bool on = false, refused = false;
+    int chart_times = 0;   // chart_times: the game's chart files read with their times this many times (a PC IIDX's)
 };
 
 constexpr double kDisplayFallbackHz = 119.88;   // hz = "display" with no window, or not known
@@ -942,7 +943,7 @@ bool load(const std::vector<std::string> &dirs, const std::string &game, const s
                     x.t.every = flag("every");
                     if (!off) g_texts.push_back(std::move(x));
                 } else if (t.kind == "rate") {
-                    known({"hz", "while_changing", "while_equal", "value", "when"});
+                    known({"hz", "while_changing", "while_equal", "value", "chart_times", "when"});
                     Rate r;
                     r.mod = mod.name;
                     if (t.values.count("hz") && t.is_string.at("hz")) {
@@ -960,6 +961,11 @@ bool load(const std::vector<std::string> &dirs, const std::string &game, const s
                         r.when.gated = true;
                         r.when.gate = (uint32_t)num("while_equal");
                         r.when.value = (uint32_t)num("value");
+                    }
+                    if (t.values.count("chart_times")) {
+                        r.chart_times = (int)num("chart_times");
+                        if (r.chart_times < 2 || r.chart_times > 8 || r.chart_times != r.times)
+                            fail("'chart_times' is the rate's \"x\" (2 to 8): the charts counted in frames as many times shorter");
                     }
                     if (!off) g_rates.push_back(r);
                 } else if (t.kind == "bytes") {
@@ -1285,6 +1291,12 @@ std::vector<uint32_t> rate_words() {
         if (r.when.gated) out.push_back(r.when.gate);
     }
     return out;
+}
+
+int chart_times() {
+    int k = 1;
+    for (const Rate &r : g_rates) k = std::max(k, r.chart_times);
+    return k;
 }
 
 std::vector<TextPatch> text_patches() {

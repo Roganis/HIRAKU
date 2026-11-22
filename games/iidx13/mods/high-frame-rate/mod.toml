@@ -1,0 +1,300 @@
+name = "High frame rate (120 Hz)"
+version = "0.1"
+game = "iidx13"
+description = "While a song plays (and the attract demo), the game runs at twice its rate (120 Hz on a 120 or 240 Hz display): its notes and bar lines move twice as often, its presses are read twice as often, and it judges as on the cabinet. The charts are read in half frames; the judging takes them back to the cabinet's frames, so every window is as long as before. The animations, the effects and the timers keep the cabinet's pace. For the program JAG."
+
+# As GOLD's (games/iidx14/mods/high-frame-rate, the same design): the chart files' times read doubled
+# (chart_times), the notes' step a frame halved, what the chart code counts in frames doubled, the
+# rest held to the cabinet's pace.
+
+[[rate]]
+hz = "x2"                      # exactly twice the cabinet's rate
+while_changing = 0x01ff09cc    # the chart's position (frames from its start): while a chart plays
+chart_times = 2                # the chart files' times read doubled: the charts in half frames
+
+# --- the notes' step a frame, halved (the scroll ring's speed: the BPM times 4816, or a fixed one)
+
+[[patch]]
+# a fixed speed (481,600 a frame) -> 240,800
+address = 0x0046d54a
+original = "40590700"
+replace = "a0ac0300"
+
+[[patch]]
+# the BPM times 4816 -> 2408
+address = 0x0046d554
+original = "d0120000"
+replace = "68090000"
+
+# --- what the chart code counts in frames, doubled
+
+[[patch]]
+# a lane's nearest note looked for up to 60 frames late -> 121
+address = 0x0046dc92
+original = "83fa3c"
+replace = "83fa79"
+
+[[patch]]
+# a note let go 60 frames after its time -> 121
+address = 0x0046ee2f
+original = "83c03c"
+replace = "83c079"
+
+[[patch]]
+# a note drawn up to 4 frames after its time -> 9
+address = 0x0046eadc
+original = "83c104"
+replace = "83c109"
+
+[[patch]]
+# a note missed when the BAD window's late edge (0x01fe3a20, in the cabinet's frames) has passed:
+# in half frames, the note's time + the edge x 2 + 1. Its load made a call to the few instructions
+# below (in the padding after a routine)
+address = 0x0046e97c
+original = "8b0d203afe01"
+replace = "e8ef05000090"
+
+[[patch]]
+# mov ecx, [0x01fe3a20]; lea ecx, [ecx + ecx + 1]; ret
+address = 0x0046ef70
+original = "cccccccccccccccccccccc"
+replace = "8b0d203afe018d4c0901c3"
+
+[[patch]]
+# the turntable sampled every other frame (a toggle 1, 0) -> every fourth half frame (3 to 0)
+address = 0x0046ddcf
+original = "2401"
+replace = "2403"
+
+[[patch]]
+# a turntable turned back within 4 frames is the same scratch -> 8
+address = 0x0046e086
+original = "83f804"
+replace = "83f808"
+
+[[patch]]
+# a failed stage's counts (frames of the chart's position after the failure): something at 16 -> 32
+address = 0x00453973
+original = "83f810"
+replace = "83f820"
+
+[[patch]]
+# ... something at 18 -> 36
+address = 0x0045398c
+original = "83f812"
+replace = "83f824"
+
+[[patch]]
+# ... something after 20 -> 41
+address = 0x004539c1
+original = "83f814"
+replace = "83f829"
+
+[[patch]]
+# ... the stage ends after 122 -> 245, more than its byte holds: the compare made a call to one below
+address = 0x004539d7
+original = "833dec29ec017a"
+replace = "e8a4b501009090"
+
+[[patch]]
+# cmp dword [0x01ec29ec], 245; ret
+address = 0x0046ef80
+original = "cccccccccccccccccccccc"
+replace = "813dec29ec01f5000000c3"
+
+[[patch]]
+# the gauge's graph (the result screen's) sampled every 32 frames of the chart's position, 384 at
+# most -> every 64 half frames
+address = 0x00472e64
+original = "1f"
+replace = "3f"
+
+# --- the longest chart, 10,800 frames (3 minutes) -> 21,600: where the chart code looks for its end
+# event, and the end it takes when there's none (doubled, a song past 90 s ended there)
+
+[[patch]]
+# cmp ecx,0x2a30
+address = 0x0046d978
+original = "302a0000"
+replace = "60540000"
+
+[[patch]]
+# cmp ecx,0x2a30
+address = 0x0046d998
+original = "302a0000"
+replace = "60540000"
+
+[[patch]]
+# cmp eax,0x2a30
+address = 0x0046d9bc
+original = "302a0000"
+replace = "60540000"
+
+[[patch]]
+# cmp eax,0x2a30
+address = 0x0046db81
+original = "302a0000"
+replace = "60540000"
+
+[[patch]]
+# cmp eax,0x2a30
+address = 0x0046f02b
+original = "302a0000"
+replace = "60540000"
+
+[[patch]]
+# cmp eax,0x2a30
+address = 0x0046f05e
+original = "302a0000"
+replace = "60540000"
+
+[[patch]]
+# mov ds:0x1fe8058,0x2a30
+address = 0x0046f25a
+original = "302a0000"
+replace = "60540000"
+
+# --- held to the cabinet's pace: found from GOLD's mod by the code around them
+
+[[patch]]
+# a key's beam, counted down
+address = 0x00451a43
+original = "48"
+replace = "90"
+between_ticks = true
+
+[[patch]]
+# the chart's frame counter (from its start)
+address = 0x0046efd0
+original = "ff05f880fe01"
+replace = "909090909090"
+between_ticks = true
+
+[[patch]]
+# the stage's counter (its state machine)
+address = 0x00471c05
+original = "ff051888ff01"
+replace = "909090909090"
+between_ticks = true
+
+[[patch]]
+# the scenes' frame counter
+address = 0x0045f1ba
+original = "42"
+replace = "90"
+between_ticks = true
+
+[[patch]]
+# a counter beside the 180-frame timer
+address = 0x00463c35
+original = "42"
+replace = "90"
+between_ticks = true
+
+[[patch]]
+# the turntables' pictures turning (two counters)
+address = 0x0044a403
+original = "4140"
+replace = "9090"
+between_ticks = true
+
+[[patch]]
+# the turntables' pictures (another screen)
+address = 0x00449986
+original = "40"
+replace = "90"
+between_ticks = true
+
+[[patch]]
+# every animated object in the engine's list, its frame stepped after it's drawn
+address = 0x00404a8a
+original = "40"
+replace = "90"
+between_ticks = true
+
+[[patch]]
+# the lamps' frame counter
+address = 0x00408c77
+original = "40"
+replace = "90"
+between_ticks = true
+
+# --- held to the cabinet's pace: found in DistorteD itself (the words still counting every picture
+# at 120 Hz in its attract demo, in memory dumps of four pictures in a row)
+
+[[patch]]
+# the attract and play screens' frame counter (0x01ec2820), its steps: one phase
+address = 0x00455722
+original = "40"
+replace = "90"
+between_ticks = true
+
+[[patch]]
+# ... another (42 frames)
+address = 0x00455885
+original = "40"
+replace = "90"
+between_ticks = true
+
+[[patch]]
+# ... another (60 frames)
+address = 0x00455998
+original = "40"
+replace = "90"
+between_ticks = true
+
+[[patch]]
+# ... another
+address = 0x00455b54
+original = "ff052028ec01"
+replace = "909090909090"
+between_ticks = true
+
+[[patch]]
+# ... another
+address = 0x00455c9f
+original = "40"
+replace = "90"
+between_ticks = true
+
+[[patch]]
+# ... a loading timeout (3000 frames: SD LOAD TIMEOUT)
+address = 0x00455f95
+original = "40"
+replace = "90"
+between_ticks = true
+
+[[patch]]
+# ... another
+address = 0x0045619e
+original = "40"
+replace = "90"
+between_ticks = true
+
+[[patch]]
+# a screen's counter (0x01ec2c90)
+address = 0x004526ce
+original = "40"
+replace = "90"
+between_ticks = true
+
+[[patch]]
+# the frames since each lane's key was last pressed (0x01ec2ca0, 15 of them: its beam and picture)
+address = 0x00451c3d
+original = "42"
+replace = "90"
+between_ticks = true
+
+[[patch]]
+# a screen's fade counter (0x01ec3044)
+address = 0x00455ccd
+original = "40"
+replace = "90"
+between_ticks = true
+
+[[patch]]
+# ... its other step
+address = 0x004561d0
+original = "ff054430ec01"
+replace = "909090909090"
+between_ticks = true

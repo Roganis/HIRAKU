@@ -1723,6 +1723,8 @@ private:
         }
         std::ofstream(save_ + "/mods-patches.txt", std::ios::trunc) << text;
         set_env("HK_PC_PATCHES", text.empty() ? "" : win_path(save_ + "/mods-patches.txt"));
+        const int ct = hk::mods::chart_times();   // IIDX 9th style to GOLD: their chart files' times (cabinet.c)
+        set_env("HK_PC_CHART_TIMES", ct > 1 ? std::to_string(ct) : "");
         return true;
     }
 

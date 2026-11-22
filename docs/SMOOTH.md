@@ -14,6 +14,7 @@ third, the CRT beam, for a CRT's sharpness in motion rather than more pictures):
 | frames (each frame moves the notes a fixed step) | in-between pictures: HIRAKU draws them (`--smooth-motion`) | per core: every game on it | DJ Main, Firebeat, Twinkle, System 573 |
 | frames, on a Windows PC | in-between pictures: the game's own Direct3D draws them again, the notes moved (`--smooth-motion`) | the PC core (runtime/pc/) | beatmania IIDX RED to GOLD (9th style to EMPRESS) |
 | frames, its charts converted from milliseconds as they load | more vsyncs: the charts counted in half frames, the game at twice its rate (`[[rate]]` mod) | per game: docs/MODS.md | beatmania IIDX DJ TROOPERS, EMPRESS |
+| frames, its charts in frames | more vsyncs: the charts read with their times doubled, the game at twice its rate (`[[rate]]` mod, `chart_times`) | per game: docs/MODS.md | beatmania IIDX 9th style to GOLD (PC) |
 
 To tell which one a game is: run its attract demo (or a play script) with the vsync at twice the
 rate. If the demo song takes the same number of frames (it plays twice as fast, out of step with
@@ -666,7 +667,8 @@ speed, judging as on the cabinet (HIRAKU's DLL takes the lanes' distances back t
 Every picture is then the game's own, the notes read and judged twice as often; the frame-counted
 rest (animations, effects, timers) is held to the cabinet's pace. Checked under Wine, then played on
 a 240 Hz display. DJ TROOPERS, the same engine, has the same mod (`games/iidx15/mods/high-frame-rate`,
-checked the same way); 9th style to GOLD store their charts in frames.
+checked the same way). 9th style to GOLD store their charts in frames: their mods have HIRAKU read
+the chart files with every time doubled (`chart_times`, docs/MODS.md); checked under Wine.
 
 ## A CRT's motion clarity (`--crt-beam`)
 

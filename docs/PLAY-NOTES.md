@@ -180,6 +180,12 @@ disk image of yours; from a terminal, `--floppy FILE` (`--floppy default`: the s
   disk** in the Floppy disk menu): see "A card's own disk or memory card" under the System 573's
   memory cards.
 
+**DEMO VOLUME** (test mode > GAME SETTING) sets the attract's sound: OFF silent, 1 and 2 a third
+and two thirds, 3 full. The sound board turns a volume chip for it, which MAME doesn't have (there
+the setting changes nothing); the chip isn't known, so its steps are taken as even. Checked on
+The Final; the other four's sound boards turn it alike. `HK_SPU_VOLUME=0` leaves the chip out, as
+MAME does.
+
 **Codes, typed for you:** the button codes players typed on the cabinet (hidden songs, modes),
 for the games that have a `games/<id>/macros.txt`.
 - **In the window:** Ctrl+1 to Ctrl+9 type the game's first to ninth code where you are now, for

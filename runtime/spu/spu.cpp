@@ -20,6 +20,7 @@
 #include "../dev/rf5c400.h"
 #include "../firebeat/board.h"
 #include "../firebeat/spectrum.h"
+#include "volchip.h"
 
 extern "C" {
 #include "m68k.h"
@@ -44,6 +45,11 @@ bool g_sync_ata_irq = false;
 std::unique_ptr<AtaBus> g_ata;
 std::unique_ptr<Rf5c400> g_rf;
 Stats g_stats;
+VolumeChip g_vol;                                // the up/down volume control (volchip.h)
+const bool g_vol_on = [] {                       // HK_SPU_VOLUME=0: its bits ignored, as in MAME
+    const char *e = getenv("HK_SPU_VOLUME");
+    return !(e && e[0] == '0' && !e[1]);
+}();
 
 // interrupt lines into the 68000 (levels 1, 2, 4, 6)
 uint8_t g_lines = 0;
@@ -84,6 +90,10 @@ void render_until(uint64_t cycles) {
             if (g_cfg.mix_effect) { l += g_buf4[4 * i + 2]; r += g_buf4[4 * i + 3]; }
             g_buf2[2 * i] = 0.5f * l;    // MAME routes each output at 0.5
             g_buf2[2 * i + 1] = 0.5f * r;
+        }
+        if (!g_vol.full()) {   // (channel 0 on the left, 1 on the right: which is which is not known)
+            const float gl = g_vol.gain(0), gr = g_vol.gain(1);
+            for (int i = 0; i < n; i++) g_buf2[2 * i] *= gl, g_buf2[2 * i + 1] *= gr;
         }
         if (g_cfg.mix_effect) spectrum::push(g_buf2.data(), n, (int)g_rf->sample_rate());   // beatmania III extend board
         if (g_sink) g_sink(g_buf2.data(), n);
@@ -157,6 +167,11 @@ void write16(uint32_t a, uint16_t v, uint16_t mask) {
     switch (a & 0xff0000) {
     case 0x220000: return;                                       // status LEDs
     case 0x230000:                                               // interrupt acknowledge
+        if (g_vol_on && (mask & 0xff00)) {                       // high byte: the volume control
+            VolumeChip next = g_vol;
+            if (next.write(v, mask)) render_until(cycles_now());   // the sound so far at the old level
+            g_vol = next;
+        }
         if (mask & 0x00ff) {
             if (v & 1) set_line(1, false);
             if (v & 2) set_line(2, false);
@@ -292,6 +307,7 @@ bool init(const Config &cfg) {
     m68k_init();
     m68k_set_cpu_type(M68K_CPU_TYPE_68000);
     m68k_pulse_reset();
+    g_vol.reset();
     g_present = true;
     g_tick.in(ticks_from_hz(500));
     return true;

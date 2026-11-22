@@ -152,6 +152,11 @@ target_link_libraries(test_ata_state PRIVATE hiraku_ata)
 target_include_directories(test_ata_state PRIVATE ${CMAKE_SOURCE_DIR}/runtime)
 add_test(NAME ata_state COMMAND test_ata_state)
 
+# The Firebeat SPU board's up/down volume control (runtime/spu/volchip.h): steps, limits, channels
+add_executable(test_volchip spu/test_volchip.cpp)
+target_include_directories(test_volchip PRIVATE ${CMAKE_SOURCE_DIR}/runtime)
+add_test(NAME spu_volume_chip COMMAND test_volchip)
+
 # The C33 cabinet's small display (runtime/pc/c33video.h: ee'MALL's video board) drawn from a
 # made-up board: tiles, palette rows, the bank, a hidden layer, a layer over another, the blank bit
 add_executable(test_c33video pc/test_c33video.c ${CMAKE_SOURCE_DIR}/runtime/pc/c33video.c)

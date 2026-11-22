@@ -24,6 +24,7 @@
 #include <utility>
 
 #include "config.h"
+#include "language.h"
 #include "musicvolume.h"
 #include "theme.h"
 #include "../third_party/mdi/icons.h"
@@ -58,7 +59,7 @@ public:
     MusicLevels() {
         setFixedHeight(kSegments * 4);
         setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-        setToolTip("The 16 parts' levels");
+        setToolTip(MusicPlayer::tr("The 16 parts' levels"));
         m_tick.setInterval(33);
         connect(&m_tick, &QTimer::timeout, this, [this] {
             bool any = false;
@@ -139,18 +140,19 @@ MusicPlayer::MusicPlayer(QWidget *parent) : QWidget(parent) {
     for (QLabel *l : {m_timeLabel, m_lengthLabel}) l->setFont(small), l->setPalette(grey), l->setProperty("hkMuted", true);
     m_position = new QSlider(Qt::Horizontal);
     m_position->setRange(0, 0);
-    m_position->setToolTip("Where the song is: drag to move in it");
-    m_prev = button(this, theme::icon(mdi::skip_previous), "|<", "Previous song (or this one again)");
-    m_toggle = button(this, theme::icon(mdi::play), ">", "Play");
-    m_next = button(this, theme::icon(mdi::skip_next), ">|", "Next song");
-    m_shuffle = button(this, theme::icon(mdi::shuffle_variant), QString::fromUtf8("⇄"), "Shuffle");
+    m_position->setToolTip(tr("Where the song is: drag to move in it"));
+    m_prev = button(this, theme::icon(mdi::skip_previous), "|<", tr("Previous song (or this one again)"));
+    m_toggle = button(this, theme::icon(mdi::play), ">", tr("Play"));
+    m_next = button(this, theme::icon(mdi::skip_next), ">|", tr("Next song"));
+    m_shuffle = button(this, theme::icon(mdi::shuffle_variant), QString::fromUtf8("⇄"), tr("Shuffle"));
     m_shuffle->setCheckable(true);
     m_shuffle->setChecked(cfg::settings().value("music/shuffle", true).toBool());
-    m_autoplay = button(this, QIcon(), "Autoplay", "Start the music when the launcher opens");
+    // TR: a switch's short label beside the music's buttons: the music starts by itself
+    m_autoplay = button(this, QIcon(), tr("Autoplay"), tr("Start the music when the launcher opens"));
     m_autoplay->setCheckable(true);
     m_autoplay->setFont(small);
     m_autoplay->setChecked(cfg::settings().value("music/autoplay", true).toBool());
-    m_folder = button(this, theme::icon(mdi::folder_music), "...", "Open the music folder");
+    m_folder = button(this, theme::icon(mdi::folder_music), "...", tr("Open the music folder"));
     m_speaker = new QLabel;
     m_volume = new QSlider(Qt::Horizontal);
     m_volume->setRange(0, 100);
@@ -164,12 +166,12 @@ MusicPlayer::MusicPlayer(QWidget *parent) : QWidget(parent) {
         const auto start = musicvolume::start(ok ? std::optional<int>(saved) : std::nullopt, s.contains("music/volumeChecked"));
         if (start.reset) {
             s.setValue("music/volume", start.volume);
-            m_note = "Volume set back to the middle (saved low before 0.12.0)";
+            m_note = tr("Volume set back to the middle (saved low before 0.12.0)");
         }
         s.setValue("music/volumeChecked", true);
         m_volume->setValue(start.volume);
     }
-    m_volume->setToolTip("Volume");
+    m_volume->setToolTip(tr("Volume"));
     m_levels->setScale(musicvolume::meterScale(m_volume->value()));
     showSpeaker(true);
     arrange(false);
@@ -225,7 +227,7 @@ MusicPlayer::MusicPlayer(QWidget *parent) : QWidget(parent) {
     connect(&m_proc, &QProcess::errorOccurred, this, [this](QProcess::ProcessError e) {
         if (e != QProcess::FailedToStart) return;
         m_playing = false;
-        showStatus("The music player couldn't be started", m_proc.errorString());
+        showStatus(tr("The music player couldn't be started"), m_proc.errorString());
         updateButtons();
     });
     m_resume.setSingleShot(true);
@@ -276,8 +278,9 @@ void MusicPlayer::firstSongs() {
                 scan();
                 if (!m_playing && !m_held) autoplay();
             }
-            m_fetchNote = m_fetchFound ? QString("Getting the first songs: %1 of %2").arg(m_fetchDone).arg(m_fetchFound)
-                                       : QString("Getting the first songs\u2026");
+            // TR: the launcher's music on its first start, fetching its first MIDI files: %1 done of %2
+            m_fetchNote = m_fetchFound ? tr("Getting the first songs: %1 of %2").arg(m_fetchDone).arg(m_fetchFound)
+                                       : tr("Getting the first songs…");
             showSong();
         }
     });
@@ -291,7 +294,7 @@ void MusicPlayer::firstSongs() {
         updateButtons();
         if (!m_playing && !m_held && m_index < 0) autoplay();   // (the launcher opened to an empty folder)
     });
-    m_fetchNote = QString("Getting the first songs\u2026");
+    m_fetchNote = tr("Getting the first songs…");
     showSong();
     m_fetch.start(py[0], py.mid(1) + QStringList{script, source, folder()});
 }
@@ -466,36 +469,37 @@ void MusicPlayer::showSong() {
     if (m_index >= 0 && m_index < m_songs.size()) {
         const QString name = songName(m_index);
         title = m_songTitle.isEmpty() || m_songTitle == name ? name : name + "  ·  " + m_songTitle;
-        line = QString("Song %1 of %2").arg(m_index + 1).arg(m_songs.size());
+        line = tr("Song %1 of %2").arg(m_index + 1).arg(m_songs.size());
         tip = QDir::toNativeSeparators(m_songs[m_index]);
     } else if (m_songs.isEmpty()) {
-        title = "No music yet";
-        line = "MIDI files in the music folder, or dropped here";
+        title = tr("No music yet");
+        line = tr("MIDI files in the music folder, or dropped here");
         tip = QDir::toNativeSeparators(folder());
     } else {
-        title = QString("%1 songs").arg(m_songs.size());
-        line = "Ready";
+        title = language::trn("MusicPlayer", "%n song", "%n songs", m_songs.size());
+        line = tr("Ready");
     }
-    if (m_held && m_playing) line += QString::fromUtf8(" · waits for the game");
-    else if (m_playing && !m_ready && m_proc.state() != QProcess::NotRunning) line += QString::fromUtf8(" · starting…");
+    // TR: added after "Song 3 of 20 · ": the music waits while a game runs; the player is starting
+    if (m_held && m_playing) line += QString::fromUtf8(" · ") + tr("waits for the game");
+    else if (m_playing && !m_ready && m_proc.state() != QProcess::NotRunning) line += QString::fromUtf8(" · ") + tr("starting…");
     else if (!m_synth.isEmpty()) line += QString::fromUtf8(" · ") + m_synth;
     if (!m_note.isEmpty()) line = m_note;
     if (!m_problem.isEmpty()) line = QString::fromUtf8("⚠ ") + m_problem;
-    if (!m_fetchNote.isEmpty() && m_songs.isEmpty()) title = "Getting the first songs", line = m_fetchNote;
+    if (!m_fetchNote.isEmpty() && m_songs.isEmpty()) title = tr("Getting the first songs"), line = m_fetchNote;
     else if (!m_fetchNote.isEmpty()) line = m_fetchNote;
     m_title->setText(m_title->fontMetrics().elidedText(title, Qt::ElideRight, m_title->width()));
     m_title->setToolTip(tip);
     m_status->setText(m_status->fontMetrics().elidedText(line, Qt::ElideRight, m_status->width()));
     const bool noted = !m_note.isEmpty() && line == m_note;
     m_status->setToolTip(!m_problem.isEmpty() ? m_problem
-                         : noted ? "The volume was set back to the middle: on Windows the slider did nothing before 0.12.0, "
-                                   "and a low volume saved then would be silent now"
+                         : noted ? tr("The volume was set back to the middle: on Windows the slider did nothing before 0.12.0, "
+                                      "and a low volume saved then would be silent now")
                                  : line);
     showTimes();
 }
 
 void MusicPlayer::showStatus(const QString &text, const QString &tip) {
-    m_problem = tip.isEmpty() ? text : text + ": " + tip;
+    m_problem = tip.isEmpty() ? text : tr("%1: %2").arg(text, tip);   // TR: a problem (%1) and what the system or the player said (%2)
     showSong();
 }
 
@@ -535,13 +539,13 @@ void MusicPlayer::showSpeaker(bool again) {
     const QColor ink = QApplication::palette().color(QPalette::WindowText);
     const QIcon icon = theme::pop() ? theme::glyph(off ? "speaker-off" : "speaker", ink) : theme::icon(off ? mdi::volume_off : mdi::volume_high);
     m_speaker->setPixmap(icon.pixmap(16, 16));
-    m_speaker->setToolTip(off ? "Muted" : QString());
+    m_speaker->setToolTip(off ? tr("Muted") : QString());
 }
 
 void MusicPlayer::updateButtons() {
     if (theme::pop()) m_toggle->setIcon(theme::glyph(m_playing ? "pause" : "play", Qt::white));
     else m_toggle->setIcon(theme::icon(m_playing ? mdi::pause : mdi::play));
-    m_toggle->setToolTip(m_playing ? (m_held ? "Pause (the music waits for the game to end)" : "Pause") : "Play");
+    m_toggle->setToolTip(m_playing ? (m_held ? tr("Pause (the music waits for the game to end)") : tr("Pause")) : tr("Play"));
     m_prev->setEnabled(!m_songs.isEmpty());
     m_next->setEnabled(!m_songs.isEmpty());
 }
@@ -554,10 +558,10 @@ void MusicPlayer::toggle() {
     if (m_songs.isEmpty()) scan();
     if (m_songs.isEmpty()) {
         QMessageBox box(QMessageBox::Information, "HIRAKU",
-                        "No music yet. Put MIDI files (.mid) in the music folder, or drop them on the window:\n\n" +
-                            QDir::toNativeSeparators(folder()),
+                        tr("No music yet. Put MIDI files (.mid) in the music folder, or drop them on the window:\n\n%1")
+                            .arg(QDir::toNativeSeparators(folder())),
                         QMessageBox::Close, this);
-        QPushButton *open = box.addButton("Open the folder", QMessageBox::AcceptRole);
+        QPushButton *open = box.addButton(tr("Open the folder"), QMessageBox::AcceptRole);
         box.exec();
         if (box.clickedButton() == open) openFolder();
         showSong();
@@ -649,7 +653,7 @@ void MusicPlayer::startProgram() {
     const QString exe = cfg::binDir() + "/" + cfg::exeName("hiraku-midi");
     if (!QFileInfo(exe).isExecutable()) {
         m_playing = false;
-        showStatus("No music player", "hiraku-midi isn't in " + QDir::toNativeSeparators(cfg::binDir()));
+        showStatus(tr("No music player"), tr("hiraku-midi isn't in %1").arg(QDir::toNativeSeparators(cfg::binDir())));
         return;
     }
     auto &s = cfg::settings();
@@ -700,14 +704,14 @@ void MusicPlayer::readOutput() {
             showTimes();
         } else if (word == "error" && !m_ready) {   // no synth at all (then it ends, code 3)
             m_playing = false;
-            showStatus("No synth for the music", rest);
+            showStatus(tr("No synth for the music"), rest);
             updateButtons();
         } else if (word == "error") {
             m_errors++;
-            showStatus("Can't play " + songName(m_index), rest.section(": ", 1));
+            showStatus(tr("Can't play %1").arg(songName(m_index)), rest.section(": ", 1));
             if (m_errors >= std::max<int>(1, (int)m_songs.size())) {   // none of them: stop asking
                 m_playing = false;
-                showStatus("None of the songs can be played", rest);
+                showStatus(tr("None of the songs can be played"), rest);
                 updateButtons();
             }
         } else if (word == "ended") {
@@ -733,7 +737,7 @@ void MusicPlayer::finished(int code, QProcess::ExitStatus) {
     // not asked to: no synth (code 3, said on its last line), or it stopped
     const QString why = QString::fromUtf8(m_proc.readAllStandardError()).trimmed();
     m_playing = false;
-    if (code != 3) showStatus("The music player stopped", why.isEmpty() ? QString("code %1").arg(code) : why);
+    if (code != 3) showStatus(tr("The music player stopped"), why.isEmpty() ? tr("code %1").arg(code) : why);   // TR: a program's exit code
     updateButtons();
 }
 

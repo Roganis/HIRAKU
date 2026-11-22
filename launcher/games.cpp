@@ -69,11 +69,12 @@ void readManifest(const QString &path, Game &g) {
 }  // namespace
 
 QString Game::statusText() const {
+    // TR: a game's status in the main window's list and its details (short)
     switch (status) {
-    case Ready: return "Ready";
-    case NotBuilt: return "Not built";
-    case NotInstalled: return "Not installed";
-    case Unavailable: return "Not in this package";
+    case Ready: return tr("Ready");
+    case NotBuilt: return tr("Not built");
+    case NotInstalled: return tr("Not installed");
+    case Unavailable: return tr("Not in this package");
     }
     return {};
 }
@@ -84,80 +85,97 @@ QString Game::howTo() const {
     const bool source = QFileInfo::exists(root + "/CMakeLists.txt");
     if (status == Unavailable) {
         if (core == "python")
-            return QString("%1 is a Konami Python game, and this HIRAKU package has no hiraku-python, which runs "
-                           "them. Is the binaries folder right (Settings)?")
+            // TR: %1 is the game's title
+            return tr("%1 is a Konami Python game, and this HIRAKU package has no hiraku-python, which runs "
+                      "them. Is the binaries folder right (Settings)?")
                 .arg(title);
         if (core.isEmpty() || core == "firebeat")
-            return QString("This HIRAKU package has no hiraku-firebeat, which runs the Firebeat games. Is the "
-                           "binaries folder right (Settings)?");
-        return QString("This HIRAKU package has no binary for %1 (hiraku-%2 or hiraku-%3). Is the binaries "
-                       "folder right (Settings)?")
+            return tr("This HIRAKU package has no hiraku-firebeat, which runs the Firebeat games. Is the "
+                      "binaries folder right (Settings)?");
+        // TR: %1 is the game's title; hiraku-%2 and hiraku-%3 are program names (keep them as they are)
+        return tr("This HIRAKU package has no binary for %1 (hiraku-%2 or hiraku-%3). Is the binaries "
+                  "folder right (Settings)?")
             .arg(title, id, core);
     }
-    const QString drop = "Drop them on this window (or File > Add game files), all at once. HIRAKU recognises "
-                         "the set by its contents and copies the files into its own folder, so they can go "
-                         "afterwards; CHDs are read as they are, nothing is unpacked.";
+    // TR: the end of the help for a game not installed yet ("Drop them": the files just listed)
+    const QString drop = tr("Drop them on this window (or File > Add game files), all at once. HIRAKU recognises "
+                            "the set by its contents and copies the files into its own folder, so they can go "
+                            "afterwards; CHDs are read as they are, nothing is unpacked.");
     if (core == "sys573" && status == NotInstalled)   // System 573: the set and the CD
-        return QString("HIRAKU has no data for %1 yet. You need your own dumps: the MAME ROM set \"%2\" "
-                       "(.zip, .7z or a folder) and its CDs (CHDs: the game's, and an install or multi-session "
-                       "unit's CD where MAME's set has one).\n\n%3")
+        // TR: %1 is the game's title, %2 the MAME set's name, %3 the paragraph on dropping the files
+        return tr("HIRAKU has no data for %1 yet. You need your own dumps: the MAME ROM set \"%2\" "
+                  "(.zip, .7z or a folder) and its CDs (CHDs: the game's, and an install or multi-session "
+                  "unit's CD where MAME's set has one).\n\n%3")
             .arg(title, mame, drop);
     if (core == "twinkle" && status == NotInstalled)   // Twinkle: the set, two CDs and the hard disk
-        return QString("HIRAKU has no data for %1 yet. You need your own dumps: the MAME ROM set \"%2\" "
-                       "(.zip, .7z or a folder), its program CD, the player's Video CD (or, from 6th style "
-                       "on, its DVD) and its hard disk (CHDs).\n\n%3")
+        // TR: %1 is the game's title, %2 the MAME set's name, %3 the paragraph on dropping the files
+        return tr("HIRAKU has no data for %1 yet. You need your own dumps: the MAME ROM set \"%2\" "
+                  "(.zip, .7z or a folder), its program CD, the player's Video CD (or, from 6th style "
+                  "on, its DVD) and its hard disk (CHDs).\n\n%3")
             .arg(title, mame, drop);
     if (core == "pc") {   // a PC game: Konami's own program in HIRAKU's cabinet (hiraku-pc)
-        if (status == NotInstalled)
-            return QString("HIRAKU has no data for %1 yet. You need the game's own folder, as the cabinet's "
-                           "drive holds it: %3.\n\n"
-                           "Drop that folder on this window, or File > Add game files. HIRAKU reads it where it "
-                           "is (it is large), so keep it there.%2")
-                .arg(title, QString(
+        if (status == NotInstalled) {
+            // TR: what the game's folder holds, in "...as the cabinet's drive holds it: %2" (C02, JAA, JAB, prog, data: folder names)
+            const QString holds = family == "iidx" ? tr("C02 with data and its programs, a folder each by revision (JAA, JAB...: "
+                                                        "the last is run)")
+                                                   : tr("prog (its programs, by date) and data");
 #ifdef _WIN32
-                    ""
+            // TR: %1 is the game's title, %2 what the folder holds
+            return tr("HIRAKU has no data for %1 yet. You need the game's own folder, as the cabinet's "
+                      "drive holds it: %2.\n\n"
+                      "Drop that folder on this window, or File > Add game files. HIRAKU reads it where it "
+                      "is (it is large), so keep it there.")
+                .arg(title, holds);
 #else
-                    " On Linux the game runs under Wine, which needs to be installed."
+            // TR: %1 is the game's title, %2 what the folder holds
+            return tr("HIRAKU has no data for %1 yet. You need the game's own folder, as the cabinet's "
+                      "drive holds it: %2.\n\n"
+                      "Drop that folder on this window, or File > Add game files. HIRAKU reads it where it "
+                      "is (it is large), so keep it there. On Linux the game runs under Wine, which needs to "
+                      "be installed.")
+                .arg(title, holds);
 #endif
-                    ),
-                     family == "iidx" ? QString("C02 with data and its programs, a folder each by revision (JAA, JAB...: "
-                                                "the last is run)")
-                                      : QString("prog (its programs, by date) and data"));
+        }
         if (status == NotBuilt || status == Unavailable)
-            return QString("This HIRAKU has no hiraku-pc, which runs the PC games. Is the binaries folder right (Settings)?");
+            return tr("This HIRAKU has no hiraku-pc, which runs the PC games. Is the binaries folder right (Settings)?");
         return {};
     }
     if (core == "python") {   // Konami Python: PCSX2 Reliquary hosted, built in Reliquary's tree
         if (status == NotInstalled)
-            return QString("HIRAKU has no data for %1 yet. You need your own dumps: the game's folder (its disk "
-                           "CHD, interface board ROMs, dongles and memory card files, with or without the .py1 "
-                           "beside it), and the arcade BIOS (COH-H31000) and the MagicGate key files in folders "
-                           "named bios and keys.\n\n"
-                           "Drop the game's folder with the bios and keys folders on this window, or File > Add "
-                           "game files (the BIOS and keys only once: later games find them). The disk is copied "
-                           "into HIRAKU's folder.")
+            // TR: %1 is the game's title; bios and keys are folder names (keep them)
+            return tr("HIRAKU has no data for %1 yet. You need your own dumps: the game's folder (its disk "
+                      "CHD, interface board ROMs, dongles and memory card files, with or without the .py1 "
+                      "beside it), and the arcade BIOS (COH-H31000) and the MagicGate key files in folders "
+                      "named bios and keys.\n\n"
+                      "Drop the game's folder with the bios and keys folders on this window, or File > Add "
+                      "game files (the BIOS and keys only once: later games find them). The disk is copied "
+                      "into HIRAKU's folder.")
                 .arg(title);
         if (status == NotBuilt)
-            return source ? QString("The data for %1 is installed, but %2 has not been built yet. It is built with "
-                                    "PCSX2 Reliquary's source (docs/PLAY.md, Konami Python).\n\nIn %3:\n\n"
-                                    "oracle/pcsx2/build-reliquary.sh all")
-                                .arg(title, exe, root)
-                          : QString("The data for %1 is installed, but this HIRAKU package has no Konami Python "
-                                    "core: it comes with HIRAKU built from source for now (docs/PLAY.md).")
+            // TR: %1 is the game's title, %2 its program's path, %3 HIRAKU's folder, %4 the command to run there
+            return source ? tr("The data for %1 is installed, but %2 has not been built yet. It is built with "
+                               "PCSX2 Reliquary's source (docs/PLAY.md, Konami Python).\n\nIn %3:\n\n%4")
+                                .arg(title, exe, root, "oracle/pcsx2/build-reliquary.sh all")
+                          // TR: %1 is the game's title
+                          : tr("The data for %1 is installed, but this HIRAKU package has no Konami Python "
+                               "core: it comes with HIRAKU built from source for now (docs/PLAY.md).")
                                 .arg(title);
         return {};
     }
+    // TR: %1 is the game's title, %2 its program's path, %3 HIRAKU's folder, %4 the commands to run there
+    const char *notBuilt = QT_TRANSLATE_NOOP("Game", "The data for %1 is installed, but %2 has not been built yet.\n\nIn %3:\n\n%4");
     if (family.startsWith("dj") || core == "sys573" || core == "twinkle") {   // DJ Main, 573, Twinkle: no recompilation
         if (status == NotInstalled)
-            return QString("HIRAKU has no data for %1 yet. You need your own dumps: the MAME ROM set \"%2\" "
-                           "(.zip, .7z or a folder) and its hard disk (CHD).\n\n%3")
+            // TR: %1 is the game's title, %2 the MAME set's name, %3 the paragraph on dropping the files
+            return tr("HIRAKU has no data for %1 yet. You need your own dumps: the MAME ROM set \"%2\" "
+                      "(.zip, .7z or a folder) and its hard disk (CHD).\n\n%3")
                 .arg(title, mame, drop);
         if (status == NotBuilt)
-            return source ? QString("The data for %1 is installed, but %2 has not been built yet.\n\nIn %3:\n\n"
-                                    "cmake -S . -B build/cmake -G Ninja && ninja -C build/cmake hiraku-%4")
-                                .arg(title, exe, root, id)
-                          : QString("The data for %1 is installed, but this HIRAKU package has no binary for "
-                                    "it (hiraku-%2 or hiraku-%3). Is the binaries folder right (Settings)?")
+            return source ? tr(notBuilt).arg(title, exe, root,
+                                             QString("cmake -S . -B build/cmake -G Ninja && ninja -C build/cmake hiraku-%1").arg(id))
+                          // TR: %1 is the game's title; hiraku-%2 and hiraku-%3 are program names (keep them as they are)
+                          : tr("The data for %1 is installed, but this HIRAKU package has no binary for "
+                               "it (hiraku-%2 or hiraku-%3). Is the binaries folder right (Settings)?")
                                 .arg(title, id, core);
         return {};
     }
@@ -165,23 +183,24 @@ QString Game::howTo() const {
                             "cmake -S . -B build/cmake -G Ninja && ninja -C build/cmake hiraku-%1")
                         .arg(id);
     if (status == NotInstalled && exe.endsWith(cfg::exeName("hiraku-firebeat")))   // a package's: the executor
-        return QString("HIRAKU has no data for %1 yet. You need your own dumps: the MAME ROM set \"%2\" "
-                       "(.zip, .7z or a folder) and its discs (CHDs: the program CD, and the second disc, DVD "
-                       "or hard disk where the game has one), or your own disc images (.cue/.iso).\n\n"
-                       "Drop them on this window (or File > Add game files), all at once. HIRAKU finds the "
-                       "game by its program, and finds its way around the program itself when it starts.")
+        // TR: %1 is the game's title, %2 the MAME set's name
+        return tr("HIRAKU has no data for %1 yet. You need your own dumps: the MAME ROM set \"%2\" "
+                  "(.zip, .7z or a folder) and its discs (CHDs: the program CD, and the second disc, DVD "
+                  "or hard disk where the game has one), or your own disc images (.cue/.iso).\n\n"
+                  "Drop them on this window (or File > Add game files), all at once. HIRAKU finds the "
+                  "game by its program, and finds its way around the program itself when it starts.")
             .arg(title, mame);
     if (status == NotInstalled)
-        return QString("HIRAKU has no data for %1 yet. You need your own dumps: the program disc, "
-                       "its second disc or HDD, and the MAME ROM set \"%2\" (docs/PLAY.md lists them per game).\n\n"
-                       "Drop them on this window, or File > Add game files: CHDs, disc images (.cue/.iso/.img) "
-                       "and the set (.zip/.7z), all at once.")
+        // TR: %1 is the game's title, %2 the MAME set's name
+        return tr("HIRAKU has no data for %1 yet. You need your own dumps: the program disc, "
+                  "its second disc or HDD, and the MAME ROM set \"%2\" (docs/PLAY.md lists them per game).\n\n"
+                  "Drop them on this window, or File > Add game files: CHDs, disc images (.cue/.iso/.img) "
+                  "and the set (.zip/.7z), all at once.")
             .arg(title, mame);
     if (status == NotBuilt) {
         bool prepped = QFileInfo::exists(root + "/build/" + id + "/recomp.txt");
-        return QString("The data for %1 is installed, but %2 has not been built yet.\n\nIn %3:\n\n%4")
-            .arg(title, exe, root,
-                 prepped ? QString("cmake -S . -B build/cmake -G Ninja && ninja -C build/cmake hiraku-%1").arg(id) : build);
+        return tr(notBuilt).arg(title, exe, root,
+                                prepped ? QString("cmake -S . -B build/cmake -G Ninja && ninja -C build/cmake hiraku-%1").arg(id) : build);
     }
     return {};
 }

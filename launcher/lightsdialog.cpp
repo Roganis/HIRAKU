@@ -37,18 +37,18 @@ public:
     AssignDialog(const QString &lamp, const std::vector<Device> &devices, std::function<void(const QString &, bool)> drive,
                  QWidget *parent)
         : QDialog(parent), m_devices(devices), m_drive(std::move(drive)) {
-        setWindowTitle("Assign " + lamp);
+        setWindowTitle(LightsDialog::tr("Assign %1").arg(lamp));   // TR: %1 is a lamp's name (English, as the cabinet names it)
         resize(460, 420);
         auto *v = new QVBoxLayout(this);
-        v->addWidget(new QLabel("Choose the LED for <b>" + lamp.toHtmlEscaped() + "</b>. The selected output lights up, "
-                                "so you can see which one it is."));
+        v->addWidget(new QLabel(LightsDialog::tr("Choose the LED for <b>%1</b>. The selected output lights up, "
+                                                 "so you can see which one it is.").arg(lamp.toHtmlEscaped())));
         m_box = new QComboBox;
         for (auto &d : m_devices)
             if (d.error.empty()) m_box->addItem(qs(d.name) + "  (" + qs(d.id) + ")", qs(d.id));
         v->addWidget(m_box);
         m_list = new QListWidget;
         v->addWidget(m_list, 1);
-        m_all = new QCheckBox("Show every output (also those that do not look like lamps)");
+        m_all = new QCheckBox(LightsDialog::tr("Show every output (also those that do not look like lamps)"));
         v->addWidget(m_all);
         connect(m_all, &QCheckBox::toggled, this, [this] { fill(); });
         auto *bb = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
@@ -102,12 +102,12 @@ QString dotStyle(bool on) {
 }  // namespace
 
 LightsDialog::LightsDialog(const QString &family, QWidget *parent) : QDialog(parent) {
-    setWindowTitle("Lights");
+    setWindowTitle(tr("Lights"));
     resize(640, 720);
     auto *v = new QVBoxLayout(this);
 
     auto *top = new QHBoxLayout;
-    top->addWidget(new QLabel("Cabinet:"));
+    top->addWidget(new QLabel(tr("Cabinet:")));
     m_familyBox = new QComboBox;
     fillCabinetBox(m_familyBox, false);
     top->addWidget(m_familyBox, 1);
@@ -117,7 +117,7 @@ LightsDialog::LightsDialog(const QString &family, QWidget *parent) : QDialog(par
     m_devLabel = new QLabel;
     m_devLabel->setWordWrap(true);
     dev->addWidget(m_devLabel, 1);
-    auto *refresh = new QPushButton("Rescan");
+    auto *refresh = new QPushButton(tr("Rescan"));
     refresh->setAutoDefault(false);
     connect(refresh, &QPushButton::clicked, this, [this] {
         allOff();
@@ -131,7 +131,7 @@ LightsDialog::LightsDialog(const QString &family, QWidget *parent) : QDialog(par
     m_permLabel = new QLabel;
     m_permLabel->setWordWrap(true);
     perm->addWidget(m_permLabel, 1);
-    m_permButton = new QPushButton("How to allow access…");
+    m_permButton = new QPushButton(tr("How to allow access…"));
     m_permButton->setAutoDefault(false);
     perm->addWidget(m_permButton);
     v->addLayout(perm);
@@ -156,12 +156,14 @@ LightsDialog::LightsDialog(const QString &family, QWidget *parent) : QDialog(par
         commands += "  | sudo tee " + path + " >/dev/null\n";
         commands += "sudo udevadm control --reload && sudo udevadm trigger --subsystem-match=hidraw\n";
         QDialog d(this);
-        d.setWindowTitle("Allow access to controller LEDs");
+        d.setWindowTitle(tr("Allow access to controller LEDs"));
         auto *l = new QVBoxLayout(&d);
-        auto *t = new QLabel("Linux only lets programs write to a controller's LEDs (its /dev/hidraw node) when a udev "
-                             "rule allows it. Run these commands in a terminal: they write the rule to <tt>" + path +
-                             "</tt> (keeping the controllers already in it) and apply it. They ask for your password. "
-                             "Then press <b>Rescan</b>; if the controller is still refused, replug it. See docs/LIGHTS.md.");
+        // TR: %1 is the rules file's path; "Rescan" is the button of that name above
+        auto *t = new QLabel(tr("Linux only lets programs write to a controller's LEDs (its /dev/hidraw node) when a udev "
+                                "rule allows it. Run these commands in a terminal: they write the rule to <tt>%1</tt> "
+                                "(keeping the controllers already in it) and apply it. They ask for your password. "
+                                "Then press <b>Rescan</b>; if the controller is still refused, replug it. See docs/LIGHTS.md.")
+                                 .arg(path));
         t->setWordWrap(true);
         l->addWidget(t);
         auto *e = new QPlainTextEdit(commands);
@@ -169,7 +171,7 @@ LightsDialog::LightsDialog(const QString &family, QWidget *parent) : QDialog(par
         e->setFont(QFont("monospace"));
         l->addWidget(e);
         auto *bb = new QDialogButtonBox(QDialogButtonBox::Close);
-        auto *copy = bb->addButton("Copy", QDialogButtonBox::ActionRole);
+        auto *copy = bb->addButton(tr("Copy"), QDialogButtonBox::ActionRole);
         connect(copy, &QPushButton::clicked, &d, [commands] { QApplication::clipboard()->setText(commands); });
         connect(bb, &QDialogButtonBox::rejected, &d, &QDialog::reject);
         l->addWidget(bb);
@@ -233,7 +235,7 @@ LightsDialog::~LightsDialog() {
 
 void LightsDialog::reject() {
     if (!m_dirty.isEmpty()) {
-        auto r = QMessageBox::question(this, "Lights", "Save the changed lights?",
+        auto r = QMessageBox::question(this, tr("Lights"), tr("Save the changed lights?"),
                                        QMessageBox::Save | QMessageBox::Discard | QMessageBox::Cancel);
         if (r == QMessageBox::Cancel) return;
         if (r == QMessageBox::Save && !save()) return;
@@ -246,11 +248,12 @@ void LightsDialog::refreshDevices() {
     m_devices = hk::hidout::enumerate();
     QStringList ok, refused;
     for (auto &d : m_devices) (d.error.empty() ? ok : refused) << qs(d.name);
-    m_devLabel->setText(!ok.isEmpty()      ? "Controllers with LEDs: " + ok.join(" · ")
-                        : refused.isEmpty() ? "No controller with LEDs found."
-                                            : "Found controllers with LEDs, but cannot open them (see below).");
-    m_permLabel->setText(refused.isEmpty() ? QString()
-                                           : "No access to: " + refused.join(" · ") + ". Without it their LEDs cannot be set.");
+    // TR: %1 is the controllers' names, joined by " · "
+    m_devLabel->setText(!ok.isEmpty()      ? tr("Controllers with LEDs: %1").arg(ok.join(" · "))
+                        : refused.isEmpty() ? tr("No controller with LEDs found.")
+                                            : tr("Found controllers with LEDs, but cannot open them (see below)."));
+    // TR: %1 is the controllers' names, joined by " · "
+    m_permLabel->setText(refused.isEmpty() ? QString() : tr("No access to: %1. Without it their LEDs cannot be set.").arg(refused.join(" · ")));
     m_permLabel->setVisible(!refused.isEmpty());
     m_permButton->setVisible(!refused.isEmpty());
 }
@@ -272,7 +275,8 @@ bool LightsDialog::save() {
         QDir().mkpath(cfg::configDir() + "/lights");
         QSaveFile f(cfg::lightsFile(fam));
         if (!f.open(QIODevice::WriteOnly | QIODevice::Text)) {
-            QMessageBox::warning(this, "Lights", "Cannot write " + f.fileName() + ": " + f.errorString());
+            // TR: %1 is the file's path, %2 the system's reason
+            QMessageBox::warning(this, tr("Lights"), tr("Cannot write %1: %2").arg(f.fileName(), f.errorString()));
             return false;
         }
         QString text = "# HIRAKU lights for " + cfg::familyName(fam) + ", written by the launcher.\n"
@@ -287,7 +291,7 @@ bool LightsDialog::save() {
         }
         f.write(text.toUtf8());
         if (!f.commit()) {
-            QMessageBox::warning(this, "Lights", "Cannot write " + f.fileName() + ": " + f.errorString());
+            QMessageBox::warning(this, tr("Lights"), tr("Cannot write %1: %2").arg(f.fileName(), f.errorString()));
             return false;
         }
     }
@@ -302,8 +306,8 @@ void LightsDialog::showFamily(const QString &family) {
     auto *page = new QWidget;
     auto *v = new QVBoxLayout(page);
     if (family == "bm3") {
-        auto *note = new QLabel("MAME does not decode beatmania III's cabinet lamps yet, so only the board's diagnostic "
-                                "LEDs are known.");
+        auto *note = new QLabel(tr("MAME does not decode beatmania III's cabinet lamps yet, so only the board's diagnostic "
+                                   "LEDs are known."));
         note->setWordWrap(true);
         v->addWidget(note);
     }
@@ -327,16 +331,16 @@ void LightsDialog::showFamily(const QString &family) {
         row.dot = new QLabel;
         row.dot->setFixedSize(14, 14);
         row.dot->setStyleSheet(dotStyle(false));
-        row.dot->setToolTip("Lit while a running game lights this lamp");
+        row.dot->setToolTip(tr("Lit while a running game lights this lamp"));
         row.button = new QPushButton;
         row.button->setAutoDefault(false);
         row.button->setMinimumWidth(240);
         auto *test = new QToolButton;
-        test->setText("Test");
-        test->setToolTip("Lights the assigned LEDs while held");
+        test->setText(tr("Test"));
+        test->setToolTip(tr("Lights the assigned LEDs while held"));
         auto *clr = new QToolButton;
         clr->setText("×");
-        clr->setToolTip("Clear");
+        clr->setToolTip(tr("Clear"));
         int index = m_rows.size();
         connect(row.button, &QPushButton::clicked, this, [this, index] { assign(index); });
         connect(test, &QToolButton::pressed, this, [this, index] {
@@ -364,11 +368,12 @@ void LightsDialog::showFamily(const QString &family) {
     v->addStretch(1);
     m_scroll->setWidget(page);
     if (m_liveGame.isEmpty())
-        m_liveLabel->setText("Live view: start a game with “Publish lamps” on (Settings) and its lamps light up here.");
+        // TR: “Publish lamps” is a setting's name in Settings: its translation there
+        m_liveLabel->setText(tr("Live view: start a game with “Publish lamps” on (Settings) and its lamps light up here."));
     else if (m_liveFamily != m_family)
-        m_liveLabel->setText("Live view: " + m_liveGame + " is running, which has a different cabinet.");
+        m_liveLabel->setText(tr("Live view: %1 is running, which has a different cabinet.").arg(m_liveGame));   // TR: %1 is the game's name
     else
-        m_liveLabel->setText("Live view: showing " + m_liveGame + "'s lamps.");
+        m_liveLabel->setText(tr("Live view: showing %1's lamps.").arg(m_liveGame));   // TR: %1 is the game's name
 }
 
 void LightsDialog::refreshRow(int k) {
@@ -383,7 +388,7 @@ void LightsDialog::refreshRow(int k) {
                     name = qs(d.name) + " · " + qs(hk::hidout::field_label(d, sp.field));
         shown << name;
     }
-    row.button->setText(shown.isEmpty() ? "— (click to assign)" : shown.join(", "));
+    row.button->setText(shown.isEmpty() ? tr("— (click to assign)") : shown.join(", "));
     row.button->setToolTip(outs.join(", "));
 }
 
@@ -391,7 +396,7 @@ void LightsDialog::assign(int k) {
     bool any = false;
     for (auto &d : m_devices) any |= d.error.empty();
     if (!any) {
-        QMessageBox::information(this, "Lights", "No controller with LEDs is available. Plug one in and press Rescan.");
+        QMessageBox::information(this, tr("Lights"), tr("No controller with LEDs is available. Plug one in and press Rescan."));
         return;
     }
     QString lamp = qs(m_rows[k].lamp.name);

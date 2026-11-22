@@ -46,26 +46,27 @@ QString ModsDialog::summary(const QString &game) {
 }
 
 ModsDialog::ModsDialog(const QString &game, const QString &title, QWidget *parent) : QDialog(parent), m_game(game) {
-    setWindowTitle("Mods for " + title);
+    // TR: %1 is the game's title
+    setWindowTitle(tr("Mods for %1").arg(title));
     auto *v = new QVBoxLayout(this);
-    auto *head = new QLabel("Mods change the game as it runs, without changing its data. The ones ticked run, in this "
-                            "order (the first one wins where two change the same thing, as with ifs_layeredfs). With "
-                            "any on, the game keeps "
-                            "its saves apart from the clean game's (started from a copy of them).");
+    auto *head = new QLabel(tr("Mods change the game as it runs, without changing its data. The ones ticked run, in this "
+                               "order (the first one wins where two change the same thing, as with ifs_layeredfs). With "
+                               "any on, the game keeps "
+                               "its saves apart from the clean game's (started from a copy of them)."));
     head->setWordWrap(true);
     v->addWidget(head);
     auto *row = new QHBoxLayout;
     m_list = new QListWidget;
     row->addWidget(m_list, 1);
     auto *side = new QVBoxLayout;
-    auto *up = new QPushButton("Up"), *down = new QPushButton("Down");
+    auto *up = new QPushButton(tr("Up")), *down = new QPushButton(tr("Down"));   // TR: buttons moving the chosen mod in the list
     connect(up, &QPushButton::clicked, this, [this] { move(-1); });
     connect(down, &QPushButton::clicked, this, [this] { move(1); });
     side->addWidget(up);
     side->addWidget(down);
     // the chosen mod's [[setting]]s, whether it's on or not (they're the mod's)
-    m_settings = new QPushButton("Settings…");
-    m_settings->setToolTip("The chosen mod's settings, kept for the game's next start with it on");
+    m_settings = new QPushButton(tr("Settings…"));
+    m_settings->setToolTip(tr("The chosen mod's settings, kept for the game's next start with it on"));
     m_settings->setEnabled(false);
     connect(m_settings, &QPushButton::clicked, this, [this] {
         const int r = m_list->currentRow();
@@ -84,12 +85,12 @@ ModsDialog::ModsDialog(const QString &game, const QString &title, QWidget *paren
     v->addWidget(m_about);
     connect(m_list, &QListWidget::currentRowChanged, this, &ModsDialog::selected);
     auto *bb = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
-    auto *open = bb->addButton("Open the mods folder", QDialogButtonBox::ActionRole);
+    auto *open = bb->addButton(tr("Open the mods folder"), QDialogButtonBox::ActionRole);
     connect(open, &QPushButton::clicked, this, [this] {
         QDir().mkpath(cfg::modsDir(m_game));
         QDesktopServices::openUrl(QUrl::fromLocalFile(cfg::modsDir(m_game)));
     });
-    auto *refresh = bb->addButton("Look again", QDialogButtonBox::ActionRole);
+    auto *refresh = bb->addButton(tr("Look again"), QDialogButtonBox::ActionRole);   // TR: a button: read the mods folder again
     connect(refresh, &QPushButton::clicked, this, &ModsDialog::fill);
     connect(bb, &QDialogButtonBox::accepted, this, &ModsDialog::accept);
     connect(bb, &QDialogButtonBox::rejected, this, &QDialog::reject);
@@ -112,16 +113,18 @@ void ModsDialog::fill() {
         const Info i = read(path);
         if (!i.game.isEmpty() && i.game != m_game) continue;
         const bool bundled = !path.startsWith(cfg::modsDir(m_game) + "/");
-        auto *it = new QListWidgetItem(i.name + (i.version.isEmpty() ? "" : " " + i.version) +
-                                       (bundled ? "  (comes with HIRAKU)" : "  (" + f + ")"));
+        const QString name = i.name + (i.version.isEmpty() ? "" : " " + i.version);
+        // TR: a mod in the list: %1 is its name and version
+        auto *it = new QListWidgetItem(bundled ? tr("%1  (comes with HIRAKU)").arg(name) : name + "  (" + f + ")");
         it->setData(Qt::UserRole, f);
         it->setFlags(it->flags() | Qt::ItemIsUserCheckable);
         it->setCheckState(on.contains(f) ? Qt::Checked : Qt::Unchecked);
         m_list->addItem(it);
     }
     if (m_list->count() == 0)
-        m_about->setText("No mods for this game yet: put each in a folder of its own in " + cfg::modsDir(m_game) +
-                         ": its mod.toml, or the game's files at their own paths, pictures as PNG (docs/MODS.md).");
+        // TR: %1 is the mods folder's path
+        m_about->setText(tr("No mods for this game yet: put each in a folder of its own in %1: its mod.toml, or the "
+                            "game's files at their own paths, pictures as PNG (docs/MODS.md).").arg(cfg::modsDir(m_game)));
     else if (m_list->currentRow() < 0)
         m_list->setCurrentRow(0);
 }
@@ -134,12 +137,14 @@ void ModsDialog::selected(int r) {
     }
     const QString folder = m_list->item(r)->data(Qt::UserRole).toString(), dir = cfg::modPath(m_game, folder);
     const Info i = read(dir);
-    QString text = i.description.isEmpty() ? "(no description)" : i.description;
+    QString text = i.description.isEmpty() ? tr("(no description)") : i.description;
     ModSettings settings;
     QString err;
     const bool ok = settings.load(dir, cfg::modSettingsFile(m_game, folder), &err);
-    if (!ok) text += "\n\nIts mod.toml can't be read: " + err;
-    else if (!settings.empty()) text += "\n\nSettings: " + settings.summary();
+    // TR: %1 is why (the mod file reader's message, in English)
+    if (!ok) text += "\n\n" + tr("Its mod.toml can't be read: %1").arg(err);
+    // TR: %1 is the mod's settings and their values, "name: value, name: value"
+    else if (!settings.empty()) text += "\n\n" + tr("Settings: %1").arg(settings.summary());
     m_about->setText(text);
     m_settings->setEnabled(!ok || !settings.empty());   // (refused: the panel says why)
 }

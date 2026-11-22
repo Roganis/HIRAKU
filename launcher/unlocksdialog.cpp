@@ -74,16 +74,16 @@ QStringList UnlocksDialog::macroArguments(const QString &game) {
 void UnlocksDialog::addMacros(QVBoxLayout *v) {
     QList<Macro> list = macros(m_game);
     if (list.isEmpty()) return;
-    auto *box = new QGroupBox("Codes, typed for you");
+    auto *box = new QGroupBox(tr("Codes, typed for you"));
     auto *bv = new QVBoxLayout(box);
-    auto *intro = new QLabel("<i>In the game window, Ctrl+1 to Ctrl+9 type the codes below at the moment you press them "
-                             "(the window title shows it while it types). The codes last a credit, or until power-off; "
-                             "a code marked so can be typed at every start by itself.</i>");
+    auto *intro = new QLabel("<i>" + tr("In the game window, Ctrl+1 to Ctrl+9 type the codes below at the moment you press them "
+                                     "(the window title shows it while it types). The codes last a credit, or until power-off; "
+                                     "a code marked so can be typed at every start by itself.") + "</i>");
     intro->setWordWrap(true);
     bv->addWidget(intro);
     for (int i = 0; i < list.size(); i++) {
         const Macro &m = list[i];
-        QString key = i < 9 ? QString("Ctrl+%1").arg(i + 1) : QString("(no key)");
+        QString key = i < 9 ? QString("Ctrl+%1").arg(i + 1) : tr("(no key)");
         auto *name = new QLabel("<b>" + key + "</b>&nbsp;&nbsp;" + m.name.toHtmlEscaped());
         bv->addWidget(name);
         auto *t = new QLabel(m.text);
@@ -91,7 +91,7 @@ void UnlocksDialog::addMacros(QVBoxLayout *v) {
         t->setContentsMargins(24, 0, 0, m.atStart ? 0 : 6);
         bv->addWidget(t);
         if (m.atStart) {
-            auto *c = new QCheckBox("Type it at every start");
+            auto *c = new QCheckBox(tr("Type it at every start"));
             c->setChecked(cfg::settings().value("macros/" + m_game).toStringList().contains(m.name));
             c->setContentsMargins(24, 0, 0, 6);
             connect(c, &QCheckBox::toggled, this, [game = m_game, n = m.name](bool on) {
@@ -108,7 +108,7 @@ void UnlocksDialog::addMacros(QVBoxLayout *v) {
 
 UnlocksDialog::UnlocksDialog(const QString &game, const QString &title, bool running, QWidget *parent)
     : QDialog(parent), m_game(game), m_title(title), m_running(running) {
-    setWindowTitle("Unlocks: " + title);
+    setWindowTitle(tr("Unlocks: %1").arg(title));   // TR: %1 is the game's title
     resize(620, 560);
     auto *v = new QVBoxLayout(this);
     auto *scroll = new QScrollArea;
@@ -152,7 +152,7 @@ void UnlocksDialog::applyAll(const QStringList &extra) {
         if (e.isEmpty()) ++done;
         else if (!e.contains("no save yet")) errors << QFileInfo(s).fileName() + ": " + e;
     }
-    if (!done && errors.isEmpty()) errors << "No save yet: start the game once (with its first-boot setup), quit, then come back.";
+    if (!done && errors.isEmpty()) errors << tr("No save yet: start the game once (with its first-boot setup), quit, then come back.");
     if (!errors.isEmpty()) QMessageBox::warning(this, m_title, errors.join("\n\n"));
     rebuild();
 }
@@ -160,13 +160,13 @@ void UnlocksDialog::applyAll(const QStringList &extra) {
 QJsonObject UnlocksDialog::run(const QStringList &extra, QString *err, const QString &nvram) {
     const QStringList py = cfg::python();
     if (py.isEmpty()) {
-        *err = "tools/unlock.py needs Python 3 (python.org)";
+        *err = tr("tools/unlock.py needs Python 3 (python.org)");
         return {};
     }
     QProcess p;
     p.start(py[0], py.mid(1) + QStringList{cfg::rootDir() + "/tools/unlock.py", m_game, "--json", "--nvram", nvram} + extra);
     if (!p.waitForFinished(15000)) {
-        *err = "tools/unlock.py did not answer (is Python 3 installed?)";
+        *err = tr("tools/unlock.py did not answer (is Python 3 installed?)");
         return {};
     }
     QJsonObject o = QJsonDocument::fromJson(p.readAllStandardOutput()).object();
@@ -186,15 +186,17 @@ void UnlocksDialog::rebuild() {
     const QStringList mods = cfg::modsOn(m_game);
     QString with;
     if (!mods.isEmpty())
-        with = QString(save() == cfg::saveDir(m_game) ? "The one with the mods on now: %1."
-                                                      : "The mods on now (%1) get a copy of it at their first start.")
+        // TR: %1 is the names of the mods on, joined by ", "
+        with = (save() == cfg::saveDir(m_game) ? tr("The one with the mods on now: %1.")
+                                               : tr("The mods on now (%1) get a copy of it at their first start."))
                    .arg(mods.join(", ").toHtmlEscaped());
     if (const QStringList all = saves(); all.size() > 1) {
         QStringList names;
         for (const QString &s : all) names << QFileInfo(s).fileName().toHtmlEscaped();
-        with += QString(with.isEmpty() ? "" : " ") + "Apply writes to all of the game's saves: " + names.join(", ") + ".";
+        // TR: %1 is the saves' folder names, joined by ", "
+        with += QString(with.isEmpty() ? "" : " ") + tr("Apply writes to all of the game's saves: %1.").arg(names.join(", "));
     }
-    auto *where = new QLabel("Save: <tt>" + save().toHtmlEscaped() + "</tt>");
+    auto *where = new QLabel(tr("Save: <tt>%1</tt>").arg(save().toHtmlEscaped()));   // TR: %1 is the save folder's path
     where->setTextInteractionFlags(Qt::TextSelectableByMouse);
     where->setToolTip(save());
     where->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);   // a long path is cut, not the dialog widened
@@ -211,7 +213,7 @@ void UnlocksDialog::rebuild() {
         v->addWidget(e);
     }
     if (m_running && !st.isEmpty()) {
-        auto *r = new QLabel("<b>Stop the game first</b>: it writes its save back when it exits.");
+        auto *r = new QLabel(tr("<b>Stop the game first</b>: it writes its save back when it exits."));
         r->setWordWrap(true);
         v->addWidget(r);
     }
@@ -225,7 +227,7 @@ void UnlocksDialog::rebuild() {
             for (const QJsonValue &sv : u["switch"].toArray()) {
                 QJsonObject sw = sv.toObject();
                 QString id = sw["id"].toString();
-                auto *c = new QCheckBox(sw["name"].toString() + "   (code " + sw["code"].toString() + ")");
+                auto *c = new QCheckBox(tr("%1   (code %2)").arg(sw["name"].toString(), sw["code"].toString()));
                 c->setChecked(cur[id].toObject()["on"].toBool());
                 c->setEnabled(!u["current"].isNull());
                 bv->addWidget(c);
@@ -236,14 +238,15 @@ void UnlocksDialog::rebuild() {
                 checks.push_back({id, c});
             }
             if (u["current"].isNull()) {
-                auto *none = new QLabel("No save yet: start the game once (with its first-boot setup), quit, then come back.");
+                auto *none = new QLabel(tr("No save yet: start the game once (with its first-boot setup), quit, then come back."));
                 none->setWordWrap(true);
                 bv->addWidget(none);
             }
-            auto *how = new QLabel("<i>" + u["how"].toString().toHtmlEscaped() + " Apply writes what the game writes then.</i>");
+            // TR: follows the game's own instructions (English) in the same paragraph
+            auto *how = new QLabel("<i>" + u["how"].toString().toHtmlEscaped() + " " + tr("Apply writes what the game writes then.") + "</i>");
             how->setWordWrap(true);
             bv->addWidget(how);
-            auto *apply = new QPushButton("Apply");
+            auto *apply = new QPushButton(tr("Apply"));
             apply->setEnabled(!m_running && !u["current"].isNull());
             bv->addWidget(apply, 0, Qt::AlignRight);
             connect(apply, &QPushButton::clicked, this, [this, checks] {
@@ -262,7 +265,9 @@ void UnlocksDialog::rebuild() {
         for (const QJsonValue &lv : levels) {
             QJsonObject l = lv.toObject();
             QString code = l["code"].toString();
-            combo->addItem(l["name"].toString() + (code.isEmpty() ? "" : "   (code " + code + ")"), l["value"].toInt());
+            // TR: %1 is a setting in the game's own words (English), %2 the code the game takes for it
+            combo->addItem(code.isEmpty() ? l["name"].toString() : tr("%1   (code %2)").arg(l["name"].toString(), code), l["value"].toInt());
+            combo->setItemData(combo->count() - 1, l["name"].toString(), Qt::UserRole + 1);   // (its name alone, for "Now:")
         }
         if (!cur.isNull()) combo->setCurrentIndex(std::max(0, combo->findData(cur.toInt())));
         auto *text = new QLabel;
@@ -273,16 +278,17 @@ void UnlocksDialog::rebuild() {
         };
         showText();
         connect(combo, &QComboBox::currentIndexChanged, this, showText);
-        auto *now = new QLabel(cur.isNull() ? QString("No save yet: start the game once (with its first-boot setup), quit, then come back.")
-                                            : "Now: <b>" + combo->itemText(combo->findData(cur.toInt())).section("   (", 0, 0).toHtmlEscaped() + "</b>");
+        auto *now = new QLabel(cur.isNull() ? tr("No save yet: start the game once (with its first-boot setup), quit, then come back.")
+                                            // TR: %1 is the setting the save has now
+                                            : tr("Now: <b>%1</b>").arg(combo->itemData(combo->findData(cur.toInt()), Qt::UserRole + 1).toString().toHtmlEscaped()));
         now->setWordWrap(true);
         bv->addWidget(now);
         bv->addWidget(combo);
         bv->addWidget(text);
-        auto *how = new QLabel("<i>" + u["how"].toString().toHtmlEscaped() + " Apply writes what the game writes then.</i>");
+        auto *how = new QLabel("<i>" + u["how"].toString().toHtmlEscaped() + " " + tr("Apply writes what the game writes then.") + "</i>");
         how->setWordWrap(true);
         bv->addWidget(how);
-        auto *apply = new QPushButton("Apply");
+        auto *apply = new QPushButton(tr("Apply"));
         apply->setEnabled(!m_running && !cur.isNull());
         bv->addWidget(apply, 0, Qt::AlignRight);
         QString id = u["id"].toString();
@@ -293,7 +299,7 @@ void UnlocksDialog::rebuild() {
     }
     for (const QJsonValue &pv : st["progress"].toArray()) {
         QJsonObject p = pv.toObject();
-        auto *box = new QGroupBox(p["title"].toString() + ": event progress");
+        auto *box = new QGroupBox(tr("%1: event progress").arg(p["title"].toString()));   // TR: %1 is the event's name (the game's, in English)
         auto *bv = new QVBoxLayout(box);
         auto *t = new QLabel(p["text"].toString());
         t->setWordWrap(true);
@@ -305,7 +311,7 @@ void UnlocksDialog::rebuild() {
                 combo->addItem(cv.toObject()["name"].toString(), cv.toObject()["value"].toString());
             auto *row = new QHBoxLayout;
             row->addWidget(combo, 1);
-            auto *apply = new QPushButton("Apply");
+            auto *apply = new QPushButton(tr("Apply"));
             apply->setEnabled(!m_running);
             row->addWidget(apply);
             bv->addLayout(row);

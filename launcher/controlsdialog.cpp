@@ -20,6 +20,7 @@
 #include <QHBoxLayout>
 #include <QKeyEvent>
 #include <QLabel>
+#include <QLocale>
 #include <QMenu>
 #include <QMessageBox>
 #include <QPushButton>
@@ -88,7 +89,7 @@ public:
     explicit TurntableMeter(std::function<QString()> binding, QWidget *parent = nullptr)
         : QWidget(parent), m_binding(std::move(binding)) {
         setFixedSize(22, 22);
-        setToolTip("The turntable as the game will see it turn: spin it to check the speed and direction");
+        setToolTip(ControlsDialog::tr("The turntable as the game will see it turn: spin it to check the speed and direction"));
         connect(&Joysticks::instance(), &Joysticks::axis, this, [this](int j, int a, int v) { onAxis(j, a, v); });
         m_fade.setSingleShot(true);
         connect(&m_fade, &QTimer::timeout, this, [this] {
@@ -183,12 +184,12 @@ void fillCabinetBox(QComboBox *box, bool controlSets, bool apart) {
 }
 
 ControlsDialog::ControlsDialog(const QString &family, QWidget *parent) : QDialog(parent) {
-    setWindowTitle("Controls");
+    setWindowTitle(tr("Controls"));
     resize(640, 720);
     auto *v = new QVBoxLayout(this);
 
     auto *top = new QHBoxLayout;
-    top->addWidget(new QLabel("Cabinet:"));
+    top->addWidget(new QLabel(tr("Cabinet:")));
     m_familyBox = new QComboBox;
     fillCabinetBox(m_familyBox, true, m_sets.apart);
     top->addWidget(m_familyBox, 1);
@@ -197,9 +198,9 @@ ControlsDialog::ControlsDialog(const QString &family, QWidget *parent) : QDialog
     m_setLabel->setWordWrap(true);
     v->addWidget(m_setLabel);
     m_opened = family;
-    m_apart = new QCheckBox("Separate controls for beatmania (DJ Main), beatmania IIDX and beatmania III");
-    m_apart->setToolTip("Each of the three keeps its own bindings, started as a copy of the shared ones. Untick to "
-                        "share one set again (the separate ones are kept for next time).");
+    m_apart = new QCheckBox(tr("Separate controls for beatmania (DJ Main), beatmania IIDX and beatmania III"));
+    m_apart->setToolTip(tr("Each of the three keeps its own bindings, started as a copy of the shared ones. Untick to "
+                           "share one set again (the separate ones are kept for next time)."));
     m_apart->setChecked(m_sets.apart);
     v->addWidget(m_apart);
     // what is shown and edited only: the setting and the files are written at the Save, with the other
@@ -241,13 +242,13 @@ ControlsDialog::ControlsDialog(const QString &family, QWidget *parent) : QDialog
         changed();
     });
     v->addWidget(m_banner);
-    auto *hint = new QLabel("Click a binding, then press a key or a controller button: it replaces that keyboard's or "
-                            "controller's binding there. Its <b>▾</b> menu (or a right-click) adds another, removes one, "
-                            "resets it, or sets a turntable's speed. A warning sign marks an input that presses two "
-                            "controls in one game. Press anything and its name lights up.");
+    auto *hint = new QLabel(tr("Click a binding, then press a key or a controller button: it replaces that keyboard's or "
+                               "controller's binding there. Its <b>▾</b> menu (or a right-click) adds another, removes one, "
+                               "resets it, or sets a turntable's speed. A warning sign marks an input that presses two "
+                               "controls in one game. Press anything and its name lights up."));
     hint->setWordWrap(true);
     v->addWidget(hint);
-    m_lastLabel = new QLabel("Last input: —");
+    m_lastLabel = new QLabel(tr("Last input: —"));
     m_lastLabel->setTextFormat(Qt::RichText);
     v->addWidget(m_lastLabel);
 
@@ -256,17 +257,17 @@ ControlsDialog::ControlsDialog(const QString &family, QWidget *parent) : QDialog
     v->addWidget(m_scroll, 1);
 
     auto *box = new QDialogButtonBox(QDialogButtonBox::Save | QDialogButtonBox::Cancel | QDialogButtonBox::RestoreDefaults);
-    auto *setup = new QPushButton("Set up");
+    auto *setup = new QPushButton(tr("Set up"));
     auto *setupMenuBox = new QMenu(setup);
     connect(setupMenuBox, &QMenu::aboutToShow, this, [this, setupMenuBox] {
         setupMenuBox->clear();
         setupMenu(setupMenuBox);
     });
     setup->setMenu(setupMenuBox);
-    setup->setToolTip("Bind everything in turn, a controller's layout (the default, or one you saved), copying "
-                      "player 1's controller to player 2");
+    setup->setToolTip(tr("Bind everything in turn, a controller's layout (the default, or one you saved), copying "
+                         "player 1's controller to player 2"));
     box->addButton(setup, QDialogButtonBox::ResetRole);
-    auto *tryIt = new QPushButton("Try in a game");
+    auto *tryIt = new QPushButton(tr("Try in a game"));
     auto *tryMenu = new QMenu(tryIt);
     connect(tryMenu, &QMenu::aboutToShow, this, [this, tryMenu] {
         tryMenu->clear();
@@ -274,7 +275,7 @@ ControlsDialog::ControlsDialog(const QString &family, QWidget *parent) : QDialog
         for (const Game &g : m_games)
             if (g.status == Game::Ready && m_sets.set(g.family) == m_family) ready << g;
         std::sort(ready.begin(), ready.end(), [](const Game &a, const Game &b) { return a.title < b.title; });
-        if (ready.isEmpty()) tryMenu->addAction("No " + cfg::controlsSetName(m_family) + " game is ready to play")->setEnabled(false);
+        if (ready.isEmpty()) tryMenu->addAction(tr("No %1 game is ready to play").arg(cfg::controlsSetName(m_family)))->setEnabled(false);   // TR: %1 is a series or cabinet, "pop'n music"
         for (const Game &g : ready)
             tryMenu->addAction(familyIcon(g.family), g.title, this, [this, id = g.id] {
                 if (!save()) return;
@@ -283,7 +284,7 @@ ControlsDialog::ControlsDialog(const QString &family, QWidget *parent) : QDialog
             });
     });
     tryIt->setMenu(tryMenu);
-    tryIt->setToolTip("Save, and start a game with these controls: its test menu's I/O check shows each input as it is pressed");
+    tryIt->setToolTip(tr("Save, and start a game with these controls: its test menu's I/O check shows each input as it is pressed"));
     box->addButton(tryIt, QDialogButtonBox::ResetRole);
     for (auto *ab : box->buttons()) {
         auto *b = qobject_cast<QPushButton *>(ab);
@@ -387,13 +388,13 @@ bool ControlsDialog::save() {
             return text.toUtf8();
         },
         &error);
-    if (!saved) QMessageBox::warning(this, "Controls", "Cannot write " + error);
+    if (!saved) QMessageBox::warning(this, tr("Controls"), tr("Cannot write %1").arg(error));   // TR: %1 is the file and the system's reason
     return saved;
 }
 
 void ControlsDialog::reject() {
     if (m_sets.unsaved()) {   // (the separate beatmania sets ticked or unticked too)
-        auto r = QMessageBox::question(this, "Controls", "Save the changed controls?",
+        auto r = QMessageBox::question(this, tr("Controls"), tr("Save the changed controls?"),
                                        QMessageBox::Save | QMessageBox::Discard | QMessageBox::Cancel);
         if (r == QMessageBox::Cancel) return;
         if (r == QMessageBox::Save && !save()) return;
@@ -413,9 +414,9 @@ void ControlsDialog::showFamily(const QString &family) {
     if (sharing.size() > 1) {
         QStringList names;
         for (const QString &m : sharing) names << cfg::familyName(m);
-        QString last = names.takeLast();
-        m_setLabel->setText("Shared by " + names.join(", ") + " and " + last +
-                            ": each game uses the controls its cabinet has and ignores the rest.");
+        // TR: %1 is the cabinets' names as a list in the language's own way ("A, B and C")
+        m_setLabel->setText(tr("Shared by %1: each game uses the controls its cabinet has and ignores the rest.")
+                                .arg(QLocale().createSeparatedList(names)));
     }
     // one section per group, in the order the groups first come (IIDX lists "Cabinet" twice)
     QStringList groups;
@@ -550,25 +551,26 @@ void ControlsDialog::setFolded(int si, bool folded) {
     int n = 0;
     for (auto &row : m_rows) n += row.section == si;
     sec.header->setText(folded ? QString("%1  (%2)").arg(sec.group).arg(n) : sec.group);
-    sec.header->setToolTip(folded ? "Show these controls" : "Fold these controls away");
+    sec.header->setToolTip(folded ? tr("Show these controls") : tr("Fold these controls away"));
 }
 
 void ControlsDialog::bindingMenu(int k, QMenu *menu) {
     QString name = QString::fromStdString(m_rows[k].control.name);
     // queued: the binding dialog opens once the menu has closed
-    menu->addAction("Add another binding…", this, [this, k] {
+    menu->addAction(tr("Add another binding…"), this, [this, k] {
         QMetaObject::invokeMethod(this, [this, k] { capture(k, true); }, Qt::QueuedConnection);
     });
     const QStringList l = m_edits[m_family].value(name);
     if (!l.isEmpty()) menu->addSeparator();
     for (const QString &b : l)
-        menu->addAction("Remove " + describeBinding(b), this, [this, name, b] {
+        // TR: %1 is a binding, "Pad 1: button 3"
+        menu->addAction(tr("Remove %1").arg(describeBinding(b)), this, [this, name, b] {
             m_edits[m_family][name].removeAll(b);
             m_dirty.insert(m_family);
             changed();
         });
     if (l.size() > 1)
-        menu->addAction("Remove all", this, [this, name] {
+        menu->addAction(tr("Remove all"), this, [this, name] {
             m_edits[m_family][name].clear();
             m_dirty.insert(m_family);
             changed();
@@ -579,7 +581,8 @@ void ControlsDialog::bindingMenu(int k, QMenu *menu) {
     QStringList shown;
     for (const QString &b : defaults) shown << describeBinding(b);
     menu->addSeparator();
-    auto *reset = menu->addAction("Reset to default (" + (shown.isEmpty() ? QString("unbound") : shown.join(", ")) + ")", this,
+    // TR: %1 is the default bindings, joined by ", "
+    auto *reset = menu->addAction(shown.isEmpty() ? tr("Reset to default (unbound)") : tr("Reset to default (%1)").arg(shown.join(", ")), this,
                                   [this, name, defaults] {
                                       m_edits[m_family][name] = defaults;
                                       m_dirty.insert(m_family);
@@ -597,9 +600,9 @@ void ControlsDialog::bindingMenu(int k, QMenu *menu) {
             if (held(b)) pads << b;
         if (pads.isEmpty()) return;
         const double scale = axisScale(pads[0]);
-        auto *speed = menu->addMenu("Speed (buttons)");
+        auto *speed = menu->addMenu(tr("Speed (buttons)"));   // TR: a turntable turned by buttons: how fast it turns while one is held
         for (double x : {0.1, 0.2, 0.3, 0.5, 0.75, 1.0, 1.5, 2.0}) {
-            auto *act = speed->addAction(x == 1.0 ? QString("×1 (as keys turn it)") : QString("×%1").arg(x), this, [this, name, held, x] {
+            auto *act = speed->addAction(x == 1.0 ? tr("×1 (as keys turn it)") : QString("×%1").arg(QLocale().toString(x)), this, [this, name, held, x] {
                 for (QString &b : m_edits[m_family][name])
                     if (held(b)) b = withAxisScale(b, x);
                 m_dirty.insert(m_family);
@@ -623,13 +626,13 @@ void ControlsDialog::bindingMenu(int k, QMenu *menu) {
         changed();
     };
     menu->addSeparator();
-    auto *rev = menu->addAction("Reverse direction", this, [setScale, scale] { setScale(-scale); });
+    auto *rev = menu->addAction(tr("Reverse direction"), this, [setScale, scale] { setScale(-scale); });
     rev->setCheckable(true);
     rev->setChecked(scale < 0);
-    auto *speed = menu->addMenu("Speed");
+    auto *speed = menu->addMenu(tr("Speed"));
     // (×4, ×8, ×12: what ×1, ×2 and ×3 turned in HIRAKU 0.11 and earlier, four counts a step)
     for (double x : {0.5, 0.75, 1.0, 1.25, 1.5, 2.0, 3.0, 4.0, 8.0, 12.0, 16.0}) {
-        auto *a = speed->addAction(x == 1.0 ? QString("×1 (as the controller sends it)") : QString("×%1").arg(x), this,
+        auto *a = speed->addAction(x == 1.0 ? tr("×1 (as the controller sends it)") : QString("×%1").arg(QLocale().toString(x)), this,
                                    [setScale, scale, x] { setScale(scale < 0 ? -x : x); });
         a->setCheckable(true);
         a->setChecked(std::abs(std::abs(scale) - x) < 1e-6);
@@ -651,8 +654,10 @@ void ControlsDialog::refreshRows() {
             for (int k : *it)
                 for (int j : *it)
                     if (j != k) {
-                        QString where = cfg::controlsSetMembers(m_family).size() > 1 ? " in " + cfg::familyName(m) : QString();
-                        clashes[k] << describeBinding(it.key()) + " also presses " + m_rows[j].label->text() + where;
+                        // TR: %1 is a binding ("Pad 1: button 3"), %2 a control's name (English), %3 a cabinet's name
+                        clashes[k] << (cfg::controlsSetMembers(m_family).size() > 1
+                                           ? tr("%1 also presses %2 in %3").arg(describeBinding(it.key()), m_rows[j].label->text(), cfg::familyName(m))
+                                           : tr("%1 also presses %2").arg(describeBinding(it.key()), m_rows[j].label->text()));
                     }
     }
     for (int k = 0; k < m_rows.size(); k++) {
@@ -661,9 +666,9 @@ void ControlsDialog::refreshRows() {
         QStringList shown;
         for (const QString &b : l) shown << describeBinding(b);
         row.button->setText(shown.isEmpty() ? "—" : shown.join(", "));
-        QString tip = l.isEmpty() ? QString("Not bound") : l.join(", ");
+        QString tip = l.isEmpty() ? tr("Not bound") : l.join(", ");
         if (clashes.contains(k)) tip += "\n\n" + clashes[k].join("\n");
-        row.button->setToolTip(tip + "\n\nClick to bind; the arrow (or a right-click) adds or removes one binding.");
+        row.button->setToolTip(tip + "\n\n" + tr("Click to bind; the arrow (or a right-click) adds or removes one binding."));
         row.button->setToolButtonStyle(clashes.contains(k) ? Qt::ToolButtonTextBesideIcon : Qt::ToolButtonTextOnly);
         row.button->setIcon(clashes.contains(k) ? theme::icon(mdi::alert_circle) : QIcon());
         if (row.meter) row.meter->setVisible(row.meter->hasAxis());
@@ -696,8 +701,9 @@ void ControlsDialog::source(const QString &binding, bool on) {
         for (int k = 0; k < m_rows.size(); k++)
             for (const QString &b : bindingsOf(k))
                 if (canonicalBinding(b) == binding && !to.contains(m_rows[k].label->text())) to << m_rows[k].label->text();
-        m_lastLabel->setText("Last input: <b>" + describeBinding(shown).toHtmlEscaped() + "</b>" +
-                             (to.isEmpty() ? QString(" — not bound") : " → " + to.join(", ").toHtmlEscaped()));
+        // TR: %1 is the input pressed ("Pad 1: button 3", "Z"), %2 the controls it presses (their English names)
+        m_lastLabel->setText(to.isEmpty() ? tr("Last input: <b>%1</b> — not bound").arg(describeBinding(shown).toHtmlEscaped())
+                                          : tr("Last input: <b>%1</b> → %2").arg(describeBinding(shown).toHtmlEscaped(), to.join(", ").toHtmlEscaped()));
     }
     refreshHighlights();
 }
@@ -738,8 +744,8 @@ bool ControlsDialog::eventFilter(QObject *o, QEvent *e) {
 
 void ControlsDialog::updateJoystickList() {
     QStringList n = Joysticks::instance().names();
-    m_joyLabel->setText(n.isEmpty() ? "No controllers connected. Plug one in and it appears here."
-                                    : "Controllers: " + n.join(" · "));
+    m_joyLabel->setText(n.isEmpty() ? tr("No controllers connected. Plug one in and it appears here.")
+                                    : tr("Controllers: %1").arg(n.join(" · ")));   // TR: %1 is the controllers, joined by " · "
 }
 
 QStringList &ControlsDialog::bindingsOf(int k) { return m_edits[m_family][QString::fromStdString(m_rows[k].control.name)]; }
@@ -772,12 +778,13 @@ bool ControlsDialog::bind(int k, const QString &b, bool append, bool move) {
     if (!others.isEmpty() && !move) {
         QStringList labels;
         for (int j : others) labels << m_rows[j].label->text();
-        QString where = members.size() > 1 ? " in " + games.join(", ") : QString();
-        QMessageBox ask(QMessageBox::Question, "Controls",
-                        describeBinding(b) + " is already " + labels.join(", ") + where + ".\n\nPressing it would press both.",
-                        QMessageBox::NoButton, this);
-        auto *moveIt = ask.addButton("Move it here", QMessageBox::AcceptRole);
-        auto *both = ask.addButton("Keep both", QMessageBox::ActionRole);
+        // TR: %1 is an input ("Pad 1: button 3", "Z"), %2 the controls it is bound to (English names), %3 the cabinets
+        const QString text = members.size() > 1 ? tr("%1 is already %2 in %3.\n\nPressing it would press both.")
+                                                      .arg(describeBinding(b), labels.join(", "), games.join(", "))
+                                                : tr("%1 is already %2.\n\nPressing it would press both.").arg(describeBinding(b), labels.join(", "));
+        QMessageBox ask(QMessageBox::Question, tr("Controls"), text, QMessageBox::NoButton, this);
+        auto *moveIt = ask.addButton(tr("Move it here"), QMessageBox::AcceptRole);
+        auto *both = ask.addButton(tr("Keep both"), QMessageBox::ActionRole);
         ask.addButton(QMessageBox::Cancel);
         ask.setDefaultButton(moveIt);
         ask.exec();
@@ -815,7 +822,7 @@ void ControlsDialog::bindAll(int player) {
         }
         m_capturing = true;
         CaptureDialog d(m_rows[k].label->text() + "  (" + QString::fromStdString(c.group) + ")", c.analog, this,
-                        QString("%1 of %2").arg(i + 1).arg(order.size()), !history.isEmpty());
+                        tr("%1 of %2").arg(i + 1).arg(order.size()), !history.isEmpty());   // TR: Bind all's step: "3 of 16"
         int r = d.exec();
         m_capturing = false;
         m_active.clear();
@@ -897,7 +904,7 @@ void ControlsDialog::saveLayout(const QString &pad) {
         text += QString::fromStdString(hk::cab::format_entry(it.key().toStdString(), items)) + "\n";
     }
     if (!f.open(QIODevice::WriteOnly | QIODevice::Text) || f.write(text.toUtf8()) < 0 || !f.commit())
-        QMessageBox::warning(this, "Controls", "Cannot write " + path + ": " + f.errorString());
+        QMessageBox::warning(this, tr("Controls"), tr("Cannot write %1: %2").arg(path, f.errorString()));   // TR: %1 is the file, %2 the system's reason
 }
 
 void ControlsDialog::applyLayout(const QString &pad, int player, const Layout &layout) {
@@ -930,14 +937,14 @@ void ControlsDialog::tieToControllers() {
 void ControlsDialog::setupMenu(QMenu *menu) {
     bool twoPlayers = false;
     for (auto &row : m_rows) twoPlayers |= playerOf(QString::fromStdString(row.control.name)) == 2;
-    auto *all = menu->addMenu("Bind all in turn");
-    all->addAction("Player 1", this, [this] { bindAll(1); });
-    if (twoPlayers) all->addAction("Player 2", this, [this] { bindAll(2); });
-    all->addAction("Everything shown", this, [this] { bindAll(0); });
+    auto *all = menu->addMenu(tr("Bind all in turn"));
+    all->addAction(tr("Player 1"), this, [this] { bindAll(1); });
+    if (twoPlayers) all->addAction(tr("Player 2"), this, [this] { bindAll(2); });
+    all->addAction(tr("Everything shown"), this, [this] { bindAll(0); });
 
-    menu->addSection("Controllers");
+    menu->addSection(tr("Controllers"));
     auto &joys = Joysticks::instance();
-    if (joys.count() == 0) menu->addAction("No controllers connected")->setEnabled(false);
+    if (joys.count() == 0) menu->addAction(tr("No controllers connected"))->setEnabled(false);
     // the controller player 1 plays with: the one most of player 1's bindings are on
     QHash<QString, int> p1pads;
     for (int k = 0; k < m_rows.size(); k++)
@@ -951,23 +958,23 @@ void ControlsDialog::setupMenu(QMenu *menu) {
         QString pad = joys.pad(j);
         auto *sub = menu->addMenu(joys.label(j));
         for (int p = 1; p <= (twoPlayers ? 2 : 1); p++)
-            sub->addAction(QString("Default layout for player %1").arg(p), this, [this, pad, p] {
+            sub->addAction(tr("Default layout for player %1").arg(p), this, [this, pad, p] {
                 applyLayout(pad, p, defaultLayout());
                 changed();
             });
         Layout saved = savedLayout(pad);
         for (int p = 1; p <= (twoPlayers ? 2 : 1) && !saved.isEmpty(); p++)
-            sub->addAction(QString("Your saved layout for player %1").arg(p), this, [this, pad, p, saved] {
+            sub->addAction(tr("Your saved layout for player %1").arg(p), this, [this, pad, p, saved] {
                 applyLayout(pad, p, saved);
                 changed();
             });
         sub->addSeparator();
-        auto *save = sub->addAction("Save its layout", this, [this, pad] { saveLayout(pad); });
+        auto *save = sub->addAction(tr("Save its layout"), this, [this, pad] { saveLayout(pad); });
         save->setEnabled(!layoutOf(pad).isEmpty());
-        save->setToolTip("Keep what this controller does here, to use again for either player (or on another PC: "
-                         "controls/layouts in the settings folder)");
+        save->setToolTip(tr("Keep what this controller does here, to use again for either player (or on another PC: "
+                            "controls/layouts in the settings folder)"));
         if (twoPlayers) {
-            auto *copy = sub->addAction("Copy player 1's controller here, as player 2", this, [this, pad, p1pad] {
+            auto *copy = sub->addAction(tr("Copy player 1's controller here, as player 2"), this, [this, pad, p1pad] {
                 Layout l = layoutOf(p1pad), mine;
                 for (auto it = l.cbegin(); it != l.cend(); ++it)
                     if (playerOf(it.key()) == 1) mine[it.key()] = *it;
@@ -981,7 +988,7 @@ void ControlsDialog::setupMenu(QMenu *menu) {
     for (auto &l : m_edits[m_family])
         for (const QString &b : l) numbered |= isPadNumber(bindingPad(b));
     menu->addSeparator();
-    auto *tie = menu->addAction("Tie pad numbers to the controllers now connected", this, [this] {
+    auto *tie = menu->addAction(tr("Tie pad numbers to the controllers now connected"), this, [this] {
         tieToControllers();
         changed();
     });
@@ -1005,26 +1012,26 @@ void ControlsDialog::updateBanner() {
         auto link = [](const QString &href, const QString &text) { return "<a href=\"" + href + "\">" + text + "</a>"; };
         QStringList acts;
         bool saved = !savedLayout(joys.pad(j)).isEmpty();
+        // TR: the banner's links, after "isn't set up for ...:", joined by " · "
         for (int p = 1; p <= (twoPlayers ? 2 : 1); p++) {
-            QString who = twoPlayers ? QString(" for player %1").arg(p) : QString();
-            if (saved) acts << link(QString("saved:%1:%2").arg(p).arg(j), "your saved layout" + who);
-            acts << link(QString("default:%1:%2").arg(p).arg(j), "the default layout" + who);
+            if (saved)
+                acts << link(QString("saved:%1:%2").arg(p).arg(j), twoPlayers ? tr("your saved layout for player %1").arg(p) : tr("your saved layout"));
+            acts << link(QString("default:%1:%2").arg(p).arg(j), twoPlayers ? tr("the default layout for player %1").arg(p) : tr("the default layout"));
         }
-        acts << link("walk:1", twoPlayers ? "bind player 1 in turn" : "bind it in turn");
-        acts << link(QString("hide:%1").arg(j), "not now");
-        lines << "<b>" + joys.label(j).toHtmlEscaped() + "</b> isn't set up for " + cfg::controlsSetName(m_family).toHtmlEscaped() +
-                     ": " + acts.join(" · ");
+        acts << link("walk:1", twoPlayers ? tr("bind player 1 in turn") : tr("bind it in turn"));
+        acts << link(QString("hide:%1").arg(j), tr("not now"));
+        // TR: %1 is a controller's name, %2 a series or cabinet ("pop'n music"), %3 the links that set it up
+        lines << tr("<b>%1</b> isn't set up for %2: %3").arg(joys.label(j).toHtmlEscaped(), cfg::controlsSetName(m_family).toHtmlEscaped(), acts.join(" · "));
     }
     if (numbered && joys.count() > 0)
-        lines << "Some bindings name a controller by its number, which follows the order they were plugged in. "
-                 "<a href=\"tie\">Tie them to the controllers now connected</a>.";
+        lines << tr("Some bindings name a controller by its number, which follows the order they were plugged in. "
+                    "<a href=\"tie\">Tie them to the controllers now connected</a>.");
     m_banner->setText(lines.join("<br>"));
     m_banner->setVisible(!lines.isEmpty());
 }
 
-QString ControlsDialog::testHint() const {
+QString ControlsDialog::testKeys() const {
     QStringList keys;
     for (const QString &b : m_edits.value(m_family).value("Test")) keys << describeBinding(b);
-    return "press Test (" + (keys.isEmpty() ? QString("not bound") : keys.join(", ")) +
-           ") for its test menu: the I/O check there shows each input as it is pressed.";
+    return keys.isEmpty() ? tr("not bound") : keys.join(", ");   // TR: in place of the keys of Test: "press Test (not bound) for ..."
 }

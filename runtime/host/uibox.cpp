@@ -10,6 +10,8 @@
 #include <cstdlib>
 #include <mutex>
 
+#include "lang/fit.h"
+#include "lang/lang.h"
 #include "menu/font.h"
 
 namespace hk::host::ui {
@@ -144,6 +146,18 @@ bool styled() {
     return g_styled;
 }
 double scale() { return styled() ? g_scale : 1; }
+const hk::menu::Font *font() { return styled() ? &g_font : nullptr; }
+
+std::string said(const char *context, const std::string &text, bool keep) {
+    return styled() ? hk::lang::shown(context, text, keep) : hk::lang::english(text);
+}
+
+int max_line_width() { return (int)std::lround(300 * scale()); }
+
+std::vector<std::string> wrap(const std::string &text, int size) {
+    if (!styled()) return {hk::lang::unmarked(text)};
+    return hk::lang::wrap(text, max_line_width(), [size](uint32_t c) { return g_font.width(size, utf8(c)); });
+}
 const hk::ui::Look &look() {
     styled();
     return g_look;
@@ -174,9 +188,19 @@ void notice_box(Image &out, Icon icon, const std::vector<std::string> &lines) {
     const auto u = [s](double n) { return (int)std::lround(n * s); };   // a 360-line screen's pixels, here
     const int pad = u(12), edge = u(4), icon_w = g_font.line(2), gap = u(12);
     const int title = g_font.line(1), small = g_font.line(0);
+    // each line given a paragraph, broken to the box's width: the title's lines in the title's size
+    std::vector<std::string> broken;
+    size_t titles = 0;
+    for (size_t k = 0; k < lines.size(); k++)
+        for (const std::string &l : wrap(lines[k], k ? 0 : 1)) {
+            broken.push_back(l);
+            if (!k) titles++;
+        }
+    if (lines.size() && !titles) broken.insert(broken.begin(), ""), titles = 1;
+    std::vector<std::string> said = std::move(broken);
     int text_w = 0;
-    for (size_t k = 0; k < lines.size(); k++) text_w = std::max(text_w, width(k ? 0 : 1, lines[k]));
-    const int text_h = title + (int)(lines.size() > 1 ? lines.size() - 1 : 0) * small;
+    for (size_t k = 0; k < said.size(); k++) text_w = std::max(text_w, width(k < titles ? 1 : 0, said[k]));
+    const int text_h = (int)titles * title + (int)(said.size() - titles) * small;
     const int w = edge + pad + icon_w + gap + text_w + pad + u(4), h = std::max(text_h, icon_w) + 2 * pad;
     start(out, w, h);
     Paint p{out};
@@ -189,9 +213,10 @@ void notice_box(Image &out, Icon icon, const std::vector<std::string> &lines) {
     if (icon != Icon::none) p.icon(x, (h - icon_w) / 2, 2, icon, c);
     int y = (h - text_h) / 2;
     const int tx = x + icon_w + gap;
-    for (size_t k = 0; k < lines.size(); k++) {
-        p.text(tx, y, k ? 0 : 1, lines[k], k ? hk::ui::mix(g_look.ink, g_look.dim, 90) : g_look.ink);
-        y += k ? small : title;
+    for (size_t k = 0; k < said.size(); k++) {
+        const bool head = k < titles;
+        p.text(tx, y, head ? 1 : 0, said[k], head ? g_look.ink : hk::ui::mix(g_look.ink, g_look.dim, 90));
+        y += head ? title : small;
     }
 }
 

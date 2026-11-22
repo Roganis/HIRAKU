@@ -3,11 +3,14 @@
 #pragma once
 
 #include <QColor>
+#include <QCoreApplication>
 #include <QIcon>
 #include <QList>
 #include <QString>
 
 struct Game {
+    Q_DECLARE_TR_FUNCTIONS(Game)   // its texts' context in the catalogues (launcher/language.h)
+public:
     QString id, title, family, mame;
     QString latin;                       // title_latin: the title spelt in ASCII, where it isn't (the game menu's font)
     QString core;                        // firebeat (default), djmain, sys573

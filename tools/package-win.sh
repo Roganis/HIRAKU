@@ -85,7 +85,7 @@ done
 py=$root/out/win-deps/python
 if [ -f "$py/python.exe" ]; then cp -r "$py" "$d/python"; else echo "no $py: the package will need Python installed" >&2; fi
 # the repo's folders: what git tracks in them, nothing a checkout holds besides (tools/package-files.sh)
-copy_tracked "$root" "$d" games docs shaders
+copy_tracked "$root" "$d" games docs shaders lang
 copy_tracked_as "$root" "$d/scripts" oracle/scripts
 mkdir -p "$d/tools"
 cp "$root"/tools/{ingest.py,checklist.py,chd.py,fbexe.py,pack-data.py,unlock.py,pythonfs.py,chdread.py,mameset.py,catalogue.py,update.py} "$d/tools/"

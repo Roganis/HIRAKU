@@ -12,8 +12,15 @@
 #include "../shell/core.h"
 #include "../shell/kvfile.h"
 #include "../shell/sys.h"
+#include "lang/fit.h"
+#include "lang/lang.h"
+#include "menu/font.h"
 #include "pacing.h"
 #include "sysload.h"
+#include "uibox.h"
+
+// the overlay's texts, context "overlay": translated where drawn (said() below)
+#define O(text) HK_N("overlay", text)
 
 namespace hk::host::statsview {
 
@@ -94,25 +101,55 @@ std::string fmt(const char *f, ...) {
     return b;
 }
 
-std::string clip(std::string s, size_t cols = COLS) {
-    if (s.size() > cols) s.resize(cols - 2), s += "..";
-    return s;
+// The overlay in the interface's language: drawn in the launcher's fonts' overlay size (host/uibox.h,
+// its 4th) when they were given and the language isn't English; else English in SDL's 8x8 font
+// (ASCII only), as it always was. Numbers keep "." for decimals in every language.
+const hk::menu::Font *own_font() {
+    const hk::menu::Font *f = ui::font();
+    return f && f->has(3) && hk::lang::code() != "en" ? f : nullptr;
 }
+const char *said(const char *english) { return own_font() ? hk::lang::tr("overlay", english) : english; }
+std::string said(const char *english, std::initializer_list<std::string_view> args) { return hk::lang::arg(said(english), args); }
+std::string said_n(const char *singular, const char *plural, long n) {
+    return own_font() ? hk::lang::trn("overlay", singular, plural, n) : hk::lang::arg(n == 1 ? singular : plural, {}, n);
+}
+// a number as the overlay writes it ("%.1f": a "." whatever the language)
+std::string num(double v, int decimals = 1) { return fmt("%.*f", decimals, v); }
+std::string num(unsigned long long v) { return fmt("%llu", v); }
 
-// s in lines of COLS characters, broken at spaces, `most` lines at most (the last cut short)
+// a character's width in the overlay's font, in its pixels
+int char_w(uint32_t c) {
+    const hk::menu::Font *f = own_font();
+    if (!f) return 8;
+    char b[5] = {};
+    if (c < 0x80) b[0] = (char)c;
+    else if (c < 0x800) b[0] = (char)(0xc0 | c >> 6), b[1] = (char)(0x80 | (c & 63));
+    else if (c < 0x10000) b[0] = (char)(0xe0 | c >> 12), b[1] = (char)(0x80 | (c >> 6 & 63)), b[2] = (char)(0x80 | (c & 63));
+    else b[0] = (char)(0xf0 | c >> 18), b[1] = (char)(0x80 | (c >> 12 & 63)), b[2] = (char)(0x80 | (c >> 6 & 63)), b[3] = (char)(0x80 | (c & 63));
+    return f->width(3, b);
+}
+int text_w(const std::string &s) { return hk::lang::width(s, char_w); }
+
+// s cut short with ".." to `cols` of the 8x8 font's characters (the same room in the font's pixels):
+// by whole characters, never inside one
+std::string clip(const std::string &s, size_t cols = COLS) { return hk::lang::clip(s, (int)cols * 8, char_w, ".."); }
+
+// s in lines of COLS characters' room, broken where a line may break (lang/fit.h), `most` lines at
+// most (the last cut short); a continued line starts two in
 std::vector<std::string> wrap(const std::string &s, size_t most) {
     std::vector<std::string> out;
     std::string rest = s;
     while (!rest.empty() && out.size() < most) {
-        const size_t room = out.empty() ? COLS : COLS - 2;   // (a continued line starts two in)
-        if (rest.size() <= room || out.size() + 1 == most) {
-            out.push_back((out.empty() ? "" : "  ") + clip(rest, room));
+        const int room = (int)(out.empty() ? COLS : COLS - 2) * 8;
+        const std::string lead = out.empty() ? "" : "  ";
+        if (text_w(rest) <= room || out.size() + 1 == most) {
+            out.push_back(lead + hk::lang::clip(rest, room, char_w, ".."));
             break;
         }
-        size_t cut = rest.rfind(' ', room);
-        if (cut == std::string::npos || cut < room / 2) cut = room;
-        out.push_back((out.empty() ? "" : "  ") + rest.substr(0, cut));
-        rest.erase(0, rest.find_first_not_of(' ', cut));
+        const std::string line = hk::lang::wrap(rest, room, char_w).front();   // (the text's start: a prefix of it)
+        out.push_back(lead + line);
+        rest.erase(0, std::max<size_t>(line.size(), 1));
+        rest.erase(0, rest.find_first_not_of(' ') == std::string::npos ? rest.size() : rest.find_first_not_of(' '));
     }
     return out;
 }
@@ -205,54 +242,71 @@ std::vector<Row> rows() {
     const bool slow = g_slow.at && now - g_slow.at < 6 * SEC;
     g_slow_shown = slow;
     if (g_level == Level::line) {
-        std::string s = fmt("%.1f fps  %.1f/%.1f ms", g_sec.fps, g_sec.game + g_sec.draw, g_sec.period);
-        if (g_sec.thread_cpu >= 0) s += fmt("  CPU %.0f %%", g_sec.thread_cpu);
-        if (g_window.sound) s += fmt("  sound %.0f ms", g_window.queue_ms);
-        s += fmt("  late %d", late10);
-        if (break10) s += fmt("  breaks %d", break10);
+        // TR: the overlay's one line: %1 the game's frames a second, %2 a frame's work in ms, %3 its time in ms
+        std::string s = said(O("%1 fps  %2/%3 ms"), {num(g_sec.fps), num(g_sec.game + g_sec.draw), num(g_sec.period)});
+        if (g_sec.thread_cpu >= 0) s += "  " + said(O("CPU %1 %"), {num(g_sec.thread_cpu, 0)});
+        if (g_window.sound) s += "  " + said(O("sound %1 ms"), {num(g_window.queue_ms, 0)});
+        // TR: frames shown late in the last ten seconds
+        s += "  " + said(O("late %1"), {std::to_string(late10)});
+        // TR: breaks in the sound in the last ten seconds
+        if (break10) s += "  " + said(O("breaks %1"), {std::to_string(break10)});
         out.push_back({s, slow || late10 || break10 ? AMBER : WHITE});
         return out;
     }
-    out.push_back({"Performance (F7: more, drag to move)", GREY});
+    out.push_back({clip(said(O("Performance (F7: more, drag to move)"))), GREY});
     {   // the rates
-        std::string s = fmt("game %.2f fps", g_sec.fps);
-        if (ps.refresh_hz > 0) s += fmt("  display %.2f Hz", ps.refresh_hz);
-        if (ps.active && std::fabs(ps.speed - 1.0) >= 0.00005) s += fmt("  speed %+.2f %%", (ps.speed - 1.0) * 100.0);
+        std::string s = said(O("game %1 fps"), {num(g_sec.fps, 2)});
+        if (ps.refresh_hz > 0) s += "  " + said(O("display %1 Hz"), {num(ps.refresh_hz, 2)});
+        // TR: %1 how much faster or slower the game runs to match the display ("+0.05")
+        if (ps.active && std::fabs(ps.speed - 1.0) >= 0.00005) s += "  " + said(O("speed %1 %"), {fmt("%+.2f", (ps.speed - 1.0) * 100.0)});
         out.push_back({clip(s)});
     }
-    out.push_back({clip(fmt("frames: %llu late of %llu (%d in the last 10 s)", (unsigned long long)g_late, (unsigned long long)g_frames, late10)),
+    out.push_back({clip(said(O("frames: %1 late of %2 (%3 in the last 10 s)"), {num((unsigned long long)g_late), num((unsigned long long)g_frames),
+                                                                             std::to_string(late10)})),
                    late10 ? AMBER : WHITE});
-    out.push_back({clip(fmt("work %.2f ms of %.2f (worst %.2f), window %.2f", g_sec.game, g_sec.period, g_sec.worst, g_sec.draw)),
+    // TR: a frame's work in ms of its time, the worst of the last second, then the window's own drawing
+    out.push_back({clip(said(O("work %1 ms of %2 (worst %3), window %4"), {num(g_sec.game, 2), num(g_sec.period, 2), num(g_sec.worst, 2), num(g_sec.draw, 2)})),
                    g_sec.worst > g_sec.period && g_sec.period > 0 ? AMBER : WHITE});
     if (g_sec.thread_cpu >= 0)
-        out.push_back({clip(fmt("CPU: game thread %.0f %%, all threads %.0f %% of one", g_sec.thread_cpu, g_sec.process_cpu))});
+        out.push_back({clip(said(O("CPU: game thread %1 %, all threads %2 % of one"), {num(g_sec.thread_cpu, 0), num(g_sec.process_cpu, 0)}))});
     out.push_back({"", WHITE, true});
-    out.push_back({"green: game, blue: window, line: a frame's time", GREY});
+    // TR: the graph's colours: the green bars, the blue bars, the line across
+    out.push_back({clip(said(O("green: game, blue: window, line: a frame's time"))), GREY});
     if (slow) {
         const Frame &f = g_slow.f;
-        out.push_back({clip(fmt("slow: frame %llu, %.1f ms of %.1f%s%s", (unsigned long long)f.number, f.game_ms + f.draw_ms, f.period_ms,
-                                f.late && f.sync ? ", late" : "", f.breaks ? ", sound broke" : "")), RED});
+        // TR: a slow frame: %1 its number, %2 its work in ms, %3 its time in ms; then ", late" and ", sound broke" may follow
+        std::string s = said(O("slow: frame %1, %2 ms of %3"), {num((unsigned long long)f.number), num(f.game_ms + f.draw_ms), num(f.period_ms)});
+        if (f.late && f.sync) s += said(O(", late"));
+        if (f.breaks) s += said(O(", sound broke"));
+        out.push_back({clip(s), RED});
         if (const std::string p = parts(f); !p.empty()) out.push_back({"  " + clip(p, COLS - 2), RED});
     }
     if (g_window.sound) {
-        out.push_back({clip(fmt("sound: %.1f ms queued (target %.1f), %llu break%s", g_window.queue_ms, g_window.target_ms,
-                                (unsigned long long)g_window.breaks, g_window.breaks == 1 ? "" : "s")), break10 ? AMBER : WHITE});
+        // TR: %1 the sound queued in ms, %2 the queue's target in ms, %3 "%n breaks"
+        out.push_back({clip(said(O("sound: %1 ms queued (target %2), %3"),
+                                 {num(g_window.queue_ms), num(g_window.target_ms), said_n(HK_NP("overlay", "%n break", "%n breaks"), (long)g_window.breaks)})),
+                       break10 ? AMBER : WHITE});
         if (!g_window.output.empty()) out.push_back({"  " + clip(g_window.output, COLS - 2), GREY});
     } else {
-        out.push_back({"sound: no device", AMBER});
+        out.push_back({clip(said(O("sound: no device"))), AMBER});
     }
     {   // display sync, and what else is on
-        std::string s = "display sync ";
-        if (ps.active) s += ps.exact ? "on: the game at its own speed" : fmt("on: %d refresh%s a frame", ps.refreshes, ps.refreshes == 1 ? "" : "es");
-        else s += ps.state.empty() ? (ps.enabled ? "not in use" : "off") : ps.state;
+        std::string s;
+        if (ps.active) s = ps.exact ? said(O("display sync on: the game at its own speed"))
+                                    : said_n(HK_NP("overlay", "display sync on: %n refresh a frame", "display sync on: %n refreshes a frame"), ps.refreshes);
+        // TR: %1 display sync's state, as the log says it (in English)
+        else if (!ps.state.empty()) s = said(O("display sync %1"), {ps.state});
+        else s = ps.enabled ? said(O("display sync not in use")) : said(O("display sync off"));
         for (const std::string &l : wrap(s, 2)) out.push_back({l});
         std::string on;
         auto add = [&](const std::string &t) { on += (on.empty() ? "" : ", ") + t; };
         if (g_window.smooth)
-            add(ps.extra ? fmt("smooth motion (%llu of %llu late)", (unsigned long long)ps.extra_late, (unsigned long long)ps.extra) : "smooth motion");
-        if (g_window.beam) add("CRT beam");
-        if (!g_window.picture.empty()) add(g_window.picture);
-        if (g_sec.period > 0 && 1000.0 / (g_sec.period * ps.speed) > core().native_rate() * 1.4) add("high frame rate");
+            // TR: smooth motion's in-between pictures: %1 shown late of %2
+            add(ps.extra ? said(O("smooth motion (%1 of %2 late)"), {num((unsigned long long)ps.extra_late), num((unsigned long long)ps.extra)})
+                         : std::string(said(O("smooth motion"))));
+        if (g_window.beam) add(said(O("CRT beam")));
+        if (!g_window.picture.empty()) add(said(g_window.picture.c_str()));   // (picture::mode_label's, marked there)
+        if (g_sec.period > 0 && 1000.0 / (g_sec.period * ps.speed) > core().native_rate() * 1.4) add(said(O("high frame rate")));
         for (const std::string &l : wrap(on, 2)) out.push_back({l});
     }
     if (g_level != Level::full) return out;
@@ -261,38 +315,47 @@ std::vector<Row> rows() {
         double sum = 0;
         const int n = (int)std::min<uint64_t>(g_press_n, 64);
         for (int i = 0; i < n; i++) sum += g_press_ms[i];
-        out.push_back({clip(fmt("a press to its frame's start: %.1f ms (last %d)", sum / n, n))});
+        // TR: %1 ms on average over the last %2 presses
+        out.push_back({clip(said(O("a press to its frame's start: %1 ms (last %2)"), {num(sum / n), std::to_string(n)}))});
     } else {
-        out.push_back({"a press to its frame's start: none yet", GREY});
+        out.push_back({clip(said(O("a press to its frame's start: none yet"))), GREY});
     }
     if (g_window.picture_p50 > 0) {
-        std::string s = fmt("frame start to picture: %.1f ms (p99 %.1f)", g_window.picture_p50, g_window.picture_p99);
+        // TR: the median in ms, then the 99th percentile; a "+..." after it is the display's own delay
+        std::string s = said(O("frame start to picture: %1 ms (p99 %2)"), {num(g_window.picture_p50), num(g_window.picture_p99)});
         if (ps.active && ps.to_screen_ms > 0) s += fmt(", +%.1f", ps.to_screen_ms);   // ... the display's own, at best
         out.push_back({clip(s)});
     }
     if (g_window.sound_p50 > 0)
-        out.push_back({clip(fmt("frame start to sound: %.1f ms (p99 %.1f), +%.1f", g_window.sound_p50, g_window.sound_p99, g_window.device_ms))});
+        // TR: the median in ms, the 99th percentile, then the sound device's buffer after "+"
+        out.push_back({clip(said(O("frame start to sound: %1 ms (p99 %2), +%3"), {num(g_window.sound_p50), num(g_window.sound_p99), num(g_window.device_ms)}))});
     // the PC
     const sysload::Now sl = sysload::now();
     if (!sl.n) {
-        out.push_back({"the PC: reading..", GREY});
+        out.push_back({clip(said(O("the PC: reading.."))), GREY});
     } else {
         if (!sl.threads.empty()) {
-            std::string s = "threads: ";
-            for (const sysload::Thread &t : sl.threads) s += fmt("%s%s %.0f %%", &t == &sl.threads[0] ? "" : ", ", t.name.c_str(), t.share);
-            for (const std::string &l : wrap(s, 2)) out.push_back({l});
+            std::string list;
+            for (const sysload::Thread &t : sl.threads) list += fmt("%s%s %.0f %%", &t == &sl.threads[0] ? "" : ", ", t.name.c_str(), t.share);
+            // TR: %1 this program's busiest threads with their shares ("game 92 %, sound 4 %")
+            for (const std::string &l : wrap(said(O("threads: %1"), {list}), 2)) out.push_back({l});
         }
-        std::string s = "GPU" + (sl.gpu.empty() ? std::string() : " (" + sl.gpu + ")") + ": ";
-        if (sl.gpu_busy < 0 && sl.gpu_own < 0) s += "its load isn't known here";
+        std::string load;
+        if (sl.gpu_busy < 0 && sl.gpu_own < 0) load = said(O("its load isn't known here"));
         else {
-            if (sl.gpu_busy >= 0) s += fmt("%.0f %%", sl.gpu_busy);
-            if (sl.gpu_own >= 0) s += fmt("%sthis window %.0f %%", sl.gpu_busy >= 0 ? ", " : "", sl.gpu_own);
+            if (sl.gpu_busy >= 0) load += said(O("%1 %"), {num(sl.gpu_busy, 0)});
+            if (sl.gpu_own >= 0) load += (sl.gpu_busy >= 0 ? ", " : "") + said(O("this window %1 %"), {num(sl.gpu_own, 0)});
         }
-        if (sl.gpu_mhz) s += fmt(", %d MHz", sl.gpu_mhz);
+        if (sl.gpu_mhz) load += ", " + said(O("%1 MHz"), {std::to_string(sl.gpu_mhz)});
+        std::string s = sl.gpu.empty()
+                            // TR: the graphics card: %1 its load
+                            ? said(O("GPU: %1"), {load})
+                            // TR: the graphics card: %1 its name, %2 its load
+                            : said(O("GPU (%1): %2"), {sl.gpu, load});
         out.push_back({clip(s), sl.gpu_busy < 0 && sl.gpu_own < 0 ? GREY : WHITE});
-        if (sl.cpu_mhz) out.push_back({fmt("processors: up to %d MHz now", sl.cpu_mhz)});
+        if (sl.cpu_mhz) out.push_back({clip(said(O("processors: up to %1 MHz now"), {std::to_string(sl.cpu_mhz)}))});
     }
-    for (const std::string &l : g_core_lines) out.push_back({clip(l)});
+    for (const std::string &l : g_core_lines) out.push_back({clip(l)});   // (the cores' own: in English)
     return out;
 }
 
@@ -334,6 +397,10 @@ void fill(std::vector<uint32_t> &to, int x, int y, int w, int h, uint32_t rgb, u
 }
 
 void text(std::vector<uint32_t> &to, int x, int y, const std::string &t, uint32_t rgb) {
+    if (const hk::menu::Font *f = own_font()) {   // (the launcher's font: any language)
+        f->draw(to.data(), g_w, g_h, 0, 0, g_w, g_h, x, y, 3, t, rgb, 255);
+        return;
+    }
     for (size_t i = 0; i < t.size() && x + 8 <= g_w; i++, x += 8) {
         const unsigned c = (unsigned char)t[i];
         if (c <= 32 || c >= 127 || y + 8 > g_h) continue;
@@ -368,13 +435,16 @@ void draw_graph(int x0, int y0) {
 void draw_text() {
     if (!g_font_read) read_font();
     const std::vector<Row> rs = rows();
-    size_t cols = 0;
-    int h = 2 * PAD - (LINE - 8);
+    // a line's height: the 8x8 font's, or the launcher's font's overlay size (taller for Japanese)
+    const hk::menu::Font *f = own_font();
+    const int glyph_h = f ? f->line(3) : 8, line = f ? std::max(LINE, glyph_h) : LINE;
+    int widest = 0;
+    int h = 2 * PAD - (line - glyph_h);
     for (const Row &row : rs) {
-        cols = std::max(cols, row.text.size());
-        h += row.graph ? GRAPH_H + (LINE - 8) + 1 : LINE;
+        widest = std::max(widest, text_w(row.text));
+        h += row.graph ? GRAPH_H + (line - glyph_h) + 1 : line;
     }
-    g_w = (g_level == Level::line ? (int)cols * 8 : BARS * 2) + 2 * PAD, g_h = h;
+    g_w = (g_level == Level::line ? widest : BARS * 2) + 2 * PAD, g_h = h;
     g_text.assign((size_t)g_w * g_h, 235u << 24 | 0x5a5a64);   // an edge, and a dark inside the picture shows through
     fill(g_text, 1, 1, g_w - 2, g_h - 2, 0x101014, 205);
     int y = PAD;
@@ -382,11 +452,11 @@ void draw_text() {
     for (const Row &row : rs) {
         if (row.graph) {
             g_graph_x = PAD, g_graph_y = y;
-            y += GRAPH_H + (LINE - 8) + 1;
+            y += GRAPH_H + (line - glyph_h) + 1;
             continue;
         }
         text(g_text, PAD, y, row.text, row.rgb);
-        y += LINE;
+        y += line;
     }
 }
 

@@ -17,6 +17,10 @@
 
 #include "shell/uilook.h"
 
+namespace hk::menu {
+class Font;
+}
+
 namespace hk::host::ui {
 
 // The icons in the font file: Material Design Icons (third_party/mdi), drawn by the launcher at
@@ -46,12 +50,23 @@ struct Image {
 
 // The launcher's look and fonts were given (read once, at the first call)
 bool styled();
+// ... its fonts (nullptr without): the 4th size, where the file has one, is the performance overlay's
+const hk::menu::Font *font();
+// A text for a box, in the interface's language when the launcher's fonts are there to draw it
+// (runtime/lang/lang.h's shown: a text marked HK_N, or lang::later's), else in English (SDL's 8x8
+// font has ASCII only); `keep`: its arguments kept on one line where they can (lang/fit.h)
+std::string said(const char *context, const std::string &text, bool keep = false);
+// How wide a box's lines may be, in the box's pixels (about 60 % of a 4:3 screen), and the lines
+// of a text of size `size` (0 small, 1 title) broken to it (lang/fit.h's wrap)
+int max_line_width();
+std::vector<std::string> wrap(const std::string &text, int size);
 double scale();
 const hk::ui::Look &look();
 // An icon's colour in this look (each its own of the six)
 uint32_t icon_colour(Icon i);
 
-// A notice: its icon in its colour, its first line as the title, the others under it
+// A notice: its icon in its colour, its first line as the title, the others under it; each line a
+// paragraph, broken to max_line_width()
 void notice_box(Image &out, Icon icon, const std::vector<std::string> &lines);
 // A box with a heading (HIRAKU's name before it, or an icon), a line with an icon before it, a bar
 // filled `done` of the way (0..1) in the six colours, and a last line under it ("" none)

@@ -33,6 +33,7 @@
 #include "../shell/core.h"
 #include "../shell/smoothgate.h"
 #include "../shell/sys.h"
+#include "../lang/lang.h"
 #include "macro.h"
 #include "pacing.h"
 #include "alsa.h"
@@ -925,9 +926,14 @@ static void watch_audio() {
     g_last_push_end = 0;   // (the time this took isn't a late chunk)
     fprintf(stderr, "audio: %s%s\n", g_audio ? "the sound now plays on " : "no sound device now: the game goes on without sound, by the clock",
             g_audio ? g_audio_output.c_str() : "");
-    if (!g_audio) notice::hint({"The sound device stopped.", "No other: the game goes on without sound."}, 12, ui::Icon::sound);
-    else if (g_audio_output == was) notice::hint({"The sound device stopped,", "and was started again."}, 6, ui::Icon::sound);
-    else notice::hint({"The sound device stopped.", "The sound now plays on another:", g_audio_output.substr(0, 44)}, 12, ui::Icon::sound);
+    // (the boxes' texts in English, translated where shown: host/notice.h)
+    if (!g_audio) notice::hint({HK_N("boxes", "The sound device stopped."), HK_N("boxes", "No other: the game goes on without sound.")}, 12, ui::Icon::sound);
+    else if (g_audio_output == was) notice::hint({HK_N("boxes", "The sound device stopped, and was started again.")}, 6, ui::Icon::sound);
+    else
+        notice::hint({HK_N("boxes", "The sound device stopped."),
+                      // TR: %1 the sound device's name
+                      lang::later(HK_N("boxes", "The sound now plays on another: %1"), {g_audio_output})},
+                     12, ui::Icon::sound);
 }
 
 static bool open_window(const char *title, int scale, const std::string &bindings, int target_ms, bool fullscreen, int rate) {

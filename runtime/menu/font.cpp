@@ -69,19 +69,20 @@ bool Font::parse(const uint8_t *d, size_t n, std::string &error) {
     const auto bad = [&](const char *why) {
         error = why;
         for (Size &s : sizes_) s = Size{};
+        count_ = 0;
         return false;
     };
     if (n < 8 || memcmp(d, "HKMF1\0\0\0", 8) != 0) return bad("not a menu font (its first bytes aren't HKMF1)");
     at = 8;
     uint32_t count = 0;
-    if (!u32(count) || count != kSizes) return bad("not three sizes");
+    if (!u32(count) || count < 3 || count > (uint32_t)kSizes) return bad("not three or four sizes");
     struct Raw {
         int size;
         uint32_t c;
         Glyph g;
     };
     std::vector<Raw> raw;
-    for (int s = 0; s < kSizes; s++) {
+    for (int s = 0; s < (int)count; s++) {
         uint32_t line = 0, glyphs = 0;
         if (!u32(line) || !u32(glyphs) || line == 0 || line > 256 || glyphs > 65536) return bad("a size's line height or glyph count is out of range");
         if ((n - at) / 18 < glyphs) return bad("cut short in a size's glyphs");
@@ -100,6 +101,7 @@ bool Font::parse(const uint8_t *d, size_t n, std::string &error) {
         sizes_[r.size].glyphs[r.c] = r.g;
     }
     ink_.assign(d + at, d + at + bytes);
+    count_ = (int)count;
     loaded_ = true;
     return true;
 }
@@ -129,7 +131,7 @@ const Font::Glyph *Font::glyph(int size, uint32_t c) const {
 }
 
 int Font::width(int size, const std::string &text) const {
-    if (size < 0 || size >= kSizes) return 0;
+    if (size < 0 || size >= count_) return 0;
     int w = 0;
     for (const uint32_t c : utf8_points(text))
         if (const Glyph *g = glyph(size, c)) w += g->advance;
@@ -138,7 +140,7 @@ int Font::width(int size, const std::string &text) const {
 
 void Font::draw(uint32_t *px, int w, int h, int x0, int y0, int x1, int y1, int x, int y, int size, const std::string &text, uint32_t rgb,
                 int alpha) const {
-    if (size < 0 || size >= kSizes || alpha <= 0) return;
+    if (size < 0 || size >= count_ || alpha <= 0) return;
     x0 = x0 < 0 ? 0 : x0, y0 = y0 < 0 ? 0 : y0, x1 = x1 > w ? w : x1, y1 = y1 > h ? h : y1;
     for (const uint32_t c : utf8_points(text)) {
         const Glyph *g = glyph(size, c);

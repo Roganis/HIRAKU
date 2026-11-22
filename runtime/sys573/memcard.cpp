@@ -6,6 +6,7 @@
 #include "imagedev/memcard.h"
 #include "shell/saves.h"
 #include "shell/sys.h"
+#include "lang/lang.h"
 
 #include <cstdio>
 #include <cstring>
@@ -164,13 +165,15 @@ std::string MemoryCards::toggle(int k) {
         keep_slot(s, false);   // (on the writer's thread: the game doesn't wait for the file)
         s.dev->hk_insert(nullptr);
         s.inserted = false;
-        words = "Memory card " + std::to_string(k + 1) + " taken out";
+        // TR: %1 the slot's number (1, 2)
+        words = hk::lang::later(HK_N("boxes", "Memory card %1 taken out"), {std::to_string(k + 1)});
     } else {
         std::string why;
-        words = insert(k, false, why) ? "Memory card " + std::to_string(k + 1) + " in its slot"
-                                      : "No memory card " + std::to_string(k + 1) + ": " + why;
+        // (lang::later: English for the log, shown in the player's language; %2 why, in English)
+        words = insert(k, false, why) ? hk::lang::later(HK_N("boxes", "Memory card %1 in its slot"), {std::to_string(k + 1)})
+                                      : hk::lang::later(HK_N("boxes", "No memory card %1: %2"), {std::to_string(k + 1), why});
     }
-    printf("memory card %d: %s\n", k + 1, words.c_str());
+    printf("memory card %d: %s\n", k + 1, hk::lang::english(words).c_str());
     if (said) said(words);
     return words;
 }

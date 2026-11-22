@@ -9,6 +9,7 @@
 // (they want the sound device and the CPU) and goes on where it was a moment after.
 #pragma once
 
+#include <QCoreApplication>
 #include <QList>
 #include <QPointer>
 #include <QProcess>
@@ -23,6 +24,7 @@ class QSlider;
 class QToolButton;
 
 class MusicPlayer : public QWidget {
+    Q_DECLARE_TR_FUNCTIONS(MusicPlayer)   // its texts' context in the catalogues (launcher/language.h)
 public:
     explicit MusicPlayer(QWidget *parent = nullptr);
     ~MusicPlayer() override;

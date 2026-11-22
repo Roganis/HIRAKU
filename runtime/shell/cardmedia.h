@@ -30,6 +30,7 @@
 #include <memory>
 #include <string>
 
+#include "lang/lang.h"
 #include "shell/sys.h"
 #include "shell/userdir.h"
 
@@ -92,14 +93,15 @@ private:
 class Changer {
 public:
     struct Medium {
-        std::string what;        // "Floppy disk", "Memory card" (a slot's number added when there are two)
+        std::string what;        // "Floppy disk", "Memory card" (a slot's number added when there are two), marked HK_N("boxes", ...)
         std::string file;        // its file in a card's folder: "floppy.img", "memcard.mcr"
         int slots = 1;
         std::function<bool(int slot)> busy;                                          // the game is writing it
         // the card's medium into the slot, from file (number and file "": the slot left empty, the
         // medium in it written back and taken out first). false (and why): not a medium's image
         std::function<bool(int slot, const std::string &number, const std::string &file, std::string &why)> use;
-        std::function<void(const std::string &)> say;                               // a line for the player
+        // a line for the player: lang::later's (lang::english for the log, lang::shown for the screen)
+        std::function<void(const std::string &)> say;
     };
     Changer(Store &store, Medium m) : store_(store), m_(std::move(m)) {}
 
@@ -121,29 +123,35 @@ public:
         if (const int at = slot_of(number); at >= 0) slot = at, out = true;
         else slot = slot_for(reader);
         if (m_.busy && m_.busy(slot)) {
-            if (!told_wait_) tell(name(slot) + " of card " + shown(number) + " waits: the game is writing " + it(slot));
+            if (!told_wait_)
+                // TR: %1 the medium ("Floppy disk", "Memory card"), %2 the card's last digits ("…1234"), %3 the slot (1, 2)
+                tell(slot, number, HK_N("boxes", "%1 of card %2 waits: the game is writing the disk"),
+                     HK_N("boxes", "%1 %3 of card %2 waits: the game is writing the card"));
             told_wait_ = true;
             return;
         }
         has_pending_ = false;
         if (out) {
-            take_out(slot, "taken out");
+            take_out(slot);
             return;
         }
         if (store_.lock(number) == sys::Lock::Held) {
-            tell(name(slot) + " of card " + shown(number) + ": the card is in use at another cabinet");
+            tell(slot, number, HK_N("boxes", "%1 of card %2: the card is in use at another cabinet"),
+                 HK_N("boxes", "%1 %3 of card %2: the card is in use at another cabinet"));
             return;
         }
         const std::string before = held_[slot];
-        if (!before.empty()) take_out(slot, "taken out");
+        if (!before.empty()) take_out(slot);
         std::string why;
         if (!m_.use(slot, number, store_.resolve(number, m_.file), why)) {
             store_.unlock(number);
-            tell(name(slot) + " of card " + shown(number) + " can't go in: " + why);
+            // TR: %4 says why (in English: the log's words)
+            tell(slot, number, HK_N("boxes", "%1 of card %2 can't go in: %4"), HK_N("boxes", "%1 %3 of card %2 can't go in: %4"), why);
             return;
         }
         held_[slot] = number;
-        tell(name(slot) + " of card " + shown(number) + " in " + place());
+        // TR: %1 the medium ("Floppy disk", "Memory card"), %2 the card's last digits ("…1234"), %3 the slot (1, 2)
+        tell(slot, number, HK_N("boxes", "%1 of card %2 in the drive"), HK_N("boxes", "%1 %3 of card %2 in its slot"));
     }
     const std::string &held(int slot) const { return held_[slot]; }
     bool waiting() const { return has_pending_; }
@@ -163,20 +171,19 @@ private:
         if (!held_[0].empty() && held_[1].empty() && !second_reader_) return 1;
         return 0;
     }
-    void take_out(int slot, const char *how) {
+    void take_out(int slot) {
         std::string why;
         m_.use(slot, "", "", why);
         const std::string number = held_[slot];
         held_[slot].clear();
         if (number.empty()) return;
         store_.unlock(number);
-        tell(name(slot) + " of card " + shown(number) + " " + how);
+        tell(slot, number, HK_N("boxes", "%1 of card %2 taken out"), HK_N("boxes", "%1 %3 of card %2 taken out"));
     }
-    std::string name(int slot) const { return m_.slots > 1 ? m_.what + " " + std::to_string(slot + 1) : m_.what; }
-    std::string it(int) const { return m_.slots > 1 ? "the card" : "the disk"; }
-    std::string place() const { return m_.slots > 1 ? "its slot" : "the drive"; }
-    void tell(const std::string &s) {
-        if (m_.say) m_.say(s);
+    // A line for the player: the one-slot or two-slot sentence (%1 the medium's name, translated
+    // where shown; %2 the card, "…1234"; %3 the slot's number; %4 why), as lang::later's
+    void tell(int slot, const std::string &number, const char *one, const char *two, const std::string &why = "") {
+        if (m_.say) m_.say(lang::later(m_.slots > 1 ? two : one, {m_.what, shown(number), std::to_string(slot + 1), why}));
     }
 
     Store &store_;

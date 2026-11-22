@@ -57,6 +57,7 @@
 #include "eamuse/merge.h"
 #include "shell/kvfile.h"
 #include "shell/sys.h"
+#include "lang/lang.h"
 #include "common/Console.h"
 #include "common/Error.h"
 #include "common/FileSystem.h"
@@ -1495,11 +1496,13 @@ private:
         if (card_hinted_ || card_->slot_ever_opened() || !card_->card_offered() || card_->card_inside()) return;
         if (++card_waited_ < 5 * 60) return;
         card_hinted_ = true;
+        // (a paragraph a text: the box breaks its lines; English in the log, translated on screen)
         const std::vector<std::string> lines = {
-            "The card waits at the slot: the game hasn't opened it.",
-            "Is e-AMUSEMENT on in its test mode? (e-AMUSEMENT OPTIONS,",
-            "under NETWORK OPTIONS from pop'n 10; SAVE AND EXIT, start again)",
-            "pop'n 9 opens it after Start."};
+            HK_N("boxes", "The card waits at the slot: the game hasn't opened it."),
+            // TR: the capitals are the game's own test menu items (keep them as the game shows them)
+            HK_N("boxes", "Is e-AMUSEMENT on in its test mode? (e-AMUSEMENT OPTIONS, under NETWORK OPTIONS from pop'n 10; "
+                          "SAVE AND EXIT, start again)"),
+            HK_N("boxes", "pop'n 9 opens it after Start.")};
         printf("card:");
         for (const std::string &l : lines) printf(" %s", l.c_str());
         printf("\n");

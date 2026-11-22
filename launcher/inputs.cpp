@@ -2,7 +2,10 @@
 #include "inputs.h"
 
 #include <QKeyEvent>
+#include <QLocale>
 #include <QRegularExpression>
+
+#include "language.h"
 
 #include <SDL3/SDL.h>
 
@@ -147,20 +150,31 @@ QString describeBinding(const QString &b) {
     QString pad = bindingPad(b);
     auto m = re.match(bindingRest(b));
     if (pad.isEmpty() || !m.hasMatch()) return b;
+    // TR: a controller known by its number only: %1 is the number ("Pad 0")
     QString who = pad.startsWith("joy[") ? pad.mid(4, pad.size() - 5).replace('@', " (") + (pad.contains('@') ? ")" : "")
-                                         : "Pad " + pad.mid(3);
+                                         : language::tr("Inputs", "Pad %1").arg(pad.mid(3));
     QString rest = m.captured(3), how;
     if (int star = rest.indexOf('*'); star >= 0) {   // a turntable's speed (an axis's: negative reverses)
         double s = axisScale(b);
         QStringList hows;
-        if (s < 0) hows << "reversed";
-        if (std::abs(s) != 1) hows << QString("×%1").arg(std::abs(s));
+        if (s < 0) hows << language::tr("Inputs", "reversed");   // TR: a turntable axis turned the other way
+        if (std::abs(s) != 1) hows << QString("×%1").arg(QLocale().toString(std::abs(s)));
         how = hows.isEmpty() ? QString() : " (" + hows.join(", ") + ")";
         rest.truncate(star);
     }
-    if (rest.startsWith(':')) rest = " " + rest.mid(1);
+    // a hat's direction, said in the language (the binding itself keeps the English word)
+    if (rest == ":up") rest = " " + language::tr("Inputs", "up");
+    else if (rest == ":down") rest = " " + language::tr("Inputs", "down");
+    else if (rest == ":left") rest = " " + language::tr("Inputs", "left");
+    else if (rest == ":right") rest = " " + language::tr("Inputs", "right");
+    else if (rest.startsWith(':')) rest = " " + rest.mid(1);
     rest += how;
-    return QString("%1: %2 %3%4").arg(who, m.captured(1), m.captured(2), rest);
+    const QString kind = m.captured(1) == "button" ? language::tr("Inputs", "button")
+                       : m.captured(1) == "axis"   ? language::tr("Inputs", "axis")
+                                                   : language::tr("Inputs", "hat");
+    // TR: a controller's input: %1 the controller, %2 its kind (button, axis, hat), %3 its number, %4 what follows
+    // TR: (a hat's direction, an axis's + or -, a turntable's speed): "Pad 0: button 3", "Pad 0: hat 0 up"
+    return language::tr("Inputs", "%1: %2 %3%4").arg(who, kind, m.captured(2), rest);
 }
 
 QString bindingPad(const QString &b) {
@@ -270,11 +284,11 @@ QStringList Joysticks::names() const {
     QStringList out;
     for (int k = 0; k < m_joys.size(); k++) {
         auto *j = (SDL_Joystick *)m_joys[k];
-        out << QString("joy%1: %2 (%3 buttons, %4 axes)")
-                   .arg(k)
-                   .arg(QString::fromUtf8(SDL_GetJoystickName(j)))
-                   .arg(SDL_GetNumJoystickButtons(j))
-                   .arg(SDL_GetNumJoystickAxes(j));
+        // TR: a controller plugged in: %1 its number, %2 its name, %3 "%n buttons", %4 "%n axes"
+        out << language::tr("Inputs", "joy%1: %2 (%3, %4)")
+                   .arg(QString::number(k), QString::fromUtf8(SDL_GetJoystickName(j)),
+                        language::trn("Inputs", "%n button", "%n buttons", SDL_GetNumJoystickButtons(j)),
+                        language::trn("Inputs", "%n axis", "%n axes", SDL_GetNumJoystickAxes(j)));
     }
     return out;
 }

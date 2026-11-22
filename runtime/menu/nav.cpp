@@ -9,6 +9,11 @@
 
 #include <map>
 
+#include "lang/lang.h"
+
+// the legends' texts: translated where they are drawn (menu/draw.cpp), context "menu"
+#define M(text) HK_N("menu", text)
+
 namespace hk::menu {
 
 namespace {
@@ -35,7 +40,7 @@ Family beatmania(int keys) {
     }
     f.rules.push_back({"1 Player Start", A::start});
     f.rules.push_back({"2 Players Start", A::start});
-    f.hints = {{"Turntable", "choose a game"}, {"Black keys", "change shelf"}, {"White key or Start", "play"}};
+    f.hints = {{M("Turntable"), M("choose a game")}, {M("Black keys"), M("change shelf")}, {M("White key or Start"), M("play")}};
     return f;
 }
 
@@ -45,7 +50,7 @@ Family popn(bool big_buttons) {
     f.rules = {{"P1 Button 4", A::prev},       {"P1 Button 6", A::next}, {"P1 Button 3", A::shelf_prev},
                {"P1 Button 7", A::shelf_next}, {"P1 Button 5", A::start}};
     if (big_buttons) f.rules.push_back({"P1 Big Red", A::shelf_prev}), f.rules.push_back({"P1 Big Blue", A::shelf_next});
-    f.hints = {{"Blue buttons", "choose a game"}, {"Green buttons", "change shelf"}, {"Red button", "play"}};
+    f.hints = {{M("Blue buttons"), M("choose a game")}, {M("Green buttons"), M("change shelf")}, {M("Red button"), M("play")}};
     return f;
 }
 
@@ -60,7 +65,7 @@ const std::map<std::string, Family> &families() {
         // pop'n stage: its three selection buttons; the outer foot buttons change shelf
         m["djpstage"] = {{{"1 Player Start", A::prev}, {"3 Players Start", A::next}, {"2 Players Start", A::start},
                           {"P1 Button 1", A::shelf_prev}, {"P1 Button 10", A::shelf_next}},
-                         {{"Select left / right", "choose a game"}, {"Outer buttons", "change shelf"}, {"Select OK", "play"}}};
+                         {{M("Select left / right"), M("choose a game")}, {M("Outer buttons"), M("change shelf")}, {M("Select OK"), M("play")}}};
         // DDR: the panels, either player's
         {
             Family f;
@@ -73,13 +78,13 @@ const std::map<std::string, Family> &families() {
             }
             f.rules.push_back({"1 Player Start", A::start});
             f.rules.push_back({"2 Players Start", A::start});
-            f.hints = {{"Up / Down panels", "choose a game"}, {"Left / Right panels", "change shelf"}, {"Start", "play"}};
+            f.hints = {{M("Up / Down panels"), M("choose a game")}, {M("Left / Right panels"), M("change shelf")}, {M("Start"), M("play")}};
             m["ddr"] = f;
         }
         m["ddrsolo"] = {{{"P1 Up", A::prev}, {"P1 Down", A::next}, {"P1 Select L", A::prev}, {"P1 Select R", A::next},
                          {"P1 Left", A::shelf_prev}, {"P1 Right", A::shelf_next}, {"P1 Up-Left", A::shelf_prev},
                          {"P1 Up-Right", A::shelf_next}, {"1 Player Start", A::start}},
-                        {{"Select L / R", "choose a game"}, {"Left / Right panels", "change shelf"}, {"Start", "play"}}};
+                        {{M("Select L / R"), M("choose a game")}, {M("Left / Right panels"), M("change shelf")}, {M("Start"), M("play")}}};
         // Dance Maniax: Select beside Start; the upper sensors change shelf
         {
             Family f;
@@ -92,7 +97,7 @@ const std::map<std::string, Family> &families() {
             }
             f.rules.push_back({"1 Player Start", A::start});
             f.rules.push_back({"2 Players Start", A::start});
-            f.hints = {{"Select L / R", "choose a game"}, {"Upper sensors", "change shelf"}, {"Start", "play"}};
+            f.hints = {{M("Select L / R"), M("choose a game")}, {M("Upper sensors"), M("change shelf")}, {M("Start"), M("play")}};
             m["dmx"] = f;
         }
         // Mambo a GoGo: Select beside Start; the left and right congas change shelf, the centre one plays
@@ -104,12 +109,12 @@ const std::map<std::string, Family> &families() {
                 f.rules.push_back({"Right Pad " + std::to_string(z), A::shelf_next});
                 f.rules.push_back({"Centre Pad " + std::to_string(z), A::start});
             }
-            f.hints = {{"Select left / right", "choose a game"}, {"Left / right conga", "change shelf"}, {"Start or centre conga", "play"}};
+            f.hints = {{M("Select left / right"), M("choose a game")}, {M("Left / right conga"), M("change shelf")}, {M("Start or centre conga"), M("play")}};
             m["mambo"] = f;
         }
         m["drmn"] = {{{"Select L", A::prev}, {"Select R", A::next}, {"Hi-Hat", A::prev}, {"Cymbal", A::next},
                       {"High Tom", A::shelf_prev}, {"Low Tom", A::shelf_next}, {"1 Player Start", A::start}, {"Snare", A::start}},
-                     {{"Select, hi-hat / cymbal", "choose a game"}, {"Toms", "change shelf"}, {"Start or snare", "play"}}};
+                     {{M("Select, hi-hat / cymbal"), M("choose a game")}, {M("Toms"), M("change shelf")}, {M("Start or snare"), M("play")}}};
         // GuitarFreaks: the neck's red and blue choose, green changes shelf, Start or the pick plays
         {
             Family f;
@@ -122,7 +127,7 @@ const std::map<std::string, Family> &families() {
             }
             f.rules.push_back({"1 Player Start", A::start});
             f.rules.push_back({"2 Players Start", A::start});
-            f.hints = {{"Neck R / B", "choose a game"}, {"Neck G", "change shelf"}, {"Start or pick", "play"}};
+            f.hints = {{M("Neck R / B"), M("choose a game")}, {M("Neck G"), M("change shelf")}, {M("Start or pick"), M("play")}};
             m["gtrf"] = f;
         }
         // Keyboardmania: the two lowest white keys choose (C and D), the black keys beside them
@@ -138,20 +143,20 @@ const std::map<std::string, Family> &families() {
             }
             f.rules.push_back({"1 Player Start", A::start});
             f.rules.push_back({"2 Players Start", A::start});
-            f.hints = {{"Wheel, or lowest C / D", "choose a game"}, {"Lowest black keys", "change shelf"}, {"Start", "play"}};
+            f.hints = {{M("Wheel, or lowest C / D"), M("choose a game")}, {M("Lowest black keys"), M("change shelf")}, {M("Start"), M("play")}};
             m["kbm"] = f;
         }
         // ParaParaParadise: its two buttons are its menus' up and down; the outer sensor bars change shelf
         m["ppp"] = {{{"P1 Button 1", A::prev}, {"P1 Button 2", A::next}, {"P1 Button 3", A::shelf_prev},
                      {"P1 Button 7", A::shelf_next}, {"1 Player Start", A::start}},
-                    {{"Left / Right buttons", "choose a game"}, {"Outer sensor bars", "change shelf"}, {"Start", "play"}}};
+                    {{M("Left / Right buttons"), M("choose a game")}, {M("Outer sensor bars"), M("change shelf")}, {M("Start"), M("play")}}};
         // Konami's ee'MALL station: its dial chooses, as in its own lists (the shell's turntable); of
         // its two buttons A is its "decide" and plays, B changes shelf (one way round)
         {
             Family f;
             f.turntable = true;
             f.rules = {{"P1 Turntable -", A::prev}, {"P1 Turntable +", A::next}, {"B", A::shelf_next}, {"A", A::start}};
-            f.hints = {{"Dial", "choose a game"}, {"B button", "change shelf"}, {"A button", "play"}};
+            f.hints = {{M("Dial"), M("choose a game")}, {M("B button"), M("change shelf")}, {M("A button"), M("play")}};
             m["eemall"] = f;
         }
         return m;
@@ -160,9 +165,9 @@ const std::map<std::string, Family> &families() {
 }
 
 const Family &family_of(const std::string &family) {
-    static const Family none{{}, {{"10-key 8 / 2", "choose a game"}, {"10-key 4 / 6", "change shelf"}, {"10-key Enter", "play"}}};
+    static const Family none{{}, {{M("10-key 8 / 2"), M("choose a game")}, {M("10-key 4 / 6"), M("change shelf")}, {M("10-key Enter"), M("play")}}};
     // a plain gamepad's (menu/pads.h): no cabinet's controls, read by the menu itself
-    static const Family pad{{}, {{"D-pad up / down", "choose a game"}, {"D-pad left / right", "change shelf"}, {"A or Start", "play"}}};
+    static const Family pad{{}, {{M("D-pad up / down"), M("choose a game")}, {M("D-pad left / right"), M("change shelf")}, {M("A or Start"), M("play")}}};
     if (family == "gamepad") return pad;
     const auto &all = families();
     const auto f = all.find(family);

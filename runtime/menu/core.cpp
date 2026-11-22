@@ -17,6 +17,7 @@
 
 #include "../shell/cabinet.h"
 #include "../shell/core.h"
+#include "lang/lang.h"
 #include "menu.h"
 #include "pads.h"
 #include "../host/input.h"
@@ -74,6 +75,7 @@ public:
         }
         state_.set(list);
         state_.set_notice(notice_);
+        lang::start(o.root);   // the launcher's language (HK_LANG), else the system's: runtime/lang/lang.h
         if (std::string why; !font_path_.empty() && !menu::set_font(font_path_, why)) fprintf(stderr, "menu: %s: the 8x8 font instead\n", why.c_str());
         menu::set_logo(logo_path_);
         if (!look_.empty()) {

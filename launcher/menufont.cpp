@@ -40,8 +40,8 @@ QByteArray build(const QFont &base, const QString &text, const Sizes &sizes, con
         if (paint && !seen.contains(c)) chars << c, seen << c;
 
     QByteArray out("HKMF1\0\0\0", 8), ink;
-    u32(out, 3);
-    for (int size = 0; size < 3; size++) {
+    u32(out, (quint32)sizes.count);
+    for (int size = 0; size < sizes.count; size++) {
         QFont font(base);
         font.setPixelSize(sizes.pixels[size]);
         font.setWeight(sizes.weight[size]);

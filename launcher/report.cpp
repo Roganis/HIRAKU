@@ -75,19 +75,22 @@ QString make(const QString &runLog, const QString &game, const QString &title, C
 }  // namespace report
 
 ReportDialog::ReportDialog(QWidget *parent, const QString &runLog) : QDialog(parent) {
-    setWindowTitle("Report a problem");
+    setWindowTitle(tr("Report a problem"));
     resize(900, 640);
     auto *lay = new QVBoxLayout(this);
-    auto *intro = new QLabel(
-        "A report of one run: its log, the game's own log and what system this is, cleaned of your "
-        "folders' and names, card numbers and network addresses. Read it below before you share it: "
-        "what it shows is all that goes in. Save it, then attach the file to an issue on GitHub" +
-        (*kMail ? QString(", or to a mail to %1 (no account needed).").arg(kMail) : QString(".")));
+    // TR: %1 is the mail address reports can go to
+    auto *intro = new QLabel(*kMail ? tr("A report of one run: its log, the game's own log and what system this is, cleaned of your "
+                                         "folders' and names, card numbers and network addresses. Read it below before you share it: "
+                                         "what it shows is all that goes in. Save it, then attach the file to an issue on GitHub, "
+                                         "or to a mail to %1 (no account needed).").arg(kMail)
+                                    : tr("A report of one run: its log, the game's own log and what system this is, cleaned of your "
+                                         "folders' and names, card numbers and network addresses. Read it below before you share it: "
+                                         "what it shows is all that goes in. Save it, then attach the file to an issue on GitHub."));
     intro->setWordWrap(true);
     intro->setTextInteractionFlags(Qt::TextSelectableByMouse);   // (the address, to copy into a webmail)
     lay->addWidget(intro);
     auto *row = new QHBoxLayout;
-    row->addWidget(new QLabel("The run:"));
+    row->addWidget(new QLabel(tr("The run:")));   // TR: a game run (its date, time and game), to make the report of
     m_runs = new QComboBox;
     row->addWidget(m_runs, 1);
     lay->addLayout(row);
@@ -97,22 +100,23 @@ ReportDialog::ReportDialog(QWidget *parent, const QString &runLog) : QDialog(par
     m_text->setFont(QFontDatabase::systemFont(QFontDatabase::FixedFont));
     lay->addWidget(m_text, 1);
     auto *buttons = new QDialogButtonBox;
-    auto *saveBtn = buttons->addButton("Save the report…", QDialogButtonBox::AcceptRole);
-    QPushButton *mailBtn = *kMail ? buttons->addButton("Send it by mail", QDialogButtonBox::ActionRole) : nullptr;
-    auto *issueBtn = buttons->addButton("Open a GitHub issue", QDialogButtonBox::ActionRole);
+    auto *saveBtn = buttons->addButton(tr("Save the report…"), QDialogButtonBox::AcceptRole);
+    QPushButton *mailBtn = *kMail ? buttons->addButton(tr("Send it by mail"), QDialogButtonBox::ActionRole) : nullptr;
+    auto *issueBtn = buttons->addButton(tr("Open a GitHub issue"), QDialogButtonBox::ActionRole);
     buttons->addButton(QDialogButtonBox::Close);
-    issueBtn->setToolTip("Opens GitHub's new issue page in your browser, with the system and the game filled in: "
-                         "describe what happened and attach the saved report");
+    issueBtn->setToolTip(tr("Opens GitHub's new issue page in your browser, with the system and the game filled in: "
+                            "describe what happened and attach the saved report"));
     lay->addWidget(buttons);
     connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
     disconnect(saveBtn, nullptr, this, nullptr);
     connect(saveBtn, &QPushButton::clicked, this, [this] { save(); });
     connect(issueBtn, &QPushButton::clicked, this, [this] { openIssue(); });
     if (mailBtn) {
-        mailBtn->setToolTip(QString("Saves the report, then opens your mail program with a message to %1, the system and "
-                                    "the game filled in: describe what happened, and attach the saved report if it "
-                                    "isn't attached already. With no mail program set up, send the file to that "
-                                    "address from your webmail").arg(kMail));
+        // TR: %1 is the mail address
+        mailBtn->setToolTip(tr("Saves the report, then opens your mail program with a message to %1, the system and "
+                               "the game filled in: describe what happened, and attach the saved report if it "
+                               "isn't attached already. With no mail program set up, send the file to that "
+                               "address from your webmail").arg(kMail));
         connect(mailBtn, &QPushButton::clicked, this, [this] { mail(); });
     }
 
@@ -129,7 +133,7 @@ ReportDialog::ReportDialog(QWidget *parent, const QString &runLog) : QDialog(par
         if (const int i = m_runs->findData(runLog); i >= 0) m_runs->setCurrentIndex(i);
     connect(m_runs, &QComboBox::currentIndexChanged, this, [this] { fill(); });
     if (logs.isEmpty()) {
-        m_text->setPlainText("No game has been run yet: run the game that has the problem, then come back here.");
+        m_text->setPlainText(tr("No game has been run yet: run the game that has the problem, then come back here."));
         saveBtn->setEnabled(false);
         if (mailBtn) mailBtn->setEnabled(false);
     } else {
@@ -157,11 +161,11 @@ void ReportDialog::save() {
     const QString log = QFileInfo(m_runs->currentData().toString()).completeBaseName();
     QString dir = QStandardPaths::writableLocation(QStandardPaths::DesktopLocation);
     if (dir.isEmpty()) dir = QDir::homePath();
-    const QString path = QFileDialog::getSaveFileName(this, "Save the report", dir + "/hiraku-report-" + log + ".txt", "Text (*.txt)");
+    const QString path = QFileDialog::getSaveFileName(this, tr("Save the report"), dir + "/hiraku-report-" + log + ".txt", tr("Text (*.txt)"));   // TR: a file type: keep "(*.txt)"
     if (path.isEmpty()) return;
     QFile f(path);
     if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate) || f.write(m_text->toPlainText().toUtf8()) < 0) {
-        QMessageBox::warning(this, "Report a problem", "Could not write " + path + ": " + f.errorString());
+        QMessageBox::warning(this, tr("Report a problem"), tr("Could not write %1: %2").arg(path, f.errorString()));   // TR: %1 is the file, %2 the system's reason
         return;
     }
     m_saved = path;

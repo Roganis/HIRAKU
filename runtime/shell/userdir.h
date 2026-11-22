@@ -38,4 +38,14 @@ inline std::string user_data_dir(const std::string &root) {
     return (xdg && *xdg ? std::string(xdg) : std::string(home ? home : ".") + "/.local/share") + "/hiraku";
 }
 
+// the launcher's settings' folder (its launcher.ini: QSettings' GenericConfigLocation + /hiraku)
+inline std::string user_config_dir(const std::string &root) {
+    if (portable(root)) return root + "/user/config";
+#ifdef _WIN32
+    if (const char *a = getenv("LOCALAPPDATA"); a && *a) return std::string(a) + "/hiraku";
+#endif
+    const char *xdg = getenv("XDG_CONFIG_HOME"), *home = getenv("HOME");
+    return (xdg && *xdg ? std::string(xdg) : std::string(home ? home : ".") + "/.config") + "/hiraku";
+}
+
 }  // namespace hk

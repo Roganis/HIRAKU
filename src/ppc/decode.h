@@ -56,9 +56,9 @@ namespace hk {
 
 enum class Op : uint16_t {
     invalid,
-#define HK_N(n, ...) n,
-    HK_OPLIST(HK_N, HK_N, HK_N, HK_N, HK_N, HK_N, HK_N)
-#undef HK_N
+#define HK_OPNAME(n, ...) n,
+    HK_OPLIST(HK_OPNAME, HK_OPNAME, HK_OPNAME, HK_OPNAME, HK_OPNAME, HK_OPNAME, HK_OPNAME)
+#undef HK_OPNAME
     // control flow and system, handled by the interpreter/emitter themselves
     b, bc, bclr, bcctr, sc, rfi, rfci,
     nop,          // sync, isync, eieio, cache hints/invalidates (no architectural effect here)

@@ -11,6 +11,7 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QFormLayout>
+#include <QLocale>
 #include <QGridLayout>
 #include <QHBoxLayout>
 #include <QLabel>
@@ -28,6 +29,7 @@
 #include <cmath>
 
 #include "config.h"
+#include "language.h"
 
 namespace picture {
 
@@ -79,10 +81,13 @@ int decimals(double step) {
 
 bool same(double a, double b) { return std::fabs(a - b) < 1e-6; }
 
-const char *const MODES[][2] = {{"off", "Off: sharp pixels"},
-                                {"light", "Light: crt-guest-advanced-fast"},
-                                {"full", "Full: crt-royale"},
-                                {"lola", "Analog: Lola Retro"}};
+// TR: the picture's modes; the shaders' own names (crt-royale, ...) stay as they are
+const char *const MODES[][2] = {{"off", QT_TRANSLATE_NOOP("PictureDialog", "Off: sharp pixels")},
+                                {"light", QT_TRANSLATE_NOOP("PictureDialog", "Light: crt-guest-advanced-fast")},
+                                {"full", QT_TRANSLATE_NOOP("PictureDialog", "Full: crt-royale")},
+                                {"lola", QT_TRANSLATE_NOOP("PictureDialog", "Analog: Lola Retro")}};
+
+QString modeText(const char *english) { return language::tr("PictureDialog", english); }
 
 // The tab of a mode's shader (off: the first)
 int tabOf(const QString &m) { return m == "full" ? 1 : m == "lola" ? 2 : 0; }
@@ -104,7 +109,7 @@ int monitorKhz(const QString &game) {
 
 QString modeLabel(const QString &m) {
     for (auto &x : MODES)
-        if (m == x[0]) return x[1];
+        if (m == x[0]) return modeText(x[1]);
     return m;
 }
 
@@ -112,20 +117,20 @@ QString modeLabel(const QString &m) {
 
 PictureDialog::PictureDialog(const QString &game, const QString &gameTitle, bool onGame, QWidget *parent)
     : QDialog(parent), m_game(game), m_gameTitle(gameTitle), m_onGame(onGame && !game.isEmpty()) {
-    setWindowTitle("Picture");
+    setWindowTitle(tr("Picture"));
     resize(720, 640);
     auto *v = new QVBoxLayout(this);
 
     auto *top = new QFormLayout;
     m_scope = new QComboBox;
-    m_scope->addItem("All games");
-    if (!m_game.isEmpty()) m_scope->addItem(m_gameTitle + " only");
+    m_scope->addItem(tr("All games"));
+    if (!m_game.isEmpty()) m_scope->addItem(tr("%1 only").arg(m_gameTitle));   // TR: %1 is the game's title
     m_scope->setCurrentIndex(m_onGame ? 1 : 0);
-    top->addRow("Settings for:", m_scope);
+    top->addRow(tr("Settings for:"), m_scope);
     m_mode = new QComboBox;
-    top->addRow("Picture:", m_mode);
+    top->addRow(tr("Picture:"), m_mode);
     v->addLayout(top);
-    auto *note = new QLabel("A running game follows the sliders at once. In the game, F10 cycles off, light, full and analog.");
+    auto *note = new QLabel(tr("A running game follows the sliders at once. In the game, F10 cycles off, light, full and analog."));
     note->setWordWrap(true);
     v->addWidget(note);
 
@@ -135,7 +140,7 @@ PictureDialog::PictureDialog(const QString &game, const QString &gameTitle, bool
     for (auto [name, title] : {std::pair{"crt-guest-advanced-fast", "Light: crt-guest-advanced-fast"},
                                std::pair{"crt-royale", "Full: crt-royale"}, std::pair{"lola-retro", "Analog: Lola Retro"}}) {
         Shader sh;
-        sh.name = name, sh.title = title;
+        sh.name = name, sh.title = modeText(title);
         m_shaders.push_back(sh);
     }
     m_values.resize(m_shaders.size());
@@ -170,7 +175,7 @@ PictureDialog::PictureDialog(const QString &game, const QString &gameTitle, bool
                     p.section = p.label.left(dash).trimmed();
                     p.label = p.label.mid(dash + 3).trimmed();
                 } else {
-                    p.section = section.isEmpty() ? "General" : section;
+                    p.section = section.isEmpty() ? tr("General") : section;   // TR: the shader settings' first group (the others are the shader's own English names)
                 }
                 sh.base[p.name] = p.def;
                 sh.params.push_back(p);
@@ -257,20 +262,20 @@ void PictureDialog::buildPage(int s) {
     auto *v = new QVBoxLayout(sh.page);
     auto *bar = new QHBoxLayout;
     auto *filter = new QLineEdit;
-    filter->setPlaceholderText("Find a setting");
+    filter->setPlaceholderText(tr("Find a setting"));
     filter->setClearButtonEnabled(true);
     bar->addWidget(filter, 1);
-    auto *resetAll = new QPushButton("Reset all");
+    auto *resetAll = new QPushButton(tr("Reset all"));
     resetAll->setAutoDefault(false);
     bar->addWidget(resetAll);
     v->addLayout(bar);
     if (!sh.looks.isEmpty()) {   // a look sets all its values at once; the sliders then fine-tune it
         auto *lr = new QHBoxLayout;
-        lr->addWidget(new QLabel("Look:"));
+        lr->addWidget(new QLabel(tr("Look:")));   // TR: a shader's preset (a tube, a cable and a set-up)
         sh.look = new QComboBox;
-        sh.look->addItem("Own settings", -1);
+        sh.look->addItem(tr("Own settings"), -1);
         for (int k = 0; k < sh.looks.size(); k++) sh.look->addItem(sh.looks[k].title, k);
-        sh.look->setToolTip("The shader's presets: each a tube, a cable and a set-up. Curvature and the board's timing stay as they are.");
+        sh.look->setToolTip(tr("The shader's presets: each a tube, a cable and a set-up. Curvature and the board's timing stay as they are."));
         lr->addWidget(sh.look, 1);
         v->addLayout(lr);
         connect(sh.look, &QComboBox::currentIndexChanged, this, [this, s](int) {
@@ -368,7 +373,8 @@ void PictureDialog::setValue(int s, int i, double v, bool fromSlider) {
     f.setBold(!same(v, inh));
     row.label->setFont(f);
     row.reset->setEnabled(!same(v, inh));
-    row.reset->setToolTip(QString("Back to %1 (%2)").arg(inh).arg(m_onGame ? "all games" : "the default"));
+    // TR: %1 is the value it goes back to
+    row.reset->setToolTip((m_onGame ? tr("Back to %1 (all games)") : tr("Back to %1 (the default)")).arg(QLocale().toString(inh, 'g', 6)));
     showLook(s);
     m_saveTimers[s]->start();
 }
@@ -393,8 +399,8 @@ void PictureDialog::showLook(int s) {
 void PictureDialog::load() {
     m_loading = true;
     m_mode->clear();
-    if (m_onGame) m_mode->addItem("Same as all games (" + modeLabel(m_globalMode) + ")", QString());
-    for (auto &x : MODES) m_mode->addItem(x[1], QString(x[0]));
+    if (m_onGame) m_mode->addItem(tr("Same as all games (%1)").arg(modeLabel(m_globalMode)), QString());   // TR: %1 is a picture mode, "Off: sharp pixels"
+    for (auto &x : MODES) m_mode->addItem(modeText(x[1]), QString(x[0]));
     QString cur = m_onGame ? m_gameMode : m_globalMode;
     m_mode->setCurrentIndex(std::max(0, m_mode->findData(cur)));
     QString shown = m_onGame && cur.isEmpty() ? m_globalMode : cur;

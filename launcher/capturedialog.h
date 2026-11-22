@@ -4,6 +4,7 @@
 // where it is, adds Back and Skip, and waits as long as it takes.
 #pragma once
 
+#include <QCoreApplication>
 #include <QDialog>
 #include <QHash>
 #include <QTimer>
@@ -11,6 +12,7 @@
 class QLabel;
 
 class CaptureDialog : public QDialog {
+    Q_DECLARE_TR_FUNCTIONS(CaptureDialog)   // its texts' context in the catalogues (launcher/language.h)
 public:
     enum Outcome { Stopped = QDialog::Rejected, Captured = QDialog::Accepted, Skipped = 2, Back = 3 };
     // step: "" for one binding (6 s to answer), or the walk's place ("3 of 12")

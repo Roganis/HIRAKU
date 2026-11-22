@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <cstring>
 
+#include "lang/lang.h"
 #include "menukey.h"
 #include "uibox.h"
 
@@ -22,10 +23,10 @@ constexpr int kSteps = 64;   // the bar's steps: a redraw each
 // the box: in the launcher's look (host/uibox.h: HIRAKU's name, the bar in the six colours); or
 // its lines in SDL's debug font and the bar, on a dark box with an amber edge (as host/warp.h's)
 void draw(int step) {
-    const char *lines[] = {"GAME MENU", "Keep holding to leave this game"};
-    if (ui::styled()) {
+    const char *lines[] = {HK_N("menu", "GAME MENU"), HK_N("menu", "Keep holding to leave this game")};
+    if (ui::styled()) {   // (in the player's language: the launcher's fonts have its characters)
         ui::Image im;
-        ui::bar_box(im, true, ui::Icon::menu, lines[0], ui::Icon::dialpad, lines[1], (double)step / kSteps, "");
+        ui::bar_box(im, true, ui::Icon::menu, ui::said("menu", lines[0]), ui::Icon::dialpad, ui::said("menu", lines[1]), (double)step / kSteps, "");
         g_pixels = std::move(im.px);
         g_w = im.w, g_h = im.h, g_scale = im.scale, g_step = step;
         g_id++;

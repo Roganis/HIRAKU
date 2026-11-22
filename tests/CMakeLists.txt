@@ -525,10 +525,11 @@ if(Qt6_FOUND)
   # the games as cards (launcher/gamecards.h): their shelves, and a game picked there or in the list
   if(TARGET Qt6::Widgets)
     add_executable(test_gamecards launcher/test_gamecards.cpp ${CMAKE_SOURCE_DIR}/launcher/gamecards.cpp
-      ${CMAKE_SOURCE_DIR}/launcher/games.cpp ${CMAKE_SOURCE_DIR}/launcher/config.cpp ${CMAKE_SOURCE_DIR}/launcher/theme.cpp)
+      ${CMAKE_SOURCE_DIR}/launcher/games.cpp ${CMAKE_SOURCE_DIR}/launcher/config.cpp ${CMAKE_SOURCE_DIR}/launcher/theme.cpp
+      ${CMAKE_SOURCE_DIR}/launcher/language.cpp)
     set_target_properties(test_gamecards PROPERTIES AUTOMOC ON)
     target_include_directories(test_gamecards PRIVATE ${CMAKE_SOURCE_DIR}/launcher)
-    target_link_libraries(test_gamecards PRIVATE Qt6::Widgets)
+    target_link_libraries(test_gamecards PRIVATE Qt6::Widgets hiraku_lang)
     add_test(NAME launcher_game_cards COMMAND test_gamecards ${CMAKE_CURRENT_BINARY_DIR}/gamecards)
     # the launcher's icons (third_party/mdi) and switches (launcher/theme.h)
     add_executable(test_theme launcher/test_theme.cpp ${CMAKE_SOURCE_DIR}/launcher/theme.cpp ${CMAKE_SOURCE_DIR}/launcher/config.cpp)
@@ -540,7 +541,25 @@ if(Qt6_FOUND)
     target_include_directories(test_controls_sets PRIVATE ${CMAKE_SOURCE_DIR}/launcher)
     target_link_libraries(test_controls_sets PRIVATE Qt6::Core)
     add_test(NAME launcher_controls_sets COMMAND test_controls_sets ${CMAKE_CURRENT_BINARY_DIR}/controls_sets)
+    # the launcher's language (launcher/language.h): its catalogue through Qt's own hook, Qt's
+    # standard buttons, plurals, English for a catalogue missing or broken; the binding dialog marked
+    add_executable(test_language launcher/test_language.cpp ${CMAKE_SOURCE_DIR}/launcher/language.cpp
+      ${CMAKE_SOURCE_DIR}/launcher/capturedialog.cpp ${CMAKE_SOURCE_DIR}/launcher/inputs.cpp)
+    set_target_properties(test_language PROPERTIES AUTOMOC ON)
+    target_include_directories(test_language PRIVATE ${CMAKE_SOURCE_DIR}/launcher)
+    target_link_libraries(test_language PRIVATE Qt6::Widgets SDL3::SDL3 hiraku_lang hiraku_cabinet)
+    add_test(NAME launcher_language COMMAND test_language ${CMAKE_CURRENT_BINARY_DIR}/language)
   endif()
+endif()
+
+# The interface's catalogues (runtime/lang/lang.h): lookup, fallback, contexts, plurals, argument
+# order, broken files, the system's language; and the checkout's lang/*.po each read clean
+add_executable(test_lang lang/test_lang.cpp)
+target_link_libraries(test_lang PRIVATE hiraku_lang)
+add_test(NAME lang_catalogues COMMAND test_lang ${CMAKE_SOURCE_DIR}/lang ${CMAKE_CURRENT_BINARY_DIR}/lang-test)
+# ... and lang/ made from the sources as they are: a text marked without tools/lang.py run is noticed
+if(Python3_Interpreter_FOUND AND NOT CMAKE_CROSSCOMPILING)
+  add_test(NAME lang_extracted COMMAND Python3::Interpreter ${CMAKE_SOURCE_DIR}/tools/lang.py --check)
 endif()
 
 # Mods' [[text]]: a string found in memory and its replacement (runtime/host/mods.h)

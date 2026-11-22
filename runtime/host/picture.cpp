@@ -2,6 +2,7 @@
 #include "picture.h"
 
 #include "beam_shader.h"
+#include "lang/lang.h"
 
 #include <SDL3/SDL.h>
 #define GL_GLEXT_PROTOTYPES 1   // declarations only (for decltype): everything is loaded through SDL
@@ -950,10 +951,11 @@ const char *mode_name(Mode m) {
 }
 
 const char *mode_label(Mode m) {
-    return m == Mode::light  ? "CRT light (crt-guest-advanced-fast)"
-           : m == Mode::full ? "CRT full (crt-royale)"
-           : m == Mode::lola ? "CRT analog (Lola Retro)"
-                             : "sharp pixels";
+    // (English for the log; the overlay shows them translated, host/statsview.cpp)
+    return m == Mode::light  ? HK_N("overlay", "CRT light (crt-guest-advanced-fast)")
+           : m == Mode::full ? HK_N("overlay", "CRT full (crt-royale)")
+           : m == Mode::lola ? HK_N("overlay", "CRT analog (Lola Retro)")
+                             : HK_N("overlay", "sharp pixels");
 }
 
 bool parse_mode(const std::string &s, Mode &m) {

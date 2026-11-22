@@ -13,7 +13,8 @@
 #                                   README asks of a system
 #
 # Checked: every program in bin answers --help (the shell, each core, the server, the tools); the
-# game menu runs a list by a script to its choice (the shell's whole loop, no window, no data);
+# game menu runs a list by a script to its choice (the shell's whole loop, no window, no data), and
+# finds the package's language catalogues (lang/: HK_LANG=fr);
 # the package's Python runs each tool's --help; and on Linux the launcher draws its main window
 # into a picture (Qt's offscreen platform, which the package carries).
 set -u
@@ -93,6 +94,16 @@ if [ -f "$root/bin/hiraku-menu$ext" ]; then
   else bad "hiraku-menu didn't choose the second game: $(echo "$out" | tail -3 | tr '\n' ' ')"; fi
 else
   bad "no bin/hiraku-menu$ext in the package"
+fi
+
+# --- the interface's languages: the catalogues are in the package, and its programs find them ---
+if [ -f "$root/lang/hiraku.pot" ] && ls "$root"/lang/*.po >/dev/null 2>&1; then ok "lang: the template and $(ls "$root"/lang/*.po | wc -l) catalogues"
+else bad "no lang/hiraku.pot or lang/*.po in the package"; fi
+if [ -f "$root/bin/hiraku-menu$ext" ] && [ -f "$root/lang/fr.po" ]; then
+  out=$(HK_LANG=fr XDG_DATA_HOME=$tmp/data XDG_CONFIG_HOME=$tmp/config run "$root/bin/hiraku-menu$ext" --list "$list" --choice "$choice" \
+        --family popn --script "$script" --frames 400 --out "$outdir" 2>&1 </dev/null)
+  if echo "$out" | grep -q "lang: fr, [0-9]* texts translated"; then ok "hiraku-menu found the package's French catalogue"
+  else bad "hiraku-menu with HK_LANG=fr didn't read lang/fr.po: $(echo "$out" | grep "lang:" | tail -2 | tr '\n' ' ')"; fi
 fi
 
 # --- the package's Python runs the tools ---

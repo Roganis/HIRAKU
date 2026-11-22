@@ -5,10 +5,13 @@
 //
 //   test_menufont DIR [FILE TEXT]    with FILE: the font file for TEXT is left there (to look at
 //                                    the menu with it: test_menu --ppm, HK_MENU_FONT)
+//   HK_TEST_BOXES=SCALE              ... a game's boxes' file instead, at that scale (HK_UI_FONT;
+//                                    the icons drawn as plain squares), for a FAMILY too: HK_TEST_FAMILY
 #include <QFile>
 #include <QFontInfo>
 #include <QGuiApplication>
 #include <QImage>
+#include <QPainter>
 
 #include <cstdio>
 
@@ -28,7 +31,18 @@ int main(int argc, char **argv) {
 #endif
     QGuiApplication app(argc, argv);
     const QString text = argc > 3 ? QString::fromUtf8(argv[3]) : QString::fromUtf8("pop'n music 18 \xe3\x81\x9b\xe3\x82\x93\xe3\x81\x94\xe3\x81\x8f\xe5\x88\x97\xe4\xbc\x9d caf\xc3\xa9");
-    const QByteArray file = menufont::build(app.font(), text);
+    QByteArray file = menufont::build(app.font(), text);
+    if (const QByteArray boxes = qgetenv("HK_TEST_BOXES"); !boxes.isEmpty() && argc > 2) {   // (a picture rig's)
+        QFont base = app.font();
+        if (const QByteArray fam = qgetenv("HK_TEST_FAMILY"); !fam.isEmpty()) base.setFamilies({QString::fromUtf8(fam), base.family()});
+        QList<char32_t> icons;
+        for (char32_t k = 0; k < 10; k++) icons << 0xF0000 + k;
+        QFile out(QString::fromLocal8Bit(argv[2]));
+        if (out.open(QIODevice::WriteOnly))
+            out.write(menufont::build(base, text, menufont::times(menufont::kBoxes, boxes.toDouble()), icons,
+                                      [](QPainter &p, const QRectF &box, char32_t) { p.fillRect(box, Qt::white); }));
+        return 0;
+    }
     if (argc > 2) {
         QFile out(QString::fromLocal8Bit(argv[2]));
         if (out.open(QIODevice::WriteOnly)) out.write(file);
@@ -53,6 +67,14 @@ int main(int argc, char **argv) {
         if (size) CHECK(font.width(size, "HIRAKU") > font.width(size - 1, "HIRAKU"));   // larger is wider
     }
     CHECK(font.width(1, "ii") < font.width(1, "MM"));   // not a fixed width
+    CHECK(!font.has(3) && font.line(3) == 0 && font.width(3, "HIRAKU") == 0);   // (the menu's: three sizes)
+    {   // a game's boxes' file: a 4th size, the performance overlay's, at its own size whatever the scale
+        hk::menu::Font boxes;
+        const QByteArray f = menufont::build(app.font(), text, menufont::times(menufont::kBoxes, 3));
+        CHECK(boxes.parse((const uint8_t *)f.constData(), (size_t)f.size(), err) && boxes.has(3));
+        CHECK(boxes.line(3) >= menufont::kOverlay && boxes.line(3) <= menufont::kOverlay * 3 && boxes.line(3) < boxes.line(0));
+        CHECK(boxes.width(3, "HIRAKU") > 0);
+    }
     // a letter has ink, a space none
     std::vector<uint32_t> px(128 * 64, 0xff000000u);
     font.draw(px.data(), 128, 64, 0, 0, 128, 64, 8, 8, 2, "H", 0xffffff, 255);

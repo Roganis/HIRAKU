@@ -38,6 +38,7 @@ extern char **environ;   // (the run's test switches, for its log: shell/switche
 #include "host/record.h"
 #include "host/screenshot.h"
 #include "host/script.h"
+#include "lang/lang.h"
 #include "shell/cabinet.h"
 #include "shell/built.h"
 #include "shell/core.h"
@@ -776,6 +777,9 @@ int main(int argc, char **argv) {
     if (window_scale) { fprintf(stderr, "this build has no SDL3 front end\n"); return 1; }
 #endif
     if (window_scale) {   // a player's readers and cabinet; scripted runs keep to their inputs
+        // the boxes' and the overlay's language: the launcher's (HK_LANG), else its saved setting
+        // for a game started on its own, else the system's (runtime/lang/lang.h). Logs stay English
+        lang::start(opt.root);
 #ifdef HK_WITH_SDL
         host::notice::warn(machine.setup_warning());   // e.g. Keyboardmania's blank sound flash
         if (modscript::any()) {   // mods' scripts: their text's font, their hk.notice on the window
@@ -821,10 +825,11 @@ int main(int argc, char **argv) {
         if (host::window_picture_asked()) {
             const bool kept = !menu_picture_own.empty() && host::menupic::save(menu_picture_own, rgb, w, h, machine.display_aspect(), true);
             if (kept) printf("game menu: this screen kept as the game's picture (F12), %.1f s in\n", machine.seconds());
-            host::notice::hint({kept ? "Picture kept" : "No picture kept",
-                                kept                       ? "This screen is the game's picture in the game menu"
-                                : menu_picture_own.empty() ? "The game wasn't started from the launcher"
-                                                           : "It couldn't be written"},
+            // (the boxes' texts: English here, as the log has them; shown in the player's language)
+            host::notice::hint({kept ? HK_N("boxes", "Picture kept") : HK_N("boxes", "No picture kept"),
+                                kept                       ? HK_N("boxes", "This screen is the game's picture in the game menu")
+                                : menu_picture_own.empty() ? HK_N("boxes", "The game wasn't started from the launcher")
+                                                           : HK_N("boxes", "It couldn't be written")},
                                4, host::ui::Icon::picture);
         }
 #endif
@@ -872,13 +877,13 @@ int main(int argc, char **argv) {
                 host::record::set_mark(false);
                 capture.stop_later([](const std::string &line, const std::string &path) {
                     printf("%s\n", line.c_str());
-                    host::notice::hint({"Recording kept", path}, 8, host::ui::Icon::picture);
+                    host::notice::hint({HK_N("boxes", "Recording kept"), path}, 8, host::ui::Icon::picture);
                 });
             } else if (can_record && record_start("")) {
                 host::record::set_mark(true);
-                host::notice::hint({"Recording (F6 ends it)", capture.path()}, 4, host::ui::Icon::picture);
+                host::notice::hint({HK_N("boxes", "Recording (F6 ends it)"), capture.path()}, 4, host::ui::Icon::picture);
             } else {
-                host::notice::hint({"No recording", record_error}, 8, host::ui::Icon::alert);
+                host::notice::hint({HK_N("boxes", "No recording"), record_error}, 8, host::ui::Icon::alert);
             }
         }
         // the fast start-up keeps no real time either: the game waits for the encoder meanwhile
@@ -918,7 +923,9 @@ int main(int argc, char **argv) {
             if (ok) printf("screenshot: %s\n", said.c_str());
             else fprintf(stderr, "screenshot: none kept: %s\n", said.c_str());
 #ifdef HK_WITH_SDL
-            if (notify) host::notice::hint({ok ? "Screenshot kept" : "No screenshot", said}, 4, ok ? host::ui::Icon::picture : host::ui::Icon::alert);
+            if (notify)
+                host::notice::hint({ok ? HK_N("boxes", "Screenshot kept") : HK_N("boxes", "No screenshot"), said}, 4,
+                                   ok ? host::ui::Icon::picture : host::ui::Icon::alert);
 #else
             (void)notify;
 #endif

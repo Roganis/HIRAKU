@@ -221,15 +221,16 @@ QStringList python() {
 
 const QList<ShaderKey> &shaderKeys() {
     static const QList<ShaderKey> k = {
-        {"show", "Show it, move it, hide it", "key:F8"},
-        {"up", "Previous setting", "key:Up"},
-        {"down", "Next setting", "key:Down"},
-        {"less", "Less", "key:Left"},
-        {"more", "More", "key:Right"},
-        {"saved", "Back to the saved value", "key:Backspace"},
-        {"default", "Back to the default", "key:Delete"},
-        {"save", "Save for all games", "key:Return"},
-        {"save_game", "Save for this game", ""},
+        // TR: the in-game shader settings' keys (Settings > Display): what each does to the settings box over the game
+        {"show", QT_TRANSLATE_NOOP("cfg", "Show it, move it, hide it"), "key:F8"},
+        {"up", QT_TRANSLATE_NOOP("cfg", "Previous setting"), "key:Up"},
+        {"down", QT_TRANSLATE_NOOP("cfg", "Next setting"), "key:Down"},
+        {"less", QT_TRANSLATE_NOOP("cfg", "Less"), "key:Left"},
+        {"more", QT_TRANSLATE_NOOP("cfg", "More"), "key:Right"},
+        {"saved", QT_TRANSLATE_NOOP("cfg", "Back to the saved value"), "key:Backspace"},
+        {"default", QT_TRANSLATE_NOOP("cfg", "Back to the default"), "key:Delete"},
+        {"save", QT_TRANSLATE_NOOP("cfg", "Save for all games"), "key:Return"},
+        {"save_game", QT_TRANSLATE_NOOP("cfg", "Save for this game"), ""},
     };
     return k;
 }
@@ -250,7 +251,8 @@ QString familyName(const QString &family) {
     if (family == "gtrf") return "GuitarFreaks (System 573)";
     if (family == "pypopn") return "pop'n music (Konami Python)";
     if (family == "pcpopn") return "pop'n music (PC)";
-    if (family == "pcpopnhc") return "pop'n music (PC, two screens)";
+    // TR: %1 is the series' name, as written ("pop'n music"): a cabinet with two screens, of the PC games
+    if (family == "pcpopnhc") return QCoreApplication::translate("cfg", "%1 (PC, two screens)").arg("pop'n music");
     if (family == "iidx") return "beatmania IIDX";
     return family;
 }
@@ -258,7 +260,7 @@ QString familyName(const QString &family) {
 QList<QPair<QString, QStringList>> familySeries() {
     return {{"beatmania", {"djbm", "iidx", "bm3"}},
             {"pop'n music", {"djpopn", "popn", "pypopn", "pcpopn", "pcpopnhc", "djpstage"}},
-            {"Other games", {"ddr", "ddrsolo", "dmx", "drmn", "gtrf", "kbm", "mambo", "ppp"}}};
+            {QCoreApplication::translate("cfg", "Other games"), {"ddr", "ddrsolo", "dmx", "drmn", "gtrf", "kbm", "mambo", "ppp"}}};
 }
 
 bool isBeatmania(const QString &family) { return family == "djbm" || family == "iidx" || family == "bm3"; }

@@ -7,7 +7,8 @@
 //                            as dropping them on the window does; the log goes to stderr too
 //   hiraku --updated VERSION | --update-failed WHY   (tools/update.py, restarting it after an update)
 //   hiraku --show WHAT [--shot FILE]   open a window (settings, controls, lights, picture, unlocks,
-//                            about, or main) over the launcher; --shot saves a picture of it and quits
+//                            about, capture, or main) over the launcher; --shot saves a picture of it and quits
+//                            (HK_LANG=fr: in that language)
 //                            (checking how the windows fit a small screen: launcher/fit.h)
 #include <QApplication>
 #include <QIcon>
@@ -15,7 +16,9 @@
 #include <QTimer>
 
 #include "aboutdialog.h"
+#include "capturedialog.h"
 #include "controlsdialog.h"
+#include "language.h"
 #include "lightsdialog.h"
 #include "picturedialog.h"
 #include "settingsdialog.h"
@@ -97,6 +100,9 @@ int main(int argc, char **argv) {
     QApplication::setDesktopFileName("hiraku");
     QApplication::setWindowIcon(QIcon(":/icon.png"));
     cfg::mergeControls();
+    // the interface's language: HK_LANG, else the saved choice (ui/language: "" follows the system)
+    language::install(app, language::choose(cfg::settings().value("ui/language").toString(), cfg::rootDir()), cfg::rootDir());
+    language::useFamily(language::current());   // (Japanese, Korean, Chinese: the language's own font first)
     theme::applySaved();   // the system's look, or Pop (theme.h)
     app.installEventFilter(new ScreenFit(&app));   // every window inside a small screen too (fit.h)
     QStringList args = app.arguments().mid(1);
@@ -105,7 +111,7 @@ int main(int argc, char **argv) {
     // update cut short hands over to the script, which starts it again (once: see upd::resume)
     const bool fromUpdate = !args.isEmpty() && (args.first() == "--updated" || args.first() == "--update-failed");
     if (!fromUpdate && upd::applying()) {
-        QMessageBox::information(nullptr, "HIRAKU", "An update is being put in. HIRAKU starts by itself when it's done.");
+        QMessageBox::information(nullptr, "HIRAKU", language::tr("Updater", "An update is being put in. HIRAKU starts by itself when it's done."));
         return 0;
     }
     if (!fromUpdate && upd::cutShort() && upd::resume(true, nullptr)) return 0;
@@ -135,6 +141,8 @@ int main(int argc, char **argv) {
         }
         else if (what == "dips") win = new DipsDialog("popn1j", "pop'n music", &w);
         else if (what == "about") win = new AboutDialog(&w);
+        else if (what == "capture") win = new CaptureDialog("P1 Turntable", false, &w);   // (one binding, its 6 s)
+        else if (what == "capture-all") win = new CaptureDialog("P1 Button 3", false, &w, "3 of 16", true);   // (Bind all's walk)
         else if (what == "nvidia") {   // the PC games' NVIDIA notice, with a sample value
             nv::PresentMethod sample;
             sample.nvidia = true, sample.value = 2, sample.from = "the global profile";
@@ -152,11 +160,12 @@ int main(int argc, char **argv) {
         w.setEcho(true);
         QTimer::singleShot(0, &w, [&w, files = args.mid(1)] { w.addGameFiles(files); });
     } else if (args.size() >= 2 && args.first() == "--updated") {   // tools/update.py, once the new files are in
-        QTimer::singleShot(0, &w, [&w, v = args[1]] { QMessageBox::information(&w, "HIRAKU", "HIRAKU is now " + v + "."); });
+        QTimer::singleShot(0, &w, [&w, v = args[1]] { QMessageBox::information(&w, "HIRAKU", language::tr("Updater", "HIRAKU is now %1.").arg(v)); });   // TR: %1 is the version, "0.15.0"
     } else if (args.size() >= 2 && args.first() == "--update-failed") {
         if (!upd::cutShort())   // (cut short: said above)
             QTimer::singleShot(0, &w, [&w, why = args[1]] {
-                QMessageBox::warning(&w, "HIRAKU", "The update could not be put in; this is still the version you had.\n\n" + why);
+                // TR: %1 is why, in English (the update script's words)
+                QMessageBox::warning(&w, "HIRAKU", language::tr("Updater", "The update could not be put in; this is still the version you had.\n\n%1").arg(why));
             });
     } else if (!args.isEmpty() && args.first() == "--menu") {   // a cabinet's shortcut: start in the game menu
         QTimer::singleShot(0, &w, [&w] { w.openMenu(w.lastGame()); });

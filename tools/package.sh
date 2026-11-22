@@ -161,7 +161,7 @@ for f in ${HK_PACKAGE_LIBS:-}; do cp -L "$f" "$d/bin/lib/"; done
 # HK_PYTHON_DIR: a Python for adding games, in python/ (the launcher looks there first)
 [ -n "${HK_PYTHON_DIR:-}" ] && cp -r "$HK_PYTHON_DIR" "$d/python"
 # the repo's folders: what git tracks in them, nothing a checkout holds besides (tools/package-files.sh)
-copy_tracked "$root" "$d" games docs shaders
+copy_tracked "$root" "$d" games docs shaders lang
 copy_tracked_as "$root" "$d/scripts" oracle/scripts
 mkdir -p "$d/tools"
 cp "$root"/tools/{ingest.py,checklist.py,chd.py,fbexe.py,pack-data.py,regress.py,unlock.py,pythonfs.py,chdread.py,mameset.py,catalogue.py,update.py} "$d/tools/"

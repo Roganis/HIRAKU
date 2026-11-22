@@ -1,0 +1,5932 @@
+# HIRAKU's interface in Japanese.
+# Japanese translation: a first draft, TO BE CHECKED BY A NATIVE SPEAKER before a release.
+# A tester who corrects a text: edit its msgstr and send the file (or a pull request).
+# SPDX-License-Identifier: GPL-3.0-or-later
+msgid ""
+msgstr ""
+"Project-Id-Version: HIRAKU\n"
+"Language: ja\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+#: launcher/aboutdialog.cpp
+msgctxt "AboutDialog"
+msgid "SoftFloat 2b (Musashi's FPU)"
+msgstr "SoftFloat 2b（Musashi の FPU）"
+
+#: launcher/aboutdialog.cpp
+msgctxt "AboutDialog"
+msgid "LZMA SDK (libchdr's LZMA decoder): public domain"
+msgstr "LZMA SDK（libchdr の LZMA デコーダー）：パブリックドメイン"
+
+#: launcher/aboutdialog.cpp
+msgctxt "AboutDialog"
+msgid "crt-guest-advanced-fast: GNU GPL v2 or later"
+msgstr "crt-guest-advanced-fast：GNU GPL v2 以降"
+
+#: launcher/aboutdialog.cpp
+msgctxt "AboutDialog"
+msgid "TinySoundFont (the launcher's music): MIT"
+msgstr "TinySoundFont（ランチャーの音楽）：MIT"
+
+#: launcher/aboutdialog.cpp
+msgctxt "AboutDialog"
+msgid "Lua (mods' scripts): MIT"
+msgstr "Lua（MOD のスクリプト）：MIT"
+
+#: launcher/aboutdialog.cpp
+msgctxt "AboutDialog"
+msgid "DXVK: zlib (Linux packages)"
+msgstr "DXVK：zlib（Linux 版パッケージ）"
+
+#. %1 is a licence file's path, %2 HIRAKU's folder
+#: launcher/aboutdialog.cpp
+#, qt-format
+msgctxt "AboutDialog"
+msgid "%1 was not found in the HIRAKU folder (%2)."
+msgstr "HIRAKU のフォルダー（%2）に %1 が見つかりません。"
+
+#. one credit in About > Software: %1 the software's name, %2 its licence and holders, %3 what it does in HIRAKU
+#: launcher/aboutdialog.cpp
+#, qt-format
+msgctxt "AboutDialog"
+msgid "<b>%1</b> (%2): %3"
+msgstr "<b>%1</b>（%2）：%3"
+
+#. one reference in About > Software: %1 its name, %2 what it was used for
+#: launcher/aboutdialog.cpp
+#, qt-format
+msgctxt "AboutDialog"
+msgid "<b>%1</b>: %2"
+msgstr "<b>%1</b>：%2"
+
+#: launcher/aboutdialog.cpp
+msgctxt "AboutDialog"
+msgid "Konami arcade games as native programs, on Linux and Windows. Firebeat games run their PowerPC code recompiled (or, in a package, through HIRAKU's own analysis of it); DJ Main, System 573, Twinkle and Python run on the same shell, behind this launcher."
+msgstr "Konami のアーケードゲームをネイティブプログラムとして、Linux と Windows で動かします。Firebeat のゲームは PowerPC のコードを再コンパイルして（パッケージ版では HIRAKU 自身の解析を通して）実行し、DJ Main・System 573・Twinkle・Python は共通の土台の上で、このランチャーから動きます。"
+
+#: launcher/aboutdialog.cpp
+msgctxt "AboutDialog"
+msgid "HIRAKU ships no game data. It runs your own dumps."
+msgstr "HIRAKU にはゲームデータは含まれていません。ご自身のダンプで動作します。"
+
+#: launcher/aboutdialog.cpp
+msgctxt "AboutDialog"
+msgid "The licence notice below is legal text, kept in English."
+msgstr "以下のライセンス表記は法的な文章のため、英語のままです。"
+
+#: launcher/aboutdialog.cpp
+msgctxt "AboutDialog"
+msgid "Code taken from other projects keeps its own licence and notices: see Software and Licences."
+msgstr "他のプロジェクトから取り入れたコードは、それぞれのライセンスと表記を保っています。「ソフトウェア」と「ライセンス」タブをご覧ください。"
+
+#: launcher/aboutdialog.cpp
+#, qt-format
+msgctxt "AboutDialog"
+msgid "%1 are trademarks of Konami. HIRAKU is not affiliated with or endorsed by Konami."
+msgstr "%1 は Konami の商標です。HIRAKU は Konami とは関係がなく、Konami の承認も受けていません。"
+
+#. %1 the Qt version HIRAKU was built with, %2 the one it runs on
+#: launcher/aboutdialog.cpp
+#, qt-format
+msgctxt "AboutDialog"
+msgid "Built with Qt %1, running on Qt %2."
+msgstr "Qt %1 でビルド、Qt %2 で実行中。"
+
+#. who holds a code's copyright, in About > Software: %1 a project's or person's name
+#: launcher/aboutdialog.cpp
+#, qt-format
+msgctxt "AboutDialog"
+msgid "%1 and contributors"
+msgstr "%1 と貢献者"
+
+#: launcher/aboutdialog.cpp
+msgctxt "AboutDialog"
+msgid "the sp2xdev team and the SpiceTools contributors"
+msgstr "sp2xdev チームと SpiceTools の貢献者"
+
+#: launcher/aboutdialog.cpp
+msgctxt "AboutDialog"
+msgid "Code in HIRAKU"
+msgstr "HIRAKU に含まれるコード"
+
+#: launcher/aboutdialog.cpp
+msgctxt "AboutDialog"
+msgid "the devices of the XT446 synth card, System 573, Twinkle and the multi-session unit, on HIRAKU's own shim of MAME's framework. Copyright holders are named in each file."
+msgstr "XT446 シンセカード、System 573、Twinkle、マルチセッションユニットの各デバイス（MAME のフレームワークを HIRAKU 独自の互換層の上で使用）。著作権者は各ファイルに記載されています。"
+
+#. %1 a person's online name
+#: launcher/aboutdialog.cpp
+#, qt-format
+msgctxt "AboutDialog"
+msgid "%1's System 573 work"
+msgstr "%1 による System 573 の成果"
+
+#: launcher/aboutdialog.cpp
+msgctxt "AboutDialog"
+msgid "the multi-session unit, its TC9446F MP3 decoders, SIO1 as a UART, the TX3927 CPU."
+msgstr "マルチセッションユニット、その TC9446F MP3 デコーダー、UART としての SIO1、TX3927 CPU。"
+
+#: launcher/aboutdialog.cpp
+msgctxt "AboutDialog"
+msgid "the 68000 of the Firebeat SPU and the 68EC020 of DJ Main."
+msgstr "Firebeat SPU の 68000 と DJ Main の 68EC020。"
+
+#. %1 the licence and holders of SoftFloat 3 (names: keep them)
+#: launcher/aboutdialog.cpp
+#, qt-format
+msgctxt "AboutDialog"
+msgid "release 2b in Musashi; Berkeley SoftFloat 3 (%1) in the MIPS CPUs."
+msgstr "Musashi ではリリース 2b、MIPS CPU では Berkeley SoftFloat 3（%1）。"
+
+#: launcher/aboutdialog.cpp
+msgctxt "AboutDialog"
+msgid "the MP3 decoding of the 573's digital I/O board and the multi-session unit."
+msgstr "573 のデジタル I/O ボードとマルチセッションユニットの MP3 デコード。"
+
+#. %1 libchdr (a link), %2 its licence and holders, %3 dr_flac, %4 its holder, %5 the LZMA SDK, %6 its holder
+#: launcher/aboutdialog.cpp
+#, qt-format
+msgctxt "AboutDialog"
+msgid "<b>%1</b> (%2), with %3 (public domain or MIT-0, %4) and the %5's decoder (public domain, %6): MAME's CHDs read in place."
+msgstr "<b>%1</b>（%2）、%3（パブリックドメインまたは MIT-0、%4）と %5 のデコーダー（パブリックドメイン、%6）を含む：MAME の CHD をそのまま読み込みます。"
+
+#. %1 and %2 the shaders' authors' names (keep them)
+#: launcher/aboutdialog.cpp
+#, qt-format
+msgctxt "AboutDialog"
+msgid "crt-guest-advanced-fast (%1) and crt-royale (%2), the picture's CRT shaders."
+msgstr "crt-guest-advanced-fast（%1）と crt-royale（%2）、画面の CRT シェーダー。"
+
+#: launcher/aboutdialog.cpp
+msgctxt "AboutDialog"
+msgid "the analog CRT picture, the signal, the TV and the tube."
+msgstr "アナログ CRT の画面：信号、テレビ、ブラウン管。"
+
+#: launcher/aboutdialog.cpp
+msgctxt "AboutDialog"
+msgid "a CRT's rolling scan on a fast display."
+msgstr "高速なディスプレイでの CRT の走査の再現。"
+
+#: launcher/aboutdialog.cpp
+msgctxt "AboutDialog"
+msgid "the language of mods' scripts."
+msgstr "MOD のスクリプト言語。"
+
+#. %1 and %2 are the makers of two protocols (names: keep them)
+#: launcher/aboutdialog.cpp
+#, qt-format
+msgctxt "AboutDialog"
+msgid "presentation-time (%1) and fifo-v1 (%2), for frame pacing."
+msgstr "presentation-time（%1）と fifo-v1（%2）、フレームのペース調整用。"
+
+#: launcher/aboutdialog.cpp
+msgctxt "AboutDialog"
+msgid "the 64-bit PC loader's start-up of AVS2 games, its two-screen Direct3D 9, its board, card reader and licence-key stand-ins and its touch screen, written after spice2x's."
+msgstr "64 ビット PC ローダーによる AVS2 ゲームの起動、2 画面の Direct3D 9、基板・カードリーダー・ライセンスキーの代替、タッチスクリーン（spice2x を参考に作成）。"
+
+#: launcher/aboutdialog.cpp
+msgctxt "AboutDialog"
+msgid "the binary XML of pop'n music 17 and 18's e-AMUSEMENT, written from its description of the format."
+msgstr "pop'n music 17・18 の e-AMUSEMENT のバイナリ XML（そのフォーマットの解説をもとに作成）。"
+
+#: launcher/aboutdialog.cpp
+msgctxt "AboutDialog"
+msgid "Libraries"
+msgstr "ライブラリ"
+
+#: launcher/aboutdialog.cpp
+msgctxt "AboutDialog"
+msgid "this launcher."
+msgstr "このランチャー。"
+
+#: launcher/aboutdialog.cpp
+msgctxt "AboutDialog"
+msgid "windows, sound, controllers and their LEDs."
+msgstr "ウィンドウ、サウンド、コントローラーとその LED。"
+
+#. %1 PCSX2 Reliquary (a link), %2 PCSX2 (a link)
+#: launcher/aboutdialog.cpp
+#, qt-format
+msgctxt "AboutDialog"
+msgid "<b>%1</b> (GPL-3.0-or-later), a fork of %2: the emulator inside the Konami Python core."
+msgstr "<b>%1</b>（GPL-3.0-or-later）、%2 のフォーク：Konami Python コアの中のエミュレーター。"
+
+#: launcher/aboutdialog.cpp
+msgctxt "AboutDialog"
+msgid "LGPL-2.1-or-later; GPL-2.0-or-later as built with x264"
+msgstr "LGPL-2.1-or-later、x264 込みのビルドでは GPL-2.0-or-later"
+
+#: launcher/aboutdialog.cpp
+msgctxt "AboutDialog"
+msgid "Twinkle's background video and the games' video recordings, when found at build time."
+msgstr "Twinkle の背景動画とゲームの録画（ビルド時に見つかった場合）。"
+
+#: launcher/aboutdialog.cpp
+msgctxt "AboutDialog"
+msgid "H.264 recordings on the processor, inside the packages' FFmpeg."
+msgstr "CPU による H.264 録画（パッケージ版の FFmpeg に内蔵）。"
+
+#. %1 nv-codec-headers (a link), %2 AMD AMF (a link)
+#: launcher/aboutdialog.cpp
+#, qt-format
+msgctxt "AboutDialog"
+msgid "<b>%1</b> and <b>%2</b> headers (MIT): H.264 recordings on NVIDIA and AMD graphics cards, with their drivers."
+msgstr "<b>%1</b> と <b>%2</b> のヘッダー（MIT）：NVIDIA と AMD のグラフィックカードによる H.264 録画（各ドライバーを使用）。"
+
+#: launcher/aboutdialog.cpp
+msgctxt "AboutDialog"
+msgid "Apache-2.0 or MIT"
+msgstr "Apache-2.0 または MIT"
+
+#: launcher/aboutdialog.cpp
+msgctxt "AboutDialog"
+msgid "H.264 recordings by Vulkan video (AMD and Intel cards), with their drivers."
+msgstr "Vulkan Video による H.264 録画（AMD・Intel のカード、各ドライバーを使用）。"
+
+#: launcher/aboutdialog.cpp
+msgctxt "AboutDialog"
+msgid "Keyboardmania's SoundFont stand-in for the XT446, when found at build time."
+msgstr "Keyboardmania の XT446 の代わりとなる SoundFont 再生（ビルド時に見つかった場合）。"
+
+#: launcher/aboutdialog.cpp
+msgctxt "AboutDialog"
+msgid "the launcher's icons."
+msgstr "ランチャーのアイコン。"
+
+#: launcher/aboutdialog.cpp
+msgctxt "AboutDialog"
+msgid "Direct3D 9 on Vulkan for the 64-bit PC games under Wine, in the Linux packages."
+msgstr "Wine 上の 64 ビット PC ゲーム向けの Vulkan 上の Direct3D 9（Linux 版パッケージ）。"
+
+#: launcher/aboutdialog.cpp
+msgctxt "AboutDialog"
+msgid "References"
+msgstr "参考"
+
+#: launcher/aboutdialog.cpp
+msgctxt "AboutDialog"
+msgid "the oracle every core is checked against, frame by frame and access by access."
+msgstr "すべてのコアを照合する基準（フレーム単位、アクセス単位）。"
+
+#: launcher/aboutdialog.cpp
+msgctxt "AboutDialog"
+msgid "the oracle for the Python core."
+msgstr "Python コアの照合基準。"
+
+#: launcher/aboutdialog.cpp
+msgctxt "AboutDialog"
+msgid "the analysis of each game program before translation."
+msgstr "変換前の各ゲームプログラムの解析。"
+
+#: launcher/aboutdialog.cpp
+msgctxt "AboutDialog"
+msgid "the reference for the PowerPC instruction tests."
+msgstr "PowerPC 命令テストの基準。"
+
+#. %1 and %2 are people's online names (keep them); reader/ and games/iidx/ are folders
+#: launcher/aboutdialog.cpp
+#, qt-format
+msgctxt "AboutDialog"
+msgid "the names and meanings of the e-AMUSEMENT options, and the real card readers' and the BIO2 board's dialogue (its reader/ and games/iidx/); its cardio (%1) and PC/SC (%2) readers (MIT) for what those readers send; for the PC pop'n games, the I/O board's and the card reader's DLL interfaces (ezusb, libacio) and the e-AMUSEMENT services they ask for."
+msgstr "e-AMUSEMENT のオプションの名前と意味、実機のカードリーダーと BIO2 基板のやり取り（reader/ と games/iidx/）、リーダーの送信内容についての cardio（%1）と PC/SC（%2）のリーダー（MIT）、PC 版 pop'n のための I/O ボードとカードリーダーの DLL インターフェース（ezusb、libacio）と要求される e-AMUSEMENT サービス。"
+
+#. %1 a person's online name (keep it)
+#: launcher/aboutdialog.cpp
+#, qt-format
+msgctxt "AboutDialog"
+msgid "the ideas behind presses judged when they happened, the board's samples for pop'n music 16-18, the PIN typed for the player and mods that replace text (popnhax has no licence: none of its code is in HIRAKU); and %1's PopnForwarder and advice on the pop'n board."
+msgstr "押した瞬間で判定する仕組み、pop'n music 16～18 の基板サンプル、プレイヤーに代わる PIN 入力、テキストを置き換える MOD の考え方（popnhax にはライセンスがないため、そのコードは HIRAKU に含まれていません）。また %1 の PopnForwarder と pop'n 基板についての助言。"
+
+#: launcher/aboutdialog.cpp
+msgctxt "AboutDialog"
+msgid "its ezusb2-popn emulation, a check of the pop'n board's packets."
+msgstr "ezusb2-popn エミュレーション（pop'n 基板のパケットの確認）。"
+
+#: launcher/aboutdialog.cpp
+msgctxt "AboutDialog"
+msgid "a reference for e-AMUSEMENT servers and the later games' settings."
+msgstr "e-AMUSEMENT サーバーと後期のゲームの設定の参考。"
+
+#: launcher/aboutdialog.cpp
+msgctxt "AboutDialog"
+msgid "event codes, unlocks and song facts."
+msgstr "イベントコード、解禁、楽曲の情報。"
+
+#. %1 the testers' names, as a list ("a, b and c")
+#: launcher/aboutdialog.cpp
+#, qt-format
+msgctxt "AboutDialog"
+msgid "Thanks to the testers, %1, who tried HIRAKU on their own PCs and cabinets, and to everyone who dumped, documented and preserved these machines."
+msgstr "自分の PC や筐体で HIRAKU を試してくれたテスターの %1、そしてこれらのマシンをダンプし、記録し、保存してきたすべての人に感謝します。"
+
+#: launcher/aboutdialog.cpp
+msgctxt "AboutDialog"
+msgid "About HIRAKU"
+msgstr "HIRAKU について"
+
+#: launcher/aboutdialog.cpp
+msgctxt "AboutDialog"
+msgid "About"
+msgstr "概要"
+
+#: launcher/aboutdialog.cpp
+msgctxt "AboutDialog"
+msgid "Software"
+msgstr "ソフトウェア"
+
+#: launcher/aboutdialog.cpp
+msgctxt "AboutDialog"
+msgid "Licences"
+msgstr "ライセンス"
+
+#: launcher/aboutdialog.cpp
+msgctxt "AboutDialog"
+msgid "About Qt"
+msgstr "Qt について"
+
+#: launcher/aboutdialog.cpp
+msgctxt "AboutDialog"
+msgid "Konami arcade games, native"
+msgstr "Konami のアーケードゲームをネイティブで"
+
+#: launcher/capturedialog.cpp
+msgctxt "CaptureDialog"
+msgid "Bind all"
+msgstr "すべて割り当て"
+
+#: launcher/capturedialog.cpp
+msgctxt "CaptureDialog"
+msgid "Set binding"
+msgstr "割り当て"
+
+#: launcher/capturedialog.cpp
+msgctxt "CaptureDialog"
+msgid "Back"
+msgstr "戻る"
+
+#: launcher/capturedialog.cpp
+msgctxt "CaptureDialog"
+msgid "Skip"
+msgstr "スキップ"
+
+#: launcher/capturedialog.cpp
+msgctxt "CaptureDialog"
+msgid "Leave this control as it is"
+msgstr "この操作はそのままにする"
+
+#: launcher/capturedialog.cpp
+msgctxt "CaptureDialog"
+msgid "Stop"
+msgstr "中止"
+
+#: launcher/capturedialog.cpp
+msgctxt "CaptureDialog"
+msgid "Cancel"
+msgstr "キャンセル"
+
+#: launcher/capturedialog.cpp
+msgctxt "CaptureDialog"
+msgid "That key cannot be bound. Try another one."
+msgstr "このキーは割り当てできません。別のキーを押してください。"
+
+#: launcher/capturedialog.cpp
+msgctxt "CaptureDialog"
+msgid "Spin the turntable (move an analog axis)…"
+msgstr "ターンテーブルを回してください（アナログ軸を動かす）…"
+
+#: launcher/capturedialog.cpp
+msgctxt "CaptureDialog"
+msgid "Press a key or a controller button…"
+msgstr "キーまたはコントローラーのボタンを押してください…"
+
+#. %1 is the seconds left before the dialog closes by itself
+#: launcher/capturedialog.cpp
+msgctxt "CaptureDialog"
+msgid "Esc stops."
+msgstr "Esc で中止します。"
+
+#. %1 is the seconds left before the dialog closes by itself
+#: launcher/capturedialog.cpp
+#, qt-format
+msgctxt "CaptureDialog"
+msgid "Esc cancels (%1 s)"
+msgstr "Esc でキャンセル（残り %1 秒）"
+
+#. %1 is the series' name, as written ("pop'n music"): a cabinet with two screens, of the PC games
+#: launcher/config.cpp
+#, qt-format
+msgctxt "cfg"
+msgid "%1 (PC, two screens)"
+msgstr "%1（PC、2 画面）"
+
+#: launcher/config.cpp
+msgctxt "cfg"
+msgid "Other games"
+msgstr "その他のゲーム"
+
+#. the in-game shader settings' keys (Settings > Display): what each does to the settings box over the game
+#: launcher/config.cpp
+msgctxt "cfg"
+msgid "Show it, move it, hide it"
+msgstr "表示・移動・非表示"
+
+#: launcher/config.cpp
+msgctxt "cfg"
+msgid "Previous setting"
+msgstr "前の項目"
+
+#: launcher/config.cpp
+msgctxt "cfg"
+msgid "Next setting"
+msgstr "次の項目"
+
+#: launcher/config.cpp
+msgctxt "cfg"
+msgid "Less"
+msgstr "下げる"
+
+#: launcher/config.cpp
+msgctxt "cfg"
+msgid "More"
+msgstr "上げる"
+
+#: launcher/config.cpp
+msgctxt "cfg"
+msgid "Back to the saved value"
+msgstr "保存した値に戻す"
+
+#: launcher/config.cpp
+msgctxt "cfg"
+msgid "Back to the default"
+msgstr "既定値に戻す"
+
+#: launcher/config.cpp
+msgctxt "cfg"
+msgid "Save for all games"
+msgstr "全ゲーム共通で保存"
+
+#: launcher/config.cpp
+msgctxt "cfg"
+msgid "Save for this game"
+msgstr "このゲーム用に保存"
+
+#: launcher/controlsdialog.cpp
+msgctxt "ControlsDialog"
+msgid "The turntable as the game will see it turn: spin it to check the speed and direction"
+msgstr "ゲームから見たターンテーブルの回転です。回して速度と向きを確認してください"
+
+#. %1 is the file and the system's reason
+#. %1 is the file, %2 the system's reason
+#: launcher/controlsdialog.cpp
+msgctxt "ControlsDialog"
+msgid "Controls"
+msgstr "操作設定"
+
+#: launcher/controlsdialog.cpp
+msgctxt "ControlsDialog"
+msgid "Cabinet:"
+msgstr "筐体："
+
+#: launcher/controlsdialog.cpp
+msgctxt "ControlsDialog"
+msgid "Separate controls for beatmania (DJ Main), beatmania IIDX and beatmania III"
+msgstr "beatmania (DJ Main)・beatmania IIDX・beatmania III の操作設定を別々にする"
+
+#: launcher/controlsdialog.cpp
+msgctxt "ControlsDialog"
+msgid "Each of the three keeps its own bindings, started as a copy of the shared ones. Untick to share one set again (the separate ones are kept for next time)."
+msgstr "3 機種それぞれが独自の割り当てを持ちます（最初は共通の割り当てのコピー）。チェックを外すと共通の設定に戻ります（別々の設定は次回のために残ります）。"
+
+#: launcher/controlsdialog.cpp
+msgctxt "ControlsDialog"
+msgid "Click a binding, then press a key or a controller button: it replaces that keyboard's or controller's binding there. Its <b>▾</b> menu (or a right-click) adds another, removes one, resets it, or sets a turntable's speed. A warning sign marks an input that presses two controls in one game. Press anything and its name lights up."
+msgstr "割り当てをクリックしてから、キーまたはコントローラーのボタンを押してください。そのキーボードまたはコントローラーの割り当てが置き換わります。<b>▾</b> メニュー（または右クリック）で、割り当ての追加・削除・リセットや、ターンテーブルの速度設定ができます。警告マークは、1 つのゲームで 2 つの操作を同時に押してしまう入力を示します。何かを押すと、その名前が光ります。"
+
+#: launcher/controlsdialog.cpp
+msgctxt "ControlsDialog"
+msgid "Last input: —"
+msgstr "最後の入力：—"
+
+#: launcher/controlsdialog.cpp
+msgctxt "ControlsDialog"
+msgid "Set up"
+msgstr "セットアップ"
+
+#: launcher/controlsdialog.cpp
+msgctxt "ControlsDialog"
+msgid "Bind everything in turn, a controller's layout (the default, or one you saved), copying player 1's controller to player 2"
+msgstr "全項目を順番に割り当て、コントローラーの配置（既定または保存したもの）、プレイヤー 1 のコントローラーをプレイヤー 2 にコピー"
+
+#: launcher/controlsdialog.cpp
+msgctxt "ControlsDialog"
+msgid "Try in a game"
+msgstr "ゲームで試す"
+
+#. %1 is a series or cabinet, "pop'n music"
+#: launcher/controlsdialog.cpp
+#, qt-format
+msgctxt "ControlsDialog"
+msgid "No %1 game is ready to play"
+msgstr "プレイ可能な %1 のゲームがありません"
+
+#: launcher/controlsdialog.cpp
+msgctxt "ControlsDialog"
+msgid "Save, and start a game with these controls: its test menu's I/O check shows each input as it is pressed"
+msgstr "保存して、この操作設定でゲームを起動します。テストメニューの I/O チェックで、押した入力を確認できます"
+
+#. %1 is the file and the system's reason
+#: launcher/controlsdialog.cpp
+#, qt-format
+msgctxt "ControlsDialog"
+msgid "Cannot write %1"
+msgstr "%1 を書き込めません"
+
+#: launcher/controlsdialog.cpp
+msgctxt "ControlsDialog"
+msgid "Save the changed controls?"
+msgstr "変更した操作設定を保存しますか？"
+
+#. %1 is the cabinets' names as a list in the language's own way ("A, B and C")
+#: launcher/controlsdialog.cpp
+#, qt-format
+msgctxt "ControlsDialog"
+msgid "Shared by %1: each game uses the controls its cabinet has and ignores the rest."
+msgstr "%1 で共通です。各ゲームは自分の筐体にある操作だけを使い、残りは無視します。"
+
+#: launcher/controlsdialog.cpp
+msgctxt "ControlsDialog"
+msgid "Show these controls"
+msgstr "これらの操作を表示"
+
+#: launcher/controlsdialog.cpp
+msgctxt "ControlsDialog"
+msgid "Fold these controls away"
+msgstr "これらの操作を折りたたむ"
+
+#: launcher/controlsdialog.cpp
+msgctxt "ControlsDialog"
+msgid "Add another binding…"
+msgstr "割り当てを追加…"
+
+#. %1 is a binding, "Pad 1: button 3"
+#: launcher/controlsdialog.cpp
+#, qt-format
+msgctxt "ControlsDialog"
+msgid "Remove %1"
+msgstr "%1 を削除"
+
+#: launcher/controlsdialog.cpp
+msgctxt "ControlsDialog"
+msgid "Remove all"
+msgstr "すべて削除"
+
+#. %1 is the default bindings, joined by ", "
+#: launcher/controlsdialog.cpp
+msgctxt "ControlsDialog"
+msgid "Reset to default (unbound)"
+msgstr "既定に戻す（割り当てなし）"
+
+#. %1 is the default bindings, joined by ", "
+#: launcher/controlsdialog.cpp
+#, qt-format
+msgctxt "ControlsDialog"
+msgid "Reset to default (%1)"
+msgstr "既定に戻す（%1）"
+
+#. a turntable turned by buttons: how fast it turns while one is held
+#: launcher/controlsdialog.cpp
+msgctxt "ControlsDialog"
+msgid "Speed (buttons)"
+msgstr "速度（ボタン）"
+
+#: launcher/controlsdialog.cpp
+msgctxt "ControlsDialog"
+msgid "×1 (as keys turn it)"
+msgstr "×1（キーと同じ）"
+
+#: launcher/controlsdialog.cpp
+msgctxt "ControlsDialog"
+msgid "Reverse direction"
+msgstr "回転方向を反転"
+
+#: launcher/controlsdialog.cpp
+msgctxt "ControlsDialog"
+msgid "Speed"
+msgstr "速度"
+
+#: launcher/controlsdialog.cpp
+msgctxt "ControlsDialog"
+msgid "×1 (as the controller sends it)"
+msgstr "×1（コントローラーのまま）"
+
+#: launcher/controlsdialog.cpp
+#, qt-format
+msgctxt "ControlsDialog"
+msgid "%1 also presses %2 in %3"
+msgstr "%1 は %3 で %2 も押します"
+
+#: launcher/controlsdialog.cpp
+#, qt-format
+msgctxt "ControlsDialog"
+msgid "%1 also presses %2"
+msgstr "%1 は %2 も押します"
+
+#: launcher/controlsdialog.cpp
+msgctxt "ControlsDialog"
+msgid "Not bound"
+msgstr "割り当てなし"
+
+#: launcher/controlsdialog.cpp
+msgctxt "ControlsDialog"
+msgid "Click to bind; the arrow (or a right-click) adds or removes one binding."
+msgstr "クリックで割り当てます。矢印（または右クリック）で割り当てを 1 つ追加・削除します。"
+
+#. %1 is the input pressed ("Pad 1: button 3", "Z"), %2 the controls it presses (their English names)
+#: launcher/controlsdialog.cpp
+#, qt-format
+msgctxt "ControlsDialog"
+msgid "Last input: <b>%1</b> — not bound"
+msgstr "最後の入力：<b>%1</b> — 割り当てなし"
+
+#: launcher/controlsdialog.cpp
+#, qt-format
+msgctxt "ControlsDialog"
+msgid "Last input: <b>%1</b> → %2"
+msgstr "最後の入力：<b>%1</b> → %2"
+
+#: launcher/controlsdialog.cpp
+msgctxt "ControlsDialog"
+msgid "No controllers connected. Plug one in and it appears here."
+msgstr "コントローラーが接続されていません。接続するとここに表示されます。"
+
+#. %1 is the controllers, joined by " · "
+#: launcher/controlsdialog.cpp
+#, qt-format
+msgctxt "ControlsDialog"
+msgid "Controllers: %1"
+msgstr "コントローラー：%1"
+
+#. %1 is an input ("Pad 1: button 3", "Z"), %2 the controls it is bound to (English names), %3 the cabinets
+#: launcher/controlsdialog.cpp
+#, qt-format
+msgctxt "ControlsDialog"
+msgid ""
+"%1 is already %2 in %3.\n"
+"\n"
+"Pressing it would press both."
+msgstr ""
+"%1 は %3 ですでに %2 に割り当てられています。\n"
+"\n"
+"押すと両方が押されます。"
+
+#: launcher/controlsdialog.cpp
+#, qt-format
+msgctxt "ControlsDialog"
+msgid ""
+"%1 is already %2.\n"
+"\n"
+"Pressing it would press both."
+msgstr ""
+"%1 はすでに %2 に割り当てられています。\n"
+"\n"
+"押すと両方が押されます。"
+
+#: launcher/controlsdialog.cpp
+msgctxt "ControlsDialog"
+msgid "Move it here"
+msgstr "ここに移す"
+
+#: launcher/controlsdialog.cpp
+msgctxt "ControlsDialog"
+msgid "Keep both"
+msgstr "両方残す"
+
+#. Bind all's step: "3 of 16"
+#: launcher/controlsdialog.cpp
+#, qt-format
+msgctxt "ControlsDialog"
+msgid "%1 of %2"
+msgstr "%1 / %2"
+
+#. %1 is the file, %2 the system's reason
+#: launcher/controlsdialog.cpp
+#, qt-format
+msgctxt "ControlsDialog"
+msgid "Cannot write %1: %2"
+msgstr "%1 を書き込めません：%2"
+
+#: launcher/controlsdialog.cpp
+msgctxt "ControlsDialog"
+msgid "Bind all in turn"
+msgstr "順番にすべて割り当て"
+
+#: launcher/controlsdialog.cpp
+msgctxt "ControlsDialog"
+msgid "Player 1"
+msgstr "プレイヤー 1"
+
+#: launcher/controlsdialog.cpp
+msgctxt "ControlsDialog"
+msgid "Player 2"
+msgstr "プレイヤー 2"
+
+#: launcher/controlsdialog.cpp
+msgctxt "ControlsDialog"
+msgid "Everything shown"
+msgstr "表示中のすべて"
+
+#: launcher/controlsdialog.cpp
+msgctxt "ControlsDialog"
+msgid "Controllers"
+msgstr "コントローラー"
+
+#: launcher/controlsdialog.cpp
+msgctxt "ControlsDialog"
+msgid "No controllers connected"
+msgstr "コントローラーが接続されていません"
+
+#: launcher/controlsdialog.cpp
+#, qt-format
+msgctxt "ControlsDialog"
+msgid "Default layout for player %1"
+msgstr "プレイヤー %1 の既定の配置"
+
+#: launcher/controlsdialog.cpp
+#, qt-format
+msgctxt "ControlsDialog"
+msgid "Your saved layout for player %1"
+msgstr "プレイヤー %1 の保存した配置"
+
+#: launcher/controlsdialog.cpp
+msgctxt "ControlsDialog"
+msgid "Save its layout"
+msgstr "この配置を保存"
+
+#: launcher/controlsdialog.cpp
+msgctxt "ControlsDialog"
+msgid "Keep what this controller does here, to use again for either player (or on another PC: controls/layouts in the settings folder)"
+msgstr "このコントローラーの割り当てを保存し、どちらのプレイヤーにも再利用できるようにします（別の PC でも：設定フォルダーの controls/layouts）"
+
+#: launcher/controlsdialog.cpp
+msgctxt "ControlsDialog"
+msgid "Copy player 1's controller here, as player 2"
+msgstr "プレイヤー 1 のコントローラーをプレイヤー 2 としてここにコピー"
+
+#: launcher/controlsdialog.cpp
+msgctxt "ControlsDialog"
+msgid "Tie pad numbers to the controllers now connected"
+msgstr "パッド番号を接続中のコントローラーに結び付ける"
+
+#: launcher/controlsdialog.cpp
+#, qt-format
+msgctxt "ControlsDialog"
+msgid "your saved layout for player %1"
+msgstr "プレイヤー %1 の保存した配置"
+
+#: launcher/controlsdialog.cpp
+msgctxt "ControlsDialog"
+msgid "your saved layout"
+msgstr "保存した配置"
+
+#: launcher/controlsdialog.cpp
+#, qt-format
+msgctxt "ControlsDialog"
+msgid "the default layout for player %1"
+msgstr "プレイヤー %1 の既定の配置"
+
+#: launcher/controlsdialog.cpp
+msgctxt "ControlsDialog"
+msgid "the default layout"
+msgstr "既定の配置"
+
+#: launcher/controlsdialog.cpp
+msgctxt "ControlsDialog"
+msgid "bind player 1 in turn"
+msgstr "プレイヤー 1 を順番に割り当て"
+
+#: launcher/controlsdialog.cpp
+msgctxt "ControlsDialog"
+msgid "bind it in turn"
+msgstr "順番に割り当て"
+
+#: launcher/controlsdialog.cpp
+msgctxt "ControlsDialog"
+msgid "not now"
+msgstr "後で"
+
+#. %1 is a controller's name, %2 a series or cabinet ("pop'n music"), %3 the links that set it up
+#: launcher/controlsdialog.cpp
+#, qt-format
+msgctxt "ControlsDialog"
+msgid "<b>%1</b> isn't set up for %2: %3"
+msgstr "<b>%1</b> は %2 用に設定されていません：%3"
+
+#: launcher/controlsdialog.cpp
+msgctxt "ControlsDialog"
+msgid "Some bindings name a controller by its number, which follows the order they were plugged in. <a href=\"tie\">Tie them to the controllers now connected</a>."
+msgstr "一部の割り当てはコントローラーを番号で指定しています（番号は接続した順番です）。<a href=\"tie\">接続中のコントローラーに結び付ける</a>。"
+
+#. in place of the keys of Test: "press Test (not bound) for ..."
+#: launcher/controlsdialog.cpp
+msgctxt "ControlsDialog"
+msgid "not bound"
+msgstr "未割り当て"
+
+#. %1 is the game's title
+#: launcher/dipsdialog.cpp
+#, qt-format
+msgctxt "DipsDialog"
+msgid "DIP switches: %1"
+msgstr "DIP スイッチ：%1"
+
+#: launcher/dipsdialog.cpp
+msgctxt "DipsDialog"
+msgid "The switches on the game's board, which the operator sets: the coinage (Free Play), difficulty, demo sounds, and some games' hidden modes. Named as MAME names them. The game reads them when it starts: a change takes effect at the next start."
+msgstr "ゲーム基板のスイッチで、オペレーターが設定するものです：コイン設定（フリープレイ）、難易度、デモ音、一部のゲームの隠しモードなど。名前は MAME の表記のままです。ゲームは起動時に読み込むため、変更は次回の起動から有効です。"
+
+#. %1 is a switch's setting as MAME names it (English)
+#: launcher/dipsdialog.cpp
+#, qt-format
+msgctxt "DipsDialog"
+msgid "%1 (default)"
+msgstr "%1（既定）"
+
+#: launcher/dipsdialog.cpp
+msgctxt "DipsDialog"
+msgid "Defaults"
+msgstr "既定値"
+
+#: launcher/gamecards.cpp
+#, qt-plural-format
+msgctxt "GameCards"
+msgid "%n game"
+msgid_plural "%n games"
+msgstr[0] "%n タイトル"
+
+#. under the shelf's name: %1 is "%n games", %2 is "%n ready to play"
+#: launcher/gamecards.cpp
+#, qt-plural-format
+msgctxt "GameCards"
+msgid "%n ready to play"
+msgid_plural "%n ready to play"
+msgstr[0] "プレイ可能 %n"
+
+#. drawn on a game's card that has no picture yet (small: keep it short)
+#: launcher/gamecards.cpp
+msgctxt "GameCards"
+msgid "not added yet"
+msgstr "未追加"
+
+#. drawn on a game's card that has no picture yet (small: keep it short)
+#: launcher/gamecards.cpp
+msgctxt "GameCards"
+msgid "F12 in the game: its picture"
+msgstr "ゲーム中に F12 で画像を登録"
+
+#: launcher/gamecards.cpp
+msgctxt "GameCards"
+msgid "The shelf: all the games, or a series'"
+msgstr "棚：すべてのゲーム、またはシリーズ別"
+
+#: launcher/gamecards.cpp
+msgctxt "GameCards"
+msgid "All games"
+msgstr "すべてのゲーム"
+
+#. under the shelf's name: %1 is "%n games", %2 is "%n ready to play"
+#: launcher/gamecards.cpp
+#, qt-format
+msgctxt "GameCards"
+msgid "%1 · %2"
+msgstr "%1 · %2"
+
+#: launcher/gamecards.cpp
+msgctxt "GameHead"
+msgid "Play"
+msgstr "プレイ"
+
+#: launcher/gamecards.cpp
+msgctxt "GameHead"
+msgid "Play this game (Enter)"
+msgstr "このゲームをプレイ（Enter）"
+
+#: launcher/gamecards.cpp
+msgctxt "GameHead"
+msgid "Controls"
+msgstr "操作設定"
+
+#: launcher/gamecards.cpp
+msgctxt "GameHead"
+msgid "Unlocks…"
+msgstr "解禁…"
+
+#: launcher/gamecards.cpp
+msgctxt "GameHead"
+msgid "Mods…"
+msgstr "MOD…"
+
+#. %1 is the game's title, %2 its program's path, %3 HIRAKU's folder, %4 the commands to run there
+#: launcher/games.cpp
+#, qt-format
+msgctxt "Game"
+msgid ""
+"The data for %1 is installed, but %2 has not been built yet.\n"
+"\n"
+"In %3:\n"
+"\n"
+"%4"
+msgstr ""
+"%1 のデータはインストール済みですが、%2 はまだビルドされていません。\n"
+"\n"
+"%3 で：\n"
+"\n"
+"%4"
+
+#: launcher/games.cpp
+msgctxt "Game"
+msgid "Ready"
+msgstr "プレイ可能"
+
+#: launcher/games.cpp
+msgctxt "Game"
+msgid "Not built"
+msgstr "未ビルド"
+
+#: launcher/games.cpp
+msgctxt "Game"
+msgid "Not installed"
+msgstr "未インストール"
+
+#: launcher/games.cpp
+msgctxt "Game"
+msgid "Not in this package"
+msgstr "このパッケージにはありません"
+
+#. %1 is the game's title
+#: launcher/games.cpp
+#, qt-format
+msgctxt "Game"
+msgid "%1 is a Konami Python game, and this HIRAKU package has no hiraku-python, which runs them. Is the binaries folder right (Settings)?"
+msgstr "%1 は Konami Python のゲームですが、この HIRAKU パッケージにはそれを動かす hiraku-python がありません。実行ファイルのフォルダー（設定）は正しいですか？"
+
+#: launcher/games.cpp
+msgctxt "Game"
+msgid "This HIRAKU package has no hiraku-firebeat, which runs the Firebeat games. Is the binaries folder right (Settings)?"
+msgstr "この HIRAKU パッケージには、Firebeat のゲームを動かす hiraku-firebeat がありません。実行ファイルのフォルダー（設定）は正しいですか？"
+
+#. %1 is the game's title; hiraku-%2 and hiraku-%3 are program names (keep them as they are)
+#: launcher/games.cpp
+#, qt-format
+msgctxt "Game"
+msgid "This HIRAKU package has no binary for %1 (hiraku-%2 or hiraku-%3). Is the binaries folder right (Settings)?"
+msgstr "この HIRAKU パッケージには %1 の実行ファイル（hiraku-%2 または hiraku-%3）がありません。実行ファイルのフォルダー（設定）は正しいですか？"
+
+#. the end of the help for a game not installed yet ("Drop them": the files just listed)
+#: launcher/games.cpp
+msgctxt "Game"
+msgid "Drop them on this window (or File > Add game files), all at once. HIRAKU recognises the set by its contents and copies the files into its own folder, so they can go afterwards; CHDs are read as they are, nothing is unpacked."
+msgstr "まとめてこのウィンドウにドロップしてください（または ファイル > ゲームファイルを追加）。HIRAKU は中身からセットを判別し、ファイルを自分のフォルダーにコピーするので、元のファイルは後で消しても構いません。CHD はそのまま読み込まれ、展開はされません。"
+
+#. %1 is the game's title, %2 the MAME set's name, %3 the paragraph on dropping the files
+#: launcher/games.cpp
+#, qt-format
+msgctxt "Game"
+msgid ""
+"HIRAKU has no data for %1 yet. You need your own dumps: the MAME ROM set \"%2\" (.zip, .7z or a folder) and its CDs (CHDs: the game's, and an install or multi-session unit's CD where MAME's set has one).\n"
+"\n"
+"%3"
+msgstr ""
+"%1 のデータがまだありません。ご自身のダンプが必要です：MAME の ROM セット「%2」（.zip、.7z またはフォルダー）とその CD（CHD：ゲームのもの、MAME のセットにあればインストール用またはマルチセッションユニットの CD）。\n"
+"\n"
+"%3"
+
+#. %1 is the game's title, %2 the MAME set's name, %3 the paragraph on dropping the files
+#: launcher/games.cpp
+#, qt-format
+msgctxt "Game"
+msgid ""
+"HIRAKU has no data for %1 yet. You need your own dumps: the MAME ROM set \"%2\" (.zip, .7z or a folder), its program CD, the player's Video CD (or, from 6th style on, its DVD) and its hard disk (CHDs).\n"
+"\n"
+"%3"
+msgstr ""
+"%1 のデータがまだありません。ご自身のダンプが必要です：MAME の ROM セット「%2」（.zip、.7z またはフォルダー）、プログラム CD、プレーヤーのビデオ CD（6th style 以降は DVD）、ハードディスク（CHD）。\n"
+"\n"
+"%3"
+
+#. what the game's folder holds, in "...as the cabinet's drive holds it: %2" (C02, JAA, JAB, prog, data: folder names)
+#: launcher/games.cpp
+msgctxt "Game"
+msgid "C02 with data and its programs, a folder each by revision (JAA, JAB...: the last is run)"
+msgstr "data とプログラムを含む C02（リビジョンごとのフォルダー JAA、JAB…：最後のものが起動されます）"
+
+#: launcher/games.cpp
+msgctxt "Game"
+msgid "prog (its programs, by date) and data"
+msgstr "prog（日付ごとのプログラム）と data"
+
+#. %1 is the game's title, %2 what the folder holds
+#: launcher/games.cpp
+#, qt-format
+msgctxt "Game"
+msgid ""
+"HIRAKU has no data for %1 yet. You need the game's own folder, as the cabinet's drive holds it: %2.\n"
+"\n"
+"Drop that folder on this window, or File > Add game files. HIRAKU reads it where it is (it is large), so keep it there."
+msgstr ""
+"%1 のデータがまだありません。筐体のドライブにあるとおりのゲームのフォルダーが必要です：%2。\n"
+"\n"
+"そのフォルダーをこのウィンドウにドロップするか、ファイル > ゲームファイルを追加 を使ってください。HIRAKU は大きなフォルダーをその場所のまま読み込むので、移動しないでください。"
+
+#. %1 is the game's title, %2 what the folder holds
+#: launcher/games.cpp
+#, qt-format
+msgctxt "Game"
+msgid ""
+"HIRAKU has no data for %1 yet. You need the game's own folder, as the cabinet's drive holds it: %2.\n"
+"\n"
+"Drop that folder on this window, or File > Add game files. HIRAKU reads it where it is (it is large), so keep it there. On Linux the game runs under Wine, which needs to be installed."
+msgstr ""
+"%1 のデータがまだありません。筐体のドライブにあるとおりのゲームのフォルダーが必要です：%2。\n"
+"\n"
+"そのフォルダーをこのウィンドウにドロップするか、ファイル > ゲームファイルを追加 を使ってください。HIRAKU は大きなフォルダーをその場所のまま読み込むので、移動しないでください。Linux ではゲームは Wine 上で動くため、Wine のインストールが必要です。"
+
+#: launcher/games.cpp
+msgctxt "Game"
+msgid "This HIRAKU has no hiraku-pc, which runs the PC games. Is the binaries folder right (Settings)?"
+msgstr "この HIRAKU には、PC 版のゲームを動かす hiraku-pc がありません。実行ファイルのフォルダー（設定）は正しいですか？"
+
+#. %1 is the game's title; bios and keys are folder names (keep them)
+#: launcher/games.cpp
+#, qt-format
+msgctxt "Game"
+msgid ""
+"HIRAKU has no data for %1 yet. You need your own dumps: the game's folder (its disk CHD, interface board ROMs, dongles and memory card files, with or without the .py1 beside it), and the arcade BIOS (COH-H31000) and the MagicGate key files in folders named bios and keys.\n"
+"\n"
+"Drop the game's folder with the bios and keys folders on this window, or File > Add game files (the BIOS and keys only once: later games find them). The disk is copied into HIRAKU's folder."
+msgstr ""
+"%1 のデータがまだありません。ご自身のダンプが必要です：ゲームのフォルダー（ディスクの CHD、インターフェース基板の ROM、ドングル、メモリーカードのファイル。.py1 は横にあってもなくても構いません）と、bios と keys という名前のフォルダーに入れたアーケード BIOS（COH-H31000）と MagicGate のキーファイル。\n"
+"\n"
+"ゲームのフォルダーを bios・keys フォルダーと一緒にこのウィンドウにドロップするか、ファイル > ゲームファイルを追加 を使ってください（BIOS とキーは一度だけで、以降のゲームはそれを使います）。ディスクは HIRAKU のフォルダーにコピーされます。"
+
+#. %1 is the game's title, %2 its program's path, %3 HIRAKU's folder, %4 the command to run there
+#: launcher/games.cpp
+#, qt-format
+msgctxt "Game"
+msgid ""
+"The data for %1 is installed, but %2 has not been built yet. It is built with PCSX2 Reliquary's source (docs/PLAY.md, Konami Python).\n"
+"\n"
+"In %3:\n"
+"\n"
+"%4"
+msgstr ""
+"%1 のデータはインストール済みですが、%2 はまだビルドされていません。PCSX2 Reliquary のソースでビルドします（docs/PLAY.md、Konami Python）。\n"
+"\n"
+"%3 で：\n"
+"\n"
+"%4"
+
+#. %1 is the game's title
+#: launcher/games.cpp
+#, qt-format
+msgctxt "Game"
+msgid "The data for %1 is installed, but this HIRAKU package has no Konami Python core: it comes with HIRAKU built from source for now (docs/PLAY.md)."
+msgstr "%1 のデータはインストール済みですが、この HIRAKU パッケージには Konami Python コアがありません。現時点では、ソースからビルドした HIRAKU に含まれます（docs/PLAY.md）。"
+
+#. %1 is the game's title, %2 the MAME set's name, %3 the paragraph on dropping the files
+#: launcher/games.cpp
+#, qt-format
+msgctxt "Game"
+msgid ""
+"HIRAKU has no data for %1 yet. You need your own dumps: the MAME ROM set \"%2\" (.zip, .7z or a folder) and its hard disk (CHD).\n"
+"\n"
+"%3"
+msgstr ""
+"%1 のデータがまだありません。ご自身のダンプが必要です：MAME の ROM セット「%2」（.zip、.7z またはフォルダー）とハードディスク（CHD）。\n"
+"\n"
+"%3"
+
+#. %1 is the game's title; hiraku-%2 and hiraku-%3 are program names (keep them as they are)
+#: launcher/games.cpp
+#, qt-format
+msgctxt "Game"
+msgid "The data for %1 is installed, but this HIRAKU package has no binary for it (hiraku-%2 or hiraku-%3). Is the binaries folder right (Settings)?"
+msgstr "%1 のデータはインストール済みですが、この HIRAKU パッケージにはその実行ファイル（hiraku-%2 または hiraku-%3）がありません。実行ファイルのフォルダー（設定）は正しいですか？"
+
+#. %1 is the game's title, %2 the MAME set's name
+#: launcher/games.cpp
+#, qt-format
+msgctxt "Game"
+msgid ""
+"HIRAKU has no data for %1 yet. You need your own dumps: the MAME ROM set \"%2\" (.zip, .7z or a folder) and its discs (CHDs: the program CD, and the second disc, DVD or hard disk where the game has one), or your own disc images (.cue/.iso).\n"
+"\n"
+"Drop them on this window (or File > Add game files), all at once. HIRAKU finds the game by its program, and finds its way around the program itself when it starts."
+msgstr ""
+"%1 のデータがまだありません。ご自身のダンプが必要です：MAME の ROM セット「%2」（.zip、.7z またはフォルダー）とそのディスク（CHD：プログラム CD と、ゲームにあれば 2 枚目のディスク、DVD またはハードディスク）、またはご自身のディスクイメージ（.cue/.iso）。\n"
+"\n"
+"まとめてこのウィンドウにドロップしてください（または ファイル > ゲームファイルを追加）。HIRAKU はプログラムからゲームを判別し、起動時にプログラムの中身を自分で解析します。"
+
+#. %1 is the game's title, %2 the MAME set's name
+#: launcher/games.cpp
+#, qt-format
+msgctxt "Game"
+msgid ""
+"HIRAKU has no data for %1 yet. You need your own dumps: the program disc, its second disc or HDD, and the MAME ROM set \"%2\" (docs/PLAY.md lists them per game).\n"
+"\n"
+"Drop them on this window, or File > Add game files: CHDs, disc images (.cue/.iso/.img) and the set (.zip/.7z), all at once."
+msgstr ""
+"%1 のデータがまだありません。ご自身のダンプが必要です：プログラムディスク、2 枚目のディスクまたは HDD、MAME の ROM セット「%2」（docs/PLAY.md にゲームごとの一覧があります）。\n"
+"\n"
+"このウィンドウにドロップするか、ファイル > ゲームファイルを追加 を使ってください：CHD、ディスクイメージ（.cue/.iso/.img）、セット（.zip/.7z）をまとめて。"
+
+#: launcher/inputs.cpp
+#, qt-plural-format
+msgctxt "Inputs"
+msgid "%n button"
+msgid_plural "%n buttons"
+msgstr[0] "ボタン %n 個"
+
+#: launcher/inputs.cpp
+#, qt-plural-format
+msgctxt "Inputs"
+msgid "%n axis"
+msgid_plural "%n axes"
+msgstr[0] "軸 %n 本"
+
+#: launcher/inputs.cpp
+#, qt-format
+msgctxt "Inputs"
+msgid "Pad %1"
+msgstr "パッド %1"
+
+#. a turntable axis turned the other way
+#: launcher/inputs.cpp
+msgctxt "Inputs"
+msgid "reversed"
+msgstr "反転"
+
+#: launcher/inputs.cpp
+msgctxt "Inputs"
+msgid "up"
+msgstr "上"
+
+#: launcher/inputs.cpp
+msgctxt "Inputs"
+msgid "down"
+msgstr "下"
+
+#: launcher/inputs.cpp
+msgctxt "Inputs"
+msgid "left"
+msgstr "左"
+
+#: launcher/inputs.cpp
+msgctxt "Inputs"
+msgid "right"
+msgstr "右"
+
+#: launcher/inputs.cpp
+msgctxt "Inputs"
+msgid "button"
+msgstr "ボタン"
+
+#: launcher/inputs.cpp
+msgctxt "Inputs"
+msgid "axis"
+msgstr "軸"
+
+#: launcher/inputs.cpp
+msgctxt "Inputs"
+msgid "hat"
+msgstr "ハット"
+
+#. a controller's input: %1 the controller, %2 its kind (button, axis, hat), %3 its number, %4 what follows
+#. (a hat's direction, an axis's + or -, a turntable's speed): "Pad 0: button 3", "Pad 0: hat 0 up"
+#: launcher/inputs.cpp
+#, qt-format
+msgctxt "Inputs"
+msgid "%1: %2 %3%4"
+msgstr "%1：%2 %3%4"
+
+#. a controller plugged in: %1 its number, %2 its name, %3 "%n buttons", %4 "%n axes"
+#: launcher/inputs.cpp
+#, qt-format
+msgctxt "Inputs"
+msgid "joy%1: %2 (%3, %4)"
+msgstr "joy%1：%2（%3、%4）"
+
+#. %1 is a lamp's name (English, as the cabinet names it)
+#: launcher/lightsdialog.cpp
+#, qt-format
+msgctxt "LightsDialog"
+msgid "Assign %1"
+msgstr "%1 を割り当て"
+
+#: launcher/lightsdialog.cpp
+#, qt-format
+msgctxt "LightsDialog"
+msgid "Choose the LED for <b>%1</b>. The selected output lights up, so you can see which one it is."
+msgstr "<b>%1</b> に使う LED を選んでください。選択中の出力が点灯するので、どれなのかがわかります。"
+
+#: launcher/lightsdialog.cpp
+msgctxt "LightsDialog"
+msgid "Show every output (also those that do not look like lamps)"
+msgstr "すべての出力を表示（ランプらしくないものも）"
+
+#. %1 is the file's path, %2 the system's reason
+#: launcher/lightsdialog.cpp
+msgctxt "LightsDialog"
+msgid "Lights"
+msgstr "ランプ設定"
+
+#: launcher/lightsdialog.cpp
+msgctxt "LightsDialog"
+msgid "Cabinet:"
+msgstr "筐体："
+
+#: launcher/lightsdialog.cpp
+msgctxt "LightsDialog"
+msgid "Rescan"
+msgstr "再検出"
+
+#: launcher/lightsdialog.cpp
+msgctxt "LightsDialog"
+msgid "How to allow access…"
+msgstr "アクセスを許可するには…"
+
+#: launcher/lightsdialog.cpp
+msgctxt "LightsDialog"
+msgid "Allow access to controller LEDs"
+msgstr "コントローラーの LED へのアクセスを許可"
+
+#. %1 is the rules file's path; "Rescan" is the button of that name above
+#: launcher/lightsdialog.cpp
+#, qt-format
+msgctxt "LightsDialog"
+msgid "Linux only lets programs write to a controller's LEDs (its /dev/hidraw node) when a udev rule allows it. Run these commands in a terminal: they write the rule to <tt>%1</tt> (keeping the controllers already in it) and apply it. They ask for your password. Then press <b>Rescan</b>; if the controller is still refused, replug it. See docs/LIGHTS.md."
+msgstr "Linux では、udev ルールで許可されている場合にのみ、プログラムがコントローラーの LED（/dev/hidraw ノード）に書き込めます。ターミナルで次のコマンドを実行してください。ルールを <tt>%1</tt> に書き込み（既存のコントローラーは残します）、適用します。パスワードを求められます。その後 <b>再検出</b> を押してください。それでも拒否される場合は、コントローラーを挿し直してください。詳しくは docs/LIGHTS.md を参照してください。"
+
+#: launcher/lightsdialog.cpp
+msgctxt "LightsDialog"
+msgid "Copy"
+msgstr "コピー"
+
+#: launcher/lightsdialog.cpp
+msgctxt "LightsDialog"
+msgid "Save the changed lights?"
+msgstr "変更したランプ設定を保存しますか？"
+
+#. %1 is the controllers' names, joined by " · "
+#: launcher/lightsdialog.cpp
+#, qt-format
+msgctxt "LightsDialog"
+msgid "Controllers with LEDs: %1"
+msgstr "LED 付きコントローラー：%1"
+
+#: launcher/lightsdialog.cpp
+msgctxt "LightsDialog"
+msgid "No controller with LEDs found."
+msgstr "LED 付きコントローラーが見つかりません。"
+
+#: launcher/lightsdialog.cpp
+msgctxt "LightsDialog"
+msgid "Found controllers with LEDs, but cannot open them (see below)."
+msgstr "LED 付きコントローラーが見つかりましたが、開けません（下記参照）。"
+
+#. %1 is the controllers' names, joined by " · "
+#: launcher/lightsdialog.cpp
+#, qt-format
+msgctxt "LightsDialog"
+msgid "No access to: %1. Without it their LEDs cannot be set."
+msgstr "%1 にアクセスできません。アクセスがないと LED を設定できません。"
+
+#. %1 is the file's path, %2 the system's reason
+#: launcher/lightsdialog.cpp
+#, qt-format
+msgctxt "LightsDialog"
+msgid "Cannot write %1: %2"
+msgstr "%1 を書き込めません：%2"
+
+#: launcher/lightsdialog.cpp
+msgctxt "LightsDialog"
+msgid "MAME does not decode beatmania III's cabinet lamps yet, so only the board's diagnostic LEDs are known."
+msgstr "MAME は beatmania III の筐体ランプをまだ解析していないため、わかっているのは基板の診断用 LED だけです。"
+
+#: launcher/lightsdialog.cpp
+msgctxt "LightsDialog"
+msgid "Lit while a running game lights this lamp"
+msgstr "実行中のゲームがこのランプを点灯させると光ります"
+
+#: launcher/lightsdialog.cpp
+msgctxt "LightsDialog"
+msgid "Test"
+msgstr "テスト"
+
+#: launcher/lightsdialog.cpp
+msgctxt "LightsDialog"
+msgid "Lights the assigned LEDs while held"
+msgstr "押している間、割り当てた LED を点灯します"
+
+#: launcher/lightsdialog.cpp
+msgctxt "LightsDialog"
+msgid "Clear"
+msgstr "クリア"
+
+#. “Publish lamps” is a setting's name in Settings: its translation there
+#: launcher/lightsdialog.cpp
+msgctxt "LightsDialog"
+msgid "Live view: start a game with “Publish lamps” on (Settings) and its lamps light up here."
+msgstr "ライブ表示：「ランプ情報を公開」をオン（設定）にしてゲームを起動すると、ここでランプが光ります。"
+
+#. %1 is the game's name
+#: launcher/lightsdialog.cpp
+#, qt-format
+msgctxt "LightsDialog"
+msgid "Live view: %1 is running, which has a different cabinet."
+msgstr "ライブ表示：%1 が実行中ですが、筐体が異なります。"
+
+#. %1 is the game's name
+#: launcher/lightsdialog.cpp
+#, qt-format
+msgctxt "LightsDialog"
+msgid "Live view: showing %1's lamps."
+msgstr "ライブ表示：%1 のランプを表示中。"
+
+#: launcher/lightsdialog.cpp
+msgctxt "LightsDialog"
+msgid "— (click to assign)"
+msgstr "—（クリックで割り当て）"
+
+#: launcher/lightsdialog.cpp
+msgctxt "LightsDialog"
+msgid "No controller with LEDs is available. Plug one in and press Rescan."
+msgstr "LED 付きコントローラーがありません。接続して「再検出」を押してください。"
+
+#: launcher/main.cpp
+msgctxt "Updater"
+msgid "An update is being put in. HIRAKU starts by itself when it's done."
+msgstr "アップデートを導入しています。終わると HIRAKU が自動で起動します。"
+
+#. %1 is the version, "0.15.0"
+#: launcher/main.cpp
+#, qt-format
+msgctxt "Updater"
+msgid "HIRAKU is now %1."
+msgstr "HIRAKU は %1 になりました。"
+
+#. %1 is why, in English (the update script's words)
+#: launcher/main.cpp
+#, qt-format
+msgctxt "Updater"
+msgid ""
+"The update could not be put in; this is still the version you had.\n"
+"\n"
+"%1"
+msgstr ""
+"アップデートを導入できませんでした。バージョンは以前のままです。\n"
+"\n"
+"%1"
+
+#: launcher/mainwindow.cpp
+#, qt-plural-format
+msgctxt "MainWindow"
+msgid "A file for each of the last %n game run: what the log pane showed"
+msgid_plural "A file for each of the last %n games run: what the log pane showed"
+msgstr[0] "最近起動した %n 本のゲームそれぞれのファイル（ログ欄に表示された内容）"
+
+#: launcher/mainwindow.cpp
+#, qt-plural-format
+msgctxt "MainWindow"
+msgid "Added: %1. It is ready to play."
+msgid_plural "Added: %1."
+msgstr[0] "追加しました：%1。"
+
+#. %1 games ready of %n
+#: launcher/mainwindow.cpp
+#, qt-plural-format
+msgctxt "MainWindow"
+msgid "%1 of %n game ready to play"
+msgid_plural "%1 of %n games ready to play"
+msgstr[0] "%n 本中 %1 本がプレイ可能"
+
+#. a series' or system's row: %n of its %1 games are ready to play
+#: launcher/mainwindow.cpp
+#, qt-plural-format
+msgctxt "MainWindow"
+msgid "%n game"
+msgid_plural "%n games"
+msgstr[0] "%n 本"
+
+#: launcher/mainwindow.cpp
+#, qt-plural-format
+msgctxt "MainWindow"
+msgid "%n of %1 ready"
+msgid_plural "%n of %1 ready"
+msgstr[0] "%1 本中 %n 本が準備済み"
+
+#: launcher/mainwindow.cpp
+#, qt-plural-format
+msgctxt "MainWindow"
+msgid "%n mod"
+msgid_plural "%n mods"
+msgstr[0] "MOD %n 個"
+
+#. the counts of a game's files, joined by ", ": "12 files, 10 the dumps MAME knows, 2 missing"
+#: launcher/mainwindow.cpp
+#, qt-plural-format
+msgctxt "MainWindow"
+msgid "%n file"
+msgid_plural "%n files"
+msgstr[0] "%n ファイル"
+
+#: launcher/mainwindow.cpp
+#, qt-plural-format
+msgctxt "MainWindow"
+msgid "%n the dumps MAME knows"
+msgid_plural "%n the dumps MAME knows"
+msgstr[0] "%n 個が MAME の認識するダンプ"
+
+#: launcher/mainwindow.cpp
+#, qt-plural-format
+msgctxt "MainWindow"
+msgid "<b>%n another dump</b>"
+msgid_plural "<b>%n another dump</b>"
+msgstr[0] "<b>%n 個が別のダンプ</b>"
+
+#: launcher/mainwindow.cpp
+#, qt-plural-format
+msgctxt "MainWindow"
+msgid "<b>%n missing</b>"
+msgid_plural "<b>%n missing</b>"
+msgstr[0] "<b>%n 個が欠落</b>"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "an access violation (0xC0000005): it used memory it doesn't have"
+msgstr "アクセス違反（0xC0000005）：割り当てられていないメモリを使いました"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "an illegal instruction (0xC000001D): it uses an instruction this CPU doesn't have"
+msgstr "不正な命令（0xC000001D）：この CPU にない命令を使っています"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "a DLL it needs is missing (0xC0000135)"
+msgstr "必要な DLL がありません（0xC0000135）"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "a DLL it loaded is older than it needs (0xC0000139: a function is missing)"
+msgstr "読み込んだ DLL が古すぎます（0xC0000139：関数がありません）"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "a DLL it loaded failed to start (0xC0000142)"
+msgstr "読み込んだ DLL の初期化に失敗しました（0xC0000142）"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "it stopped itself on a fatal error (0xC0000409)"
+msgstr "致命的なエラーで自ら停止しました（0xC0000409）"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "a stack overflow (0xC00000FD)"
+msgstr "スタックオーバーフロー（0xC00000FD）"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "a corrupted heap (0xC0000374)"
+msgstr "ヒープの破損（0xC0000374）"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "a division by zero (0xC0000094)"
+msgstr "ゼロ除算（0xC0000094）"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "a failed assertion or a breakpoint (0x80000003)"
+msgstr "アサーションの失敗またはブレークポイント（0x80000003）"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "it aborted (exit code 3: a failed assertion or a fatal error)"
+msgstr "異常終了しました（終了コード 3：アサーションの失敗または致命的なエラー）"
+
+#: launcher/mainwindow.cpp
+#, qt-format
+msgctxt "MainWindow"
+msgid "it crashed (exception 0x%1)"
+msgstr "クラッシュしました（例外 0x%1）"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "a segmentation fault (SIGSEGV): it used memory it doesn't have"
+msgstr "セグメンテーション違反（SIGSEGV）：割り当てられていないメモリを使いました"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "an illegal instruction (SIGILL): it uses an instruction this CPU doesn't have"
+msgstr "不正な命令（SIGILL）：この CPU にない命令を使っています"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "it aborted (SIGABRT: a failed assertion or a fatal error)"
+msgstr "異常終了しました（SIGABRT：アサーションの失敗または致命的なエラー）"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "a bus error (SIGBUS): a file it had mapped went away, or a bad memory access"
+msgstr "バスエラー（SIGBUS）：マップしていたファイルが消えたか、不正なメモリアクセスです"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "an arithmetic error (SIGFPE)"
+msgstr "算術エラー（SIGFPE）"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "it was killed (SIGKILL): by the system when memory runs out, or by another program"
+msgstr "強制終了されました（SIGKILL）：メモリ不足でシステムが終了させたか、別のプログラムによるものです"
+
+#: launcher/mainwindow.cpp
+#, qt-format
+msgctxt "MainWindow"
+msgid "it crashed (signal %1)"
+msgstr "クラッシュしました（シグナル %1）"
+
+#: launcher/mainwindow.cpp
+#, qt-format
+msgctxt "MainWindow"
+msgid "it exited with code %1"
+msgstr "終了コード %1 で終了しました"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "Each e-AMUSEMENT card its own floppy disk"
+msgstr "e-AMUSEMENT カードごとに専用のフロッピーディスク"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "Each e-AMUSEMENT card its own memory card"
+msgstr "e-AMUSEMENT カードごとに専用のメモリーカード"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "A card touched to the card reader puts that card's own floppy disk in (touched again: takes it out; another card swaps it), made blank the first time. Without a reader, the keys present Settings' e-AMUSEMENT card numbers"
+msgstr "カードリーダーにかざしたカードの専用フロッピーディスクが挿入されます（もう一度かざすと取り出し、別のカードなら入れ替え）。初回は空のディスクが作られます。リーダーがない場合は、キーで「設定」の e-AMUSEMENT カード番号を使います"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "A card touched to the card reader puts that card's own memory card in (touched again: takes it out; another card swaps it), made blank the first time. Without a reader, the keys present Settings' e-AMUSEMENT card numbers"
+msgstr "カードリーダーにかざしたカードの専用メモリーカードが挿入されます（もう一度かざすと取り出し、別のカードなら入れ替え）。初回は空のカードが作られます。リーダーがない場合は、キーで「設定」の e-AMUSEMENT カード番号を使います"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "A card's floppy disk"
+msgstr "カードのフロッピーディスク"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "A card's memory card"
+msgstr "カードのメモリーカード"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "Close the game first: a card's floppy disk is the game's while it runs."
+msgstr "先にゲームを終了してください。ゲームの実行中、カードのフロッピーディスクはゲームが使用しています。"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "Close the game first: a card's memory card is the game's while it runs."
+msgstr "先にゲームを終了してください。ゲームの実行中、カードのメモリーカードはゲームが使用しています。"
+
+#. %1 is "card …1234"
+#: launcher/mainwindow.cpp
+#, qt-format
+msgctxt "MainWindow"
+msgid "An image for %1's floppy disk"
+msgstr "%1 のフロッピーディスク用イメージ"
+
+#. %1 is "card …1234"
+#: launcher/mainwindow.cpp
+#, qt-format
+msgctxt "MainWindow"
+msgid "An image for %1's memory card"
+msgstr "%1 のメモリーカード用イメージ"
+
+#. %1 is a file's name, %2 a number of bytes
+#: launcher/mainwindow.cpp
+#, qt-format
+msgctxt "MainWindow"
+msgid "%1 is not a floppy disk's image (%2 bytes)."
+msgstr "%1 はフロッピーディスクのイメージではありません（%2 バイト）。"
+
+#. %1 is a file's name, %2 a number of bytes
+#: launcher/mainwindow.cpp
+#, qt-format
+msgctxt "MainWindow"
+msgid "%1 is not a memory card's image (%2 bytes)."
+msgstr "%1 はメモリーカードのイメージではありません（%2 バイト）。"
+
+#. %1 is a file's name, %2 "card …1234"
+#: launcher/mainwindow.cpp
+#, qt-format
+msgctxt "MainWindow"
+msgid "%1 is %2's floppy disk now: the next touch of that card puts it in."
+msgstr "%1 が %2 のフロッピーディスクになりました。次にそのカードをかざすと挿入されます。"
+
+#. %1 is a file's name, %2 "card …1234"
+#: launcher/mainwindow.cpp
+#, qt-format
+msgctxt "MainWindow"
+msgid "%1 is %2's memory card now: the next touch of that card puts it in."
+msgstr "%1 が %2 のメモリーカードになりました。次にそのカードをかざすと挿入されます。"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "The system's"
+msgstr "システムの外観"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "e-AMUSEMENT cards"
+msgstr "e-AMUSEMENT カード"
+
+#. an e-AMUSEMENT card by the last four digits of its number: "card …1234"
+#: launcher/mainwindow.cpp
+#, qt-format
+msgctxt "MainWindow"
+msgid "card …%1"
+msgstr "カード …%1"
+
+#. %1 is "card …1234"
+#: launcher/mainwindow.cpp
+#, qt-format
+msgctxt "MainWindow"
+msgid "Put an image to %1…"
+msgstr "%1 にイメージを入れる…"
+
+#: launcher/mainwindow.cpp
+#, qt-format
+msgctxt "MainWindow"
+msgid "Couldn't write %1."
+msgstr "%1 に書き込めませんでした。"
+
+#. %1 is a date and time
+#: launcher/mainwindow.cpp
+#, qt-format
+msgctxt "MainWindow"
+msgid "Last used %1"
+msgstr "最終使用：%1"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "No card has been touched yet: touch yours in the game once"
+msgstr "まだカードがかざされていません。ゲーム内で一度かざしてください"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "Open the cards' folder"
+msgstr "カードのフォルダーを開く"
+
+#. a game's status notes, joined by ", " (none may have a comma: the first is the card's)
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "Installs at the next start"
+msgstr "次回起動時にインストール"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "Installs the network unit's data at the next start"
+msgstr "次回起動時にネットワークユニットのデータをインストール"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "First boot"
+msgstr "初回起動"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "own arguments"
+msgstr "個別の引数"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "DIP switches set"
+msgstr "DIP スイッチ設定済み"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "e-AMUSEMENT unit"
+msgstr "e-AMUSEMENT ユニット"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "one 4:3 screen"
+msgstr "4:3 画面 1 枚"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "Ready"
+msgstr "プレイ可能"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "Play"
+msgstr "プレイ"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "Stop"
+msgstr "停止"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "Controls"
+msgstr "操作設定"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "Lights"
+msgstr "ランプ設定"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "Settings"
+msgstr "設定"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "Picture"
+msgstr "画面"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "Sharp pixels or a CRT (light, full, analog), and the CRT's settings: for all games, or the selected one"
+msgstr "くっきりしたピクセルか CRT 表示（軽量・フル・アナログ）と CRT の設定：全ゲーム共通、または選択中のゲーム用"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "Add game files…"
+msgstr "ゲームファイルを追加…"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid ""
+"Add a game from its files: the MAME ROM set (.zip/.7z), CHDs or disc images,\n"
+"or a Konami Python game's .py1 (PCSX2 Reliquary's descriptor).\n"
+"You can also drop them on this window."
+msgstr ""
+"ファイルからゲームを追加します：MAME の ROM セット（.zip/.7z）、CHD、ディスクイメージ、\n"
+"または Konami Python ゲームの .py1（PCSX2 Reliquary の記述ファイル）。\n"
+"このウィンドウにドロップしても追加できます。"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "Add game files"
+msgstr "ゲームファイルを追加"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "Game files (*.zip *.7z *.chd *.cue *.iso *.img *.bin *.py1);;All files (*)"
+msgstr "ゲームファイル (*.zip *.7z *.chd *.cue *.iso *.img *.bin *.py1);;すべてのファイル (*)"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "Add a game folder…"
+msgstr "ゲームフォルダーを追加…"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "Add a game folder (its ROM set, CHDs, images)"
+msgstr "ゲームフォルダーを追加（ROM セット、CHD、イメージ）"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "Refresh"
+msgstr "再読み込み"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "Show games not added yet"
+msgstr "未追加のゲームも表示"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "Every game HIRAKU runs, with what each needs to be added"
+msgstr "HIRAKU が動かせるすべてのゲームと、それぞれの追加に必要なもの"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "Language"
+msgstr "言語"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "The new language is used when HIRAKU starts again."
+msgstr "新しい言語は HIRAKU の次回起動時から使われます。"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "Restart now"
+msgstr "今すぐ再起動"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "Later"
+msgstr "後で"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "Main"
+msgstr "メイン"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "About HIRAKU"
+msgstr "HIRAKU について"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "Cards"
+msgstr "カード"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "List"
+msgstr "リスト"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "The games as cards, with pictures of their title screens, a shelf for each series"
+msgstr "ゲームをカードで表示（タイトル画面の画像付き、シリーズごとの棚）"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "The games as a list, by series and system"
+msgstr "ゲームをリストで表示（シリーズ・システム別）"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "Search"
+msgstr "検索"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "Title"
+msgstr "タイトル"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "Year"
+msgstr "年"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "Status"
+msgstr "状態"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "<b>No games added yet</b>"
+msgstr "<b>まだゲームが追加されていません</b>"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "Add a game from your own dumps: its MAME ROM set (.zip, .7z), CHDs or disc images, or a Konami Python game's folder. HIRAKU recognises the game by its contents. You can also drop them on this window."
+msgstr "ご自身のダンプからゲームを追加してください：MAME の ROM セット（.zip、.7z）、CHD、ディスクイメージ、または Konami Python ゲームのフォルダー。HIRAKU は中身からゲームを判別します。このウィンドウにドロップしても追加できます。"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "Show every game HIRAKU runs"
+msgstr "HIRAKU が動かせるすべてのゲームを表示"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "With what each one needs (View > Show games not added yet)"
+msgstr "それぞれに必要なものも表示します（表示 > 未追加のゲームも表示）"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "What's new…"
+msgstr "新機能…"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "Not now (Help > Check for updates finds it again)"
+msgstr "今はしない（ヘルプ > アップデートを確認 で再表示できます）"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "Details"
+msgstr "詳細"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "Log"
+msgstr "ログ"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "Music"
+msgstr "音楽"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "&File"
+msgstr "ファイル(&F)"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "Convert recordings for sharing…"
+msgstr "録画を共有用に変換…"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "Open the recordings folder"
+msgstr "録画フォルダーを開く"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "Open the screenshots folder"
+msgstr "スクリーンショットフォルダーを開く"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "Open the HIRAKU folder"
+msgstr "HIRAKU フォルダーを開く"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "Open the settings folder"
+msgstr "設定フォルダーを開く"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "Quit"
+msgstr "終了"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "&Game"
+msgstr "ゲーム(&G)"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "Pick a game in the list first"
+msgstr "先にリストからゲームを選んでください"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "&Options"
+msgstr "オプション(&O)"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "&View"
+msgstr "表示(&V)"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "Look"
+msgstr "外観"
+
+#: launcher/mainwindow.cpp runtime/host/notice.cpp
+msgctxt "MainWindow"
+msgid "&Help"
+msgstr "ヘルプ(&H)"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "How to play (docs/PLAY.md)"
+msgstr "遊び方（docs/PLAY.md）"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "Lights (docs/LIGHTS.md)"
+msgstr "ランプ（docs/LIGHTS.md）"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "Open the last runs' logs"
+msgstr "最近の実行ログを開く"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "Report a problem…"
+msgstr "問題を報告…"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "A run's logs and what system this is, cleaned of your folders, names and card numbers, to attach to an issue on GitHub or to a mail"
+msgstr "実行ログとシステム情報（フォルダー名・名前・カード番号は除去済み）。GitHub の issue やメールに添付できます"
+
+#: launcher/mainwindow.cpp runtime/host/notice.cpp
+msgctxt "MainWindow"
+msgid "Check for updates…"
+msgstr "アップデートを確認…"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "A release package updates itself; this copy isn't one"
+msgstr "リリース版のパッケージは自動で更新されます。このコピーはリリース版ではありません"
+
+#. %1 is the games added, as a list in the language's own way ("A, B and C")
+#: launcher/mainwindow.cpp
+#, qt-format
+msgctxt "MainWindow"
+msgid "Kept: %1"
+msgstr "保存しました：%1"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "The files could not be added."
+msgstr "ファイルを追加できませんでした。"
+
+#: launcher/mainwindow.cpp
+#, qt-format
+msgctxt "MainWindow"
+msgid ""
+"Could not run tools/ingest.py (python3 is needed):\n"
+"%1"
+msgstr ""
+"tools/ingest.py を実行できませんでした（python3 が必要です）：\n"
+"%1"
+
+#: launcher/mainwindow.cpp
+#, qt-format
+msgctxt "MainWindow"
+msgid "%1 crashed"
+msgstr "%1 がクラッシュしました"
+
+#: launcher/mainwindow.cpp
+#, qt-format
+msgctxt "MainWindow"
+msgid "%1 left for the game menu"
+msgstr "%1 を終了してゲームメニューに移りました"
+
+#: launcher/mainwindow.cpp
+#, qt-format
+msgctxt "MainWindow"
+msgid "%1 exited (code %2)"
+msgstr "%1 が終了しました（コード %2）"
+
+#: launcher/mainwindow.cpp
+#, qt-format
+msgctxt "MainWindow"
+msgid "%1 stopped"
+msgstr "%1 を停止しました"
+
+#: launcher/mainwindow.cpp
+#, qt-format
+msgctxt "MainWindow"
+msgid ""
+"Did %1 show INSTALLATION COMPLETED?\n"
+"\n"
+"Yes: the e-AMUSEMENT network unit is fitted from the next start (turn e-AMUSEMENT on in the game's test mode). No: the next start installs its data again."
+msgstr ""
+"%1 に INSTALLATION COMPLETED と表示されましたか？\n"
+"\n"
+"はい：次回起動から e-AMUSEMENT ネットワークユニットが装着されます（ゲームのテストモードで e-AMUSEMENT をオンにしてください）。いいえ：次回起動時にデータを再インストールします。"
+
+#. under a game's name in the game menu's box
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "ended with an error: HIRAKU's window has its log"
+msgstr "エラーで終了しました。ログは HIRAKU のウィンドウにあります"
+
+#: launcher/mainwindow.cpp
+#, qt-format
+msgctxt "MainWindow"
+msgid "The game menu couldn't be started: %1"
+msgstr "ゲームメニューを起動できませんでした：%1"
+
+#: launcher/mainwindow.cpp
+#, qt-format
+msgctxt "MainWindow"
+msgid ""
+"Could not start %1:\n"
+"%2"
+msgstr ""
+"%1 を起動できませんでした：\n"
+"%2"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "A game is running. Stop it and quit?"
+msgstr "ゲームが実行中です。停止して終了しますか？"
+
+#. a game's id and MAME's name for it
+#: launcher/mainwindow.cpp
+#, qt-format
+msgctxt "MainWindow"
+msgid "%1  (MAME: %2)"
+msgstr "%1  （MAME：%2）"
+
+#: launcher/mainwindow.cpp
+#, qt-format
+msgctxt "MainWindow"
+msgid "No games found in %1. Is the HIRAKU folder right (Settings)?"
+msgstr "%1 にゲームが見つかりません。HIRAKU フォルダーは正しいですか（設定）？"
+
+#: launcher/mainwindow.cpp
+#, qt-format
+msgctxt "MainWindow"
+msgid "No game matches <b>%1</b>."
+msgstr "<b>%1</b> に一致するゲームはありません。"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "<p><b>First boot:</b> the game starts installed, from the saves kept with its data (<tt>nvram-seed</tt>, from a MAME NVRAM folder).</p>"
+msgstr "<p><b>初回起動：</b>データと一緒に保存されたセーブ（<tt>nvram-seed</tt>、MAME の NVRAM フォルダーから作成）から、インストール済みの状態で起動します。</p>"
+
+#. %1 is the game's own note, in English
+#: launcher/mainwindow.cpp
+#, qt-format
+msgctxt "MainWindow"
+msgid "<p><b>First boot:</b> %1</p>"
+msgstr "<p><b>初回起動：</b>%1</p>"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "<p><b>The install cassette is in the slot</b> for the next start: the game installs itself from CD to flash. When it says the install is done (INFO 506), stop it and play again: it then boots with the game's cassette.</p>"
+msgstr "<p><b>次回起動時はインストール用カセットが挿さっています。</b>ゲームは CD からフラッシュへ自身をインストールします。インストール完了（INFO 506）と表示されたら停止して、もう一度プレイしてください。次はゲーム本来のカセットで起動します。</p>"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "<p><b>The install CD is in the drive</b> for the next start: the game installs itself from it. When it says the install is done, stop it and play again: it then boots from the game's CD.</p>"
+msgstr "<p><b>次回起動時はインストール CD がドライブに入っています。</b>ゲームはその CD から自身をインストールします。インストール完了と表示されたら停止して、もう一度プレイしてください。次はゲームの CD から起動します。</p>"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "<p><b>e-AMUSEMENT:</b> the next start installs the network unit's data from its CD (about 15 to 20 minutes of the game's time; hold Tab to fast-forward). When the game shows INSTALLATION COMPLETED, stop it: the unit is then fitted from the next start.</p>"
+msgstr "<p><b>e-AMUSEMENT：</b>次回起動時に、ネットワークユニットのデータを CD からインストールします（ゲーム内時間で約 15～20 分。Tab 長押しで早送り）。INSTALLATION COMPLETED と表示されたら停止してください。その次の起動からユニットが装着されます。</p>"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "<p><b>e-AMUSEMENT:</b> the network unit is fitted (Game menu). Turn e-AMUSEMENT on in the game's test mode; each guitar or drum kit has a card unit (Card in Controls). The server is HIRAKU's own, or the one in Settings &gt; e-AMUSEMENT.</p>"
+msgstr "<p><b>e-AMUSEMENT：</b>ネットワークユニットが装着されています（「ゲーム」メニュー）。ゲームのテストモードで e-AMUSEMENT をオンにしてください。ギターとドラムそれぞれにカードユニットがあります（操作設定の Card）。サーバーは HIRAKU 内蔵のもの、または 設定 &gt; e-AMUSEMENT のものです。</p>"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "<p><b>e-AMUSEMENT:</b> needs the cabinet's network unit, whose hard disk installs once from its CD: Game &gt; Install the e-AMUSEMENT network unit.</p>"
+msgstr "<p><b>e-AMUSEMENT：</b>筐体のネットワークユニットが必要です。ユニットのハードディスクは CD から一度だけインストールします：ゲーム &gt; e-AMUSEMENT ネットワークユニットをインストール。</p>"
+
+#. %1 is the game's save folder
+#: launcher/mainwindow.cpp
+#, qt-format
+msgctxt "MainWindow"
+msgid "<p>Saves: <tt>%1</tt> (none yet)</p>"
+msgstr "<p>セーブデータ：<tt>%1</tt>（まだありません）</p>"
+
+#. %1 is the game's save folder
+#: launcher/mainwindow.cpp
+#, qt-format
+msgctxt "MainWindow"
+msgid "<p>Saves: <tt>%1</tt></p>"
+msgstr "<p>セーブデータ：<tt>%1</tt></p>"
+
+#: launcher/mainwindow.cpp
+#, qt-format
+msgctxt "MainWindow"
+msgid "<p><b>Mods on:</b> %1 (Game &gt; Mods…)</p>"
+msgstr "<p><b>有効な MOD：</b>%1（ゲーム &gt; MOD…）</p>"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "<p>Unlocks and codes: Game &gt; Unlocks… (or right-click the game).</p>"
+msgstr "<p>解禁とコード：ゲーム &gt; 解禁…（またはゲームを右クリック）。</p>"
+
+#: launcher/mainwindow.cpp
+#, qt-format
+msgctxt "MainWindow"
+msgid "<p><b>DIP switches:</b> %1 (Game &gt; DIP switches…)</p>"
+msgstr "<p><b>DIP スイッチ：</b>%1（ゲーム &gt; DIP スイッチ…）</p>"
+
+#: launcher/mainwindow.cpp
+#, qt-format
+msgctxt "MainWindow"
+msgid "<p>Its own arguments: <tt>%1</tt> (Game &gt; Arguments…)</p>"
+msgstr "<p>個別の引数：<tt>%1</tt>（ゲーム &gt; 引数…）</p>"
+
+#. %1 is the picture mode: "CRT full (crt-royale)", "sharp pixels"
+#: launcher/mainwindow.cpp
+#, qt-format
+msgctxt "MainWindow"
+msgid "<p>Picture: %1, with its own settings</p>"
+msgstr "<p>画面：%1（個別の設定あり）</p>"
+
+#. %1 is the picture mode: "CRT full (crt-royale)", "sharp pixels"
+#: launcher/mainwindow.cpp
+#, qt-format
+msgctxt "MainWindow"
+msgid "<p>Picture: %1</p>"
+msgstr "<p>画面：%1</p>"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "CRT full (crt-royale)"
+msgstr "CRT フル（crt-royale）"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "CRT light (crt-guest-advanced-fast)"
+msgstr "CRT 軽量（crt-guest-advanced-fast）"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "CRT analog (Lola Retro)"
+msgstr "CRT アナログ（Lola Retro）"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "sharp pixels"
+msgstr "くっきりピクセル"
+
+#. %1 is what Test is bound to ("F2"), or "not bound"
+#: launcher/mainwindow.cpp
+#, qt-format
+msgctxt "MainWindow"
+msgid "Trying the controls: once the game is running, press Test (%1) for its test menu: the I/O check there shows each input as it is pressed."
+msgstr "操作の確認：ゲームが起動したら Test（%1）を押してテストメニューを開いてください。I/O チェックで入力が押されるたびに表示されます。"
+
+#: launcher/mainwindow.cpp
+#, qt-format
+msgctxt "MainWindow"
+msgid "%1 needs Wine, which isn't installed."
+msgstr "%1 には Wine が必要ですが、インストールされていません。"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid ""
+"On Linux the PC games (pop'n music 15 on, beatmania IIDX 9th style on) are Konami's Windows programs, run under Wine. Install it with your distribution's packages, then start the game again:\n"
+"\n"
+"Arch, CachyOS, Manjaro: sudo pacman -S wine (the multilib repository on)\n"
+"Debian, Ubuntu, Mint: sudo apt install wine\n"
+"Fedora: sudo dnf install wine\n"
+"\n"
+"The first start then prepares Wine's folder for the PC games, which takes a minute."
+msgstr ""
+"Linux では、PC 版のゲーム（pop'n music 15 以降、beatmania IIDX 9th style 以降）は Konami の Windows 用プログラムを Wine で動かします。ディストリビューションのパッケージで Wine をインストールしてから、もう一度ゲームを起動してください：\n"
+"\n"
+"Arch、CachyOS、Manjaro：sudo pacman -S wine（multilib リポジトリを有効に）\n"
+"Debian、Ubuntu、Mint：sudo apt install wine\n"
+"Fedora：sudo dnf install wine\n"
+"\n"
+"初回起動時に PC ゲーム用の Wine フォルダーを準備するため、1 分ほどかかります。"
+
+#. %1 is a game's id
+#: launcher/mainwindow.cpp
+#, qt-format
+msgctxt "MainWindow"
+msgid "No game %1"
+msgstr "ゲーム %1 はありません"
+
+#: launcher/mainwindow.cpp
+#, qt-format
+msgctxt "MainWindow"
+msgid "%1 is not ready to play."
+msgstr "%1 はまだプレイできません。"
+
+#: launcher/mainwindow.cpp
+#, qt-format
+msgctxt "MainWindow"
+msgid ""
+"%1's saves couldn't be copied from\n"
+"%2\n"
+"to\n"
+"%3\n"
+"\n"
+"Is the disk full?"
+msgstr ""
+"%1 のセーブデータをコピーできませんでした。\n"
+"コピー元：%2\n"
+"コピー先：%3\n"
+"\n"
+"ディスクがいっぱいではありませんか？"
+
+#: launcher/mainwindow.cpp
+#, qt-format
+msgctxt "MainWindow"
+msgid "Running %1"
+msgstr "%1 を実行中"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "The game menu: no game is ready to play yet"
+msgstr "ゲームメニュー：プレイできるゲームがまだありません"
+
+#: launcher/mainwindow.cpp
+#, qt-format
+msgctxt "MainWindow"
+msgid "The game menu (hiraku-menu) isn't in %1"
+msgstr "ゲームメニュー（hiraku-menu）が %1 にありません"
+
+#: launcher/mainwindow.cpp
+#, qt-format
+msgctxt "MainWindow"
+msgid "The game menu's list couldn't be written to %1"
+msgstr "ゲームメニューのリストを %1 に書き込めませんでした"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "The game menu is open (the cabinet's controls choose; Escape closes it)"
+msgstr "ゲームメニューを開いています（筐体の操作で選択、Esc で閉じます）"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "The game menu was closed"
+msgstr "ゲームメニューを閉じました"
+
+#: launcher/mainwindow.cpp
+#, qt-format
+msgctxt "MainWindow"
+msgid "The game menu stopped (code %1)"
+msgstr "ゲームメニューが停止しました（コード %1）"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "Mods…"
+msgstr "MOD…"
+
+#. %1 is a series or cabinet ("pop'n music")
+#: launcher/mainwindow.cpp
+#, qt-format
+msgctxt "MainWindow"
+msgid "Controls for %1…"
+msgstr "%1 の操作設定…"
+
+#: launcher/mainwindow.cpp
+#, qt-format
+msgctxt "MainWindow"
+msgid "Lights for %1…"
+msgstr "%1 のランプ設定…"
+
+#: launcher/mainwindow.cpp
+#, qt-format
+msgctxt "MainWindow"
+msgid "Picture for %1…"
+msgstr "%1 の画面設定…"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "Picture in the game menu"
+msgstr "ゲームメニューの画像"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "Choose a picture…"
+msgstr "画像を選ぶ…"
+
+#. a file dialog's filter: what is in brackets stays as it is
+#: launcher/mainwindow.cpp
+#, qt-format
+msgctxt "MainWindow"
+msgid "A picture for %1 in the game menu"
+msgstr "ゲームメニューでの %1 の画像"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "Pictures (*.png *.jpg *.jpeg *.bmp *.webp);;All files (*)"
+msgstr "画像 (*.png *.jpg *.jpeg *.bmp *.webp);;すべてのファイル (*)"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "That file isn't a picture HIRAKU can read."
+msgstr "このファイルは HIRAKU が読める画像ではありません。"
+
+#: launcher/mainwindow.cpp
+#, qt-format
+msgctxt "MainWindow"
+msgid "The picture couldn't be copied to %1."
+msgstr "画像を %1 にコピーできませんでした。"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "Shown in the game menu behind the list, and on the game's card"
+msgstr "ゲームメニューのリストの背後と、ゲームのカードに表示されます"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "Back to its title screen"
+msgstr "タイトル画面に戻す"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "Remove the picture chosen"
+msgstr "選んだ画像を外す"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "Keep its title screen again at the next start"
+msgstr "次回起動時にタイトル画面を撮り直す"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "The next start keeps a new one, if no control is touched before the title screen"
+msgstr "タイトル画面までに操作しなければ、次回起動時に新しく保存します"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "DIP switches…"
+msgstr "DIP スイッチ…"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "The board's switches: coinage (Free Play), difficulty, demo sounds, hidden modes"
+msgstr "基板のスイッチ：コイン設定（フリープレイ）、難易度、デモ音、隠しモード"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "Unlocks…"
+msgstr "解禁…"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "Floppy disk"
+msgstr "フロッピーディスク"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "No disk"
+msgstr "ディスクなし"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "The drive stays empty, as on a cabinet nobody brought a disk to"
+msgstr "ドライブは空のまま（誰もディスクを持ってこなかった筐体と同じ）"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "The game's own disk"
+msgstr "ゲーム専用のディスク"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "A disk kept in the game's save folder (floppy.img), made blank and formatted the first time: the game keeps the player's name, options and scores on it at the end of a credit, and reads them at the next"
+msgstr "ゲームのセーブフォルダーに置かれるディスク（floppy.img）。初回は空でフォーマットされます。クレジットの終わりにプレイヤー名・オプション・スコアを書き込み、次のクレジットで読み込みます"
+
+#: launcher/mainwindow.cpp
+#, qt-format
+msgctxt "MainWindow"
+msgid "A disk image: %1…"
+msgstr "ディスクイメージ：%1…"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "A disk image…"
+msgstr "ディスクイメージ…"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "A 1.44 MB disk image of your own (made blank and formatted if the file isn't there). One file can be given to all five games: a disk went from one beatmania III to the next"
+msgstr "ご自身の 1.44 MB ディスクイメージ（ファイルがなければ空でフォーマットして作成）。1 つのファイルを 5 作すべてで使えます：ディスクは beatmania III の次の作品へ引き継げました"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "A 1.44 MB floppy disk image (made if it isn't there)"
+msgstr "1.44 MB フロッピーディスクイメージ（なければ作成）"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "Disk images (*.img *.ima *.flp *.dsk);;All files (*)"
+msgstr "ディスクイメージ (*.img *.ima *.flp *.dsk);;すべてのファイル (*)"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "In the game, Insert takes the disk out and puts it in (Controls)"
+msgstr "ゲーム中、Insert でディスクを出し入れします（操作設定）"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "Memory cards"
+msgstr "メモリーカード"
+
+#: launcher/mainwindow.cpp
+#, qt-format
+msgctxt "MainWindow"
+msgid "Slot %1"
+msgstr "スロット %1"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "No card"
+msgstr "カードなし"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "The slot stays empty, as on a cabinet nobody brought a card to"
+msgstr "スロットは空のまま（誰もカードを持ってこなかった筐体と同じ）"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "The game's own card"
+msgstr "ゲーム専用のカード"
+
+#: launcher/mainwindow.cpp
+#, qt-format
+msgctxt "MainWindow"
+msgid "A card kept in the game's save folder (%1), made formatted and empty the first time"
+msgstr "ゲームのセーブフォルダーに置かれるカード（%1）。初回はフォーマット済みの空のカードです"
+
+#: launcher/mainwindow.cpp
+#, qt-format
+msgctxt "MainWindow"
+msgid "A card image: %1…"
+msgstr "カードイメージ：%1…"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "A card image…"
+msgstr "カードイメージ…"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "A raw PlayStation memory card image of your own (128 KiB, .mcr), which the game reads and writes in place: the one a PlayStation emulator plays the home version with (made formatted if the file isn't there)"
+msgstr "ご自身の PlayStation メモリーカードの生イメージ（128 KiB、.mcr）。ゲームがそのまま読み書きします。PlayStation エミュレーターで家庭用版を遊ぶときのものと同じです（ファイルがなければフォーマットして作成）"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "A PlayStation memory card image (made if it isn't there)"
+msgstr "PlayStation メモリーカードイメージ（なければ作成）"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "Memory card images (*.mcr *.mcd *.mc *.srm);;All files (*)"
+msgstr "メモリーカードイメージ (*.mcr *.mcd *.mc *.srm);;すべてのファイル (*)"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "In the game, Home and End take card 1 or 2 out and put it in (Controls)"
+msgstr "ゲーム中、Home と End でカード 1・2 を出し入れします（操作設定）"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "In the game, Insert and Delete take card 1 or 2 out and put it in (Controls)"
+msgstr "ゲーム中、Insert と Delete でカード 1・2 を出し入れします（操作設定）"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "Boot once with the install cassette"
+msgstr "一度だけインストール用カセットで起動"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "For an install that stopped before it was done (the game then shows ERROR 147)"
+msgstr "途中で止まったインストール用（その場合ゲームは ERROR 147 を表示します）"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "Boot once with the install CD"
+msgstr "一度だけインストール CD で起動"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "To install again, or finish an install that stopped before it was done"
+msgstr "再インストール、または途中で止まったインストールの続きに"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "Install the e-AMUSEMENT network unit again"
+msgstr "e-AMUSEMENT ネットワークユニットを再インストール"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "Install the e-AMUSEMENT network unit"
+msgstr "e-AMUSEMENT ネットワークユニットをインストール"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "At the next start the game installs the unit's hard disk from its CD (about 15 to 20 minutes of its time). When it shows INSTALLATION COMPLETED, stop it: the unit is then fitted"
+msgstr "次回起動時に、ユニットのハードディスクを CD からインストールします（ゲーム内時間で約 15～20 分）。INSTALLATION COMPLETED と表示されたら停止してください。これでユニットが装着されます"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "e-AMUSEMENT network unit fitted"
+msgstr "e-AMUSEMENT ネットワークユニットを装着"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "e-AMUSEMENT through the cabinet's network unit and its card units (installed first)"
+msgstr "筐体のネットワークユニットとカードユニットによる e-AMUSEMENT（先にインストールが必要）"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "One 4:3 screen, nine buttons"
+msgstr "4:3 画面 1 枚、9 ボタン"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "For an older cabinet: the main screen at 640x480, no touch screen or big buttons; the save folder's single-screen/ layout when there is one"
+msgstr "旧筐体向け：メイン画面を 640x480 にし、タッチ画面や大きなボタンは使いません。セーブフォルダーに single-screen/ レイアウトがあればそれを使います"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "Market"
+msgstr "出荷地域"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "The country the cabinet was sold for: its texts' language and the songs it lists (licensed songs are some countries' only)"
+msgstr "筐体の出荷先の国：テキストの言語と収録曲が変わります（ライセンス曲は一部の国でのみ収録）"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "As the game's data says"
+msgstr "ゲームデータのとおり"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "Japan"
+msgstr "日本"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "Asia (English)"
+msgstr "アジア（英語）"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "Korea"
+msgstr "韓国"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "USA"
+msgstr "アメリカ"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "Open the save folder"
+msgstr "セーブフォルダーを開く"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "Reset save data…"
+msgstr "セーブデータをリセット…"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "Stop the game first."
+msgstr "先にゲームを停止してください。"
+
+#. %1 is the game, %2 its save folder
+#: launcher/mainwindow.cpp
+#, qt-format
+msgctxt "MainWindow"
+msgid ""
+"Move %1's save data (operator settings, rankings, sound flash) to the trash?\n"
+"\n"
+"%2\n"
+"\n"
+"The next start is a first boot, as on a new cabinet."
+msgstr ""
+"%1 のセーブデータ（オペレーター設定、ランキング、サウンドフラッシュ）をゴミ箱に移動しますか？\n"
+"\n"
+"%2\n"
+"\n"
+"次回起動は新品の筐体と同じ初回起動になります。"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "The game's own floppy disk (floppy.img, a player's name and scores) is in that folder and goes with it."
+msgstr "ゲーム専用のフロッピーディスク（floppy.img、プレイヤー名とスコア）もこのフォルダーにあり、一緒に移動されます。"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "The game's own memory cards (memcard1.mcr, memcard2.mcr) are in that folder and go with it."
+msgstr "ゲーム専用のメモリーカード（memcard1.mcr、memcard2.mcr）もこのフォルダーにあり、一緒に移動されます。"
+
+#: launcher/mainwindow.cpp
+#, qt-format
+msgctxt "MainWindow"
+msgid "Could not move %1 to the trash."
+msgstr "%1 をゴミ箱に移動できませんでした。"
+
+#: launcher/mainwindow.cpp
+#, qt-format
+msgctxt "MainWindow"
+msgid "Arguments for %1…"
+msgstr "%1 の引数…"
+
+#: launcher/mainwindow.cpp
+#, qt-format
+msgctxt "MainWindow"
+msgid "Arguments for %1 alone, added after those for every game (Settings > General):"
+msgstr "%1 だけの引数。全ゲーム共通の引数（設定 > 全般）の後に追加されます："
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "Command-line options for this game only (docs/PLAY.md lists them)"
+msgstr "このゲームだけのコマンドラインオプション（一覧は docs/PLAY.md）"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "Copy the command line"
+msgstr "コマンドラインをコピー"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "Add games"
+msgstr "ゲームの追加"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "Move the game's files into the HIRAKU folder, or leave them where they are?"
+msgstr "ゲームのファイルを HIRAKU フォルダーに移動しますか、それとも今の場所に置いたままにしますか？"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid ""
+"Move: its CHDs, disks and ROM set (a PC game: its folder) go into the HIRAKU folder (dumps/) and are gone from where they are now. From another drive they are copied, then removed.\n"
+"\n"
+"Leave: HIRAKU reads them where they are: keep them there (a USB drive plugged in to play).\n"
+"\n"
+"Its ROMs are copied in either way (they are small); a Firebeat game's discs are unpacked into the HIRAKU folder either way."
+msgstr ""
+"移動：CHD、ディスク、ROM セット（PC ゲームならそのフォルダー）を HIRAKU フォルダー（dumps/）に移し、元の場所からはなくなります。別のドライブからの場合はコピーしてから削除します。\n"
+"\n"
+"そのまま：HIRAKU は今の場所から読み込みます。ファイルはそこに置いたままにしてください（USB ドライブを挿してプレイする場合など）。\n"
+"\n"
+"ROM はどちらの場合もコピーされます（小さいため）。Firebeat ゲームのディスクはどちらの場合も HIRAKU フォルダーに展開されます。"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "Move into the HIRAKU folder"
+msgstr "HIRAKU フォルダーに移動"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "Leave where they are"
+msgstr "そのままにする"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "Don't ask again (Settings > General)"
+msgstr "今後は確認しない（設定 > 全般）"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "<p><b>Files:</b> checking…</p>"
+msgstr "<p><b>ファイル：</b>確認中…</p>"
+
+#: launcher/mainwindow.cpp
+#, qt-format
+msgctxt "MainWindow"
+msgid "<p><b>Files:</b> could not be listed (%1)</p>"
+msgstr "<p><b>ファイル：</b>一覧を取得できませんでした（%1）</p>"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "missing"
+msgstr "欠落"
+
+#: launcher/mainwindow.cpp
+#, qt-format
+msgctxt "MainWindow"
+msgid "not the dump MAME knows (its SHA-1: <tt>%1</tt>)"
+msgstr "MAME の認識するダンプではありません（その SHA-1：<tt>%1</tt>）"
+
+#. %1 is the counts; then what each mark beside a file says
+#: launcher/mainwindow.cpp
+#, qt-format
+msgctxt "MainWindow"
+msgid "<p><b>Files:</b> %1<br><small>✓ the dump MAME knows (its SHA-1) · • there, nothing to check it against · ✗ another dump · – missing</small></p>"
+msgstr "<p><b>ファイル：</b>%1<br><small>✓ MAME の認識するダンプ（SHA-1 一致）· • あり、照合できるデータなし · ✗ 別のダンプ · – 欠落</small></p>"
+
+#: launcher/mainwindow.cpp
+#, qt-format
+msgctxt "MainWindow"
+msgid "<p><small>Reading the big files (%1)…</small></p>"
+msgstr "<p><small>大きなファイルを読み込み中（%1）…</small></p>"
+
+#. keep the link (<a href='hash-big'>...</a>) as it is, its words translated; %1 is a size
+#: launcher/mainwindow.cpp
+#, qt-format
+msgctxt "MainWindow"
+msgid "<p><a href='hash-big'>Hash the big files too</a> <small>(%1: their MD5 and SHA-1, kept once read)</small></p>"
+msgstr "<p><a href='hash-big'>大きなファイルもハッシュを計算する</a> <small>（%1：MD5 と SHA-1。一度読めば保存されます）</small></p>"
+
+#: launcher/mainwindow.cpp
+#, qt-format
+msgctxt "MainWindow"
+msgid "%1 is missing: is the HIRAKU folder set right (Settings)?"
+msgstr "%1 がありません。HIRAKU フォルダーの設定は正しいですか（設定）？"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "Adding games runs tools/ingest.py, which needs Python 3 (python.org)."
+msgstr "ゲームの追加には tools/ingest.py を使うため、Python 3（python.org）が必要です。"
+
+#: launcher/mainwindow.cpp
+#, qt-format
+msgctxt "MainWindow"
+msgid ""
+"Could not look for a new version:\n"
+"%1"
+msgstr ""
+"新しいバージョンを確認できませんでした：\n"
+"%1"
+
+#: launcher/mainwindow.cpp
+#, qt-format
+msgctxt "MainWindow"
+msgid "This is the latest version (%1)."
+msgstr "最新バージョンです（%1）。"
+
+#. %1 is the new release's name ("HIRAKU 0.15.0"), %2 this version
+#: launcher/mainwindow.cpp
+#, qt-format
+msgctxt "MainWindow"
+msgid "<b>%1</b> is out (this is %2)."
+msgstr "<b>%1</b> が公開されています（現在は %2）。"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "Close the game, or wait for the game being added, before updating."
+msgstr "アップデートの前に、ゲームを終了するか、ゲームの追加が終わるまでお待ちください。"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "Convert recordings"
+msgstr "録画の変換"
+
+#: launcher/mainwindow.cpp
+#, qt-format
+msgctxt "MainWindow"
+msgid "No program to convert with: hiraku-menu isn't in %1."
+msgstr "変換に使うプログラムがありません：hiraku-menu が %1 にありません。"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "Convert recordings for sharing (H.264, .mp4)"
+msgstr "録画を共有用に変換（H.264、.mp4）"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "Exact recordings (*.mkv)"
+msgstr "無劣化の録画 (*.mkv)"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "Converting…"
+msgstr "変換中…"
+
+#. each followed by its files, one a line
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "No recording was converted."
+msgstr "変換された録画はありません。"
+
+#: launcher/mainwindow.cpp
+#, qt-format
+msgctxt "MainWindow"
+msgid ""
+"Made:\n"
+"%1"
+msgstr ""
+"作成しました：\n"
+"%1"
+
+#: launcher/mainwindow.cpp
+#, qt-format
+msgctxt "MainWindow"
+msgid ""
+"Converted up to the damage (the recording was cut short or is damaged; the log says how much was kept):\n"
+"%1"
+msgstr ""
+"破損箇所まで変換しました（録画が途中で切れているか破損しています。保存できた範囲はログに記録されています）：\n"
+"%1"
+
+#: launcher/mainwindow.cpp
+#, qt-format
+msgctxt "MainWindow"
+msgid ""
+"Not converted (the log says why):\n"
+"%1"
+msgstr ""
+"変換できませんでした（理由はログにあります）：\n"
+"%1"
+
+#: launcher/mainwindow.cpp
+#, qt-format
+msgctxt "MainWindow"
+msgid "Converting %1 (%2 of %3)…"
+msgstr "%1 を変換中（%3 件中 %2 件目）…"
+
+#. %1 is the game, %2 why ("a segmentation fault (SIGSEGV): it used memory it doesn't have")
+#: launcher/mainwindow.cpp
+#, qt-format
+msgctxt "MainWindow"
+msgid "%1 stopped: %2."
+msgstr "%1 が停止しました：%2。"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "It wrote nothing."
+msgstr "何も出力していません。"
+
+#: launcher/mainwindow.cpp
+#, qt-format
+msgctxt "MainWindow"
+msgid ""
+"Its last messages:\n"
+"\n"
+"%1"
+msgstr ""
+"最後のメッセージ：\n"
+"\n"
+"%1"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "The whole log is in the log pane, and in the run's log file (Help > Open the last runs' logs): report it with the button below (or Help > Report a problem)."
+msgstr "ログ全体はログ欄と、実行ログファイル（ヘルプ > 最近の実行ログを開く）にあります。下のボタン（またはヘルプ > 問題を報告）で報告してください。"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "Report this problem…"
+msgstr "この問題を報告…"
+
+#: launcher/mainwindow.cpp
+msgctxt "MainWindow"
+msgid "Open the log file"
+msgstr "ログファイルを開く"
+
+#. %1 is the game's title
+#: launcher/modsdialog.cpp
+#, qt-format
+msgctxt "ModsDialog"
+msgid "Mods for %1"
+msgstr "%1 の MOD"
+
+#: launcher/modsdialog.cpp
+msgctxt "ModsDialog"
+msgid "Mods change the game as it runs, without changing its data. The ones ticked run, in this order (the first one wins where two change the same thing, as with ifs_layeredfs). With any on, the game keeps its saves apart from the clean game's (started from a copy of them)."
+msgstr "MOD はゲームのデータを変えずに、実行中のゲームを変更します。チェックしたものがこの順番で動作します（ifs_layeredfs と同様に、2 つが同じものを変更する場合は先のものが優先）。1 つでもオンにすると、ゲームはセーブデータを MOD なしのゲームとは別に保存します（最初はそのコピーから始まります）。"
+
+#. buttons moving the chosen mod in the list
+#: launcher/modsdialog.cpp
+msgctxt "ModsDialog"
+msgid "Up"
+msgstr "上へ"
+
+#. buttons moving the chosen mod in the list
+#: launcher/modsdialog.cpp
+msgctxt "ModsDialog"
+msgid "Down"
+msgstr "下へ"
+
+#: launcher/modsdialog.cpp
+msgctxt "ModsDialog"
+msgid "Settings…"
+msgstr "設定…"
+
+#: launcher/modsdialog.cpp
+msgctxt "ModsDialog"
+msgid "The chosen mod's settings, kept for the game's next start with it on"
+msgstr "選択中の MOD の設定。次回この MOD をオンにしてゲームを起動するときに使われます"
+
+#: launcher/modsdialog.cpp
+msgctxt "ModsDialog"
+msgid "Open the mods folder"
+msgstr "MOD フォルダーを開く"
+
+#. a button: read the mods folder again
+#: launcher/modsdialog.cpp
+msgctxt "ModsDialog"
+msgid "Look again"
+msgstr "再読み込み"
+
+#. a mod in the list: %1 is its name and version
+#: launcher/modsdialog.cpp
+#, qt-format
+msgctxt "ModsDialog"
+msgid "%1  (comes with HIRAKU)"
+msgstr "%1  （HIRAKU 同梱）"
+
+#. %1 is the mods folder's path
+#: launcher/modsdialog.cpp
+#, qt-format
+msgctxt "ModsDialog"
+msgid "No mods for this game yet: put each in a folder of its own in %1: its mod.toml, or the game's files at their own paths, pictures as PNG (docs/MODS.md)."
+msgstr "このゲームの MOD はまだありません。%1 の中に MOD ごとのフォルダーを作り、mod.toml、またはゲームのファイルを元のパスで（画像は PNG で）入れてください（docs/MODS.md）。"
+
+#: launcher/modsdialog.cpp
+msgctxt "ModsDialog"
+msgid "(no description)"
+msgstr "（説明なし）"
+
+#. %1 is why (the mod file reader's message, in English)
+#: launcher/modsdialog.cpp
+#, qt-format
+msgctxt "ModsDialog"
+msgid "Its mod.toml can't be read: %1"
+msgstr "mod.toml を読み込めません：%1"
+
+#. %1 is the mod's settings and their values, "name: value, name: value"
+#: launcher/modsdialog.cpp
+#, qt-format
+msgctxt "ModsDialog"
+msgid "Settings: %1"
+msgstr "設定：%1"
+
+#. a tick box setting's value
+#: launcher/modsettings.h
+msgctxt "ModSettings"
+msgid "on"
+msgstr "オン"
+
+#. a tick box setting's value
+#: launcher/modsettings.h
+msgctxt "ModSettings"
+msgid "off"
+msgstr "オフ"
+
+#. %1 is a setting's name (the mod author's), %2 its value; shown in a list joined by ", "
+#: launcher/modsettings.h
+#, qt-format
+msgctxt "ModSettings"
+msgid "%1: %2"
+msgstr "%1：%2"
+
+#. an action that switches a setting: %1 the setting's name, %2 and %3 its two values
+#: launcher/modsettings.h
+#, qt-format
+msgctxt "ModSettings"
+msgid "%1, %2 / %3"
+msgstr "%1、%2 / %3"
+
+#. an action that raises or lowers a setting: %1 the setting's name, %2 the step
+#: launcher/modsettings.h
+#, qt-format
+msgctxt "ModSettings"
+msgid "%1 up by %2"
+msgstr "%1 を %2 上げる"
+
+#. an action that raises or lowers a setting: %1 the setting's name, %2 the step
+#: launcher/modsettings.h
+#, qt-format
+msgctxt "ModSettings"
+msgid "%1 down by %2"
+msgstr "%1 を %2 下げる"
+
+#. an action that raises or lowers a setting by one: %1 the setting's name
+#: launcher/modsettings.h
+#, qt-format
+msgctxt "ModSettings"
+msgid "%1 up"
+msgstr "%1 を上げる"
+
+#. an action that raises or lowers a setting by one: %1 the setting's name
+#: launcher/modsettings.h
+#, qt-format
+msgctxt "ModSettings"
+msgid "%1 down"
+msgstr "%1 を下げる"
+
+#. a key while playing: %1 the key, %2 the action's name (the mod author's), %3 what it does
+#: launcher/modsettings.h
+#, qt-format
+msgctxt "ModSettings"
+msgid "%1: %2 (%3)"
+msgstr "%1：%2（%3）"
+
+#. %1 is the mod's name (its author's)
+#: launcher/modsettingsdialog.cpp
+#, qt-format
+msgctxt "ModSettingsDialog"
+msgid "Settings: %1"
+msgstr "設定：%1"
+
+#: launcher/modsettingsdialog.cpp
+msgctxt "ModSettingsDialog"
+msgid "The mod's settings, kept for the next time the game starts with it on (the game reads them when it starts; the keys below change some while playing)."
+msgstr "MOD の設定です。次回この MOD をオンにしてゲームを起動するときに使われます（ゲームは起動時に読み込みます。下のキーでプレイ中に一部を変更できます）。"
+
+#. %1 is why (the mod file reader's message, in English)
+#: launcher/modsettingsdialog.cpp
+#, qt-format
+msgctxt "ModSettingsDialog"
+msgid ""
+"This mod's mod.toml can't be read, so the game wouldn't start with it:\n"
+"%1"
+msgstr ""
+"この MOD の mod.toml を読み込めないため、この MOD ではゲームが起動しません：\n"
+"%1"
+
+#. %1 is the default value ("on", "off", a number or a named value)
+#: launcher/modsettingsdialog.cpp
+#, qt-format
+msgctxt "ModSettingsDialog"
+msgid "(default: %1)"
+msgstr "（既定：%1）"
+
+#: launcher/modsettingsdialog.cpp
+#, qt-format
+msgctxt "ModSettingsDialog"
+msgid "%1 (default)"
+msgstr "%1（既定）"
+
+#. %1 and %2 are the setting's lowest and highest value, %3 its default
+#: launcher/modsettingsdialog.cpp
+#, qt-format
+msgctxt "ModSettingsDialog"
+msgid "%1 to %2, default %3"
+msgstr "%1～%2、既定 %3"
+
+#: launcher/modsettingsdialog.cpp
+#, qt-format
+msgctxt "ModSettingsDialog"
+msgid "%1 to %2 (default: %3)"
+msgstr "%1～%2（既定：%3）"
+
+#. a setting's name (the mod author's, as written) as a form's label
+#: launcher/modsettingsdialog.cpp
+#, qt-format
+msgctxt "ModSettingsDialog"
+msgid "%1:"
+msgstr "%1："
+
+#: launcher/modsettingsdialog.cpp
+msgctxt "ModSettingsDialog"
+msgid "Keys while playing (the bindings in the settings file):"
+msgstr "プレイ中のキー（設定ファイルの割り当て）："
+
+#: launcher/modsettingsdialog.cpp
+msgctxt "ModSettingsDialog"
+msgid "This mod has no settings."
+msgstr "この MOD には設定がありません。"
+
+#: launcher/modsettingsdialog.cpp
+msgctxt "ModSettingsDialog"
+msgid "Defaults"
+msgstr "既定値"
+
+#. %1 is the file and the system's reason
+#: launcher/modsettingsdialog.cpp
+#, qt-format
+msgctxt "ModSettingsDialog"
+msgid ""
+"The settings couldn't be kept:\n"
+"%1"
+msgstr ""
+"設定を保存できませんでした：\n"
+"%1"
+
+#: launcher/music.cpp
+#, qt-plural-format
+msgctxt "MusicPlayer"
+msgid "%n song"
+msgid_plural "%n songs"
+msgstr[0] "%n 曲"
+
+#: launcher/music.cpp
+msgctxt "MusicPlayer"
+msgid "The 16 parts' levels"
+msgstr "16 パートのレベル"
+
+#: launcher/music.cpp
+msgctxt "MusicPlayer"
+msgid "Where the song is: drag to move in it"
+msgstr "曲の再生位置：ドラッグで移動できます"
+
+#: launcher/music.cpp
+msgctxt "MusicPlayer"
+msgid "Previous song (or this one again)"
+msgstr "前の曲（またはこの曲の最初から）"
+
+#: launcher/music.cpp
+msgctxt "MusicPlayer"
+msgid "Play"
+msgstr "再生"
+
+#: launcher/music.cpp
+msgctxt "MusicPlayer"
+msgid "Next song"
+msgstr "次の曲"
+
+#: launcher/music.cpp
+msgctxt "MusicPlayer"
+msgid "Shuffle"
+msgstr "シャッフル"
+
+#. a switch's short label beside the music's buttons: the music starts by itself
+#: launcher/music.cpp
+msgctxt "MusicPlayer"
+msgid "Autoplay"
+msgstr "自動再生"
+
+#. a switch's short label beside the music's buttons: the music starts by itself
+#: launcher/music.cpp
+msgctxt "MusicPlayer"
+msgid "Start the music when the launcher opens"
+msgstr "ランチャーを開いたときに音楽を再生します"
+
+#: launcher/music.cpp
+msgctxt "MusicPlayer"
+msgid "Open the music folder"
+msgstr "音楽フォルダーを開く"
+
+#: launcher/music.cpp
+msgctxt "MusicPlayer"
+msgid "Volume set back to the middle (saved low before 0.12.0)"
+msgstr "音量を中央に戻しました（0.12.0 より前に低く保存されていたため）"
+
+#: launcher/music.cpp
+msgctxt "MusicPlayer"
+msgid "Volume"
+msgstr "音量"
+
+#: launcher/music.cpp
+msgctxt "MusicPlayer"
+msgid "The music player couldn't be started"
+msgstr "音楽プレイヤーを起動できませんでした"
+
+#. the launcher's music on its first start, fetching its first MIDI files: %1 done of %2
+#: launcher/music.cpp
+#, qt-format
+msgctxt "MusicPlayer"
+msgid "Getting the first songs: %1 of %2"
+msgstr "最初の曲を取得中：%2 曲中 %1 曲"
+
+#: launcher/music.cpp
+msgctxt "MusicPlayer"
+msgid "Getting the first songs…"
+msgstr "最初の曲を取得中…"
+
+#: launcher/music.cpp
+#, qt-format
+msgctxt "MusicPlayer"
+msgid "Song %1 of %2"
+msgstr "%2 曲中 %1 曲目"
+
+#: launcher/music.cpp
+msgctxt "MusicPlayer"
+msgid "No music yet"
+msgstr "まだ音楽がありません"
+
+#: launcher/music.cpp
+msgctxt "MusicPlayer"
+msgid "MIDI files in the music folder, or dropped here"
+msgstr "音楽フォルダーの MIDI ファイル、またはここにドロップしたもの"
+
+#: launcher/music.cpp
+msgctxt "MusicPlayer"
+msgid "Ready"
+msgstr "準備完了"
+
+#. added after "Song 3 of 20 · ": the music waits while a game runs; the player is starting
+#: launcher/music.cpp
+msgctxt "MusicPlayer"
+msgid "waits for the game"
+msgstr "ゲーム終了待ち"
+
+#: launcher/music.cpp
+msgctxt "MusicPlayer"
+msgid "starting…"
+msgstr "起動中…"
+
+#: launcher/music.cpp
+msgctxt "MusicPlayer"
+msgid "Getting the first songs"
+msgstr "最初の曲を取得中"
+
+#: launcher/music.cpp
+msgctxt "MusicPlayer"
+msgid "The volume was set back to the middle: on Windows the slider did nothing before 0.12.0, and a low volume saved then would be silent now"
+msgstr "音量を中央に戻しました。0.12.0 より前の Windows ではスライダーが効いておらず、そのとき保存された低い音量では今は無音になってしまうためです"
+
+#. a problem (%1) and what the system or the player said (%2)
+#: launcher/music.cpp
+#, qt-format
+msgctxt "MusicPlayer"
+msgid "%1: %2"
+msgstr "%1：%2"
+
+#: launcher/music.cpp
+msgctxt "MusicPlayer"
+msgid "Muted"
+msgstr "ミュート"
+
+#: launcher/music.cpp
+msgctxt "MusicPlayer"
+msgid "Pause (the music waits for the game to end)"
+msgstr "一時停止（ゲーム終了まで音楽は待機します）"
+
+#: launcher/music.cpp
+msgctxt "MusicPlayer"
+msgid "Pause"
+msgstr "一時停止"
+
+#: launcher/music.cpp
+#, qt-format
+msgctxt "MusicPlayer"
+msgid ""
+"No music yet. Put MIDI files (.mid) in the music folder, or drop them on the window:\n"
+"\n"
+"%1"
+msgstr ""
+"まだ音楽がありません。音楽フォルダーに MIDI ファイル（.mid）を入れるか、ウィンドウにドロップしてください：\n"
+"\n"
+"%1"
+
+#: launcher/music.cpp
+msgctxt "MusicPlayer"
+msgid "Open the folder"
+msgstr "フォルダーを開く"
+
+#: launcher/music.cpp
+msgctxt "MusicPlayer"
+msgid "No music player"
+msgstr "音楽プレイヤーがありません"
+
+#: launcher/music.cpp
+#, qt-format
+msgctxt "MusicPlayer"
+msgid "hiraku-midi isn't in %1"
+msgstr "hiraku-midi が %1 にありません"
+
+#: launcher/music.cpp
+msgctxt "MusicPlayer"
+msgid "No synth for the music"
+msgstr "音楽用のシンセがありません"
+
+#: launcher/music.cpp
+#, qt-format
+msgctxt "MusicPlayer"
+msgid "Can't play %1"
+msgstr "%1 を再生できません"
+
+#: launcher/music.cpp
+msgctxt "MusicPlayer"
+msgid "None of the songs can be played"
+msgstr "どの曲も再生できません"
+
+#. a program's exit code
+#: launcher/music.cpp
+msgctxt "MusicPlayer"
+msgid "The music player stopped"
+msgstr "音楽プレイヤーが停止しました"
+
+#. a program's exit code
+#: launcher/music.cpp
+#, qt-format
+msgctxt "MusicPlayer"
+msgid "code %1"
+msgstr "コード %1"
+
+#: launcher/nvidia.cpp
+msgctxt "NvidiaNotice"
+msgid "NVIDIA setting for the PC games"
+msgstr "PC ゲーム用の NVIDIA 設定"
+
+#: launcher/nvidia.cpp
+msgctxt "NvidiaNotice"
+msgid "The PC games need one NVIDIA setting to start in full screen."
+msgstr "PC ゲームをフルスクリーンで起動するには、NVIDIA の設定を 1 つ変更する必要があります。"
+
+#. the NVIDIA Control Panel's menus and settings as NVIDIA's own panel names them in the language (it is
+#. translated by NVIDIA); the Japanese error stays as the game shows it. %1 is the game program's path,
+#. %2 the setting's value now (NVIDIA's English name), %3 where it comes from ("the global profile")
+#: launcher/nvidia.cpp
+#, qt-format
+msgctxt "NvidiaNotice"
+msgid ""
+"With NVIDIA's default, HIRAKU's full-screen window takes the screen to itself, and Windows refuses the game its Direct3D (\"Direct3D の初期化に失敗しました\"). In a window the game runs either way.\n"
+"\n"
+"To set it, once:\n"
+"1. Open the NVIDIA Control Panel (right-click the desktop, or the Start menu).\n"
+"2. 3D Settings > Manage 3D settings > Program Settings.\n"
+"3. Add > Browse..., and choose\n"
+"    %1\n"
+"4. Set \"Vulkan/OpenGL present method\" to \"Prefer layered on DXGI Swapchain\".\n"
+"5. Apply.\n"
+"\n"
+"It's now \"%2\" (%3)."
+msgstr ""
+"NVIDIA の既定設定では、HIRAKU のフルスクリーンウィンドウが画面を占有し、Windows がゲームの Direct3D を拒否します（「Direct3D の初期化に失敗しました」）。ウィンドウ表示ではどちらでも動作します。\n"
+"\n"
+"設定方法（一度だけ）：\n"
+"1. NVIDIA コントロールパネルを開きます（デスクトップを右クリック、またはスタートメニュー）。\n"
+"2. 3D 設定 > 3D 設定の管理 > プログラム設定。\n"
+"3. 追加 > 参照... で次を選びます\n"
+"    %1\n"
+"4.「Vulkan/OpenGL present method」を「Prefer layered on DXGI Swapchain」にします。\n"
+"5. 適用。\n"
+"\n"
+"現在の値は「%2」です（%3）。"
+
+#: launcher/nvidia.cpp
+msgctxt "NvidiaNotice"
+msgid "Don't show this again"
+msgstr "今後表示しない"
+
+#. where NVIDIA's setting comes from (in the log in English)
+#: launcher/nvidia.cpp
+msgctxt "NvidiaNotice"
+msgid "its own profile"
+msgstr "プログラム自身のプロファイル"
+
+#. where NVIDIA's setting comes from (in the log in English)
+#: launcher/nvidia.cpp
+msgctxt "NvidiaNotice"
+msgid "the global profile"
+msgstr "グローバルプロファイル"
+
+#: launcher/nvidia.cpp
+msgctxt "NvidiaNotice"
+msgid "the driver's default"
+msgstr "ドライバーの既定値"
+
+#. the picture's modes; the shaders' own names (crt-royale, ...) stay as they are
+#: launcher/picturedialog.cpp
+msgctxt "PictureDialog"
+msgid "Off: sharp pixels"
+msgstr "オフ：くっきりしたドット"
+
+#: launcher/picturedialog.cpp
+msgctxt "PictureDialog"
+msgid "Light: crt-guest-advanced-fast"
+msgstr "軽量：crt-guest-advanced-fast"
+
+#: launcher/picturedialog.cpp
+msgctxt "PictureDialog"
+msgid "Full: crt-royale"
+msgstr "フル：crt-royale"
+
+#: launcher/picturedialog.cpp
+msgctxt "PictureDialog"
+msgid "Analog: Lola Retro"
+msgstr "アナログ：Lola Retro"
+
+#: launcher/picturedialog.cpp
+msgctxt "PictureDialog"
+msgid "Picture"
+msgstr "画面"
+
+#: launcher/picturedialog.cpp
+msgctxt "PictureDialog"
+msgid "All games"
+msgstr "すべてのゲーム"
+
+#. %1 is the game's title
+#: launcher/picturedialog.cpp
+#, qt-format
+msgctxt "PictureDialog"
+msgid "%1 only"
+msgstr "%1 のみ"
+
+#: launcher/picturedialog.cpp
+msgctxt "PictureDialog"
+msgid "Settings for:"
+msgstr "設定対象："
+
+#: launcher/picturedialog.cpp
+msgctxt "PictureDialog"
+msgid "Picture:"
+msgstr "画面："
+
+#: launcher/picturedialog.cpp
+msgctxt "PictureDialog"
+msgid "A running game follows the sliders at once. In the game, F10 cycles off, light, full and analog."
+msgstr "実行中のゲームはスライダーにすぐ追従します。ゲーム中は F10 でオフ・軽量・フル・アナログを切り替えます。"
+
+#. the shader settings' first group (the others are the shader's own English names)
+#: launcher/picturedialog.cpp
+msgctxt "PictureDialog"
+msgid "General"
+msgstr "全般"
+
+#: launcher/picturedialog.cpp
+msgctxt "PictureDialog"
+msgid "Find a setting"
+msgstr "設定を検索"
+
+#: launcher/picturedialog.cpp
+msgctxt "PictureDialog"
+msgid "Reset all"
+msgstr "すべてリセット"
+
+#. a shader's preset (a tube, a cable and a set-up)
+#: launcher/picturedialog.cpp
+msgctxt "PictureDialog"
+msgid "Look:"
+msgstr "プリセット："
+
+#: launcher/picturedialog.cpp
+msgctxt "PictureDialog"
+msgid "Own settings"
+msgstr "カスタム"
+
+#: launcher/picturedialog.cpp
+msgctxt "PictureDialog"
+msgid "The shader's presets: each a tube, a cable and a set-up. Curvature and the board's timing stay as they are."
+msgstr "シェーダーのプリセット：ブラウン管、ケーブル、設置環境の組み合わせです。曲率と基板のタイミングはそのままです。"
+
+#. %1 is the value it goes back to
+#: launcher/picturedialog.cpp
+#, qt-format
+msgctxt "PictureDialog"
+msgid "Back to %1 (all games)"
+msgstr "%1 に戻す（すべてのゲーム）"
+
+#. %1 is the value it goes back to
+#: launcher/picturedialog.cpp
+#, qt-format
+msgctxt "PictureDialog"
+msgid "Back to %1 (the default)"
+msgstr "%1 に戻す（既定）"
+
+#. %1 is a picture mode, "Off: sharp pixels"
+#: launcher/picturedialog.cpp
+#, qt-format
+msgctxt "PictureDialog"
+msgid "Same as all games (%1)"
+msgstr "すべてのゲームと同じ（%1）"
+
+#. %1 is the file, %2 the system's reason
+#: launcher/report.cpp
+msgctxt "ReportDialog"
+msgid "Report a problem"
+msgstr "問題を報告"
+
+#. %1 is the mail address reports can go to
+#: launcher/report.cpp
+#, qt-format
+msgctxt "ReportDialog"
+msgid "A report of one run: its log, the game's own log and what system this is, cleaned of your folders' and names, card numbers and network addresses. Read it below before you share it: what it shows is all that goes in. Save it, then attach the file to an issue on GitHub, or to a mail to %1 (no account needed)."
+msgstr "1 回の実行のレポートです。そのログ、ゲーム自身のログ、システムの情報を含み、フォルダー名や名前、カード番号、ネットワークアドレスは消去されています。共有する前に下で内容を確認してください。表示されている内容がすべてです。保存してから、ファイルを GitHub の issue に添付するか、%1 宛てのメールに添付してください（アカウント不要）。"
+
+#: launcher/report.cpp
+msgctxt "ReportDialog"
+msgid "A report of one run: its log, the game's own log and what system this is, cleaned of your folders' and names, card numbers and network addresses. Read it below before you share it: what it shows is all that goes in. Save it, then attach the file to an issue on GitHub."
+msgstr "1 回の実行のレポートです。そのログ、ゲーム自身のログ、システムの情報を含み、フォルダー名や名前、カード番号、ネットワークアドレスは消去されています。共有する前に下で内容を確認してください。表示されている内容がすべてです。保存してから、ファイルを GitHub の issue に添付してください。"
+
+#. a game run (its date, time and game), to make the report of
+#: launcher/report.cpp
+msgctxt "ReportDialog"
+msgid "The run:"
+msgstr "実行："
+
+#: launcher/report.cpp
+msgctxt "ReportDialog"
+msgid "Save the report…"
+msgstr "レポートを保存…"
+
+#: launcher/report.cpp
+msgctxt "ReportDialog"
+msgid "Send it by mail"
+msgstr "メールで送る"
+
+#: launcher/report.cpp
+msgctxt "ReportDialog"
+msgid "Open a GitHub issue"
+msgstr "GitHub で issue を作成"
+
+#: launcher/report.cpp
+msgctxt "ReportDialog"
+msgid "Opens GitHub's new issue page in your browser, with the system and the game filled in: describe what happened and attach the saved report"
+msgstr "ブラウザーで GitHub の新しい issue のページを開きます（システムとゲームは入力済み）。何が起きたかを書いて、保存したレポートを添付してください"
+
+#. %1 is the mail address
+#: launcher/report.cpp
+#, qt-format
+msgctxt "ReportDialog"
+msgid "Saves the report, then opens your mail program with a message to %1, the system and the game filled in: describe what happened, and attach the saved report if it isn't attached already. With no mail program set up, send the file to that address from your webmail"
+msgstr "レポートを保存してから、%1 宛てのメッセージ（システムとゲームは入力済み）でメールソフトを開きます。何が起きたかを書いて、添付されていなければ保存したレポートを添付してください。メールソフトが設定されていない場合は、Web メールからそのアドレスにファイルを送ってください"
+
+#: launcher/report.cpp
+msgctxt "ReportDialog"
+msgid "No game has been run yet: run the game that has the problem, then come back here."
+msgstr "まだゲームを実行していません。問題が起きるゲームを実行してから、ここに戻ってください。"
+
+#. a file type: keep "(*.txt)"
+#: launcher/report.cpp
+msgctxt "ReportDialog"
+msgid "Save the report"
+msgstr "レポートを保存"
+
+#. a file type: keep "(*.txt)"
+#: launcher/report.cpp
+msgctxt "ReportDialog"
+msgid "Text (*.txt)"
+msgstr "テキスト (*.txt)"
+
+#. %1 is the file, %2 the system's reason
+#: launcher/report.cpp
+#, qt-format
+msgctxt "ReportDialog"
+msgid "Could not write %1: %2"
+msgstr "%1 を書き込めませんでした：%2"
+
+#. sound frames (one a sample for each speaker), and the time they take at 48 kHz
+#: launcher/settingsdialog.cpp
+#, qt-plural-format
+msgctxt "SettingsDialog"
+msgid "%n frame (%1 ms)"
+msgid_plural "%n frames (%1 ms)"
+msgstr[0] "%n フレーム（%1 ms）"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "Display"
+msgstr "ディスプレイ"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "Audio"
+msgstr "サウンド"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "Cabinet I/O"
+msgstr "筐体 I/O"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "General"
+msgstr "全般"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "Look"
+msgstr "外観"
+
+#. "Pop" and "Pop night" are the looks' names (View > Look)
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "The system's: your desktop's own style and colours, its night mode too"
+msgstr "システムの外観：デスクトップのスタイルと配色（ダークモードにも対応）"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "Pop: HIRAKU's six colours on warm paper"
+msgstr "Pop：HIRAKU の 6 色を温かみのある紙の上に"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "Pop night: the six colours on night blue"
+msgstr "Pop night：6 色を夜の青の上に"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "Choose a SoundFont"
+msgstr "SoundFont を選ぶ"
+
+#. a file dialog's filter: what is in brackets stays as it is; ";;" separates two of them
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "SoundFonts (*.sf2 *.sf3);;All files (*)"
+msgstr "SoundFont (*.sf2 *.sf3);;すべてのファイル (*)"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "Browse…"
+msgstr "参照…"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "Choose a folder"
+msgstr "フォルダーを選ぶ"
+
+#. a button beside a card number: a menu of the cards HIRAKU has, or a new number
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "Pick"
+msgstr "選ぶ"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "New card number"
+msgstr "新しいカード番号"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "None"
+msgstr "なし"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "Settings"
+msgstr "設定"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "For the Konami Python games (pop'n music 9-14, DrumMania V and V2), the PC games (pop'n music 15-18, beatmania IIDX) and GuitarFreaks 11th and DrumMania 10th with their network unit (Game menu), with spice2x's option names. The game's e-AMUSEMENT must be ON in its test mode."
+msgstr "Konami Python のゲーム（pop'n music 9～14、DrumMania V・V2）、PC 版のゲーム（pop'n music 15～18、beatmania IIDX）、ネットワークユニット付きの GuitarFreaks 11th・DrumMania 10th（「ゲーム」メニュー）向けの設定です。オプション名は spice2x と同じです。ゲームのテストモードで e-AMUSEMENT を ON にしておく必要があります。"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "The launcher's look"
+msgstr "ランチャーの外観"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "Also in View > Look. It changes when you press OK."
+msgstr "表示 > 外観 からも変更できます。OK を押すと切り替わります。"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "Window"
+msgstr "ウィンドウ"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "Window size:"
+msgstr "ウィンドウサイズ："
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "Start in fullscreen (F11 or Alt+Enter toggles)"
+msgstr "フルスクリーンで起動（F11 または Alt+Enter で切り替え）"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "Keyboardmania: each player's monitor in its own window (two displays)"
+msgstr "Keyboardmania：プレイヤーごとのモニターを別々のウィンドウに（ディスプレイ 2 台）"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "The cabinet has a monitor for each player. Player 2's window opens on the next display; with fullscreen, each fills its own. F11 toggles the window with the keyboard."
+msgstr "筐体にはプレイヤーごとにモニターがあります。プレイヤー 2 のウィンドウは次のディスプレイに開きます。フルスクリーンではそれぞれが自分のディスプレイ全体に表示されます。キーボードでは F11 でウィンドウを切り替えます。"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "Frames and picture"
+msgstr "フレームと画面"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "Smooth frames on a 60, 120 or 240 Hz display"
+msgstr "60・120・240 Hz のディスプレイでフレームを均等に表示"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "The games run at their own rates (pop'n 58.49 Hz, beatmania III 59.94 Hz), which a fixed-refresh display can't show evenly. On: each frame stays up the same number of refreshes, and the game runs at the display's rate (pop'n 2.6 % faster, its sound with it). Off: the exact speed, for a variable-refresh (FreeSync, G-Sync) display."
+msgstr "各ゲームは独自のリフレッシュレートで動きます（pop'n 58.49 Hz、beatmania III 59.94 Hz）。固定リフレッシュレートのディスプレイではこれを均等に表示できません。オン：各フレームを同じ回数のリフレッシュで表示し、ゲームはディスプレイのレートで動きます（pop'n は 2.6 % 速くなり、音も同様）。オフ：本来の速度のまま。可変リフレッシュレート（FreeSync、G-Sync）のディスプレイ向けです。"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "Each frame held for its refreshes"
+msgstr "各フレームをリフレッシュの間そのまま表示"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "Smooth motion in songs: every refresh a picture of its own moment while a song plays"
+msgstr "曲中のみなめらか表示：曲のプレイ中、リフレッシュごとにその瞬間の画面を描画"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "Smooth motion everywhere: on every screen"
+msgstr "常になめらか表示：すべての画面で"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "CRT beam: each refresh the part of the tube the beam sweeps (120 Hz and up)"
+msgstr "CRT ビーム：リフレッシュごとに、ビームが走査する部分だけを表示（120 Hz 以上）"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "DJ Main, Firebeat, Twinkle and System 573 games, and the PC beatmania IIDX games, with smooth frames on, on a display faster than the game. Smooth motion: the game at its exact speed on any display (60, 144, 240 Hz), the notes and other moving objects carried on along their move at each refresh (the PC IIDX games: the notes only, the rest as the game drew it). In songs: only while a song is played, the menus each frame held for its refreshes, for the games that say when a song plays (beatmania III, most Firebeat and DJ Main games: docs/SMOOTH.md); the others get it everywhere until they do. CRT beam (Blur Busters' CRT Beam Simulator): each refresh lights the part of the tube the electron beam sweeps then and lets the rest fade, for a CRT's motion clarity; best at 240 Hz, SDR, with the monitor's ABL/APL and its own strobing off. Windows, or Wayland with the fifo protocol (KWin 6.7)."
+msgstr "DJ Main・Firebeat・Twinkle・System 573 のゲームと PC 版 beatmania IIDX で、フレームの均等表示がオンかつゲームより速いディスプレイの場合に使えます。なめらか表示：どのディスプレイ（60・144・240 Hz）でもゲームは本来の速度のまま、ノーツなどの動く物体をリフレッシュごとに移動先まで描き進めます（PC 版 IIDX はノーツのみ、それ以外はゲームの描画どおり）。曲中のみ：曲のプレイ中だけ有効で、メニューは各フレームをそのまま表示します。曲のプレイ中かどうかを伝えるゲーム（beatmania III、ほとんどの Firebeat・DJ Main のゲーム：docs/SMOOTH.md）が対象で、それ以外のゲームは対応するまで常に有効になります。CRT ビーム（Blur Busters の CRT Beam Simulator）：リフレッシュごとに電子ビームがその時に走査する部分を光らせ、残りを減衰させて、CRT の動きのくっきりさを再現します。240 Hz・SDR で、モニターの ABL/APL と独自のストロボをオフにすると最適です。Windows、または fifo プロトコル対応の Wayland（KWin 6.7）が必要です。"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "Motion:"
+msgstr "動き："
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "Your display's gamma (2.2 for most; 2.4 if set so). A mismatch shows as horizontal bands and washed-out colours."
+msgstr "ディスプレイのガンマ値（ほとんどは 2.2、そう設定していれば 2.4）。合っていないと横縞や色あせが出ます。"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "Brightness against motion blur: lower is sharper and darker. 0.7 at 240 Hz, about 0.5 at 120 Hz."
+msgstr "明るさと動きのぼやけのバランス：低いほどくっきりしますが暗くなります。240 Hz で 0.7、120 Hz で約 0.5。"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "Display gamma"
+msgstr "ディスプレイのガンマ"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "Brightness"
+msgstr "明るさ"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "CRT beam:"
+msgstr "CRT ビーム："
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "Off (F7 in the game shows it)"
+msgstr "オフ（ゲーム中に F7 で表示）"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "One line: frame rate, a frame's work, processor, sound, late frames"
+msgstr "1 行：フレームレート、1 フレームの処理、CPU、サウンド、遅れたフレーム"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "Panel: with a graph of the frames, the sound and the display sync"
+msgstr "パネル：フレーム、サウンド、画面同期のグラフ付き"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "Everything: with latencies, threads, the graphics card, the core's numbers"
+msgstr "すべて：レイテンシ、スレッド、グラフィックカード、コアの数値付き"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "How the game runs on this PC, over its picture: whether each frame held its place on the display and the sound stayed whole, and where a slow frame's time went. In the game, F7 goes through the levels, the mouse drags the panel anywhere on the picture, and Shift+F7 puts it in the next corner. It changes nothing in the game, and no snapshot has it."
+msgstr "この PC でのゲームの動作状況を画面上に表示します：各フレームが画面に正しく表示されたか、音が途切れなかったか、遅いフレームの時間がどこにかかったか。ゲーム中は F7 で表示レベルを切り替え、マウスでパネルを好きな位置へドラッグ、Shift+F7 で次の隅へ移動します。ゲームには一切影響せず、スクリーンショットにも写りません。"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "Performance overlay:"
+msgstr "パフォーマンス表示："
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "Off: sharp pixels"
+msgstr "オフ：くっきりピクセル"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "CRT light: crt-guest-advanced-fast"
+msgstr "CRT 軽量：crt-guest-advanced-fast"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "CRT full: crt-royale"
+msgstr "CRT フル：crt-royale"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "CRT analog: Lola Retro (the heaviest)"
+msgstr "CRT アナログ：Lola Retro（最も重い）"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "For all games; a game can have its own (Picture, in the game's menu). In the game, F10 cycles them."
+msgstr "全ゲーム共通です。ゲームごとにも設定できます（ゲームのメニューの「画面」）。ゲーム中は F10 で切り替えます。"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "Adjust…"
+msgstr "調整…"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "Picture:"
+msgstr "画面："
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "Recording (F6 in the game)"
+msgstr "録画（ゲーム中に F6）"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "Exact, lossless (.mkv: every pixel and sound as the game made them; large)"
+msgstr "無劣化（.mkv：ゲームが出力したままの画素と音。サイズ大）"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "For sharing, H.264 (.mp4: plays everywhere, about a sixth of the size)"
+msgstr "共有用、H.264（.mp4：どこでも再生可能、サイズは約 6 分の 1）"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "Exact recordings play in VLC, mpv and FFmpeg's other players and editors, and can be made into the other kind afterwards (File > Convert recordings for sharing). Recordings go to the recordings folder in the saves' folder."
+msgstr "無劣化の録画は VLC、mpv など FFmpeg ベースのプレイヤーや編集ソフトで再生でき、後から共有用に変換できます（ファイル > 録画を共有用に変換）。録画はセーブデータのフォルダー内の録画フォルダーに保存されます。"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "Recording:"
+msgstr "録画："
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "Automatic: the graphics card's when it can, else the processor"
+msgstr "自動：可能ならグラフィックカード、だめなら CPU"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "Graphics card (NVIDIA, AMD, Intel, or Windows' own)"
+msgstr "グラフィックカード（NVIDIA、AMD、Intel、または Windows 標準）"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "Processor (x264)"
+msgstr "CPU（x264）"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "Who compresses the video. A graphics card's encoder costs the game nearly nothing; x264 takes processor time but works on every PC. The game's log says which was taken and why."
+msgstr "映像を圧縮するもの。グラフィックカードのエンコーダーならゲームへの負荷はほぼゼロです。x264 は CPU 時間を使いますが、どの PC でも動きます。どちらが使われたか、その理由はゲームのログに記録されます。"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "Encoder:"
+msgstr "エンコーダー："
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "Automatic: enlarged to about 1440 lines by a graphics card, the game's own by the processor"
+msgstr "自動：グラフィックカードなら約 1440 ラインに拡大、CPU ならゲーム本来のサイズ"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "The game's own size"
+msgstr "ゲーム本来のサイズ"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "H.264 keeps colour at half the resolution, which smears pixel art at the game's own size: enlarged by whole pixels first, it stays sharp. A graphics card's encoder does that for nothing; on the processor it takes several times the work, so Automatic keeps the game's own size there (most games are 480 lines or fewer). A size chosen here is used either way."
+msgstr "H.264 は色を半分の解像度で記録するため、ゲーム本来のサイズではドット絵がにじみます。先に整数倍で拡大すればくっきりしたままです。グラフィックカードのエンコーダーなら負荷なしでできますが、CPU では何倍もの処理になるため、「自動」では CPU のときゲーム本来のサイズのままにします（ほとんどのゲームは 480 ライン以下）。ここでサイズを選ぶと、どちらの場合もそのサイズを使います。"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "Size:"
+msgstr "サイズ："
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "Konami Python games (pop'n music 9-14, DrumMania V and V2)"
+msgstr "Konami Python のゲーム（pop'n music 9～14、DrumMania V・V2）"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "Vulkan (the default)"
+msgstr "Vulkan（既定）"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "Software: the CPU draws (the most CPU)"
+msgstr "ソフトウェア：CPU で描画（CPU 負荷最大）"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "How PCSX2's GS draws the PS2's pictures (--renderer). Vulkan takes the least CPU. If these games crash or show nothing on this PC, its graphics driver may not get on with Vulkan: try Direct3D 11, then Software (which still shows its picture through Direct3D)."
+msgstr "PCSX2 の GS が PS2 の画面を描く方法（--renderer）。Vulkan が最も CPU 負荷が低くなります。この PC でこれらのゲームがクラッシュしたり何も表示されない場合、グラフィックドライバーが Vulkan と相性が悪いのかもしれません。Direct3D 11、次にソフトウェア（表示には Direct3D を使います）を試してください。"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "How PCSX2's GS draws the PS2's pictures (--renderer). Vulkan takes the least CPU. If these games crash or show nothing on this PC, try Software (it still needs a Vulkan driver to show its picture)."
+msgstr "PCSX2 の GS が PS2 の画面を描く方法（--renderer）。Vulkan が最も CPU 負荷が低くなります。この PC でこれらのゲームがクラッシュしたり何も表示されない場合は、ソフトウェアを試してください（表示には Vulkan ドライバーが必要です）。"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "Graphics:"
+msgstr "グラフィック："
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "The shader's settings while playing (F8)"
+msgstr "プレイ中のシェーダー設定（F8）"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "A panel beside the picture: pick a setting, change it, see it at once, save it. A key or a controller's button for each (with the keyboard, Shift does ten steps, or saves for this game)."
+msgstr "画面の横に出るパネルで、設定を選んで変更し、すぐに結果を確認して保存できます。それぞれの操作にキーかコントローラーのボタンを割り当てます（キーボードでは Shift で 10 段階ずつ、または このゲーム用に保存）。"
+
+#. nothing set (a key; below, a board)
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "none"
+msgstr "なし"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "Click, then press the key or the controller's button"
+msgstr "クリックしてから、キーまたはコントローラーのボタンを押してください"
+
+#. %1 is what the key does ("Previous setting"), in the box that waits for the key
+#: launcher/settingsdialog.cpp
+#, qt-format
+msgctxt "SettingsDialog"
+msgid "%1  (the shader's settings, F8)"
+msgstr "%1  （シェーダー設定、F8）"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "No control for it"
+msgstr "割り当てなし"
+
+#. a label before its key: "Previous setting:"
+#: launcher/settingsdialog.cpp
+#, qt-format
+msgctxt "SettingsDialog"
+msgid "%1:"
+msgstr "%1："
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "Defaults"
+msgstr "既定値"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "Output"
+msgstr "出力"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "Latency"
+msgstr "レイテンシ"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "The sound's lead over the device, and its least: it grows by itself while frames keep coming late on this PC, and comes back down when they stop (docs/PLAY.md, Latency)."
+msgstr "デバイスに対する音の先行量とその最小値。この PC でフレームの遅れが続くと自動的に増え、遅れがなくなると元に戻ります（docs/PLAY.md の Latency）。"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "Fixed: never more (a rare break in the sound instead)"
+msgstr "固定：これ以上増やさない（代わりにまれに音が途切れます）"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "The queue stays at this setting all game long: the least delay on every sound, and a click whenever a frame comes later than it covers."
+msgstr "ゲーム中ずっとこの設定のままです。すべての音の遅延が最小になりますが、フレームがその範囲より遅れるたびにクリック音が出ます。"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "Louder or quieter than the machine makes it, for every game (6 dB: twice as loud). Some games, Keyboardmania among them, are quiet next to others; as in MAME."
+msgstr "全ゲームの音量を本来より大きく、または小さくします（6 dB で 2 倍）。Keyboardmania など、他より音が小さいゲームもあります（MAME と同じ）。"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "Audio queue:"
+msgstr "オーディオキュー："
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "Ahead of other programs (higher priority, and GameMode if installed)"
+msgstr "他のプログラムより優先（高い優先度、インストールされていれば GameMode も）"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "The game's threads run ahead of other programs (a browser, a build), so a busy PC doesn't delay its frames and sound; the sound server and the desktop keep theirs. A sound card of its own (Output) is written by a real-time thread either way."
+msgstr "ゲームのスレッドを他のプログラム（ブラウザーやビルドなど）より優先して実行し、PC が忙しくてもフレームや音が遅れないようにします。サウンドサーバーとデスクトップの優先度はそのままです。専用のサウンドカード（出力）にはどちらの場合もリアルタイムスレッドで書き込みます。"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "Windows' High performance power plan while a game runs"
+msgstr "ゲーム中は Windows の電源プラン「高パフォーマンス」を使う"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "Windows' Balanced plan lets the processor slow down while a game waits for its next frame, and on some PCs frames then come late (a game's log says so: \"Windows let the CPU slow down\"). With this on, HIRAKU changes to the High performance plan when a game starts and back to yours when its window is back. The PC uses more power meanwhile. A plan you set yourself is left as it is."
+msgstr "Windows の「バランス」プランでは、ゲームが次のフレームを待つ間に CPU が減速し、PC によってはフレームが遅れます（ゲームのログに \"Windows let the CPU slow down\" と記録されます）。オンにすると、ゲーム開始時に HIRAKU が「高パフォーマンス」プランに切り替え、ランチャーのウィンドウに戻ったら元のプランに戻します。その間は消費電力が増えます。ご自身で設定したプランはそのままにします。"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "Windows' default output"
+msgstr "Windows の既定の出力"
+
+#. a sound device saved earlier that this PC hasn't now
+#: launcher/settingsdialog.cpp
+#, qt-format
+msgctxt "SettingsDialog"
+msgid "%1 (not found now)"
+msgstr "%1（現在見つかりません）"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "The sound device the game plays on. ASIO: the card through its own ASIO driver, with no Windows audio in between; its buffer is the one set in the driver's control panel unless Device buffer below says otherwise. If the driver won't start, the game uses Windows' default output."
+msgstr "ゲームが音を出すサウンドデバイス。ASIO：カード専用の ASIO ドライバーを使い、Windows のオーディオを通しません。バッファーは、下の「デバイスバッファー」で指定しない限りドライバーのコントロールパネルの設定になります。ドライバーが起動しない場合は Windows の既定の出力を使います。"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "Output:"
+msgstr "出力："
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "Exclusive (WASAPI): the device alone, lowest latency"
+msgstr "排他モード（WASAPI）：デバイスを独占、最小レイテンシ"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "The game has the device to itself in WASAPI exclusive mode, with no Windows mixer in between and its buffer as small as the device allows (Device buffer below); other programs are silent on it meanwhile. If the device refuses (another program has it alone, or Windows' sound settings don't allow exclusive mode), the game plays shared."
+msgstr "WASAPI 排他モードでゲームがデバイスを独占します。Windows のミキサーを通さず、バッファーはデバイスが許す最小になります（下の「デバイスバッファー」）。その間、他のプログラムの音はそのデバイスから出ません。デバイスが拒否した場合（他のプログラムが独占している、または Windows のサウンド設定で排他モードが許可されていない）は、共有モードで再生します。"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "The system's default (the sound server)"
+msgstr "システムの既定（サウンドサーバー）"
+
+#. a sound card opened alone (no sound server in between): %1 is its name
+#: launcher/settingsdialog.cpp
+#, qt-format
+msgctxt "SettingsDialog"
+msgid "Alone: %1"
+msgstr "単独使用：%1"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "A sound card alone: the game opens it through ALSA with no sound server in between, for the lowest latency; nothing else plays on it meanwhile. If it's busy (the sound server lets go of a card a few seconds after the last sound on it), the game uses the default instead."
+msgstr "サウンドカードを単独で使用：ゲームはサウンドサーバーを通さず ALSA で直接開き、最小のレイテンシを得ます。その間、他の音はそのカードから出ません。カードが使用中の場合（サウンドサーバーは最後の音から数秒後にカードを解放します）は、代わりに既定の出力を使います。"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "Default (128 frames, 2.7 ms; ASIO: the driver's own)"
+msgstr "既定（128 フレーム、2.7 ms。ASIO はドライバーの設定）"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "Default (128 frames, 2.7 ms)"
+msgstr "既定（128 フレーム、2.7 ms）"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "The sound device's buffer (the sound server's quantum; on Windows in exclusive mode the device's own; with a Linux card alone, its period: HIRAKU keeps two of them queued on the card, four on a USB card, which needs them). Smaller is sooner, until it crackles; the audio queue above tunes itself to it. Times at 48 kHz."
+msgstr "サウンドデバイスのバッファー（サウンドサーバーのクォンタム。Windows の排他モードではデバイス自体のもの。Linux でカードを単独使用する場合はその周期で、HIRAKU はカードに 2 つ、USB カードには必要なため 4 つをキューに入れます）。小さいほど音が早く出ますが、小さすぎるとノイズが出ます。上のオーディオキューは自動でこれに合わせます。時間は 48 kHz での値です。"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "Device buffer:"
+msgstr "デバイスバッファー："
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "Volume:"
+msgstr "音量："
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "Every game about as loud as the others"
+msgstr "すべてのゲームをほぼ同じ音量に"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "The machines make their sound at very different levels: System 573 and Twinkle games play about 8 dB louder than DJ Main's. On: a trim for each family of games brings their songs to about the same loudness (System 573 -5 dB, Twinkle -4, PC IIDX -4, PC pop'n -1, Firebeat 0, Python +1, DJ Main +3), and the volume above on top. Off: each machine's own level (--even-volume off; docs/PLAY.md, Sound levels)."
+msgstr "機種によって音の大きさはかなり違います：System 573 と Twinkle のゲームは DJ Main より約 8 dB 大きく鳴ります。オン：ゲームの系統ごとに補正して曲の音量をほぼ揃え（System 573 -5 dB、Twinkle -4、PC 版 IIDX -4、PC 版 pop'n -1、Firebeat 0、Python +1、DJ Main +3）、その上に上の音量設定をかけます。オフ：各機種本来の音量（--even-volume off。docs/PLAY.md の Sound levels）。"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "Sound every millisecond on System 573 and Twinkle (not MAME's)"
+msgstr "System 573 と Twinkle で音を 1 ミリ秒ごとに処理（MAME 方式ではなく）"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "MAME hands these machines' sound on 50 times a second, which adds up to 20 ms of latency, uneven from moment to moment. Every millisecond is lower and steadier. On Twinkle (beatmania IIDX) the keysounds then start when the game triggers them, so the sound no longer matches MAME's. On by default; off is MAME's timing (--mame-sound; docs/PLAY.md, Latency)."
+msgstr "MAME はこれらの機種の音を 1 秒に 50 回まとめて渡すため、最大 20 ms のレイテンシが加わり、その量も一定しません。1 ミリ秒ごとならレイテンシは小さく安定します。Twinkle（beatmania IIDX）ではキー音がゲームの発音タイミングどおりに鳴るため、音は MAME と一致しなくなります。既定でオン。オフにすると MAME のタイミングになります（--mame-sound。docs/PLAY.md の Latency）。"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "Presses judged when they happened (pop'n music 15-18, IIDX 9th style to EMPRESS)"
+msgstr "押した瞬間で判定（pop'n music 15～18、IIDX 9th style～EMPRESS）"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "The game judges a press at the frame it reads the buttons in, up to a frame (17 ms) after it happened, as on its cabinet. On: each press is judged at the moment the controller gave it. IIDX judges in whole frames: there, each press counts in the frame it happened in, however late the game read it (--press-time; docs/PLAY.md, PC)."
+msgstr "ゲームは、ボタンを読み取るフレームで入力を判定します。そのため実際に押してから最大 1 フレーム（17 ms）遅れます（筐体と同じ）。オン：コントローラーから入力が来た瞬間で判定します。IIDX はフレーム単位で判定するため、ゲームがいつ読み取ったかに関係なく、押したフレームで判定されます（--press-time。docs/PLAY.md の PC）。"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "pop'n music 15-18, IIDX 9th style to EMPRESS: each press judged this much earlier than it came (--judge-offset), for a TV or a sound system that shows or plays late, so presses made in time with it count as in time. Positive when the notes look late; pop'n judges in 4 ms steps, IIDX in frames (each press moved by whole frames from its own time: part of a frame on average, with presses judged when they happened)."
+msgstr "pop'n music 15～18、IIDX 9th style～EMPRESS：各入力を、この値だけ早く来たものとして判定します（--judge-offset）。テレビやオーディオ機器の表示・音が遅れる場合に、それに合わせて押した入力をタイミングどおりとして扱えます。ノーツが遅れて見えるときは正の値にします。pop'n は 4 ms 単位、IIDX はフレーム単位で判定します（各入力を自身のタイミングから整数フレームずらします。「押した瞬間で判定」と併用すると平均して 1 フレーム未満になります）。"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "Judgement offset:"
+msgstr "判定オフセット："
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "default: the system's General MIDI SoundFont"
+msgstr "既定：システムの General MIDI SoundFont"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "The instruments of Keyboardmania's MIDI out (its keyboards' sound when a song plays them)."
+msgstr "Keyboardmania の MIDI 出力の楽器（曲が鍵盤を鳴らすときの音）。"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "SoundFont:"
+msgstr "SoundFont："
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "Music in the launcher"
+msgstr "ランチャーの音楽"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "A small MIDI player, the Music panel under the details and the log (View > Music). It waits while a game or the game menu runs, and goes on afterwards."
+msgstr "小さな MIDI プレイヤーです。詳細とログの下にある「音楽」パネル（表示 > 音楽）。ゲームやゲームメニューの実行中は待機し、終わると再開します。"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "Where its MIDI files are (.mid, .midi, .kar, .rmi), its folders too. MIDI files dropped on the launcher's window play as well."
+msgstr "MIDI ファイル（.mid、.midi、.kar、.rmi）の場所。サブフォルダーも含みます。ランチャーのウィンドウにドロップした MIDI ファイルも再生されます。"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "Folder:"
+msgstr "フォルダー："
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "The first there is"
+msgstr "最初に見つかったもの"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "Keyboardmania's synth card"
+msgstr "Keyboardmania のシンセカード"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "A SoundFont"
+msgstr "SoundFont"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "Windows' own synth"
+msgstr "Windows 標準のシンセ"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "What plays the notes. Keyboardmania's synth card: the Yamaha MU100B in its cabinet, emulated, once a Keyboardmania game is added (about a quarter of a CPU core while it plays). A SoundFont: the one below, else Keyboardmania's above, else the system's. Windows' own synth: Microsoft GS Wavetable Synth, always there. The first there is: in that order."
+msgstr "音を鳴らすもの。Keyboardmania のシンセカード：筐体の Yamaha MU100B をエミュレートしたもので、Keyboardmania のゲームを追加すると使えます（再生中は CPU コアの約 4 分の 1）。SoundFont：下のもの、なければ上の Keyboardmania 用、それもなければシステムのもの。Windows 標準のシンセ：Microsoft GS Wavetable Synth（常に利用可能）。最初に見つかったもの：この順で探します。"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "What plays the notes. Keyboardmania's synth card: the Yamaha MU100B in its cabinet, emulated, once a Keyboardmania game is added (about a quarter of a CPU core while it plays). A SoundFont: the one below, else Keyboardmania's above, else the system's. The first there is: in that order."
+msgstr "音を鳴らすもの。Keyboardmania のシンセカード：筐体の Yamaha MU100B をエミュレートしたもので、Keyboardmania のゲームを追加すると使えます（再生中は CPU コアの約 4 分の 1）。SoundFont：下のもの、なければ上の Keyboardmania 用、それもなければシステムのもの。最初に見つかったもの：この順で探します。"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "Synth:"
+msgstr "シンセ："
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "default: Keyboardmania's above"
+msgstr "既定：上の Keyboardmania 用のもの"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "A General MIDI SoundFont (.sf2) for the music."
+msgstr "音楽用の General MIDI SoundFont（.sf2）。"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "SoundFonts (*.sf2);;All files (*)"
+msgstr "SoundFont (*.sf2);;すべてのファイル (*)"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "Shuffle"
+msgstr "シャッフル"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "Server"
+msgstr "サーバー"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "empty: the server inside HIRAKU (-ea)"
+msgstr "空欄：HIRAKU 内蔵のサーバー（-ea）"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "-url. Empty: the server inside HIRAKU, which keeps its data in the game's save folder. host:port or http://host:port/path: a server on the network, such as hiraku-eamuse on another PC (docs/EAMUSE3.md). The game's e-AMUSEMENT must be ON in test mode."
+msgstr "-url。空欄：HIRAKU 内蔵のサーバー（データはゲームのセーブフォルダーに保存）。host:port または http://host:port/path：ネットワーク上のサーバー（別の PC の hiraku-eamuse など。docs/EAMUSE3.md）。ゲームのテストモードで e-AMUSEMENT を ON にしておく必要があります。"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "EA Service URL:"
+msgstr "EA Service URL："
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "The server inside HIRAKU when that one doesn't answer (-smartea)"
+msgstr "そのサーバーが応答しないときは HIRAKU 内蔵のサーバーを使う（-smartea）"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "the game's own (pop'n 9: 01401401000100045FEF)"
+msgstr "ゲーム本来のもの（pop'n 9：01401401000100045FEF）"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid ""
+"-p: the cabinet's PCBID, 20 hex digits, for a server that only takes the machines it knows.\n"
+"HIRAKU's own server (hiraku-eamuse) makes one with --new-cabinet and then answers only the cabinets it lists."
+msgstr ""
+"-p：筐体の PCBID（16 進数 20 桁）。登録済みの筐体しか受け付けないサーバー向けです。\n"
+"HIRAKU のサーバー（hiraku-eamuse）は --new-cabinet で PCBID を作成し、以後は登録した筐体にだけ応答します。"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "PCBID:"
+msgstr "PCBID："
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "none (a server without a key)"
+msgstr "なし（キーのないサーバー）"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid ""
+"The key of a hiraku-eamuse that has one (its --new-key prints it; -eakey on a command line).\n"
+"With it, all that this cabinet and the server say goes over the network sealed, and the server answers only cabinets that have it. A key on both sides, or on neither."
+msgstr ""
+"キーを持つ hiraku-eamuse のキー（--new-key で表示されます。コマンドラインでは -eakey）。\n"
+"キーがあると、この筐体とサーバーのやりとりはすべて暗号化され、サーバーはキーを持つ筐体にだけ応答します。キーは両側に設定するか、どちらにも設定しないかのどちらかです。"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "Server key:"
+msgstr "サーバーキー："
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "Cards"
+msgstr "カード"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "card1.txt (pop'n has one reader: not used)"
+msgstr "card1.txt（pop'n はリーダーが 1 台のため未使用）"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "card0.txt, or the save folder's card.bin"
+msgstr "card0.txt、またはセーブフォルダーの card.bin"
+
+#. %1 is 0 or 1 (the option -card0 and the file card0.txt)
+#: launcher/settingsdialog.cpp
+#, qt-format
+msgctxt "SettingsDialog"
+msgid "-card%1: the card's number, 16 hex digits (E004...), the same as in spice2x, so a server knows the player. Empty: card%1.txt in the save folder, if there is one; else the save folder's card.bin, numbered by the server."
+msgstr "-card%1：カード番号（16 進数 16 桁、E004...）。spice2x と同じ番号なら、サーバーがプレイヤーを識別できます。空欄：セーブフォルダーに card%1.txt があればそれ、なければセーブフォルダーの card.bin（番号はサーバーが付けます）。"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "pop'n has one card reader, player 1's."
+msgstr "pop'n のカードリーダーは 1 台（プレイヤー 1 用）だけです。"
+
+#. the spice2x option's name (spicecfg's Network page): %1 is 1 or 2
+#: launcher/settingsdialog.cpp
+#, qt-format
+msgctxt "SettingsDialog"
+msgid "Player %1 Card:"
+msgstr "Player %1 Card："
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "-autocard: the card is put in whenever the reader waits for one, so Insert needn't be pressed."
+msgstr "-autocard：リーダーがカードを待つたびに自動で挿入するので、Insert を押す必要がありません。"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "Auto Card Insert:"
+msgstr "Auto Card Insert："
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "Type the card's PIN (pop'n music 14-18)"
+msgstr "カードの暗証番号を自動入力（pop'n music 14～18）"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "-autopin: when the game asks for a known card's PIN, HIRAKU types it on the 10-key, as the server inside HIRAKU keeps it (not with a server on the network)."
+msgstr "-autopin：登録済みカードの暗証番号をゲームが求めると、HIRAKU 内蔵のサーバーが保存している番号を HIRAKU がテンキーで入力します（ネットワーク上のサーバーでは不可）。"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "Card readers (pop'n music 9-18, GuitarFreaks, DrumMania)"
+msgstr "カードリーダー（pop'n music 9～18、GuitarFreaks、DrumMania）"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "none (or type its port: COM3)"
+msgstr "なし（またはポートを入力：COM3）"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog|no card reader"
+msgid "none"
+msgstr "なし"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "-reader: a Konami e-AMUSEMENT reader with its 10-key on a serial port (a USB-serial adapter). A card held to it is the player's card in the game; its 10-key is the game's (00 is Enter where the game has no 00)."
+msgstr "-reader：シリアルポート（USB シリアル変換器）につないだ、テンキー付きの Konami e-AMUSEMENT リーダー。かざしたカードがゲーム内のプレイヤーのカードになり、テンキーはゲームのテンキーになります（ゲームに 00 キーがない場合、00 は Enter になります）。"
+
+#: launcher/settingsdialog.cpp
+#, qt-format
+msgctxt "SettingsDialog"
+msgid "Player %1 serial reader:"
+msgstr "プレイヤー %1 のシリアルリーダー："
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "NFC readers (ACR122U and the like) through PC/SC (-scard): the first is player 1's"
+msgstr "PC/SC 経由の NFC リーダー（ACR122U など、-scard）：最初のものがプレイヤー 1 用"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "Through Windows' own smart card service. Cards that aren't e-AMUSEMENT PASSes (FeliCa, phones) get an E00401 number, as spice2x's -scardfix."
+msgstr "Windows のスマートカードサービスを使います。e-AMUSEMENT PASS 以外のカード（FeliCa、スマートフォン）には、spice2x の -scardfix と同じく E00401 で始まる番号が付きます。"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "Needs the pcscd service (systemctl enable --now pcscd.socket). Cards that aren't e-AMUSEMENT PASSes (FeliCa, phones) get an E00401 number, as spice2x's -scardfix."
+msgstr "pcscd サービスが必要です（systemctl enable --now pcscd.socket）。e-AMUSEMENT PASS 以外のカード（FeliCa、スマートフォン）には、spice2x の -scardfix と同じく E00401 で始まる番号が付きます。"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "cardio readers (USB HID, -cardio): the first is player 1's"
+msgstr "cardio リーダー（USB HID、-cardio）：最初のものがプレイヤー 1 用"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "Read through /dev/hidraw: a udev rule lets you open it (docs/PLAY.md, Card readers)."
+msgstr "/dev/hidraw 経由で読み取ります。開くには udev ルールが必要です（docs/PLAY.md の Card readers）。"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "Readers that show themselves as cardio's HID device (usage page FFCA): the first two found."
+msgstr "cardio の HID デバイス（Usage Page FFCA）として認識されるリーダー：最初に見つかった 2 台。"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "Lights"
+msgstr "ランプ"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "Publish lamps on a local socket (live view in Lights, external LED tools)"
+msgstr "ランプ情報を公開（ローカルソケット。ランプ設定のライブ表示や外部の LED ツール用）"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "Show the game's lights over its picture (F9 in the game shows or hides them)"
+msgstr "ゲーム画面にランプを重ねて表示（ゲーム中に F9 で表示／非表示）"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "Every lamp the game drives, lit or not, grouped as the cabinet has them, and how often they change: for seeing what a game does with its lights without the cabinet."
+msgstr "ゲームが制御するすべてのランプを、点灯の有無にかかわらず筐体と同じグループで表示し、切り替わる頻度も示します。筐体なしでゲームのランプの動きを確認できます。"
+
+#. %1 is the socket's path
+#: launcher/settingsdialog.cpp
+#, qt-format
+msgctxt "SettingsDialog"
+msgid "Socket: <tt>%1</tt> (protocol: docs/LIGHTS.md)"
+msgstr "ソケット：<tt>%1</tt>（プロトコル：docs/LIGHTS.md）"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "I/O boards"
+msgstr "I/O ボード"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "--bio2: beatmania IIDX's BIO2 I/O board (IIDX 25-26's BI2A firmware) on its USB serial port: the cabinet's keys, turntables, buttons, effector and coin, and its lamps and ticker, for beatmania IIDX, III and the DJ Main games."
+msgstr "--bio2：beatmania IIDX の BIO2 I/O ボード（IIDX 25～26 の BI2A ファームウェア）を USB シリアルポートで接続。筐体の鍵盤、ターンテーブル、ボタン、エフェクター、コイン、ランプ、電光掲示板を、beatmania IIDX、III、DJ Main のゲームで使えます。"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "IIDX BIO2 board:"
+msgstr "IIDX BIO2 ボード："
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "--popn-io: a pop'n music cabinet's USB I/O board (the one pop'n music 15 and later drive through ezusb.dll, or a board that copies it, such as PopnIO): its buttons, TEST, SERVICE and coin, and its button, top and side lamps, for every pop'n music game. On Windows choose auto: the ezusb.dll below finds the board (Konami's needs Cypress's CyUSB driver installed for it). The game's log says how it goes, in its lines starting popn-io."
+msgstr "--popn-io：pop'n music 筐体の USB I/O ボード（pop'n music 15 以降が ezusb.dll で制御するもの、または PopnIO のような互換ボード）。ボタン、TEST、SERVICE、コイン、ボタン・上部・側面のランプを、すべての pop'n music のゲームで使えます。Windows では auto を選んでください。下の ezusb.dll がボードを見つけます（Konami のボードには Cypress の CyUSB ドライバーが必要です）。状況はゲームのログの popn-io で始まる行に記録されます。"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "--popn-io: a pop'n music cabinet's USB I/O board (the one pop'n music 15 and later drive through ezusb.dll, or a board that copies it, such as PopnIO): its buttons, TEST, SERVICE and coin, and its button, top and side lamps, for every pop'n music game. auto takes the first; a USB port (as in /sys/bus/usb/devices, e.g. 3-2.1) chooses one."
+msgstr "--popn-io：pop'n music 筐体の USB I/O ボード（pop'n music 15 以降が ezusb.dll で制御するもの、または PopnIO のような互換ボード）。ボタン、TEST、SERVICE、コイン、ボタン・上部・側面のランプを、すべての pop'n music のゲームで使えます。auto は最初のボードを使います。USB ポート（/sys/bus/usb/devices での表記。例：3-2.1）を指定するとそのボードを使います。"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "pop'n music I/O board:"
+msgstr "pop'n music I/O ボード："
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "the ezusb.dll that drives it: the game's, or a replacement"
+msgstr "ボードを制御する ezusb.dll：ゲームのもの、または代替版"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "--popn-io-dll: HIRAKU drives the board through it, as the games do: the game's ezusb.dll (pop'n music 15 or later, with Cypress's driver installed), or a replacement such as UltimatePopnController's."
+msgstr "--popn-io-dll：ゲームと同じように、HIRAKU はこの DLL でボードを制御します。ゲームの ezusb.dll（pop'n music 15 以降。Cypress のドライバーが必要）、または UltimatePopnController のような代替版。"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "only for a board with no firmware: the game's ezusb.dll"
+msgstr "ファームウェアのないボード専用：ゲームの ezusb.dll"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "--popn-io-dll: Konami's board keeps no firmware; the game loads it at every start from its ezusb.dll (pop'n music 15 or later), and HIRAKU does the same from this file."
+msgstr "--popn-io-dll：Konami のボードはファームウェアを保持しません。ゲームは起動のたびに ezusb.dll（pop'n music 15 以降）から読み込み、HIRAKU もこのファイルから同じように読み込みます。"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "  its ezusb.dll:"
+msgstr "  その ezusb.dll："
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "Choose an ezusb.dll"
+msgstr "ezusb.dll を選ぶ"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "ezusb.dll (ezusb*.dll);;All files (*)"
+msgstr "ezusb.dll (ezusb*.dll);;すべてのファイル (*)"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "Language"
+msgstr "言語"
+
+#. %1 is the language that following the system gives on this PC, in its own name ("Français")
+#: launcher/settingsdialog.cpp
+#, qt-format
+msgctxt "SettingsDialog"
+msgid "Follow the system (%1)"
+msgstr "システムに合わせる（%1）"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "The language of HIRAKU's windows, of its game menu and of the boxes over a game. It changes when HIRAKU starts again."
+msgstr "HIRAKU のウィンドウ、ゲームメニュー、ゲーム画面上のメッセージの言語です。HIRAKU の次回起動時に切り替わります。"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "Language:"
+msgstr "言語："
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "This system asks for Brazilian Portuguese: HIRAKU has Portuguese (Portugal), and uses it."
+msgstr "このシステムはブラジルポルトガル語を指定していますが、HIRAKU にはポルトガル語（ポルトガル）があるため、そちらを使います。"
+
+#. %1 is a language's own name ("日本語")
+#: launcher/settingsdialog.cpp
+#, qt-format
+msgctxt "SettingsDialog"
+msgid "⚠ This PC has no font for %1: its texts would show as empty boxes. Install one (Noto Sans CJK, from your system's packages)."
+msgstr "⚠ この PC には %1 のフォントがありません。文字が空の四角で表示されます。フォントをインストールしてください（システムのパッケージから Noto Sans CJK など）。"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "Folders"
+msgstr "フォルダー"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "HIRAKU folder:"
+msgstr "HIRAKU フォルダー："
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "A portable install (it has a folder named user): it always runs from its own folder, and keeps its settings and saves in user/."
+msgstr "ポータブル版（user という名前のフォルダーがあるもの）：常に自身のフォルダーから実行し、設定とセーブデータは user/ に保存します。"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "Game executables:"
+msgstr "ゲームの実行ファイル："
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "default: user/data in the HIRAKU folder"
+msgstr "既定：HIRAKU フォルダー内の user/data"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "default: ~/.local/share/hiraku"
+msgstr "既定：~/.local/share/hiraku"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "Saves (NVRAM):"
+msgstr "セーブデータ（NVRAM）："
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "Ask each time"
+msgstr "毎回確認する"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "Move them into the HIRAKU folder"
+msgstr "HIRAKU フォルダーに移動"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "Leave them where they are"
+msgstr "そのままにする"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "A game's CHDs, disks and ROM set (a PC game's folder): moved into the HIRAKU folder's dumps/ (gone from where they were), or read where they are (keep them there). Its ROMs are copied in either way."
+msgstr "ゲームの CHD、ディスク、ROM セット（PC ゲームならそのフォルダー）：HIRAKU フォルダーの dumps/ に移動する（元の場所からはなくなります）か、今の場所から読み込みます（その場所に置いたままにしてください）。ROM はどちらの場合もコピーされます。"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "Games' files when added:"
+msgstr "追加時のゲームファイル："
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "Starting a game"
+msgstr "ゲームの起動"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "Fast start-up: through the game's start-up checks at full speed, to its title"
+msgstr "高速起動：ゲームの起動チェックを最高速度で進めてタイトルまで"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "The game still boots as the cabinet does (its checks, its loading), only as fast as this PC can run it, without sound, with a box over its picture saying so; from its title or attract on, at its own speed. A button of the game (a coin, Test) goes back to its own speed at once. The arcade games (not the PC ones); Tab, held, fast-forwards any time."
+msgstr "ゲームは筐体と同じように起動しますが（チェックや読み込みも含む）、この PC で可能な最高速度で、音なしで進み、その旨が画面上に表示されます。タイトルやデモ画面からは本来の速度になります。ゲームのボタン（コイン、Test）を押すとすぐに本来の速度に戻ります。アーケードゲームのみ（PC ゲームは対象外）。Tab を押し続けるといつでも早送りできます。"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "Game menu: change games from the cabinet"
+msgstr "ゲームメニュー：筐体からゲームを切り替える"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "5, 7 and 3 held together on a card reader's 10-key leave the game for the game menu"
+msgstr "カードリーダーのテンキーで 5・7・3 を同時に長押しすると、ゲームを終了してゲームメニューへ"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "Either player's 10-key, the three keys together; on a cabinet with no 10-key, the Test and Service switches held together. A box on the picture says so while they are held. The game ends as when its window is closed (its saves written), and a list of the games opens, driven by the cabinet's own controls: a turntable, pop'n's buttons, the panels, the 10-key itself. The game chosen there starts; Escape closes the menu."
+msgstr "どちらのプレイヤーのテンキーでも、3 つのキーを同時に押します。テンキーのない筐体では Test と Service のスイッチを同時に長押しします。押している間は画面にその旨が表示されます。ゲームはウィンドウを閉じたときと同じように終了し（セーブデータも書き込み）、ゲームの一覧が開きます。一覧は筐体の操作（ターンテーブル、pop'n のボタン、パネル、テンキー自体）で操作できます。選んだゲームが起動します。Esc でメニューを閉じます。"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "Held for:"
+msgstr "長押し時間："
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "none (e.g. key:F12 or joy0:button11)"
+msgstr "なし（例：key:F12、joy0:button11）"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "A key or a controller's button that does the same when held, as a controls file spells it: key:F12, joy0:button11, joy[DAO FPS]:button9."
+msgstr "長押しで同じ動作をするキーまたはコントローラーのボタン。コントロールファイルと同じ書式で：key:F12、joy0:button11、joy[DAO FPS]:button9。"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "A key or button of your own:"
+msgstr "独自のキーまたはボタン："
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "The games this cabinet's controls play"
+msgstr "この筐体の操作で遊べるゲーム"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "Every game"
+msgstr "すべてのゲーム"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "This cabinet's: the games with the same controls as the one just left (on an IIDX cabinet, every beatmania, IIDX and beatmania III)."
+msgstr "この筐体のゲーム：直前に終了したゲームと同じ操作のゲーム（IIDX 筐体なら beatmania、IIDX、beatmania III のすべて）。"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "It lists:"
+msgstr "表示するゲーム："
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "HIRAKU starts in the game menu (a cabinet that boots into it)"
+msgstr "HIRAKU をゲームメニューで起動（ゲームメニューから立ち上がる筐体向け）"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "With full screen (Display) and \"Hide the launcher while a game runs\" below, the cabinet's screen shows only the menu and the games. Escape in the menu comes back to this window."
+msgstr "フルスクリーン（ディスプレイ）と下の「ゲーム中はランチャーを隠す」を併用すると、筐体の画面にはメニューとゲームだけが表示されます。メニューで Esc を押すとこのウィンドウに戻ります。"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "Keep a picture of each game's title screen for the menu"
+msgstr "メニュー用に各ゲームのタイトル画面を保存"
+
+#. %1 is a folder
+#: launcher/settingsdialog.cpp
+#, qt-format
+msgctxt "SettingsDialog"
+msgid "The first time a game reaches its title screen with no control touched, that picture is kept (in %1) and the menu shows it behind the list. A picture of your own there, named after the game's id (iidx16.png), is shown instead. Not every game has a title time yet: those show none until you give one."
+msgstr "操作に触れずにゲームが初めてタイトル画面に到達したとき、その画面を保存し（%1）、メニューのリストの背後に表示します。そこにゲーム ID の名前（iidx16.png）でご自身の画像を置くと、そちらを表示します。タイトル画面のタイミングがまだ設定されていないゲームもあり、画像を用意するまで何も表示されません。"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "Launcher"
+msgstr "ランチャー"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "Hide the launcher while a game runs"
+msgstr "ゲーム中はランチャーを隠す"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "Look for a new version (asks GitHub): when the launcher starts, and in games started without it"
+msgstr "新しいバージョンを確認（GitHub に問い合わせ）：ランチャーの起動時と、ランチャーなしで起動したゲームで"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "A release package updates itself; this copy isn't one"
+msgstr "リリース版のパッケージは自動で更新されます。このコピーはリリース版ではありません"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "e.g. --bios-seconds 21.65"
+msgstr "例：--bios-seconds 21.65"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "Command-line options for every game (docs/PLAY.md lists them). For one game alone: Game > Arguments… (or right-click it)."
+msgstr "全ゲーム共通のコマンドラインオプション（一覧は docs/PLAY.md）。1 つのゲームだけなら：ゲーム > 引数…（またはゲームを右クリック）。"
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "Arguments (every game):"
+msgstr "引数（全ゲーム共通）："
+
+#: launcher/settingsdialog.cpp
+msgctxt "SettingsDialog"
+msgid "A PCBID is 20 hex digits, and a card number 16 (E004...)."
+msgstr "PCBID は 16 進数 20 桁、カード番号は 16 桁です（E004...）。"
+
+#: launcher/unlocksdialog.cpp
+msgctxt "UnlocksDialog"
+msgid "Codes, typed for you"
+msgstr "コード自動入力"
+
+#: launcher/unlocksdialog.cpp
+msgctxt "UnlocksDialog"
+msgid "In the game window, Ctrl+1 to Ctrl+9 type the codes below at the moment you press them (the window title shows it while it types). The codes last a credit, or until power-off; a code marked so can be typed at every start by itself."
+msgstr "ゲームウィンドウで Ctrl+1～Ctrl+9 を押すと、その時点で下のコードを入力します（入力中はウィンドウのタイトルに表示）。コードの効果は 1 クレジット、または電源を切るまで続きます。印の付いたコードは、起動のたびに自動で入力できます。"
+
+#: launcher/unlocksdialog.cpp
+msgctxt "UnlocksDialog"
+msgid "(no key)"
+msgstr "（キーなし）"
+
+#: launcher/unlocksdialog.cpp
+msgctxt "UnlocksDialog"
+msgid "Type it at every start"
+msgstr "起動のたびに入力する"
+
+#. %1 is the game's title
+#: launcher/unlocksdialog.cpp
+#, qt-format
+msgctxt "UnlocksDialog"
+msgid "Unlocks: %1"
+msgstr "解禁：%1"
+
+#: launcher/unlocksdialog.cpp
+msgctxt "UnlocksDialog"
+msgid "No save yet: start the game once (with its first-boot setup), quit, then come back."
+msgstr "セーブデータがまだありません。ゲームを一度起動して（初回起動の設定を済ませて）終了し、ここに戻ってください。"
+
+#: launcher/unlocksdialog.cpp
+msgctxt "UnlocksDialog"
+msgid "tools/unlock.py needs Python 3 (python.org)"
+msgstr "tools/unlock.py には Python 3 が必要です（python.org）"
+
+#: launcher/unlocksdialog.cpp
+msgctxt "UnlocksDialog"
+msgid "tools/unlock.py did not answer (is Python 3 installed?)"
+msgstr "tools/unlock.py が応答しませんでした（Python 3 はインストールされていますか？）"
+
+#. %1 is the names of the mods on, joined by ", "
+#: launcher/unlocksdialog.cpp
+#, qt-format
+msgctxt "UnlocksDialog"
+msgid "The one with the mods on now: %1."
+msgstr "現在オンの MOD 用のセーブデータです：%1。"
+
+#: launcher/unlocksdialog.cpp
+#, qt-format
+msgctxt "UnlocksDialog"
+msgid "The mods on now (%1) get a copy of it at their first start."
+msgstr "現在オンの MOD（%1）は、最初の起動時にこのコピーを使います。"
+
+#. %1 is the saves' folder names, joined by ", "
+#: launcher/unlocksdialog.cpp
+#, qt-format
+msgctxt "UnlocksDialog"
+msgid "Apply writes to all of the game's saves: %1."
+msgstr "「適用」はゲームのすべてのセーブデータに書き込みます：%1。"
+
+#. %1 is the save folder's path
+#: launcher/unlocksdialog.cpp
+#, qt-format
+msgctxt "UnlocksDialog"
+msgid "Save: <tt>%1</tt>"
+msgstr "セーブデータ：<tt>%1</tt>"
+
+#: launcher/unlocksdialog.cpp
+msgctxt "UnlocksDialog"
+msgid "<b>Stop the game first</b>: it writes its save back when it exits."
+msgstr "<b>先にゲームを終了してください</b>：ゲームは終了時にセーブデータを書き戻します。"
+
+#. %1 is a setting in the game's own words (English), %2 the code the game takes for it
+#: launcher/unlocksdialog.cpp
+#, qt-format
+msgctxt "UnlocksDialog"
+msgid "%1   (code %2)"
+msgstr "%1   （コード %2）"
+
+#. follows the game's own instructions (English) in the same paragraph
+#: launcher/unlocksdialog.cpp
+msgctxt "UnlocksDialog"
+msgid "Apply writes what the game writes then."
+msgstr "「適用」は、そのときゲームが書き込む内容を書き込みます。"
+
+#: launcher/unlocksdialog.cpp
+msgctxt "UnlocksDialog"
+msgid "Apply"
+msgstr "適用"
+
+#. %1 is the setting the save has now
+#: launcher/unlocksdialog.cpp
+#, qt-format
+msgctxt "UnlocksDialog"
+msgid "Now: <b>%1</b>"
+msgstr "現在：<b>%1</b>"
+
+#. %1 is the event's name (the game's, in English)
+#: launcher/unlocksdialog.cpp
+#, qt-format
+msgctxt "UnlocksDialog"
+msgid "%1: event progress"
+msgstr "%1：イベントの進行状況"
+
+#: launcher/updater.cpp
+msgctxt "Updater"
+msgid "Python could not be started to put the new files in."
+msgstr "Python を起動できず、新しいファイルを導入できませんでした。"
+
+#: launcher/updater.cpp
+msgctxt "Updater"
+msgid "This copy has no script that can put the update right."
+msgstr "このコピーには、アップデートを修復できるスクリプトがありません。"
+
+#: launcher/updater.cpp
+msgctxt "Updater"
+msgid "Python could not be started to put the update right."
+msgstr "Python を起動できず、アップデートを修復できませんでした。"
+
+#: launcher/updater.cpp
+msgctxt "Updater"
+msgid "An update was cut short and hasn't been put right: this folder may be part the old version, part the new, and some games may not start."
+msgstr "アップデートが中断され、修復されていません。このフォルダーは旧バージョンと新バージョンが混在している可能性があり、一部のゲームが起動しないかもしれません。"
+
+#: launcher/updater.cpp
+msgctxt "Updater"
+msgid "Try again closes the launcher and has another go. If that keeps failing, unpack the release's package over this folder: your games, saves and settings stay as they are."
+msgstr "「再試行」でランチャーを閉じて、もう一度試します。それでも失敗する場合は、リリースのパッケージをこのフォルダーに上書き展開してください。ゲーム、セーブデータ、設定はそのまま残ります。"
+
+#: launcher/updater.cpp
+msgctxt "Updater"
+msgid "Try again"
+msgstr "再試行"
+
+#: launcher/updater.cpp
+msgctxt "Updater"
+msgid "Not now"
+msgstr "後で"
+
+#. %1 is the system's reason
+#: launcher/updater.cpp
+#, qt-format
+msgctxt "UpdateCheck"
+msgid "Python could not be started: %1"
+msgstr "Python を起動できませんでした：%1"
+
+#. %1 is HIRAKU's folder
+#: launcher/updater.cpp
+msgctxt "UpdateDialog"
+msgid "Update HIRAKU"
+msgstr "HIRAKU のアップデート"
+
+#. %1 is the new version's name ("HIRAKU 0.15.0"), %2 the version in use ("0.14.0"), %3 the download's size
+#: launcher/updater.cpp
+#, qt-format
+msgctxt "UpdateDialog"
+msgid "<b>%1</b> is out: this is %2. The download is %3.<br>Your games, saves and settings stay as they are; the launcher restarts once it's in."
+msgstr "<b>%1</b> が公開されています（現在は %2）。ダウンロードサイズは %3 です。<br>ゲーム、セーブデータ、設定はそのまま残ります。導入が終わるとランチャーが再起動します。"
+
+#: launcher/updater.cpp
+msgctxt "UpdateDialog"
+msgid "Update and restart"
+msgstr "更新して再起動"
+
+#: launcher/updater.cpp
+msgctxt "UpdateDialog"
+msgid "Later"
+msgstr "後で"
+
+#: launcher/updater.cpp
+msgctxt "UpdateDialog"
+msgid "Release page"
+msgstr "リリースページ"
+
+#. %1 is the size downloaded so far
+#: launcher/updater.cpp
+#, qt-format
+msgctxt "UpdateDialog"
+msgid "Downloading… %1"
+msgstr "ダウンロード中… %1"
+
+#: launcher/updater.cpp
+msgctxt "UpdateDialog"
+msgid "Unpacking…"
+msgstr "展開中…"
+
+#: launcher/updater.cpp
+msgctxt "UpdateDialog"
+msgid "Ready: the launcher closes and starts again."
+msgstr "準備完了：ランチャーを閉じて再起動します。"
+
+#. %1 is the update script's last lines (English)
+#: launcher/updater.cpp
+#, qt-format
+msgctxt "UpdateDialog"
+msgid "The update failed: %1"
+msgstr "アップデートに失敗しました：%1"
+
+#: launcher/updater.cpp
+msgctxt "UpdateDialog"
+msgid "Try again"
+msgstr "再試行"
+
+#. %1 is HIRAKU's folder
+#: launcher/updater.cpp
+#, qt-format
+msgctxt "UpdateDialog"
+msgid "%1 can't be written to: download the new version from the release page instead."
+msgstr "%1 に書き込めません。リリースページから新しいバージョンをダウンロードしてください。"
+
+#: launcher/updater.cpp
+msgctxt "UpdateDialog"
+msgid "Downloading…"
+msgstr "ダウンロード中…"
+
+#: runtime/main.cpp
+msgctxt "boxes"
+msgid "Picture kept"
+msgstr "画像を保存しました"
+
+#: runtime/main.cpp
+msgctxt "boxes"
+msgid "No picture kept"
+msgstr "画像は保存されませんでした"
+
+#: runtime/main.cpp
+msgctxt "boxes"
+msgid "This screen is the game's picture in the game menu"
+msgstr "この画面をゲームメニューでのゲームの画像にします"
+
+#: runtime/main.cpp
+msgctxt "boxes"
+msgid "The game wasn't started from the launcher"
+msgstr "ランチャーから起動されていません"
+
+#: runtime/main.cpp
+msgctxt "boxes"
+msgid "It couldn't be written"
+msgstr "書き込めませんでした"
+
+#: runtime/main.cpp
+msgctxt "boxes"
+msgid "Recording kept"
+msgstr "録画を保存しました"
+
+#: runtime/main.cpp
+msgctxt "boxes"
+msgid "Recording (F6 ends it)"
+msgstr "録画中（F6 で終了）"
+
+#: runtime/main.cpp
+msgctxt "boxes"
+msgid "No recording"
+msgstr "録画できません"
+
+#: runtime/main.cpp
+msgctxt "boxes"
+msgid "Screenshot kept"
+msgstr "スクリーンショットを保存しました"
+
+#: runtime/main.cpp
+msgctxt "boxes"
+msgid "No screenshot"
+msgstr "スクリーンショットを保存できません"
+
+#: runtime/firebeat/board.cpp
+msgctxt "boxes"
+msgid "Floppy disk taken out while the game was writing it"
+msgstr "書き込み中にフロッピーディスクを取り出しました"
+
+#: runtime/firebeat/board.cpp
+msgctxt "boxes"
+msgid "Floppy disk taken out"
+msgstr "フロッピーディスクを取り出しました"
+
+#: runtime/firebeat/board.cpp
+#, qt-format
+msgctxt "boxes"
+msgid "No floppy disk: %1"
+msgstr "フロッピーディスクなし：%1"
+
+#: runtime/firebeat/board.cpp
+msgctxt "boxes"
+msgid "Floppy disk in the drive (write-protected)"
+msgstr "フロッピーディスクを挿入しました（書き込み禁止）"
+
+#: runtime/firebeat/board.cpp
+msgctxt "boxes"
+msgid "Floppy disk in the drive"
+msgstr "フロッピーディスクを挿入しました"
+
+#: runtime/firebeat/core.cpp
+msgctxt "boxes"
+msgid "The sound flash is blank: most sounds are missing."
+msgstr "サウンドフラッシュが空です。ほとんどの音が鳴りません。"
+
+#. SOUND FLASH INIT is the game's own test menu item (keep it); F2 a key
+#: runtime/firebeat/core.cpp
+msgctxt "boxes"
+msgid "Test mode (F2): SOUND FLASH INIT (the launcher says how)."
+msgstr "テストモード（F2）：SOUND FLASH INIT（方法はランチャーで案内しています）。"
+
+#: runtime/firebeat/core.cpp
+msgctxt "boxes"
+msgid "Floppy disk"
+msgstr "フロッピーディスク"
+
+#: runtime/host/menuview.cpp runtime/menu/draw.cpp
+msgctxt "menu"
+msgid "GAME MENU"
+msgstr "ゲームメニュー"
+
+#: runtime/host/menuview.cpp
+msgctxt "menu"
+msgid "Keep holding to leave this game"
+msgstr "押し続けるとこのゲームを終了します"
+
+#: runtime/host/mods.cpp
+msgctxt "boxes"
+msgid "Files and patches: from the game's next start"
+msgstr "ファイルとパッチ：次回の起動から"
+
+#. %1 is the launcher's menu entry, "Help > Check for updates"
+#: runtime/host/notice.cpp
+#, qt-format
+msgctxt "boxes"
+msgid "Update it from the launcher: %1."
+msgstr "ランチャーの %1 からアップデートしてください。"
+
+#. %1 the new version, %2 the one running ("0.15.0")
+#: runtime/host/notice.cpp
+#, qt-format
+msgctxt "boxes"
+msgid "HIRAKU %1 is out (this is %2)."
+msgstr "HIRAKU %1 が出ています（このバージョンは %2）。"
+
+#: runtime/host/picture.cpp
+msgctxt "overlay"
+msgid "CRT light (crt-guest-advanced-fast)"
+msgstr "CRT 軽量（crt-guest-advanced-fast）"
+
+#: runtime/host/picture.cpp
+msgctxt "overlay"
+msgid "CRT full (crt-royale)"
+msgstr "CRT フル（crt-royale）"
+
+#: runtime/host/picture.cpp
+msgctxt "overlay"
+msgid "CRT analog (Lola Retro)"
+msgstr "CRT アナログ（Lola Retro）"
+
+#: runtime/host/picture.cpp
+msgctxt "overlay"
+msgid "sharp pixels"
+msgstr "シャープなピクセル"
+
+#: runtime/host/statsview.cpp
+#, qt-plural-format
+msgctxt "overlay"
+msgid "%n break"
+msgid_plural "%n breaks"
+msgstr[0] "途切れ %n 回"
+
+#: runtime/host/statsview.cpp
+#, qt-plural-format
+msgctxt "overlay"
+msgid "display sync on: %n refresh a frame"
+msgid_plural "display sync on: %n refreshes a frame"
+msgstr[0] "画面同期オン：1 フレームに %n リフレッシュ"
+
+#. the overlay's one line: %1 the game's frames a second, %2 a frame's work in ms, %3 its time in ms
+#: runtime/host/statsview.cpp
+#, qt-format
+msgctxt "overlay"
+msgid "%1 fps  %2/%3 ms"
+msgstr "%1 fps  %2/%3 ms"
+
+#: runtime/host/statsview.cpp
+#, qt-format
+msgctxt "overlay"
+msgid "CPU %1 %"
+msgstr "CPU %1 %"
+
+#: runtime/host/statsview.cpp
+#, qt-format
+msgctxt "overlay"
+msgid "sound %1 ms"
+msgstr "音 %1 ms"
+
+#. frames shown late in the last ten seconds
+#: runtime/host/statsview.cpp
+#, qt-format
+msgctxt "overlay"
+msgid "late %1"
+msgstr "遅れ %1"
+
+#. breaks in the sound in the last ten seconds
+#: runtime/host/statsview.cpp
+#, qt-format
+msgctxt "overlay"
+msgid "breaks %1"
+msgstr "途切れ %1"
+
+#: runtime/host/statsview.cpp
+msgctxt "overlay"
+msgid "Performance (F7: more, drag to move)"
+msgstr "パフォーマンス（F7：詳しく、ドラッグで移動）"
+
+#: runtime/host/statsview.cpp
+#, qt-format
+msgctxt "overlay"
+msgid "game %1 fps"
+msgstr "ゲーム %1 fps"
+
+#: runtime/host/statsview.cpp
+#, qt-format
+msgctxt "overlay"
+msgid "display %1 Hz"
+msgstr "画面 %1 Hz"
+
+#. %1 how much faster or slower the game runs to match the display ("+0.05")
+#: runtime/host/statsview.cpp
+#, qt-format
+msgctxt "overlay"
+msgid "speed %1 %"
+msgstr "速度 %1 %"
+
+#: runtime/host/statsview.cpp
+#, qt-format
+msgctxt "overlay"
+msgid "frames: %1 late of %2 (%3 in the last 10 s)"
+msgstr "フレーム：%2 中 %1 遅れ（直近 10 秒で %3）"
+
+#. a frame's work in ms of its time, the worst of the last second, then the window's own drawing
+#: runtime/host/statsview.cpp
+#, qt-format
+msgctxt "overlay"
+msgid "work %1 ms of %2 (worst %3), window %4"
+msgstr "処理 %1/%2 ms（最大 %3）、ウィンドウ %4"
+
+#: runtime/host/statsview.cpp
+#, qt-format
+msgctxt "overlay"
+msgid "CPU: game thread %1 %, all threads %2 % of one"
+msgstr "CPU：ゲームスレッド %1 %、全体 %2 %（1 コア比）"
+
+#. the graph's colours: the green bars, the blue bars, the line across
+#: runtime/host/statsview.cpp
+msgctxt "overlay"
+msgid "green: game, blue: window, line: a frame's time"
+msgstr "緑：ゲーム、青：ウィンドウ、線：1 フレームの時間"
+
+#. a slow frame: %1 its number, %2 its work in ms, %3 its time in ms; then ", late" and ", sound broke" may follow
+#: runtime/host/statsview.cpp
+#, qt-format
+msgctxt "overlay"
+msgid "slow: frame %1, %2 ms of %3"
+msgstr "遅いフレーム：%1、%2/%3 ms"
+
+#: runtime/host/statsview.cpp
+msgctxt "overlay"
+msgid ", late"
+msgstr "、表示遅れ"
+
+#: runtime/host/statsview.cpp
+msgctxt "overlay"
+msgid ", sound broke"
+msgstr "、音途切れ"
+
+#. %1 the sound queued in ms, %2 the queue's target in ms, %3 "%n breaks"
+#: runtime/host/statsview.cpp
+#, qt-format
+msgctxt "overlay"
+msgid "sound: %1 ms queued (target %2), %3"
+msgstr "音：キュー %1 ms（目標 %2）、%3"
+
+#: runtime/host/statsview.cpp
+msgctxt "overlay"
+msgid "sound: no device"
+msgstr "音：デバイスなし"
+
+#: runtime/host/statsview.cpp
+msgctxt "overlay"
+msgid "display sync on: the game at its own speed"
+msgstr "画面同期オン：ゲーム本来の速度"
+
+#. %1 display sync's state, as the log says it (in English)
+#: runtime/host/statsview.cpp
+#, qt-format
+msgctxt "overlay"
+msgid "display sync %1"
+msgstr "画面同期 %1"
+
+#: runtime/host/statsview.cpp
+msgctxt "overlay"
+msgid "display sync not in use"
+msgstr "画面同期は未使用"
+
+#: runtime/host/statsview.cpp
+msgctxt "overlay"
+msgid "display sync off"
+msgstr "画面同期オフ"
+
+#. smooth motion's in-between pictures: %1 shown late of %2
+#: runtime/host/statsview.cpp
+#, qt-format
+msgctxt "overlay"
+msgid "smooth motion (%1 of %2 late)"
+msgstr "なめらか表示（%2 中 %1 遅れ）"
+
+#: runtime/host/statsview.cpp
+msgctxt "overlay"
+msgid "smooth motion"
+msgstr "なめらか表示"
+
+#: runtime/host/statsview.cpp
+msgctxt "overlay"
+msgid "CRT beam"
+msgstr "CRT ビーム"
+
+#: runtime/host/statsview.cpp
+msgctxt "overlay"
+msgid "high frame rate"
+msgstr "ハイフレームレート"
+
+#. %1 ms on average over the last %2 presses
+#: runtime/host/statsview.cpp
+#, qt-format
+msgctxt "overlay"
+msgid "a press to its frame's start: %1 ms (last %2)"
+msgstr "入力からフレーム開始まで：%1 ms（直近 %2 回）"
+
+#: runtime/host/statsview.cpp
+msgctxt "overlay"
+msgid "a press to its frame's start: none yet"
+msgstr "入力からフレーム開始まで：まだなし"
+
+#. the median in ms, then the 99th percentile; a "+..." after it is the display's own delay
+#: runtime/host/statsview.cpp
+#, qt-format
+msgctxt "overlay"
+msgid "frame start to picture: %1 ms (p99 %2)"
+msgstr "フレーム開始から画面まで：%1 ms（p99 %2）"
+
+#. the median in ms, the 99th percentile, then the sound device's buffer after "+"
+#: runtime/host/statsview.cpp
+#, qt-format
+msgctxt "overlay"
+msgid "frame start to sound: %1 ms (p99 %2), +%3"
+msgstr "フレーム開始から音まで：%1 ms（p99 %2）、+%3"
+
+#: runtime/host/statsview.cpp
+msgctxt "overlay"
+msgid "the PC: reading.."
+msgstr "PC：読み取り中.."
+
+#. %1 this program's busiest threads with their shares ("game 92 %, sound 4 %")
+#: runtime/host/statsview.cpp
+#, qt-format
+msgctxt "overlay"
+msgid "threads: %1"
+msgstr "スレッド：%1"
+
+#: runtime/host/statsview.cpp
+msgctxt "overlay"
+msgid "its load isn't known here"
+msgstr "負荷は取得できません"
+
+#: runtime/host/statsview.cpp
+#, qt-format
+msgctxt "overlay"
+msgid "%1 %"
+msgstr "%1 %"
+
+#: runtime/host/statsview.cpp
+#, qt-format
+msgctxt "overlay"
+msgid "this window %1 %"
+msgstr "このウィンドウ %1 %"
+
+#: runtime/host/statsview.cpp
+#, qt-format
+msgctxt "overlay"
+msgid "%1 MHz"
+msgstr "%1 MHz"
+
+#. the graphics card: %1 its load
+#: runtime/host/statsview.cpp
+#, qt-format
+msgctxt "overlay"
+msgid "GPU: %1"
+msgstr "GPU：%1"
+
+#. the graphics card: %1 its name, %2 its load
+#: runtime/host/statsview.cpp
+#, qt-format
+msgctxt "overlay"
+msgid "GPU (%1): %2"
+msgstr "GPU（%1）：%2"
+
+#: runtime/host/statsview.cpp
+#, qt-format
+msgctxt "overlay"
+msgid "processors: up to %1 MHz now"
+msgstr "CPU：現在最大 %1 MHz"
+
+#: runtime/host/warp.cpp
+msgctxt "boxes"
+msgid "Done: the game runs at its normal speed"
+msgstr "完了：ゲームは通常の速度で動いています"
+
+#. %1 how many times the normal speed ("4.2")
+#: runtime/host/warp.cpp
+#, qt-format
+msgctxt "boxes"
+msgid "Speeding through the start-up: %1x"
+msgstr "起動を高速化中：%1 倍"
+
+#: runtime/host/warp.cpp
+msgctxt "boxes"
+msgid "Speeding through the start-up"
+msgstr "起動を高速化中"
+
+#: runtime/host/warp.cpp
+msgctxt "boxes"
+msgid "FAST START-UP"
+msgstr "高速起動"
+
+#: runtime/host/warp.cpp
+msgctxt "boxes"
+msgid "Press a game button for normal speed"
+msgstr "ゲームのボタンを押すと通常の速度に戻ります"
+
+#: runtime/host/window.cpp
+msgctxt "boxes"
+msgid "The sound device stopped."
+msgstr "サウンドデバイスが停止しました。"
+
+#: runtime/host/window.cpp
+msgctxt "boxes"
+msgid "No other: the game goes on without sound."
+msgstr "代わりのデバイスがないため、音なしで続行します。"
+
+#: runtime/host/window.cpp
+msgctxt "boxes"
+msgid "The sound device stopped, and was started again."
+msgstr "サウンドデバイスが停止し、再起動しました。"
+
+#. %1 the sound device's name
+#: runtime/host/window.cpp
+#, qt-format
+msgctxt "boxes"
+msgid "The sound now plays on another: %1"
+msgstr "音は別のデバイスで再生しています：%1"
+
+#: runtime/menu/draw.cpp
+msgctxt "menu"
+msgid "No game is ready to play"
+msgstr "プレイ可能なゲームがありません"
+
+#: runtime/menu/draw.cpp
+msgctxt "menu"
+msgid "Add your games in HIRAKU's window first"
+msgstr "先に HIRAKU のウィンドウでゲームを追加してください"
+
+#. %1 is the game's title, as the game writes it
+#: runtime/menu/draw.cpp
+#, qt-format
+msgctxt "menu"
+msgid "Starting %1"
+msgstr "%1 を起動しています"
+
+#: runtime/menu/nav.cpp
+msgctxt "menu"
+msgid "Turntable"
+msgstr "ターンテーブル"
+
+#: runtime/menu/nav.cpp
+msgctxt "menu"
+msgid "choose a game"
+msgstr "ゲームを選ぶ"
+
+#: runtime/menu/nav.cpp
+msgctxt "menu"
+msgid "Black keys"
+msgstr "黒鍵"
+
+#: runtime/menu/nav.cpp
+msgctxt "menu"
+msgid "change shelf"
+msgstr "棚を切り替える"
+
+#: runtime/menu/nav.cpp
+msgctxt "menu"
+msgid "White key or Start"
+msgstr "白鍵またはスタート"
+
+#: runtime/menu/nav.cpp
+msgctxt "menu"
+msgid "play"
+msgstr "プレイ"
+
+#: runtime/menu/nav.cpp
+msgctxt "menu"
+msgid "Blue buttons"
+msgstr "青ボタン"
+
+#: runtime/menu/nav.cpp
+msgctxt "menu"
+msgid "Green buttons"
+msgstr "緑ボタン"
+
+#: runtime/menu/nav.cpp
+msgctxt "menu"
+msgid "Red button"
+msgstr "赤ボタン"
+
+#: runtime/menu/nav.cpp
+msgctxt "menu"
+msgid "Select left / right"
+msgstr "セレクト左 / 右"
+
+#: runtime/menu/nav.cpp
+msgctxt "menu"
+msgid "Outer buttons"
+msgstr "外側のボタン"
+
+#: runtime/menu/nav.cpp
+msgctxt "menu"
+msgid "Select OK"
+msgstr "セレクト OK"
+
+#: runtime/menu/nav.cpp
+msgctxt "menu"
+msgid "Up / Down panels"
+msgstr "上 / 下パネル"
+
+#: runtime/menu/nav.cpp
+msgctxt "menu"
+msgid "Left / Right panels"
+msgstr "左 / 右パネル"
+
+#: runtime/menu/nav.cpp
+msgctxt "menu"
+msgid "Start"
+msgstr "スタート"
+
+#: runtime/menu/nav.cpp
+msgctxt "menu"
+msgid "Select L / R"
+msgstr "セレクト L / R"
+
+#: runtime/menu/nav.cpp
+msgctxt "menu"
+msgid "Upper sensors"
+msgstr "上段センサー"
+
+#: runtime/menu/nav.cpp
+msgctxt "menu"
+msgid "Left / right conga"
+msgstr "左 / 右コンガ"
+
+#: runtime/menu/nav.cpp
+msgctxt "menu"
+msgid "Start or centre conga"
+msgstr "スタートまたは中央のコンガ"
+
+#: runtime/menu/nav.cpp
+msgctxt "menu"
+msgid "Select, hi-hat / cymbal"
+msgstr "セレクト、ハイハット / シンバル"
+
+#: runtime/menu/nav.cpp
+msgctxt "menu"
+msgid "Toms"
+msgstr "タム"
+
+#: runtime/menu/nav.cpp
+msgctxt "menu"
+msgid "Start or snare"
+msgstr "スタートまたはスネア"
+
+#: runtime/menu/nav.cpp
+msgctxt "menu"
+msgid "Neck R / B"
+msgstr "ネック R / B"
+
+#: runtime/menu/nav.cpp
+msgctxt "menu"
+msgid "Neck G"
+msgstr "ネック G"
+
+#: runtime/menu/nav.cpp
+msgctxt "menu"
+msgid "Start or pick"
+msgstr "スタートまたはピック"
+
+#: runtime/menu/nav.cpp
+msgctxt "menu"
+msgid "Wheel, or lowest C / D"
+msgstr "ホイール、または最低音のド / レ"
+
+#: runtime/menu/nav.cpp
+msgctxt "menu"
+msgid "Lowest black keys"
+msgstr "最低音の黒鍵"
+
+#: runtime/menu/nav.cpp
+msgctxt "menu"
+msgid "Left / Right buttons"
+msgstr "左 / 右ボタン"
+
+#: runtime/menu/nav.cpp
+msgctxt "menu"
+msgid "Outer sensor bars"
+msgstr "外側のセンサーバー"
+
+#: runtime/menu/nav.cpp
+msgctxt "menu"
+msgid "Dial"
+msgstr "ダイヤル"
+
+#: runtime/menu/nav.cpp
+msgctxt "menu"
+msgid "B button"
+msgstr "B ボタン"
+
+#: runtime/menu/nav.cpp
+msgctxt "menu"
+msgid "A button"
+msgstr "A ボタン"
+
+#: runtime/menu/nav.cpp
+msgctxt "menu"
+msgid "10-key 8 / 2"
+msgstr "テンキー 8 / 2"
+
+#: runtime/menu/nav.cpp
+msgctxt "menu"
+msgid "10-key 4 / 6"
+msgstr "テンキー 4 / 6"
+
+#: runtime/menu/nav.cpp
+msgctxt "menu"
+msgid "10-key Enter"
+msgstr "テンキー Enter"
+
+#: runtime/menu/nav.cpp
+msgctxt "menu"
+msgid "D-pad up / down"
+msgstr "十字キー上 / 下"
+
+#: runtime/menu/nav.cpp
+msgctxt "menu"
+msgid "D-pad left / right"
+msgstr "十字キー左 / 右"
+
+#: runtime/menu/nav.cpp
+msgctxt "menu"
+msgid "A or Start"
+msgstr "A またはスタート"
+
+#: runtime/python/core.cpp
+msgctxt "boxes"
+msgid "The card waits at the slot: the game hasn't opened it."
+msgstr "カードが差し込み口で待っています。ゲームが差し込み口を開いていません。"
+
+#. the capitals are the game's own test menu items (keep them as the game shows them)
+#: runtime/python/core.cpp
+msgctxt "boxes"
+msgid "Is e-AMUSEMENT on in its test mode? (e-AMUSEMENT OPTIONS, under NETWORK OPTIONS from pop'n 10; SAVE AND EXIT, start again)"
+msgstr "テストモードで e-AMUSEMENT はオンですか？（e-AMUSEMENT OPTIONS、pop'n 10 以降は NETWORK OPTIONS の中。SAVE AND EXIT のあと再起動）"
+
+#: runtime/python/core.cpp
+msgctxt "boxes"
+msgid "pop'n 9 opens it after Start."
+msgstr "pop'n 9 では Start の後に開きます。"
+
+#. %1 the medium ("Floppy disk", "Memory card"), %2 the card's last digits ("…1234"), %3 the slot (1, 2)
+#: runtime/shell/cardmedia.h
+#, qt-format
+msgctxt "boxes"
+msgid "%1 of card %2 waits: the game is writing the disk"
+msgstr "カード %2 の%1は待機中：ゲームがディスクに書き込んでいます"
+
+#: runtime/shell/cardmedia.h
+#, qt-format
+msgctxt "boxes"
+msgid "%1 %3 of card %2 waits: the game is writing the card"
+msgstr "カード %2 の%1 %3 は待機中：ゲームがカードに書き込んでいます"
+
+#: runtime/shell/cardmedia.h
+#, qt-format
+msgctxt "boxes"
+msgid "%1 of card %2: the card is in use at another cabinet"
+msgstr "カード %2 の%1：このカードは別の筐体で使用中です"
+
+#: runtime/shell/cardmedia.h
+#, qt-format
+msgctxt "boxes"
+msgid "%1 %3 of card %2: the card is in use at another cabinet"
+msgstr "カード %2 の%1 %3：このカードは別の筐体で使用中です"
+
+#. %4 says why (in English: the log's words)
+#: runtime/shell/cardmedia.h
+#, qt-format
+msgctxt "boxes"
+msgid "%1 of card %2 can't go in: %4"
+msgstr "カード %2 の%1を入れられません：%4"
+
+#. %4 says why (in English: the log's words)
+#: runtime/shell/cardmedia.h
+#, qt-format
+msgctxt "boxes"
+msgid "%1 %3 of card %2 can't go in: %4"
+msgstr "カード %2 の%1 %3 を入れられません：%4"
+
+#. %1 the medium ("Floppy disk", "Memory card"), %2 the card's last digits ("…1234"), %3 the slot (1, 2)
+#: runtime/shell/cardmedia.h
+#, qt-format
+msgctxt "boxes"
+msgid "%1 of card %2 in the drive"
+msgstr "カード %2 の%1を挿入しました"
+
+#. %1 the medium ("Floppy disk", "Memory card"), %2 the card's last digits ("…1234"), %3 the slot (1, 2)
+#: runtime/shell/cardmedia.h
+#, qt-format
+msgctxt "boxes"
+msgid "%1 %3 of card %2 in its slot"
+msgstr "カード %2 の%1 %3 を挿入しました"
+
+#: runtime/shell/cardmedia.h
+#, qt-format
+msgctxt "boxes"
+msgid "%1 of card %2 taken out"
+msgstr "カード %2 の%1を取り出しました"
+
+#: runtime/shell/cardmedia.h
+#, qt-format
+msgctxt "boxes"
+msgid "%1 %3 of card %2 taken out"
+msgstr "カード %2 の%1 %3 を取り出しました"
+
+#: runtime/sys573/core.cpp
+msgctxt "boxes"
+msgid "Memory card"
+msgstr "メモリーカード"
+
+#. %1 the slot's number (1, 2)
+#: runtime/sys573/memcard.cpp
+#, qt-format
+msgctxt "boxes"
+msgid "Memory card %1 taken out"
+msgstr "メモリーカード %1 を取り出しました"
+
+#: runtime/sys573/memcard.cpp
+#, qt-format
+msgctxt "boxes"
+msgid "Memory card %1 in its slot"
+msgstr "メモリーカード %1 を挿入しました"
+
+#: runtime/sys573/memcard.cpp
+#, qt-format
+msgctxt "boxes"
+msgid "No memory card %1: %2"
+msgstr "メモリーカード %1 なし：%2"
+
+#. Qt's own standard text; & marks the letter for Alt (Japanese and Chinese: "(&Y)" after the word)
+msgctxt "QPlatformTheme"
+msgid "OK"
+msgstr "OK"
+
+#. Qt's own standard text; & marks the letter for Alt (Japanese and Chinese: "(&Y)" after the word)
+msgctxt "QPlatformTheme"
+msgid "Cancel"
+msgstr "キャンセル"
+
+#. Qt's own standard text; & marks the letter for Alt (Japanese and Chinese: "(&Y)" after the word)
+msgctxt "QPlatformTheme"
+msgid "Close"
+msgstr "閉じる"
+
+#. Qt's own standard text; & marks the letter for Alt (Japanese and Chinese: "(&Y)" after the word)
+msgctxt "QPlatformTheme"
+msgid "Apply"
+msgstr "適用"
+
+#. Qt's own standard text; & marks the letter for Alt (Japanese and Chinese: "(&Y)" after the word)
+msgctxt "QPlatformTheme"
+msgid "&Yes"
+msgstr "はい(&Y)"
+
+#. Qt's own standard text; & marks the letter for Alt (Japanese and Chinese: "(&Y)" after the word)
+msgctxt "QPlatformTheme"
+msgid "&No"
+msgstr "いいえ(&N)"
+
+#. Qt's own standard text; & marks the letter for Alt (Japanese and Chinese: "(&Y)" after the word)
+msgctxt "QPlatformTheme"
+msgid "Yes to &All"
+msgstr "すべてはい(&A)"
+
+#. Qt's own standard text; & marks the letter for Alt (Japanese and Chinese: "(&Y)" after the word)
+msgctxt "QPlatformTheme"
+msgid "N&o to All"
+msgstr "すべていいえ(&O)"
+
+#. Qt's own standard text; & marks the letter for Alt (Japanese and Chinese: "(&Y)" after the word)
+msgctxt "QPlatformTheme"
+msgid "Save"
+msgstr "保存"
+
+#. Qt's own standard text; & marks the letter for Alt (Japanese and Chinese: "(&Y)" after the word)
+msgctxt "QPlatformTheme"
+msgid "Save All"
+msgstr "すべて保存"
+
+#. Qt's own standard text; & marks the letter for Alt (Japanese and Chinese: "(&Y)" after the word)
+msgctxt "QPlatformTheme"
+msgid "Open"
+msgstr "開く"
+
+#. Qt's own standard text; & marks the letter for Alt (Japanese and Chinese: "(&Y)" after the word)
+msgctxt "QPlatformTheme"
+msgid "Discard"
+msgstr "破棄"
+
+#. Qt's own standard text; & marks the letter for Alt (Japanese and Chinese: "(&Y)" after the word)
+msgctxt "QPlatformTheme"
+msgid "Reset"
+msgstr "リセット"
+
+#. Qt's own standard text; & marks the letter for Alt (Japanese and Chinese: "(&Y)" after the word)
+msgctxt "QPlatformTheme"
+msgid "Restore Defaults"
+msgstr "既定値に戻す"
+
+#. Qt's own standard text; & marks the letter for Alt (Japanese and Chinese: "(&Y)" after the word)
+msgctxt "QPlatformTheme"
+msgid "Help"
+msgstr "ヘルプ"
+
+#. Qt's own standard text; & marks the letter for Alt (Japanese and Chinese: "(&Y)" after the word)
+msgctxt "QPlatformTheme"
+msgid "Abort"
+msgstr "中止"
+
+#. Qt's own standard text; & marks the letter for Alt (Japanese and Chinese: "(&Y)" after the word)
+msgctxt "QPlatformTheme"
+msgid "Retry"
+msgstr "再試行"
+
+#. Qt's own standard text; & marks the letter for Alt (Japanese and Chinese: "(&Y)" after the word)
+msgctxt "QPlatformTheme"
+msgid "Ignore"
+msgstr "無視"
+
+#. Qt's own standard text; & marks the letter for Alt (Japanese and Chinese: "(&Y)" after the word)
+msgctxt "QLineEdit"
+msgid "&Undo"
+msgstr "元に戻す(&U)"
+
+#. Qt's own standard text; & marks the letter for Alt (Japanese and Chinese: "(&Y)" after the word)
+msgctxt "QLineEdit"
+msgid "&Redo"
+msgstr "やり直す(&R)"
+
+#. Qt's own standard text; & marks the letter for Alt (Japanese and Chinese: "(&Y)" after the word)
+msgctxt "QLineEdit"
+msgid "Cu&t"
+msgstr "切り取り(&T)"
+
+#. Qt's own standard text; & marks the letter for Alt (Japanese and Chinese: "(&Y)" after the word)
+msgctxt "QLineEdit"
+msgid "&Copy"
+msgstr "コピー(&C)"
+
+#. Qt's own standard text; & marks the letter for Alt (Japanese and Chinese: "(&Y)" after the word)
+msgctxt "QLineEdit"
+msgid "&Paste"
+msgstr "貼り付け(&P)"
+
+#. Qt's own standard text; & marks the letter for Alt (Japanese and Chinese: "(&Y)" after the word)
+msgctxt "QLineEdit"
+msgid "Delete"
+msgstr "削除"
+
+#. Qt's own standard text; & marks the letter for Alt (Japanese and Chinese: "(&Y)" after the word)
+msgctxt "QLineEdit"
+msgid "Select All"
+msgstr "すべて選択"
+
+#. Qt's own standard text; & marks the letter for Alt (Japanese and Chinese: "(&Y)" after the word)
+msgctxt "QWidgetTextControl"
+msgid "&Undo"
+msgstr "元に戻す(&U)"
+
+#. Qt's own standard text; & marks the letter for Alt (Japanese and Chinese: "(&Y)" after the word)
+msgctxt "QWidgetTextControl"
+msgid "&Redo"
+msgstr "やり直す(&R)"
+
+#. Qt's own standard text; & marks the letter for Alt (Japanese and Chinese: "(&Y)" after the word)
+msgctxt "QWidgetTextControl"
+msgid "Cu&t"
+msgstr "切り取り(&T)"
+
+#. Qt's own standard text; & marks the letter for Alt (Japanese and Chinese: "(&Y)" after the word)
+msgctxt "QWidgetTextControl"
+msgid "&Copy"
+msgstr "コピー(&C)"
+
+#. Qt's own standard text; & marks the letter for Alt (Japanese and Chinese: "(&Y)" after the word)
+msgctxt "QWidgetTextControl"
+msgid "&Paste"
+msgstr "貼り付け(&P)"
+
+#. Qt's own standard text; & marks the letter for Alt (Japanese and Chinese: "(&Y)" after the word)
+msgctxt "QWidgetTextControl"
+msgid "Delete"
+msgstr "削除"
+
+#. Qt's own standard text; & marks the letter for Alt (Japanese and Chinese: "(&Y)" after the word)
+msgctxt "QWidgetTextControl"
+msgid "Select All"
+msgstr "すべて選択"
+
+#. Qt's own standard text; & marks the letter for Alt (Japanese and Chinese: "(&Y)" after the word)
+msgctxt "QWidgetTextControl"
+msgid "Copy &Link Location"
+msgstr "リンクの場所をコピー(&L)"
+
+#. Qt's own standard text; & marks the letter for Alt (Japanese and Chinese: "(&Y)" after the word)
+msgctxt "QMessageBox"
+msgid "Show Details..."
+msgstr "詳細を表示…"
+
+#. Qt's own standard text; & marks the letter for Alt (Japanese and Chinese: "(&Y)" after the word)
+msgctxt "QMessageBox"
+msgid "Hide Details..."
+msgstr "詳細を隠す…"
+

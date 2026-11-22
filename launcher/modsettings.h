@@ -7,6 +7,7 @@
 // kept. No widgets here: the panel (modsettingsdialog.h) shows it, the tests check it.
 #pragma once
 
+#include <QCoreApplication>
 #include <QFile>
 #include <QFileInfo>
 #include <QDir>
@@ -20,6 +21,7 @@
 #include "host/modsettings.h"
 
 class ModSettings {
+    Q_DECLARE_TR_FUNCTIONS(ModSettings)   // its texts' context in the catalogues (launcher/language.h)
 public:
     enum class Kind { tick, list, number };
     struct Row {
@@ -76,13 +78,14 @@ public:
         for (Row &r : m_rows) r.value = r.setting.dflt;
     }
     static QString shown(const Row &r, int64_t v) {
-        if (r.kind == Kind::tick) return v ? "on" : "off";
+        if (r.kind == Kind::tick) return v ? ModSettings::tr("on") : ModSettings::tr("off");   // TR: a tick box setting's value
         return QString::fromStdString(hk::modsettings::shown(r.setting, v));
     }
     // "Backing track timing: PS2, Lane cover: 120" (for the mod's row)
     QString summary() const {
         QStringList parts;
-        for (const Row &r : m_rows) parts << QString::fromStdString(r.setting.label) + ": " + shown(r, r.value);
+        // TR: %1 is a setting's name (the mod author's), %2 its value; shown in a list joined by ", "
+        for (const Row &r : m_rows) parts << ModSettings::tr("%1: %2").arg(QString::fromStdString(r.setting.label), shown(r, r.value));
         return parts.join(", ");
     }
     // the actions' keys, read-only: "Keypad 8: later (Judging (ms) up by 5)"
@@ -95,10 +98,17 @@ public:
             for (const Row &r : m_rows)
                 if (r.setting.name == a.setting) {
                     const QString label = QString::fromStdString(r.setting.label);
-                    does = a.what == "toggle" ? label + ", " + shown(r, r.setting.min) + " / " + shown(r, r.setting.max)
-                                              : label + " " + does + (r.setting.step != 1 ? " by " + QString::number(r.setting.step) : "");
+                    const bool up = a.what == "up", by = r.setting.step != 1;
+                    const QString step = QString::number(r.setting.step);
+                    // TR: an action that switches a setting: %1 the setting's name, %2 and %3 its two values
+                    if (a.what == "toggle") does = ModSettings::tr("%1, %2 / %3").arg(label, shown(r, r.setting.min), shown(r, r.setting.max));
+                    // TR: an action that raises or lowers a setting: %1 the setting's name, %2 the step
+                    else if (by) does = up ? ModSettings::tr("%1 up by %2").arg(label, step) : ModSettings::tr("%1 down by %2").arg(label, step);
+                    // TR: an action that raises or lowers a setting by one: %1 the setting's name
+                    else does = up ? ModSettings::tr("%1 up").arg(label) : ModSettings::tr("%1 down").arg(label);
                 }
-            out << key + ": " + QString::fromStdString(a.label) + " (" + does + ")";
+            // TR: a key while playing: %1 the key, %2 the action's name (the mod author's), %3 what it does
+            out << ModSettings::tr("%1: %2 (%3)").arg(key, QString::fromStdString(a.label), does);
         }
         return out;
     }

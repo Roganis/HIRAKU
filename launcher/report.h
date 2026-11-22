@@ -11,6 +11,7 @@
 // or the person's mail program with a message started, for them to finish and send.
 #pragma once
 
+#include <QCoreApplication>
 #include <QDialog>
 #include <QString>
 
@@ -27,6 +28,7 @@ QString make(const QString &runLog, const QString &game, const QString &title, C
 }  // namespace report
 
 class ReportDialog : public QDialog {
+    Q_DECLARE_TR_FUNCTIONS(ReportDialog)   // its texts' context in the catalogues (launcher/language.h)
 public:
     // runLog: the run to start with ("" the newest)
     explicit ReportDialog(QWidget *parent, const QString &runLog = QString());

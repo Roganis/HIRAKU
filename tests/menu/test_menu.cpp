@@ -9,6 +9,7 @@
 //   - HIRAKU's logo: its pictures read, and where it is when (opening, up to the top, closing)
 // test_menu GAMES_DIR                      the checks
 // test_menu GAMES_DIR --ppm FILE FAMILY [wide]   a picture of the menu for that cabinet, to look at
+//                                                (HK_LANG=fr: in that language, lang/fr.po)
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -21,6 +22,7 @@
 
 #include "host/menukey.h"
 #include "host/menupic.h"
+#include "lang/lang.h"
 #include "menu/font.h"
 #include "menu/logo.h"
 #include "menu/menu.h"
@@ -352,6 +354,39 @@ static void test_draw() {
     menu::draw(empty, "popn", 0, px.data(), 640, 480);   // says there is none, and doesn't fall over
 }
 
+// The legends in the player's language (runtime/lang/lang.h, context "menu"): drawn translated,
+// and one far longer than the English still ends inside the screen's margin (cut short), so the
+// columns at the right edge stay the ground's, as at the left
+static void test_legend_language() {
+    menu::List l;
+    std::string err;
+    CHECK(l.parse(kList, err));
+    menu::State s;
+    s.set(l);
+    const auto margins_clear = [](const std::vector<uint32_t> &px, int w) {
+        for (int y = 0; y < 480; y++)
+            for (int x = 0; x < 6; x++)
+                if (px[(size_t)y * w + (size_t)(w - 1 - x)] != px[(size_t)y * w + (size_t)x]) return false;
+        return true;
+    };
+    for (int w : {640, 848}) {
+        std::vector<uint32_t> english((size_t)w * 480), said((size_t)w * 480);
+        menu::draw(s, "iidx", kUp, english.data(), w, 480);
+        CHECK(margins_clear(english, w));
+        lang::Catalogue c;
+        CHECK(c.parse("msgid \"\"\nmsgstr \"\"\n\"Content-Type: text/plain; charset=UTF-8\\n\"\n\n"
+                      "msgctxt \"menu\"\nmsgid \"Turntable\"\nmsgstr \"Drehscheibe des ersten und des zweiten Spielers\"\n\n"
+                      "msgctxt \"menu\"\nmsgid \"choose a game\"\n"
+                      "msgstr \"ein Spiel aus der langen Liste aller hier installierten Spiele ausw\xc3\xa4hlen\"\n",
+                      err));
+        lang::use(std::move(c), "de");
+        menu::draw(s, "iidx", kUp, said.data(), w, 480);
+        lang::use(lang::Catalogue(), "en");
+        CHECK(said != english);
+        CHECK(margins_clear(said, w));
+    }
+}
+
 // The launcher's look (--look): its colours read, a light ground's defaults, the shelves' colours
 // from the list; drawn with them (no amber left), and the menu's own colours again after
 static void test_look() {
@@ -680,6 +715,7 @@ int main(int argc, char **argv) {
         const uint64_t frame = getenv("HK_MENU_FRAME") ? strtoull(getenv("HK_MENU_FRAME"), nullptr, 0) : 300;
         if (getenv("HK_MENU_START")) s.act(menu::Act::start, frame - 4);
         if (getenv("HK_MENU_NOTICE")) s.set_notice(getenv("HK_MENU_NOTICE"));
+        if (getenv("HK_LANG")) hk::lang::start(std::string(argv[1]) + "/..");   // (its catalogue: the checkout's lang/)
         if (std::string why; getenv("HK_MENU_FONT") && !menu::set_font(getenv("HK_MENU_FONT"), why)) fprintf(stderr, "%s\n", why.c_str());
         if (getenv("HK_MENU_LOGO")) menu::set_logo(getenv("HK_MENU_LOGO"));
         if (const char *look = getenv("HK_MENU_LOOK")) {   // (the launcher's --look)
@@ -703,6 +739,7 @@ int main(int argc, char **argv) {
     test_state();
     test_cabinets(argv[1]);
     test_draw();
+    test_legend_language();
     test_look();
     test_logo();
     test_picture(argc > 2 ? argv[2] : ".");

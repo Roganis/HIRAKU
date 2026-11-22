@@ -78,14 +78,15 @@ QString DipsDialog::summary(const QString &game) {
 }
 
 DipsDialog::DipsDialog(const QString &game, const QString &title, QWidget *parent) : QDialog(parent), m_game(game) {
-    setWindowTitle("DIP switches: " + title);
+    // TR: %1 is the game's title
+    setWindowTitle(tr("DIP switches: %1").arg(title));
     m_switches = read(game);
     const auto b = banks(game);
     auto *body = new QWidget;
     auto *v = new QVBoxLayout(body);
-    auto *about = new QLabel("The switches on the game's board, which the operator sets: the coinage (Free Play), "
-                             "difficulty, demo sounds, and some games' hidden modes. Named as MAME names them. The game "
-                             "reads them when it starts: a change takes effect at the next start.");
+    auto *about = new QLabel(tr("The switches on the game's board, which the operator sets: the coinage (Free Play), "
+                                "difficulty, demo sounds, and some games' hidden modes. Named as MAME names them. The game "
+                                "reads them when it starts: a change takes effect at the next start."));
     about->setWordWrap(true);
     v->addWidget(about);
     QMap<QString, QFormLayout *> forms;
@@ -96,7 +97,7 @@ DipsDialog::DipsDialog(const QString &game, const QString &title, QWidget *paren
             v->addWidget(g);
         }
         auto *box = new QComboBox;
-        for (const auto &[value, label] : s.settings) box->addItem(value == s.preset ? label + " (default)" : label, value);
+        for (const auto &[value, label] : s.settings) box->addItem(value == s.preset ? tr("%1 (default)").arg(label) : label, value);   // TR: %1 is a switch's setting as MAME names it (English)
         box->setCurrentIndex(std::max(0, box->findData(b.value(s.bank, 0xff) & s.mask)));
         box->setToolTip(s.where);
         forms[s.bank]->addRow((s.name == "Unknown" ? s.name + " (" + s.where + ")" : s.name) + ":", box);
@@ -108,7 +109,7 @@ DipsDialog::DipsDialog(const QString &game, const QString &title, QWidget *paren
     scroll->setWidgetResizable(true);
     scroll->setFrameShape(QFrame::NoFrame);
     auto *bb = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
-    auto *defaults = bb->addButton("Defaults", QDialogButtonBox::ResetRole);
+    auto *defaults = bb->addButton(tr("Defaults"), QDialogButtonBox::ResetRole);
     connect(defaults, &QPushButton::clicked, this, [this] {
         for (int i = 0; i < m_switches.size(); i++)
             m_boxes[i]->setCurrentIndex(std::max(0, m_boxes[i]->findData(m_switches[i].preset)));

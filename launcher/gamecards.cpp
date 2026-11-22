@@ -27,6 +27,7 @@
 
 #include "config.h"
 #include "games.h"
+#include "language.h"
 #include "theme.h"
 #include "../third_party/mdi/icons.h"
 
@@ -101,7 +102,8 @@ void paintPicture(QPainter *p, const QRectF &pic, const Card &c, const QFont &fo
         p->setFont(f);
         p->setPen(QColor(255, 255, 255, 200));
         p->drawText(pic.adjusted(4, 0, -4, big ? -12 : -8), Qt::AlignHCenter | Qt::AlignBottom,
-                    !c.ready ? "not added yet" : "F12 in the game: its picture");
+                    // TR: drawn on a game's card that has no picture yet (small: keep it short)
+                    !c.ready ? GameCards::tr("not added yet") : GameCards::tr("F12 in the game: its picture"));
     }
     p->restore();
 }
@@ -352,7 +354,7 @@ GameCards::GameCards(QWidget *parent) : QWidget(parent) {
     m_head->setFont(big);
     rv->addWidget(m_head);
     m_pick = new QComboBox;
-    m_pick->setToolTip("The shelf: all the games, or a series'");
+    m_pick->setToolTip(tr("The shelf: all the games, or a series'"));
     m_pick->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
     m_pick->setMinimumContentsLength(12);
     m_pick->hide();
@@ -443,7 +445,7 @@ void GameCards::fillShelves() {
         it->setToolTip(name);
         if (series == m_shelf) m_shelves->setCurrentItem(it);
     };
-    add("All games", QString(), QColor(), all.n);
+    add(tr("All games"), QString(), QColor(), all.n);
     // a series' colour: its family with the most games (pop'n music's pink, not its first game's yellow)
     for (const QString &s : order) {
         QString most;
@@ -486,10 +488,11 @@ void GameCards::showShelf(bool pickFirst) {
         m_shown << k;
         ready += c.ready;
     }
-    m_head->setText(m_shelf.isEmpty() ? QString("All games") : m_shelf);
+    m_head->setText(m_shelf.isEmpty() ? tr("All games") : m_shelf);
     const int n = m_shown.size();
-    m_sub->setText(n == ready ? QString("%1 game%2").arg(n).arg(n == 1 ? "" : "s")
-                              : QString("%1 games · %2 ready to play").arg(n).arg(ready));
+    const QString games = language::trn("GameCards", "%n game", "%n games", n);
+    // TR: under the shelf's name: %1 is "%n games", %2 is "%n ready to play"
+    m_sub->setText(n == ready ? games : tr("%1 · %2").arg(games, language::trn("GameCards", "%n ready to play", "%n ready to play", ready)));
     if (at < 0 && pickFirst && n) at = 0;
     if (at >= 0) {
         m_grid->setCurrentRow(at);
@@ -594,17 +597,17 @@ GameHead::GameHead(QWidget *parent) : QWidget(parent) {
     art->h = &m_h;
     m_art = art;
     v->addWidget(m_art);
-    m_play = new QPushButton("Play");
+    m_play = new QPushButton(tr("Play"));
     m_play->setCursor(Qt::PointingHandCursor);
-    m_play->setToolTip("Play this game (Enter)");
+    m_play->setToolTip(tr("Play this game (Enter)"));
     v->addWidget(m_play);
     m_buttons = new QGridLayout;
     m_buttons->setSpacing(6);
-    m_controls = new QPushButton("Controls");
+    m_controls = new QPushButton(tr("Controls"));
     theme::mark(m_controls, mdi::gamepad_variant);
-    m_unlocks = new QPushButton("Unlocks…");
+    m_unlocks = new QPushButton(tr("Unlocks…"));
     theme::mark(m_unlocks, mdi::lock_open_variant);
-    m_mods = new QPushButton("Mods…");
+    m_mods = new QPushButton(tr("Mods…"));
     for (int k = 0; QPushButton *b : {m_controls, m_unlocks, m_mods}) m_buttons->addWidget(b, 0, k++);
     m_buttons->setColumnStretch(3, 1);
     v->addLayout(m_buttons);

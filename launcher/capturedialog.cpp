@@ -32,7 +32,7 @@ QPushButton *quietButton(const QString &text) {
 
 CaptureDialog::CaptureDialog(const QString &what, bool analog, QWidget *parent, const QString &step, bool canGoBack)
     : QDialog(parent), m_analog(analog), m_walk(!step.isEmpty()) {
-    setWindowTitle(m_walk ? "Bind all" : "Set binding");
+    setWindowTitle(m_walk ? tr("Bind all") : tr("Set binding"));
     auto *v = new QVBoxLayout(this);
     if (m_walk) {
         auto *where = new QLabel(step);
@@ -49,16 +49,16 @@ CaptureDialog::CaptureDialog(const QString &what, bool analog, QWidget *parent, 
     auto *buttons = new QHBoxLayout;
     buttons->addStretch(1);
     if (m_walk) {
-        auto *back = quietButton("Back");
+        auto *back = quietButton(tr("Back"));
         back->setEnabled(canGoBack);
         connect(back, &QPushButton::clicked, this, [this] { done(Back); });
         buttons->addWidget(back);
-        auto *skip = quietButton("Skip");
-        skip->setToolTip("Leave this control as it is");
+        auto *skip = quietButton(tr("Skip"));
+        skip->setToolTip(tr("Leave this control as it is"));
         connect(skip, &QPushButton::clicked, this, [this] { done(Skipped); });
         buttons->addWidget(skip);
     }
-    auto *stop = quietButton(m_walk ? "Stop" : "Cancel");
+    auto *stop = quietButton(m_walk ? tr("Stop") : tr("Cancel"));
     connect(stop, &QPushButton::clicked, this, &QDialog::reject);
     buttons->addWidget(stop);
     buttons->addStretch(1);
@@ -103,13 +103,14 @@ void CaptureDialog::keyPressEvent(QKeyEvent *e) {
     }
     if (m_analog) return;
     QString b = bindingForKey(e);
-    if (b.isEmpty()) m_text->setText("That key cannot be bound. Try another one.");
+    if (b.isEmpty()) m_text->setText(tr("That key cannot be bound. Try another one."));
     else finish(b);
 }
 
 void CaptureDialog::showText() {
-    QString ask = m_analog ? "Spin the turntable (move an analog axis)…" : "Press a key or a controller button…";
-    m_text->setText(m_walk ? ask + "\n\nEsc stops." : ask + QString("\n\nEsc cancels (%1 s)").arg(m_left));
+    const QString ask = m_analog ? tr("Spin the turntable (move an analog axis)…") : tr("Press a key or a controller button…");
+    // TR: %1 is the seconds left before the dialog closes by itself
+    m_text->setText(ask + "\n\n" + (m_walk ? tr("Esc stops.") : tr("Esc cancels (%1 s)").arg(m_left)));
 }
 
 void CaptureDialog::onAxis(int j, int a, int v) {

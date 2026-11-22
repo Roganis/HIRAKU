@@ -16,6 +16,7 @@
 #include <vector>
 
 #include "font.h"
+#include "lang/lang.h"
 #include "logo.h"
 #include "menu.h"
 
@@ -259,7 +260,8 @@ void draw_menu(const State &s, const std::string &family, uint64_t frame, uint32
                 c.put(mx + x, 9 + y, day ? 0xffffff : L.ink, (int)((p >> 16 & 0xff) * 2 + (p >> 8 & 0xff) * 5 + (p & 0xff)) / 8);
             }
     } else c.text(mx, 16, "HIRAKU", 3, L.point);
-    c.text(w - mx - width("GAME MENU", 2), 20, "GAME MENU", 2, L.ink);
+    const char *title = lang::tr("menu", "GAME MENU");
+    c.text(w - mx - width(title, 2), 20, title, 2, L.ink);
     if (g_styled && !L.stripe.empty()) {   // the six, side by side
         const int n = (int)L.stripe.size();
         for (int i = 0; i < n; i++) {
@@ -273,9 +275,9 @@ void draw_menu(const State &s, const std::string &family, uint64_t frame, uint32
     const int list_y = 112, row_h = 24, rows = 11, bar_y = list_y + rows / 2 * row_h;
     const Game *sel = s.selected();
     if (!sel) {
-        const char *none = "No game is ready to play";
+        const char *none = lang::tr("menu", "No game is ready to play");
         c.text((w - width(none, 2)) / 2, bar_y + 4, none, 2, L.ink);
-        const char *how = "Add your games in HIRAKU's window first";
+        const char *how = lang::tr("menu", "Add your games in HIRAKU's window first");
         c.text((w - width(how, 1)) / 2, bar_y + 32, how, 1, L.dim);
         return;
     }
@@ -402,7 +404,8 @@ void draw_menu(const State &s, const std::string &family, uint64_t frame, uint32
     const int legend_y = list_y + rows * row_h + 12;
     c.fill(mx, legend_y - 6, w - 2 * mx, 1, L.line);
     if (started) {
-        const std::string line = "Starting " + sel->title;
+        // TR: %1 is the game's title, as the game writes it
+        const std::string line = lang::arg(lang::tr("menu", "Starting %1"), {sel->title});
         const int k = width(line, 2) <= w - 2 * mx ? 2 : 1;
         c.text((w - width(line, k)) / 2, legend_y + 28, line, k, L.ink);
         return;
@@ -417,20 +420,28 @@ void draw_menu(const State &s, const std::string &family, uint64_t frame, uint32
         c.text((w - width(second, 1)) / 2, legend_y + 44, second, 1, day ? L.ink : L.point);
         return;
     }
+    // in the player's language (nav.cpp's texts, context "menu"); the colour from the English name
     const std::vector<Hint> hints = legend(family);
+    std::vector<Hint> said;
+    for (const Hint &hint : hints) said.push_back({lang::tr("menu", hint.control.c_str()), lang::tr("menu", hint.does.c_str())});
     int longest = 0, does = 0;
-    for (const Hint &hint : hints) longest = std::max(longest, width(hint.control, 2)), does = std::max(does, width(hint.does, 2));
+    for (const Hint &hint : said) longest = std::max(longest, width(hint.control, 2)), does = std::max(does, width(hint.does, 2));
     const int dot = g_styled ? 22 : 0;   // the look's: a dot of the control's colour before it
+    // a language that says it longer: the controls keep what they need (up to two thirds), what they
+    // do is cut short with dots to the room left, not drawn off the screen's side
+    longest = std::min(longest, (w - 2 * mx - dot) * 2 / 3);
     const int gap = width("mm", 2), x = std::max(mx + dot, (w - (dot + longest + gap + does)) / 2 + dot);
-    for (size_t i = 0; i < hints.size(); i++) {
+    const int room = w - mx - (x + longest + gap);
+    for (size_t i = 0; i < said.size(); i++) {
         const int y = legend_y + 4 + (int)i * 24;
+        const std::string control = cut(said[i].control, 2, longest), done = cut(said[i].does, 2, room);
         if (g_styled) {
             c.disc(x - 15, y + 8, 7, control_colour(hints[i].control, (int)i));
-            c.text(x, y, hints[i].control, 2, L.ink);
-            c.text(x + longest + gap, y, hints[i].does, 2, mix(L.ink, L.dim, 80));
+            c.text(x, y, control, 2, L.ink);
+            c.text(x + longest + gap, y, done, 2, mix(L.ink, L.dim, 80));
         } else {
-            c.text(x, y, hints[i].control, 2, L.bar);
-            c.text(x + longest + gap, y, hints[i].does, 2, L.ink);
+            c.text(x, y, control, 2, L.bar);
+            c.text(x + longest + gap, y, done, 2, L.ink);
         }
     }
 }

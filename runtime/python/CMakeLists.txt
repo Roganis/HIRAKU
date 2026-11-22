@@ -36,6 +36,8 @@ add_library(hk_python_shell STATIC
 	${HK}/runtime/shell/keyed.cpp
 	${HK}/runtime/shell/overlay.cpp
 	${HK}/runtime/shell/uilook.cpp
+	${HK}/runtime/lang/lang.cpp
+	${HK}/runtime/lang/fit.cpp
 	${HK}/runtime/menu/font.cpp
 	${HK}/runtime/host/hiddesc.cpp
 	${HK}/runtime/host/script.cpp

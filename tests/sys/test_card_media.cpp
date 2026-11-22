@@ -53,7 +53,7 @@ struct Drive {
             in[s] = number;
             return true;
         };
-        m.say = [this](const std::string &s) { said.push_back(s); };
+        m.say = [this](const std::string &s) { said.push_back(hk::lang::english(s)); };   // (the log's words)
         return m;
     }
     bool said_has(const std::string &part) const {

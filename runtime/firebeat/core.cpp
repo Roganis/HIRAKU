@@ -19,6 +19,7 @@
 
 #include "shell/kvfile.h"
 #include "host/notice.h"
+#include "lang/lang.h"
 #include "../core/exec.h"
 #include "../core/hooks.h"
 #include "ppc/analyze.h"   // the executor's functions, and any build's for code a mod changes
@@ -387,8 +388,10 @@ public:
     std::vector<std::string> setup_warning() const override {
         if (!fb::sound_flash_blank()) return {};
         // the YMZ280B then plays erased flash: a level stuck at full scale under the rest
-        return {"The sound flash is blank: most sounds are missing.",
-                "Test mode (F2): SOUND FLASH INIT (the launcher says how)."};
+        // (English for the log; translated where shown, host/notice.h)
+        return {HK_N("boxes", "The sound flash is blank: most sounds are missing."),
+                // TR: SOUND FLASH INIT is the game's own test menu item (keep it); F2 a key
+                HK_N("boxes", "Test mode (F2): SOUND FLASH INIT (the launcher says how).")};
     }
 
 private:
@@ -447,7 +450,7 @@ private:
         if (!error.empty()) { fprintf(stderr, "%s\n", error.c_str()); return false; }
         store_ = std::make_unique<cardmedia::FolderStore>(dir);
         cardmedia::Changer::Medium m;
-        m.what = "Floppy disk", m.file = "floppy.img", m.slots = 1;
+        m.what = HK_N("boxes", "Floppy disk"), m.file = "floppy.img", m.slots = 1;
         m.busy = [](int) { return fb::floppy_busy(); };
         m.use = [](int, const std::string &number, const std::string &file, std::string &why) {
             return fb::floppy_use(file, number.empty() ? "" : "card " + cardmedia::shown(number) + "'s disk", why);
@@ -457,8 +460,8 @@ private:
         printf("card media: a card touched to a reader puts its own floppy disk in the drive\n");
         return true;
     }
-    void say(const std::string &s) {
-        printf("card media: %s\n", s.c_str());
+    void say(const std::string &s) {   // (lang::later's: English in the log, the player's language on screen)
+        printf("card media: %s\n", hk::lang::english(s).c_str());
         notices_.push_back(s);
     }
     bool card_media_ = false;

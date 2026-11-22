@@ -33,6 +33,7 @@
 #include "../shell/saves.h"
 #include "../shell/smoothgate.h"
 #include "../shell/sys.h"
+#include "../lang/lang.h"
 #include "spectrum.h"
 #include "synth.h"
 
@@ -1079,13 +1080,15 @@ std::string floppy_toggle() {
         const bool cut = g_fdc->writing();
         floppy_keep(false);   // (on the writer's thread: the game doesn't wait for the file)
         g_fdc->eject();
-        said = cut ? "Floppy disk taken out while the game was writing it" : "Floppy disk taken out";
+        said = cut ? HK_N("boxes", "Floppy disk taken out while the game was writing it") : HK_N("boxes", "Floppy disk taken out");
     } else {
         std::string why;
-        said = floppy_insert(false, why) ? std::string("Floppy disk in the drive") + (g_fdc->write_protected() ? " (write-protected)" : "")
-                                         : "No floppy disk: " + why;
+        // (English for the log; shown in the player's language: lang::later, host/notice.h)
+        said = !floppy_insert(false, why)     ? hk::lang::later(HK_N("boxes", "No floppy disk: %1"), {why})
+               : g_fdc->write_protected() ? HK_N("boxes", "Floppy disk in the drive (write-protected)")
+                                          : HK_N("boxes", "Floppy disk in the drive");
     }
-    printf("floppy: %s\n", said.c_str());
+    printf("floppy: %s\n", hk::lang::english(said).c_str());
     if (g_floppy_said) g_floppy_said(said);
     return said;
 }

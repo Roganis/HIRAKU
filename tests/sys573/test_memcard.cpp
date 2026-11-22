@@ -22,6 +22,7 @@
 #include <vector>
 
 #include "sys573/memcard.h"
+#include "lang/lang.h"
 #include "emu.h"
 #include "imagedev/memcard.h"
 #include "bus/psx/ctlrport.h"
@@ -297,10 +298,10 @@ void test_files(rig &r, const std::string &dir) {
     CHECK(f.size() == 131072 && memcmp(&f[70 * 128], data, 128) == 0);
 
     // taken out and in again: read from the file
-    CHECK(cards.toggle(0) == "Memory card 1 taken out");
+    CHECK(hk::lang::english(cards.toggle(0)) == "Memory card 1 taken out");
     CHECK(!cards.in(0));
     CHECK(cards.toggle(1).empty());   // (no card given for slot 2)
-    CHECK(cards.toggle(0) == "Memory card 1 in its slot");
+    CHECK(hk::lang::english(cards.toggle(0)) == "Memory card 1 in its slot");
     std::vector<u8> back(128);
     card1->fseek(70 * 128, SEEK_SET);
     card1->fread(back.data(), 128);

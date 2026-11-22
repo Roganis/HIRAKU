@@ -11,6 +11,8 @@
 #include <vector>
 
 #include "host/uibox.h"
+#include "lang/fit.h"
+#include "lang/lang.h"
 
 using namespace hk::host;
 
@@ -75,6 +77,23 @@ int main(int argc, char **argv) {
     for (const uint32_t c : colours) title |= (c & 0xffffff) >= 0xefefef && (c & 0xffffff) <= 0xf0f0f0 && (c >> 8 & 255) == (c & 255);
     CHECK(title);   // the title
     CHECK(ui::icon_colour(ui::Icon::alert) == 0x000055 && ui::icon_colour(ui::Icon::dialpad) == 0xffd000);
+
+    // a long paragraph: broken into lines no wider than the boxes' most (lang/fit.h), the box with it
+    {
+        const std::string para = "The card waits at the slot: the game hasn't opened it. Is e-AMUSEMENT on in its test mode?";
+        const std::vector<std::string> lines = ui::wrap(para, 0);
+        CHECK(lines.size() >= 2 && ui::max_line_width() == 600);
+        for (const std::string &l : lines) CHECK(hk::lang::width(l, [](uint32_t) { return 8; }) <= 600 / 8 * 8);
+        ui::Image one, two;
+        ui::notice_box(one, ui::Icon::card, {"Card", "short"});
+        ui::notice_box(two, ui::Icon::card, {"Card", para});
+        CHECK(two.w <= one.w - 6 * 8 + 600 + 8 && two.h > one.h);   // (wider only up to the most; taller)
+        // a value kept whole (an argument): not broken where it can go on the next line whole
+        const std::vector<std::string> kept = ui::wrap(std::string(64, 'a') + " " + hk::lang::keep("bb cc dd ee ff"), 0);
+        CHECK(kept.size() == 2 && kept[1] == "bb cc dd ee ff");
+        // the text as a box shows it: English without the launcher's language
+        CHECK(ui::said("boxes", hk::lang::later("Memory card %1 in its slot", {"1"})) == "Memory card 1 in its slot");
+    }
 
     // a bar box half done: the six's first three, then the line's colour
     ui::Image b;

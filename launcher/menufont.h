@@ -22,14 +22,17 @@ constexpr int kPixels[3] = {14, 20, 31};
 
 // The sizes a file is drawn at, and their weights
 struct Sizes {
-    int pixels[3];
-    QFont::Weight weight[3];
+    int count;
+    int pixels[4];
+    QFont::Weight weight[4];
 };
-constexpr Sizes kMenu{{kPixels[0], kPixels[1], kPixels[2]}, {QFont::Normal, QFont::DemiBold, QFont::Bold}};
+constexpr Sizes kMenu{3, {kPixels[0], kPixels[1], kPixels[2], 0}, {QFont::Normal, QFont::DemiBold, QFont::Bold, QFont::Normal}};
 // a game's boxes (runtime/host/uibox.h): a line, a title, a heading at a 360-line screen's size,
-// times its scale
-constexpr Sizes kBoxes{{10, 13, 18}, {QFont::Normal, QFont::Bold, QFont::Black}};
-Sizes times(const Sizes &s, double scale);
+// times its scale; and a 4th, the performance overlay's (host/statsview.h) in a language other than
+// English, at its own size (the overlay enlarges its whole picture itself)
+constexpr int kOverlay = 11;
+constexpr Sizes kBoxes{4, {10, 13, 18, kOverlay}, {QFont::Normal, QFont::Bold, QFont::Black, QFont::Normal}};
+Sizes times(const Sizes &s, double scale);   // (the first three)
 
 // A character the caller draws itself instead of the font (an icon), filling `box`, in white
 using Painter = std::function<void(QPainter &p, const QRectF &box, char32_t c)>;

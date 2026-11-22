@@ -8,6 +8,8 @@
 #include <QDir>
 #include <QMessageBox>
 
+#include "language.h"
+
 #ifdef Q_OS_WIN
 #include <windows.h>
 
@@ -77,18 +79,18 @@ nv::PresentMethod nv::presentMethod(const QString &exe_name) {
             app->version = version_of(sizeof(Application), 1);
             NvProfile profile = nullptr;
             NvStatus st = find(s, name, &profile, app);
-            r.from = "its own profile";
-            if (st == EXECUTABLE_NOT_FOUND) st = global(s, &profile), r.from = "the global profile";
+            r.from = QT_TRANSLATE_NOOP("NvidiaNotice", "its own profile");   // TR: where NVIDIA's setting comes from (in the log in English)
+            if (st == EXECUTABLE_NOT_FOUND) st = global(s, &profile), r.from = QT_TRANSLATE_NOOP("NvidiaNotice", "the global profile");
             if (st == OK) {
                 auto *set = new Setting{};
                 set->version = version_of(sizeof(Setting), 1);
                 st = get(s, profile, PRESENT_METHOD, set);
                 if (st == OK) {
                     r.value = (int)set->current.u32;
-                    if (set->location == 1) r.from = "the global profile";
-                    else if (set->location >= 2) r.from = "the driver's default";
+                    if (set->location == 1) r.from = QT_TRANSLATE_NOOP("NvidiaNotice", "the global profile");
+                    else if (set->location >= 2) r.from = QT_TRANSLATE_NOOP("NvidiaNotice", "the driver's default");
                 } else if (st == SETTING_NOT_FOUND) {
-                    r.value = PRESENT_DEFAULT, r.from = "the driver's default";
+                    r.value = PRESENT_DEFAULT, r.from = QT_TRANSLATE_NOOP("NvidiaNotice", "the driver's default");
                 }
                 delete set;
             }
@@ -114,20 +116,26 @@ QString nv::presentMethodName(int value) {
 }
 
 QMessageBox *nv::noticeBox(QWidget *parent, const QString &exe_path, const PresentMethod &now) {
-    auto *box = new QMessageBox(QMessageBox::Information, "NVIDIA setting for the PC games",
-                                "The PC games need one NVIDIA setting to start in full screen.", QMessageBox::Ok, parent);
-    box->setInformativeText(
+    auto *box = new QMessageBox(QMessageBox::Information, language::tr("NvidiaNotice", "NVIDIA setting for the PC games"),
+                                language::tr("NvidiaNotice", "The PC games need one NVIDIA setting to start in full screen."),
+                                QMessageBox::Ok, parent);
+    // TR: the NVIDIA Control Panel's menus and settings as NVIDIA's own panel names them in the language (it is
+    // TR: translated by NVIDIA); the Japanese error stays as the game shows it. %1 is the game program's path,
+    // TR: %2 the setting's value now (NVIDIA's English name), %3 where it comes from ("the global profile")
+    const QString steps = language::tr("NvidiaNotice",
         "With NVIDIA's default, HIRAKU's full-screen window takes the screen to itself, and Windows refuses the game "
         "its Direct3D (\"Direct3D の初期化に失敗しました\"). In a window the game runs either way.\n\n"
         "To set it, once:\n"
         "1. Open the NVIDIA Control Panel (right-click the desktop, or the Start menu).\n"
         "2. 3D Settings > Manage 3D settings > Program Settings.\n"
-        "3. Add > Browse..., and choose\n    " + QDir::toNativeSeparators(exe_path) + "\n"
+        "3. Add > Browse..., and choose\n    %1\n"
         "4. Set \"Vulkan/OpenGL present method\" to \"Prefer layered on DXGI Swapchain\".\n"
         "5. Apply.\n\n"
-        "It's now \"" + presentMethodName(now.value) + "\" (" + now.from + ").");
+        "It's now \"%2\" (%3).");
+    box->setInformativeText(steps.arg(QDir::toNativeSeparators(exe_path), presentMethodName(now.value),
+                                      language::tr("NvidiaNotice", now.from.toUtf8().constData())));
     box->setTextInteractionFlags(Qt::TextSelectableByMouse);
-    box->setCheckBox(new QCheckBox("Don't show this again"));
+    box->setCheckBox(new QCheckBox(language::tr("NvidiaNotice", "Don't show this again")));
     return box;
 }
 

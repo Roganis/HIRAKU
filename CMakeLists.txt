@@ -282,6 +282,10 @@ add_library(hiraku_cabinet STATIC runtime/shell/cabinet.cpp runtime/host/hiddesc
 target_include_directories(hiraku_cabinet PUBLIC runtime)
 target_link_libraries(hiraku_cabinet PUBLIC hiraku_sys)
 
+# --- the interface's languages: lang/*.po, read by the launcher and the games (runtime/lang/lang.h)
+add_library(hiraku_lang STATIC runtime/lang/lang.cpp runtime/lang/fit.cpp)
+target_include_directories(hiraku_lang PUBLIC runtime)
+
 # --- the shell: what every machine core shares (runtime/shell/core.h) --------------
 # Input scripts; the host front end below. Cores provide hk::core().
 add_library(hiraku_shell STATIC runtime/host/script.cpp runtime/host/macro.cpp runtime/host/mods.cpp runtime/host/pythondisk.cpp runtime/host/png.cpp
@@ -290,7 +294,7 @@ add_library(hiraku_shell STATIC runtime/host/script.cpp runtime/host/macro.cpp r
 target_include_directories(hiraku_shell PUBLIC runtime)
 find_package(Threads REQUIRED)
 find_package(ZLIB REQUIRED)   # mods' PNG pictures (runtime/host/png.h)
-target_link_libraries(hiraku_shell PUBLIC hiraku_cabinet Threads::Threads ZLIB::ZLIB)
+target_link_libraries(hiraku_shell PUBLIC hiraku_cabinet hiraku_lang Threads::Threads ZLIB::ZLIB)
 # Mods' scripts (runtime/host/modscript.h, docs/MODS.md "Scripts"): Lua, sandboxed (cmake/lua.cmake)
 include(cmake/lua.cmake)
 hk_add_lua(hk_lua)
@@ -627,7 +631,7 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   set_source_files_properties(runtime/core/exec.cpp PROPERTIES COMPILE_OPTIONS "-mllvm;-enable-tail-merge=false")
 endif()
 target_include_directories(hiraku_rt PUBLIC runtime)
-target_link_libraries(hiraku_rt PUBLIC hiraku_ppc musashi hiraku_ata hiraku_cabinet hiraku_xt446 hiraku_jit)
+target_link_libraries(hiraku_rt PUBLIC hiraku_ppc musashi hiraku_ata hiraku_cabinet hiraku_xt446 hiraku_jit hiraku_lang)
 hk_stencils(ppc403 hiraku_rt)   # the executor's functions made at run time (exec_jit.cpp)
 hk_pgo(firebeat hiraku_rt musashi hiraku_xt446)   # not the game code: see hk_pgo above
 
@@ -738,6 +742,7 @@ if(Qt6_FOUND AND TARGET hiraku_hidout)
     launcher/cover.cpp
     launcher/menufont.cpp
     launcher/capturedialog.cpp
+    launcher/language.cpp
     launcher/controlsdialog.cpp
     launcher/lightsdialog.cpp
     launcher/dipsdialog.cpp
@@ -772,7 +777,7 @@ if(Qt6_FOUND AND TARGET hiraku_hidout)
     set_property(SOURCE launcher/music.cpp APPEND PROPERTY COMPILE_DEFINITIONS "HK_MUSIC_SOURCE=\"${HK_MUSIC_LINK}\"")
     message(STATUS "hiraku: the launcher gets its first songs from the folder the build names")
   endif()
-  target_link_libraries(hiraku PRIVATE Qt6::Widgets Qt6::Network hiraku_cabinet hiraku_hidout)
+  target_link_libraries(hiraku PRIVATE Qt6::Widgets Qt6::Network hiraku_cabinet hiraku_hidout hiraku_lang)
   if(WIN32)   # the power plan while a game runs (launcher/powerplan.h)
     target_link_libraries(hiraku PRIVATE powrprof)
   endif()
@@ -901,7 +906,7 @@ target_link_libraries(hiraku_mame573 PUBLIC hk_softfloat3)
 add_library(hiraku_sys573 STATIC runtime/sys573/board.cpp runtime/sys573/core.cpp runtime/sys573/mips.cpp runtime/sys573/mipsjit.cpp runtime/sys573/idle.cpp runtime/sys573/npu.cpp runtime/sys573/link.cpp
   runtime/sys573/cardunit.cpp runtime/sys573/rental.cpp runtime/sys573/mcal.cpp runtime/sys573/memcard.cpp)
 target_include_directories(hiraku_sys573 PUBLIC runtime)
-target_link_libraries(hiraku_sys573 PUBLIC hiraku_mame573 hiraku_cabinet hiraku_eamuse hiraku_jit)
+target_link_libraries(hiraku_sys573 PUBLIC hiraku_mame573 hiraku_cabinet hiraku_eamuse hiraku_jit hiraku_lang)
 hk_stencils(r3000 hiraku_sys573)
 # hiraku-eamuse: the e-AMUSEMENT server on the network, for several cabinets (tools/eamuse/server.cpp):
 # every game's (docs/EAMUSE3.md); plain C++, no emulator

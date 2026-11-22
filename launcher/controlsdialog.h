@@ -38,7 +38,7 @@ public:
     // Accepted with gameToTry() set: the controls are saved, and that game should start.
     void setGames(const QList<Game> &games) { m_games = games; }
     QString gameToTry() const { return m_tryGame; }
-    QString testHint() const;   // "press Test (F2) for the test menu, ..."
+    QString testKeys() const;   // what Test is bound to ("F2", "F2, Pad 0 Button 9"), for the main window's hint
 protected:
     bool eventFilter(QObject *o, QEvent *e) override;
     void reject() override;

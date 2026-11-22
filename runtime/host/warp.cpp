@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+#include "lang/lang.h"
 #include "uibox.h"
 #include "warp.h"
 
@@ -35,11 +36,16 @@ double secs(Clock::time_point a, Clock::time_point b) { return std::chrono::dura
 // the box: its lines in SDL's debug font and a bar of how far the start-up is, on a dark box with a
 // blue edge (as host/notice.h's banners are drawn)
 void draw(double done, bool ended) {
-    char speed[64];
-    if (ended) snprintf(speed, sizeof speed, "Done: the game runs at its normal speed");
-    else if (g_speed > 0) snprintf(speed, sizeof speed, "Speeding through the start-up: %.1fx", g_speed);
-    else snprintf(speed, sizeof speed, "Speeding through the start-up");
-    const char *lines[] = {"FAST START-UP", speed, "Press a game button for normal speed"};
+    char times[32];
+    snprintf(times, sizeof times, "%.1f", g_speed);   // (a "." whatever the language, as the overlay)
+    const std::string speed =
+        ended ? ui::said("boxes", HK_N("boxes", "Done: the game runs at its normal speed"))
+        : g_speed > 0
+            // TR: %1 how many times the normal speed ("4.2")
+            ? ui::said("boxes", hk::lang::later(HK_N("boxes", "Speeding through the start-up: %1x"), {times}))
+            : ui::said("boxes", HK_N("boxes", "Speeding through the start-up"));
+    const std::string lines[] = {ui::said("boxes", HK_N("boxes", "FAST START-UP")), speed,
+                                 ui::said("boxes", HK_N("boxes", "Press a game button for normal speed"))};
     if (ui::styled()) {   // in the launcher's look (host/uibox.h)
         ui::Image im;
         ui::bar_box(im, false, ui::Icon::fast, lines[0], ui::Icon::none, speed, done, ended ? "" : lines[2]);
@@ -60,9 +66,9 @@ void draw(double done, bool ended) {
         SDL_SetRenderDrawColor(r, 14, 16, 24, 230);
         const SDL_FRect in{2, 2, (float)w - 4, (float)h - 4};
         SDL_RenderFillRect(r, &in);
-        auto text = [&](int y, const char *t, uint8_t c) {
+        auto text = [&](int y, const std::string &t, uint8_t c) {
             SDL_SetRenderDrawColor(r, c, c, c, 255);
-            SDL_RenderDebugText(r, (float)(w - 8 * (int)strlen(t)) / 2, (float)y, t);
+            SDL_RenderDebugText(r, (float)(w - 8 * (int)t.size()) / 2, (float)y, t.c_str());
         };
         text(pad, lines[0], 255);
         text(pad + 12, lines[1], 210);

@@ -24,6 +24,9 @@ public:
     explicit SettingsDialog(QWidget *parent = nullptr);
     void accept() override;
     theme::Look look() const;   // the look chosen on the Look page (the caller applies it)
+    // the language chosen on the General page differs from the one at the dialog's opening (saved as
+    // ui/language; it takes effect at the next start: the caller offers to restart)
+    bool languageChanged() const { return m_languageChanged; }
 protected:
     void resizeEvent(QResizeEvent *e) override;
 private:
@@ -68,4 +71,6 @@ private:
     QComboBox *m_bio2;                      // beatmania IIDX's BIO2 board (runtime/host/bio2.h)
     QComboBox *m_popnio;                    // pop'n music's USB I/O board (runtime/host/popnio.h)
     QLineEdit *m_popnioDll;                 // its ezusb.dll
+    QComboBox *m_language;                  // the interface's language: "" follows the system, else a code
+    bool m_languageChanged = false;
 };

@@ -21,6 +21,7 @@
 #include <QVBoxLayout>
 
 #include "config.h"
+#include "language.h"
 #include "shell/sys.h"
 
 namespace upd {
@@ -76,7 +77,7 @@ bool startApply(QString *error) {
     const QStringList args{neu + "/tools/update.py", "apply", root, neu, "--wait",
                            QString::number(QCoreApplication::applicationPid()), "--restart"};
     if (startScript(py, args, root)) return true;
-    if (error) *error = "Python could not be started to put the new files in.";
+    if (error) *error = language::tr("Updater", "Python could not be started to put the new files in.");
     return false;
 }
 
@@ -96,24 +97,26 @@ bool resume(bool once, QString *error) {
     QString script = root + "/update-new/tools/update.py";
     if (!knowsRecover(script)) script = root + "/tools/update.py";
     if (!knowsRecover(script)) {
-        if (error) *error = "This copy has no script that can put the update right.";
+        if (error) *error = language::tr("Updater", "This copy has no script that can put the update right.");
         return false;
     }
     const QStringList args{script, "recover", root, "--wait", QString::number(QCoreApplication::applicationPid()), "--restart"};
     if (startScript(QString(), args, root)) return true;
-    if (error) *error = "Python could not be started to put the update right.";
+    if (error) *error = language::tr("Updater", "Python could not be started to put the update right.");
     return false;
 }
 
 bool offerResume(QWidget *parent, const QString &why) {
     QMessageBox box(QMessageBox::Warning, "HIRAKU",
-                    "An update was cut short and hasn't been put right: this folder may be part the old "
-                    "version, part the new, and some games may not start.", QMessageBox::NoButton, parent);
+                    language::tr("Updater", "An update was cut short and hasn't been put right: this folder may be part the old "
+                                            "version, part the new, and some games may not start."),
+                    QMessageBox::NoButton, parent);
+    // TR: "Try again" is the button of that name
     box.setInformativeText((why.isEmpty() ? QString() : why + "\n\n") +
-                           "Try again closes the launcher and has another go. If that keeps failing, unpack the "
-                           "release's package over this folder: your games, saves and settings stay as they are.");
-    QPushButton *again = box.addButton("Try again", QMessageBox::AcceptRole);
-    box.addButton("Not now", QMessageBox::RejectRole);
+                           language::tr("Updater", "Try again closes the launcher and has another go. If that keeps failing, unpack the "
+                                                   "release's package over this folder: your games, saves and settings stay as they are."));
+    QPushButton *again = box.addButton(language::tr("Updater", "Try again"), QMessageBox::AcceptRole);
+    box.addButton(language::tr("Updater", "Not now"), QMessageBox::RejectRole);
     box.exec();
     if (box.clickedButton() != again) return false;
     QString err;
@@ -144,7 +147,7 @@ UpdateCheck::UpdateCheck(QObject *parent) : QObject(parent) {
         else emit done(false, {}, lastLines(m_proc.readAllStandardError() + out));
     });
     connect(&m_proc, &QProcess::errorOccurred, this, [this](QProcess::ProcessError e) {
-        if (e == QProcess::FailedToStart) emit done(false, {}, "Python could not be started: " + m_proc.errorString());
+        if (e == QProcess::FailedToStart) emit done(false, {}, tr("Python could not be started: %1").arg(m_proc.errorString()));   // TR: %1 is the system's reason
     });
 }
 
@@ -160,11 +163,12 @@ void UpdateCheck::start() {
 }
 
 UpdateDialog::UpdateDialog(const QJsonObject &rel, QWidget *parent) : QDialog(parent), m_rel(rel) {
-    setWindowTitle("Update HIRAKU");
+    setWindowTitle(tr("Update HIRAKU"));
     auto *v = new QVBoxLayout(this);
     const QString size = QLocale().formattedDataSize(rel["size"].toInteger());
-    auto *head = new QLabel(QString("<b>%1</b> is out: this is %2. The download is %3.<br>Your games, saves and "
-                                    "settings stay as they are; the launcher restarts once it's in.")
+    // TR: %1 is the new version's name ("HIRAKU 0.15.0"), %2 the version in use ("0.14.0"), %3 the download's size
+    auto *head = new QLabel(tr("<b>%1</b> is out: this is %2. The download is %3.<br>Your games, saves and "
+                               "settings stay as they are; the launcher restarts once it's in.")
                                 .arg(rel["name"].toString().toHtmlEscaped(), upd::currentVersion().toHtmlEscaped(), size));
     head->setWordWrap(true);
     v->addWidget(head);
@@ -180,10 +184,10 @@ UpdateDialog::UpdateDialog(const QJsonObject &rel, QWidget *parent) : QDialog(pa
     m_bar->hide();
     v->addWidget(m_bar);
     auto *bb = new QDialogButtonBox;
-    m_go = bb->addButton("Update and restart", QDialogButtonBox::AcceptRole);
-    bb->addButton("Later", QDialogButtonBox::RejectRole);
+    m_go = bb->addButton(tr("Update and restart"), QDialogButtonBox::AcceptRole);
+    bb->addButton(tr("Later"), QDialogButtonBox::RejectRole);
     if (!rel["page"].toString().isEmpty()) {
-        auto *page = bb->addButton("Release page", QDialogButtonBox::HelpRole);
+        auto *page = bb->addButton(tr("Release page"), QDialogButtonBox::HelpRole);
         connect(page, &QPushButton::clicked, this, [this] { QDesktopServices::openUrl(QUrl(m_rel["page"].toString())); });
     }
     connect(m_go, &QPushButton::clicked, this, &UpdateDialog::download);
@@ -199,12 +203,12 @@ UpdateDialog::UpdateDialog(const QJsonObject &rel, QWidget *parent) : QDialog(pa
                 const qint64 done = p.value(1).toLongLong(), total = p.value(2).toLongLong();
                 m_bar->setRange(0, total > 0 ? 1000 : 0);
                 if (total > 0) m_bar->setValue((int)(done * 1000 / total));
-                m_status->setText("Downloading… " + QLocale().formattedDataSize(done));
+                m_status->setText(tr("Downloading… %1").arg(QLocale().formattedDataSize(done)));   // TR: %1 is the size downloaded so far
             } else if (line == "unpacking") {
                 m_bar->setRange(0, 0);
-                m_status->setText("Unpacking…");
+                m_status->setText(tr("Unpacking…"));
             } else if (line.startsWith("ready ")) {
-                m_status->setText("Ready: the launcher closes and starts again.");
+                m_status->setText(tr("Ready: the launcher closes and starts again."));
             }
         }
     });
@@ -214,9 +218,9 @@ UpdateDialog::UpdateDialog(const QJsonObject &rel, QWidget *parent) : QDialog(pa
             return;
         }
         m_bar->hide();
-        m_status->setText("The update failed: " + lastLines(m_proc.readAllStandardError()));
+        m_status->setText(tr("The update failed: %1").arg(lastLines(m_proc.readAllStandardError())));   // TR: %1 is the update script's last lines (English)
         m_go->setEnabled(true);
-        m_go->setText("Try again");
+        m_go->setText(tr("Try again"));
     });
 }
 
@@ -224,13 +228,14 @@ void UpdateDialog::download() {
     // the package's folder must take new files (a copy in a read-only place can't update itself)
     QFileInfo root(upd::packageRoot());
     if (!root.isWritable()) {
-        QMessageBox::warning(this, "Update HIRAKU", root.filePath() + " can't be written to: download the new "
-                             "version from the release page instead.");
+        // TR: %1 is HIRAKU's folder
+        QMessageBox::warning(this, tr("Update HIRAKU"), tr("%1 can't be written to: download the new "
+                                                           "version from the release page instead.").arg(root.filePath()));
         return;
     }
     m_go->setEnabled(false);
     m_status->show();
-    m_status->setText("Downloading…");
+    m_status->setText(tr("Downloading…"));
     m_bar->setRange(0, 0);
     m_bar->show();
     const QStringList py = cfg::python();

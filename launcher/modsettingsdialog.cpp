@@ -22,14 +22,16 @@
 ModSettingsDialog::ModSettingsDialog(const QString &game, const QString &folder, QWidget *parent) : QDialog(parent) {
     const QString dir = cfg::modPath(game, folder);
     const ModsDialog::Info info = ModsDialog::read(dir);
-    setWindowTitle("Settings: " + info.name);
+    // TR: %1 is the mod's name (its author's)
+    setWindowTitle(tr("Settings: %1").arg(info.name));
     QString err;
     m_ok = m_model.load(dir, cfg::modSettingsFile(game, folder), &err);
     auto *body = new QWidget;
     auto *v = new QVBoxLayout(body);
-    auto *about = new QLabel(m_ok ? "The mod's settings, kept for the next time the game starts with it on (the game reads "
-                                    "them when it starts; the keys below change some while playing)."
-                                  : "This mod's mod.toml can't be read, so the game wouldn't start with it:\n" + err);
+    auto *about = new QLabel(m_ok ? tr("The mod's settings, kept for the next time the game starts with it on (the game reads "
+                                       "them when it starts; the keys below change some while playing).")
+                                  // TR: %1 is why (the mod file reader's message, in English)
+                                  : tr("This mod's mod.toml can't be read, so the game wouldn't start with it:\n%1").arg(err));
     about->setWordWrap(true);
     v->addWidget(about);
     if (m_ok && !m_model.empty()) {
@@ -40,14 +42,15 @@ ModSettingsDialog::ModSettingsDialog(const QString &game, const QString &folder,
             const QString dflt = ModSettings::shown(r, r.setting.dflt);
             switch (r.kind) {
             case ModSettings::Kind::tick: {
-                auto *box = new QCheckBox("(default: " + dflt + ")");
+                auto *box = new QCheckBox(tr("(default: %1)").arg(dflt));   // TR: %1 is the default value ("on", "off", a number or a named value)
                 editor = box;
                 break;
             }
             case ModSettings::Kind::list: {
                 auto *box = new QComboBox;
                 for (size_t i = 0; i < r.setting.choices.size(); i++)
-                    box->addItem(QString::fromStdString(r.setting.choices[i]) + ((int64_t)i == r.setting.dflt ? " (default)" : ""));
+                    box->addItem((int64_t)i == r.setting.dflt ? tr("%1 (default)").arg(QString::fromStdString(r.setting.choices[i]))
+                                                              : QString::fromStdString(r.setting.choices[i]));   // TR: %1 is one of the mod's named values
                 editor = box;
                 break;
             }
@@ -55,31 +58,33 @@ ModSettingsDialog::ModSettingsDialog(const QString &game, const QString &folder,
                 auto *box = new QSpinBox;
                 box->setRange((int)std::max<int64_t>(r.setting.min, INT_MIN), (int)std::min<int64_t>(r.setting.max, INT_MAX));
                 box->setSingleStep((int)std::min<int64_t>(r.setting.step, INT_MAX));
-                box->setToolTip(QString("%1 to %2, default %3").arg(r.setting.min).arg(r.setting.max).arg(dflt));
+                // TR: %1 and %2 are the setting's lowest and highest value, %3 its default
+                box->setToolTip(tr("%1 to %2, default %3").arg(r.setting.min).arg(r.setting.max).arg(dflt));
                 auto *line = new QWidget;
                 auto *h = new QHBoxLayout(line);
                 h->setContentsMargins(0, 0, 0, 0);
                 h->addWidget(box);
-                auto *note = new QLabel(QString("%1 to %2 (default: %3)").arg(r.setting.min).arg(r.setting.max).arg(dflt));
+                auto *note = new QLabel(tr("%1 to %2 (default: %3)").arg(r.setting.min).arg(r.setting.max).arg(dflt));
                 note->setEnabled(false);
                 h->addWidget(note, 1);
                 m_editors.push_back(box);
-                form->addRow(QString::fromStdString(r.setting.label) + ":", line);
+                form->addRow(tr("%1:").arg(QString::fromStdString(r.setting.label)), line);
                 continue;
             }
             }
             m_editors.push_back(editor);
-            form->addRow(QString::fromStdString(r.setting.label) + ":", editor);
+            // TR: a setting's name (the mod author's, as written) as a form's label
+            form->addRow(tr("%1:").arg(QString::fromStdString(r.setting.label)), editor);
         }
         v->addWidget(group);
         if (const QStringList keys = m_model.bindings(); !keys.isEmpty()) {
-            auto *k = new QLabel("Keys while playing (the bindings in the settings file):\n" + keys.join("\n"));
+            auto *k = new QLabel(tr("Keys while playing (the bindings in the settings file):") + "\n" + keys.join("\n"));
             k->setWordWrap(true);
             k->setTextInteractionFlags(Qt::TextSelectableByMouse);
             v->addWidget(k);
         }
     } else if (m_ok) {
-        v->addWidget(new QLabel("This mod has no settings."));
+        v->addWidget(new QLabel(tr("This mod has no settings.")));
     }
     v->addStretch(1);
     auto *scroll = new QScrollArea;   // (many settings: it scrolls on a small screen, fit.h)
@@ -87,7 +92,7 @@ ModSettingsDialog::ModSettingsDialog(const QString &game, const QString &folder,
     scroll->setWidgetResizable(true);
     scroll->setFrameShape(QFrame::NoFrame);
     auto *bb = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
-    auto *defaults = bb->addButton("Defaults", QDialogButtonBox::ResetRole);
+    auto *defaults = bb->addButton(tr("Defaults"), QDialogButtonBox::ResetRole);
     defaults->setEnabled(m_ok && !m_model.empty());
     bb->button(QDialogButtonBox::Ok)->setEnabled(m_ok);
     connect(defaults, &QPushButton::clicked, this, [this] {
@@ -121,7 +126,7 @@ void ModSettingsDialog::accept() {
     }
     QString err;
     if (!m_model.empty() && !m_model.save(&err)) {
-        QMessageBox::warning(this, "HIRAKU", "The settings couldn't be kept:\n" + err);
+        QMessageBox::warning(this, "HIRAKU", tr("The settings couldn't be kept:\n%1").arg(err));   // TR: %1 is the file and the system's reason
         return;
     }
     QDialog::accept();

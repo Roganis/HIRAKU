@@ -33,6 +33,7 @@
 #include "shell/saves.h"
 #include "shell/sha1.h"
 #include "shell/sys.h"
+#include "lang/lang.h"
 #include "shell/userdir.h"
 #include "shell/wordcond.h"
 
@@ -256,6 +257,8 @@ std::string shown(const Setting &s) { return modsettings::shown(def_of(s), s.val
 
 // a setting that chooses files or patches changed while playing: from the next start (said)
 const char *kNextStart = "from the game's next start";
+// ... said on the screen (one text: translated where shown, host/notice.h)
+const char *kNextStartSaid = HK_N("boxes", "Files and patches: from the game's next start");
 
 std::string read_file(const std::string &path) {
     std::ifstream f(path, std::ios::binary);
@@ -1487,7 +1490,7 @@ std::vector<std::string> action(size_t id, bool down, bool repeat) {
         // a quiet action (notify = false) still says this once it changed: no mod can show that the
         // files and patches change only at the next start (as hk.set_setting's change says it)
         if (!a.notify && v == was) return {};
-        return {s.mod, s.label + ": " + shown(s), std::string("Files and patches: ") + kNextStart};
+        return {s.mod, s.label + ": " + shown(s), kNextStartSaid};
     }
     if (!a.notify) return {};   // the mod shows its values itself
     return {s.mod, s.label + ": " + shown(s)};
@@ -1522,7 +1525,7 @@ bool set_setting(const std::string &folder, const std::string &name, int64_t val
                 save_settings(folder);
                 fprintf(stderr, "mods: %s: %s = %s (its script)%s\n", s.mod.c_str(), s.name.c_str(), shown(s).c_str(),
                         s.chooses ? (std::string(": the files and patches it chooses change ") + kNextStart).c_str() : "");
-                if (s.chooses) modscript::notice({s.mod, s.label + ": " + shown(s), std::string("Files and patches: ") + kNextStart});
+                if (s.chooses) modscript::notice({s.mod, s.label + ": " + shown(s), kNextStartSaid});
             }
             return true;
         }

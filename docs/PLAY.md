@@ -36,6 +36,29 @@ folder: your games, saves and settings stay. A checkout doesn't offer updates: u
 
 Details: [PLAY-NOTES.md](PLAY-NOTES.md#updating-a-release-package)
 
+## Language
+
+HIRAKU's windows, the game menu and the boxes and overlay over a game come in English, French and
+Japanese (more to come). **Options > Settings > General > Language**: "Follow the system" (the
+default) or a language by its own name; the change takes effect when the launcher starts again (it
+offers to restart). A Brazilian Portuguese system gets Portuguese (Portugal) once there is one.
+Games started from the launcher follow it; a game started on its own takes the launcher's saved
+setting. The games themselves, logs and option names stay as they are.
+
+- `HK_LANG=fr` (or `ja`, `en`...) in the environment overrides the setting, for the launcher and
+  for a game started by hand.
+- Japanese, Korean and Chinese need a font for that language (Windows has one; on Linux install
+  Noto Sans CJK from your distribution). Settings says when there is none.
+- **Your own catalogue**: a `lang/<code>.po` in your saves' folder (`~/.local/share/hiraku/lang/`,
+  `%LOCALAPPDATA%\hiraku\lang\`, or `user/data/lang/` in a portable install) is read before the
+  package's, so you can try a corrected file without touching the package; an update doesn't
+  replace it. A file that can't be read is said in the log with its line, and the package's is
+  used instead.
+- **Helping to translate**: open `lang/<code>.po` (or `lang/hiraku.pot` for a new language) in
+  [Poedit](https://poedit.net) or any .po editor, try it as your own catalogue (above), and send it
+  as a pull request on GitHub. How the files work and the words to keep to:
+  [TRANSLATING.md](TRANSLATING.md).
+
 ## Building games from source
 
 A release package needs none of this. In a checkout, each game has a program of its own. A

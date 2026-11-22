@@ -55,6 +55,9 @@ struct Patch {
     // ... and then only on the frames between the cabinet's ticks: an increment made 0 there keeps
     // the cabinet's pace at any rate (pop'n music 14's objects' frame counters)
     bool between_ticks = false;
+    // a float that holds one cabinet frame's time (a step a picture: the PC pop'n's animation time):
+    // while the rate is on, the original times the cabinet's rate over the rate's (`replace` made so)
+    bool per_picture = false;
 };
 
 // [[text]]: a string of the game's, found where it is (MemoryPatches once found)
@@ -897,18 +900,24 @@ bool load(const std::vector<std::string> &dirs, const std::string &game, const s
                     }
                     hooks.push_back(std::move(p));
                 } else if (t.kind == "patch") {
-                    known({"address", "module", "original", "replace", "once", "while_rate", "between_ticks", "when"});
+                    known({"address", "module", "original", "replace", "once", "while_rate", "between_ticks", "per_picture", "when"});
                     Patch p;
                     p.mod = mod.name;
                     p.address = (uint32_t)num("address");
                     p.module = str("module", false);
-                    if (!p.module.empty() && (p.while_rate || flag("while_rate") || flag("between_ticks")))
+                    if (!p.module.empty() && (p.while_rate || flag("while_rate") || flag("between_ticks") || flag("per_picture")))
                         fail("a patch in a module (the PC games) can't be tied to a [[rate]]");
                     if (t.values.count("original")) p.original = hex("original");   // none: written every frame (a cheat)
-                    p.replace = hex("replace");
+                    p.per_picture = flag("per_picture");
+                    if (p.per_picture) {   // its replace is the rate's: made as the rate comes on
+                        if (p.original.size() != 4 || t.values.count("replace") || flag("between_ticks"))
+                            fail("a per_picture patch is a float (4 bytes of 'original'), without 'replace' or between_ticks");
+                        p.replace = p.original;
+                    } else
+                        p.replace = hex("replace");
                     p.once = flag("once");
                     p.between_ticks = flag("between_ticks");
-                    p.while_rate = flag("while_rate") || p.between_ticks;
+                    p.while_rate = flag("while_rate") || p.between_ticks || p.per_picture;
                     if (p.while_rate && (p.once || !t.values.count("original")))
                         fail("a while_rate patch has its 'original' (put back when the rate is off) and isn't 'once'");
                     if (p.replace.empty()) fail("'replace' is empty");
@@ -1219,6 +1228,19 @@ void frame() {
     }
     for (Patch &p : g_patches) {
         if (p.done || p.under || !p.module.empty()) continue;   // (a module's: the PC games' process puts it in)
+        if (p.per_picture && rate_on) {   // a cabinet frame's time: the rate's picture's
+            float f;
+            memcpy(&f, p.original.data(), 4);
+            f = (float)(f * core().native_rate() / rate_hz);
+            if (memcmp(&f, p.replace.data(), 4) != 0) {   // a new rate: the last one's value out first
+                auto *m = const_cast<uint8_t *>(core().mem(p.address, 4));
+                if (m && memcmp(m, p.replace.data(), 4) == 0 && memcmp(p.replace.data(), p.original.data(), 4) != 0) {
+                    memcpy(m, p.original.data(), 4);
+                    core().code_changed(p.address, 4);
+                }
+                memcpy(p.replace.data(), &f, 4);
+            }
+        }
         if (p.while_rate && (!rate_on || (p.between_ticks && g_tick))) {   // the original back, if the patch is there
             const size_t n = p.original.size();
             auto *m = const_cast<uint8_t *>(core().mem(p.address, (uint32_t)n));
@@ -1252,7 +1274,7 @@ std::vector<MemoryPatch> memory_patches() {
 std::vector<RatePatch> rate_patches() {
     std::vector<RatePatch> out;
     for (const Patch &p : g_patches)
-        if (p.while_rate && p.module.empty()) out.push_back({{p.mod, p.address, p.module, p.original, p.replace, false}, p.between_ticks});
+        if (p.while_rate && p.module.empty()) out.push_back({{p.mod, p.address, p.module, p.original, p.replace, false}, p.between_ticks, p.per_picture});
     return out;
 }
 

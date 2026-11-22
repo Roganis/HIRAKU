@@ -742,7 +742,10 @@ public:
         set_env("HK_PC32_LOG", win_path(save_ + "/pc.log"));
         if (!ea_.pcbid.empty()) set_env("HK_PC32_PCBID", ea_.pcbid);   // (-p: the cabinet's own, not ea3-config's)
         set_env("HK_PC32_SKIP_TUTORIAL", skip_tutorial_ ? "1" : "");
-        set_env("HK_PC_PROGRAM", m.count("exe") ? m["exe"] : "popn22.dll");   // the game's own code: the DLL, not the loader
+        code_ = m.count("exe") ? m["exe"] : "popn22.dll";
+        set_env("HK_PC_PROGRAM", code_);   // the game's own code: the DLL, not the loader
+        if (!hand_patches()) return false;   // its [[rate]]s and memory patches (in the DLL)
+        if (!patches_.empty()) printf("mods: %zu memory patches go to the game\n", patches_.size());
         // the mods (docs/MODS.md): each folder laid over the game's data folder, new files too, and
         // inside its packs (<pack>_ifs/<member>), as ifs_layeredfs (the loader's HK_PC32_DATA: files.c)
         const std::vector<std::string> mods = hk::mods::folders();
@@ -1556,7 +1559,7 @@ private:
     bool texts_in_program(std::vector<hk::mods::MemoryPatch> &out) {
         const auto texts = hk::mods::text_patches();
         if (texts.empty()) return true;
-        std::ifstream in(program_ + "/" + exe_, std::ios::binary);
+        std::ifstream in(program_ + "/" + (pc32_ ? code_ : exe_), std::ios::binary);
         const std::string f((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
         auto u32 = [&](size_t at) {
             uint32_t v = 0;
@@ -1673,6 +1676,15 @@ private:
             std::ofstream(run_prog_ + "/dat.bin", std::ios::binary | std::ios::trunc) << d;
             if (changed) printf("mods: %zu of the game's files changed in its list of its files (dat.bin)\n", changed);
         }
+        if (!hand_patches()) return false;
+        if (!list.empty() || !patches_.empty())
+            printf("mods: %zu of the game's files and %zu memory patches go to the game\n", md5_of.size(), patches_.size());
+        return true;
+    }
+
+    // The mods' memory patches and [[rate]]s' patches to the game's process (HK_PC_PATCHES: cabinet.c
+    // puts them in place at the program's own addresses; the 32-bit loader's game, in its DLL's)
+    bool hand_patches() {
         // the patches: "ADDRESS ONCE ORIGINAL REPLACE" (hex; "-": no original, a cheat); those in a
         // module (the 64-bit loader's) aren't this DLL's
         patches_ = hk::mods::memory_patches();
@@ -1702,12 +1714,15 @@ private:
             const auto &p = patches_[i];
             char a[32];
             snprintf(a, sizeof a, "%08x %d ", p.address, p.once ? 1 : 0);
-            text += a + hex(p.original) + " " + hex(p.replace) + (i < plain ? "" : rated[i - plain].between_ticks ? " ticks" : " rate") + "\n";
+            text += a + hex(p.original) + " " + hex(p.replace) +
+                    (i < plain                         ? ""
+                     : rated[i - plain].per_picture    ? " picture"   // (cabinet.c: the rate's share of the float)
+                     : rated[i - plain].between_ticks  ? " ticks"
+                                                       : " rate") +
+                    "\n";
         }
         std::ofstream(save_ + "/mods-patches.txt", std::ios::trunc) << text;
         set_env("HK_PC_PATCHES", text.empty() ? "" : win_path(save_ + "/mods-patches.txt"));
-        if (!list.empty() || !text.empty())
-            printf("mods: %zu of the game's files and %zu memory patches go to the game\n", md5_of.size(), patches_.size());
         return true;
     }
 
@@ -2272,6 +2287,7 @@ private:
     std::string game_, family_ = "pcpopn", exe_, program_, save_, run_prog_, run_e_, link_path_, wine_ = "wine";
     bool pc64_ = false;               // the 64-bit loader runs the game (init_pc64)
     bool pc32_ = false;               // the 32-bit AVS2 loader runs the game (init_pc32)
+    std::string code_;                // ... and the game's DLL, in its modules/ (its [[text]]s are looked for there)
     bool dxvk32_ = false;             // ... with DXVK's Direct3D 9 beside it
     std::string ea_dir_;              // HIRAKU's e-AMUSEMENT server's files ("": -url's server)
     bool c02_ = false;                // the C02 cabinet's board (beatmania IIDX 9th style, PLAN.md section 33)

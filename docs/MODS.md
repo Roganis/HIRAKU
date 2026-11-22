@@ -204,6 +204,7 @@ replace  = "4d4f4444 45442120 21"   # hex: what goes there (as long as original)
 # once = true                   # apply the first time only (default: whenever original is there again)
 # while_rate = true             # in place only while a [[rate]] is on, original back otherwise
 # between_ticks = true          # ... and then only on the vsyncs between the cabinet's ticks (below)
+# per_picture = true            # a float of one cabinet frame's time (no replace): the rate's picture's while it's on
 # Without `original`, replace is written every frame, whatever is there (a cheat: MAME's and
 # PCSX2's write their values so); with once = true, only the first frame. Careful with that: from
 # the very first frame means while the game is still loading or unpacking its code there too,
@@ -577,6 +578,11 @@ run faster, which is why the rate is tied to a condition, and what `between_tick
 (The same condition, in a game's own game.toml as `[smooth]`, says when a song is played for smooth
 motion in songs only: docs/SMOOTH.md.)
 
+A game that moves its animations on by a time each picture, a constant of one cabinet frame,
+gets its picture's own time with `per_picture` on that float's patch (`original` its 4 bytes, no
+`replace`): while the rate is on it holds the original times the cabinet's rate over the rate's
+(half of it at 120 Hz, a quarter at 240), the original again when the rate is off.
+
 The cabinet's ticks: while a rate is on, HIRAKU keeps count of the machine's time, and a vsync
 that completes another 1/59.94 s is a tick (every second one at 119.88 Hz, every fourth at 239.76,
 5 in 12 at 144). A `[[patch]]` with `between_ticks` is in place on the vsyncs between ticks only:
@@ -886,7 +892,9 @@ so their memory and files are the game's own process's, not an emulated machine'
   (`<pack>_ifs/tex/<name>.png`, as translations have them): each is converted for the game the
   first time it's shown in a run (`mods: picture ...` in `pc.log`), its size the game's, or the
   mod's own `tex/texturelist.xml`'s; not yet `dxt5` pictures, nor new pictures without a list of the
-  mod's (PLAN.md section 35).
+  mod's (PLAN.md section 35). A mod's `[[patch]]`es and `[[rate]]` go to the game's DLL as the other
+  PC games' do (its addresses as `popn22.dll` lays itself out, from 0x10000000), and `[[text]]` is
+  looked for in that DLL.
 
 ## Per core
 

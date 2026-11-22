@@ -46,6 +46,7 @@ std::vector<MemoryPatch> memory_patches();
 struct RatePatch {
     MemoryPatch patch;
     bool between_ticks = false;
+    bool per_picture = false;   // a float of one cabinet frame's time: the rate's picture's while it's on
 };
 std::vector<RatePatch> rate_patches();
 // The words of the game's memory the [[rate]]s look at (while_changing, while_equal): such a core

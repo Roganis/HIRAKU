@@ -549,6 +549,10 @@ add_test(NAME mods_api COMMAND test_mod_api ${CMAKE_CURRENT_BINARY_DIR}/mod-api-
 add_executable(test_mod_script mods/test_mod_script.cpp)
 target_link_libraries(test_mod_script PRIVATE hiraku_shell)
 add_test(NAME mods_script COMMAND test_mod_script ${CMAKE_CURRENT_BINARY_DIR}/mod-script-test ${CMAKE_CURRENT_SOURCE_DIR}/mods/sample-script)
+# ... and a per_picture patch: a frame's time made the rate's picture's while a [[rate]] is on
+add_executable(test_per_picture mods/test_per_picture.cpp)
+target_link_libraries(test_per_picture PRIVATE hiraku_shell)
+add_test(NAME mods_per_picture COMMAND test_per_picture)
 # tools/ingest.py (Python 3.11 or later: tomllib): a Konami Python game waiting for its BIOS and keys,
 # finished when they're dropped
 if(Python3_Interpreter_FOUND AND Python3_VERSION VERSION_GREATER_EQUAL 3.11)

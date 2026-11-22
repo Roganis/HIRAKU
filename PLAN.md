@@ -1125,3 +1125,12 @@ Extended the same day to the Firebeat and DJ Main games. **Pacing outside songs*
 - (owner) a real 120/240 Hz display: the switch at a stage's start and end (exact speed to locked and back) under fifo-v1 and DWM, which the headless rig doesn't have.
 - Still without `[smooth]` (everywhere, as before): Keyboardmania, Keyboardheaven and ParaParaParadise 1st Mix Plus (no set-up save here), Keyboardmania 2nd Mix (its words break inside songs) and 3rd Mix (its word runs on under the RESULT panel), the DJ Main sets not ingested here (popn1, popn1a, popn1k, bm3rdmixa, bmcmxaac, bmcompmx, bs4thmix, bscompmx), Twinkle's and the 573's.
 - (owner) the exact pacing outside songs on a real display: no speed step at the switch, the frames held on the menus.
+
+## 51. The high-frame-rate work of 2026-11-14, merged
+
+Two pieces made in a side worktree on 2026-11-13/14 (from d277663) and left uncommitted there were brought into this tree on 2026-11-22 by three-way merges (`git merge-file`, the worktree's base as the base), keeping everything this tree had gained since (mods adding files, settings choosing files and patches with `when`, the `[[rate]]` condition in `runtime/shell/wordcond.h`, the `[smooth]` gate). **(B) a patch option for a frame's time as a float** (`per_picture`: while a rate is on, the original times the cabinet's rate over the rate's; mods.cpp for the emulated cores, cabinet.c kind "picture" for the PC games), the last 32-bit PC pop'n's loader now handed the mods' patches and rates (`hand_patches` in `runtime/pc/core.cpp`, `[[text]]` looked for in its DLL), and `tests/mods/test_per_picture.cpp` (ctest `mods_per_picture`). The other piece, beatmania IIDX 9th style to GOLD at 120 Hz, follows in its own commit. Conflicts were only side by side (key lists, a test's lines).
+
+Checked: the Linux build (hiraku-pc, its DLLs, the 32- and 64-bit loaders) and the mingw cross build (hiraku-pc.exe, the DLLs); the mods tests (7 of 7) and lint, `mods_per_picture` and `mods_patch_order` under Wine too. No game in the repo uses `per_picture` yet, and it hasn't run in a game since the last 32-bit PC pop'n's DLL moved (below).
+
+**Open**
+- (build) The last 32-bit PC pop'n's DLL now loads below its own base under Wine (0x07b30000 or 0x08480000, not 0x10000000), with the worktree's build as with this one: patches and rate words given at its own addresses miss (no patch in place, the rate never on). Either the place it loads is found out, or the DLL's patches and the rate's words are moved by its load address.

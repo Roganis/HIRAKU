@@ -714,7 +714,8 @@ static void waits_report(void);
 // --- mods: memory patches (HK_PC_PATCHES), each in place whenever its original bytes are there
 // (or, without original bytes, every time: a cheat), once if asked; at the program's own addresses
 
-// rate: 1 tied to a [[rate]] (in place only while it's on), 2 also only between the cabinet's ticks
+// rate: 1 tied to a [[rate]] (in place only while it's on), 2 also only between the cabinet's ticks,
+// 3 a float of one cabinet frame's time made the rate's picture's (its replace made as the rate comes on)
 // line: the patch's place in hiraku-pc's list (its patch_done), whichever lines were read
 static struct patch { uint8_t *at, *original, *replace; size_t n; int once, done, rate, line; } *g_patches;
 static int g_npatches;
@@ -752,10 +753,11 @@ static void read_patches(void) {
         if (!repl) { unread++; continue; }
         if (!kind) kind = "";
         struct patch p = {(uint8_t *)(uintptr_t)strtoul(addr, NULL, 16), NULL, NULL, 0, atoi(once), 0,
-                          !strcmp(kind, "rate") ? 1 : !strcmp(kind, "ticks") ? 2 : 0, line_no};
+                          !strcmp(kind, "rate") ? 1 : !strcmp(kind, "ticks") ? 2 : !strcmp(kind, "picture") ? 3 : 0, line_no};
         const int n = unhex(repl, &p.replace);
         if (n <= 0 || (strcmp(orig, "-") && unhex(orig, &p.original) != n)) { unread++; continue; }
         if (p.rate && (!p.original || p.once)) continue;   // (mods.cpp refuses these)
+        if (p.rate == 3 && n != 4) continue;
         p.n = (size_t)n;
         g_patches = realloc(g_patches, sizeof *g_patches * (size_t)(g_npatches + 1));
         g_patches[g_npatches++] = p;
@@ -786,14 +788,17 @@ static void put(uint8_t *at, const uint8_t *bytes, size_t n) {
 // one is on): on, and whether the frame ends a cabinet frame's worth of time (1/59.94 s, as
 // mods.cpp counts it for the emulated machines): between_ticks patches are out then
 static int g_rate_on, g_tick = 1;
+static uint32_t g_rate_milli, g_cab_milli = 60000;   // the rate's and the cabinet's own, in mHz
 static void rate_frame(void) {
     static double owed;
     const uint32_t hz = hk_link()->game_hz_milli;
     g_rate_on = hz > 60500;
     if (!g_rate_on) {
         owed = 0, g_tick = 1;
+        if (hz > 30000) g_cab_milli = hz;
         return;
     }
+    g_rate_milli = hz;
     // a whole multiple of the cabinet's rate (a mod's hz = "x2": a PC IIDX's 59.935 or 60.035 Hz
     // twice): every that many frames exactly, whatever the cabinet's own rate
     const uint32_t k = (hz + 30000) / 60000;
@@ -810,6 +815,15 @@ static void rate_frame(void) {
 static void apply_patches(void) {
     for (int i = 0; i < g_npatches; i++) {
         struct patch *p = &g_patches[i];
+        if (p->rate == 3 && g_rate_on) {   // a cabinet frame's time: the rate's picture's
+            float f;
+            memcpy(&f, p->original, 4);
+            f = (float)(f * g_cab_milli / g_rate_milli);
+            if (memcmp(&f, p->replace, 4)) {   // a new rate: the last one's value out first
+                if (present(p->at, 4) && !memcmp(p->at, p->replace, 4) && memcmp(p->replace, p->original, 4)) put(p->at, p->original, 4);
+                memcpy(p->replace, &f, 4);
+            }
+        }
         if (p->rate && (!g_rate_on || (p->rate == 2 && g_tick))) {   // the original back, if the patch is there
             if (present(p->at, p->n) && !memcmp(p->at, p->replace, p->n)) put(p->at, p->original, p->n);
             continue;

@@ -51,6 +51,8 @@ void readManifest(const QString &path, Game &g) {
         QString k = m.captured(1), v = m.captured(2);
         if (!section.isEmpty()) {
             if (section == "pc" && k == "loader") g.loader = v, g.hidden = v == "pc64" || v == "pc32";
+            // (the C33 station: its board is there, adding its files and its package's DLLs are not yet)
+            if (section == "pc" && k == "board" && v == "c33") g.hidden = true;
             continue;
         }
         if (k == "id") g.id = v;

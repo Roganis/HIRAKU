@@ -376,8 +376,36 @@ std::string utf8(const std::filesystem::path &p, bool generic = false) {
     return std::string(s.begin(), s.end());
 }
 
+// The names a folder of the game's has (a folder medium's), read once a load: name_in() below
+std::map<std::string, std::vector<std::string>> g_listed;
+
+// The name `part` has in the folder `at` as the folder has it: `part` itself if that is there, else
+// the one that differs from it in case only; "" when neither is. Never fs::exists(at / part): on
+// Windows (a file system that ignores case) that holds for the mod's spelling too, and one game file
+// would be two paths (hiraku-pc would hand the game both, and the DLL take the first in the list's
+// order, not the first mod's)
+std::string name_in(const std::filesystem::path &at, const std::string &part) {
+    namespace fs = std::filesystem;
+    auto [it, fresh] = g_listed.try_emplace(utf8(at));
+    if (fresh) {
+        std::error_code ec;
+        for (auto d = fs::directory_iterator(at, ec); !ec && d != fs::directory_iterator(); d.increment(ec))
+            it->second.push_back(utf8(d->path().filename()));
+        std::sort(it->second.begin(), it->second.end());   // (the same one each time where two differ in case only)
+    }
+    std::string other;
+    for (const std::string &name : it->second) {
+        if (name == part) return name;
+        bool same = other.empty() && name.size() == part.size();
+        for (size_t i = 0; same && i < name.size(); i++) same = std::tolower((unsigned char)name[i]) == std::tolower((unsigned char)part[i]);
+        if (same) other = name;
+    }
+    return other;
+}
+
 // `rel` in `folder` (a folder medium: the PC games' data), its name's case as the folder has it
-// (the mod's may differ, as Windows doesn't mind); "" if it isn't there
+// (the mod's may differ, as Windows doesn't mind), with '/' between its parts on every system;
+// "" if it isn't there
 std::string in_folder(const std::string &folder, const std::string &rel) {
     namespace fs = std::filesystem;
     fs::path at = fs_path(folder);
@@ -387,31 +415,17 @@ std::string in_folder(const std::string &folder, const std::string &rel) {
         part = rest.substr(0, slash);
         rest = slash == std::string::npos ? "" : rest.substr(slash + 1);
         if (part.empty() || part == "." || part == "..") return {};
-        std::error_code ec;
-        if (fs::exists(at / fs_path(part), ec)) {
-            at /= fs_path(part);
-            continue;
-        }
-        bool found = false;
-        for (auto it = fs::directory_iterator(at, ec); !ec && it != fs::directory_iterator(); ++it) {
-            const std::string name = utf8(it->path().filename());
-            bool same = name.size() == part.size();
-            for (size_t i = 0; same && i < name.size(); i++) same = std::tolower((unsigned char)name[i]) == std::tolower((unsigned char)part[i]);
-            if (same) {
-                at = it->path();
-                found = true;
-                break;
-            }
-        }
-        if (!found) return {};
+        const std::string name = name_in(at, part);
+        if (name.empty()) return {};
+        at /= fs_path(name);
     }
     std::error_code ec;
-    return fs::is_regular_file(at, ec) ? utf8(at) : std::string();
+    return fs::is_regular_file(at, ec) ? utf8(at, true) : std::string();
 }
 
 // `rel` new to `folder` (it isn't there): its path there, with the folder's case for the folders it
-// has and the mod's for the rest; "" when it can't be (a part of the way is a file, or the path is
-// a folder there)
+// has and the mod's for the rest, '/' between the parts; "" when it can't be (a part of the way is a
+// file, or the path is a folder there)
 std::string new_in_folder(const std::string &folder, const std::string &rel) {
     namespace fs = std::filesystem;
     fs::path at = fs_path(folder);
@@ -421,22 +435,11 @@ std::string new_in_folder(const std::string &folder, const std::string &rel) {
         part = rest.substr(0, slash);
         rest = slash == std::string::npos ? "" : rest.substr(slash + 1);
         if (part.empty() || part == "." || part == "..") return {};
+        const std::string name = name_in(at, part);
+        if (name.empty()) return utf8(at / fs_path(part), true) + (rest.empty() ? "" : "/" + rest);   // the rest is the mod's
         std::error_code ec;
-        fs::path next = at / fs_path(part);
-        if (!fs::exists(next, ec)) {
-            for (auto it = fs::directory_iterator(at, ec); !ec && it != fs::directory_iterator(); ++it) {
-                const std::string name = utf8(it->path().filename());
-                bool same = name.size() == part.size();
-                for (size_t i = 0; same && i < name.size(); i++) same = std::tolower((unsigned char)name[i]) == std::tolower((unsigned char)part[i]);
-                if (same) {
-                    next = it->path();
-                    break;
-                }
-            }
-        }
-        if (!fs::exists(next, ec)) return utf8(next) + (rest.empty() ? "" : "/" + rest);   // the rest is the mod's
-        if (!fs::is_directory(next, ec)) return {};
-        at = next;
+        if (!fs::is_directory(at / fs_path(name), ec)) return {};
+        at /= fs_path(name);
     }
     return {};   // (a folder of the game's)
 }
@@ -573,6 +576,7 @@ bool load(const std::vector<std::string> &dirs, const std::string &game, const s
         const auto medium_paths = media(root, game);
         std::map<std::string, std::unique_ptr<pythondisk::Files>> python_disks;   // [[file]]s on Konami Python disks
         g_big_endian = core().mod_big_endian();
+        g_listed.clear();   // (the game's folders as they are now)
         g_settings_dir = user_data_dir(root) + "/mod-settings/" + game;
         std::vector<std::vector<Hook>> mod_hooks;   // each mod's [[hook]]s, last mod first (put in at the end)
         // The first mod in the list wins where two change the same thing, as with ifs_layeredfs: a
@@ -1499,6 +1503,7 @@ void clear() {
     g_mods.clear();
     g_folder_files.clear();
     g_added_files.clear();
+    g_listed.clear();
     g_actions.clear();
     g_counters.clear();
     g_settings.clear();

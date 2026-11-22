@@ -7,6 +7,8 @@
 // that isn't "data" takes no new files (they're left out, as on a disc). Made-up files, no game.
 //
 //   test_mod_files <scratch folder>      exit 0 when all hold
+#include <algorithm>
+#include <cctype>
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
@@ -110,9 +112,18 @@ int main(int argc, char **argv) {
     const auto replaced = rel(hk::mods::folder_files());
     const auto added = rel(hk::mods::added_files());
     printf("      replaced: %s\n      added: %s\n", show(replaced).c_str(), show(added).c_str());
+    // (the mod's file compared ignoring case on Windows: the folders made above in two cases, B's
+    // Sound, SOUND and sound, are one folder there, named as the first was made)
     auto is = [](const std::map<std::string, std::string> &m, const std::string &k, const std::string &v) {
         auto it = m.find(k);
-        return it != m.end() && it->second == v;
+        if (it == m.end()) return false;
+#ifdef _WIN32
+        return it->second.size() == v.size() && std::equal(v.begin(), v.end(), it->second.begin(), [](char a, char b) {
+                   return std::tolower((unsigned char)a) == std::tolower((unsigned char)b);
+               });
+#else
+        return it->second == v;
+#endif
     };
     check(is(replaced, "data/Sound/old.bin", "A/sound/OLD.bin"), "a game's file in another case: replaced, the first mod's");
     check(is(replaced, "data/graph/sys/system.idx", "A/graph/sys/system.idx"), "a game's file: replaced");

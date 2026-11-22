@@ -829,7 +829,7 @@
 +	}
 +	const xxh_u8* const secret = (state->extSecret == nullptr) ? state->customSecret : state->extSecret;
 +	XXH_ALIGN(XXH_ACC_ALIGN) xxh_u64 acc[XXH_ACC_NB];
-+	std::memcpy(acc, state->acc, sizeof(acc));
++	::std::memcpy(acc, state->acc, sizeof(acc));
 +	// Whole stripes already buffered come first in the input, so they can be taken now.
 +	if (state->bufferedSize != 0)
 +	{
@@ -842,10 +842,10 @@
 +			block_size / XXH_STRIPE_LEN, secret, state->secretLimit, XXH3_accumulate, XXH3_scrambleAcc);
 +	}
 +	// The last block stays buffered: XXH3 always holds back the input's end for the digest's last stripe.
-+	std::memcpy(state->buffer, blocks[count - 1], block_size);
++	::std::memcpy(state->buffer, blocks[count - 1], block_size);
 +	state->bufferedSize = static_cast<XXH32_hash_t>(block_size);
 +	state->totalLen += static_cast<XXH64_hash_t>(block_size) * count;
-+	std::memcpy(state->acc, acc, sizeof(acc));
++	::std::memcpy(state->acc, acc, sizeof(acc));
 +	return XXH_OK;
 +}
 --- a/pcsx2/GS/MultiISA.h

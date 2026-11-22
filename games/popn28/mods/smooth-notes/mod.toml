@@ -1,0 +1,63 @@
+name = "Smooth notes (high frame rate)"
+version = "0.1"
+game = "popn28"
+description = "While a song plays, the game draws at the display's refresh rate (120, 144, 240 Hz...): its notes come from its song clock, so they move at the display's rate, and it judges as before. The animations keep their speed (the time each picture gives them is the picture's own), and the game's frame counters keep the cabinet's pace. For the program of 2025092400."
+
+[[rate]]
+hz = "display"                 # the display's refresh rate (no window: 119.88); or a number, up to 1000
+while_changing = 0x1099b194    # the song clock (ms: timeGetTime from the song's start, as the play screen reads it)
+while_equal = 0x109927a4       # ... and while the play screen's phase is 2: the song itself
+value = 2
+
+# The animations (the AFP library's, every layer the game draws) are moved on by a time each picture,
+# a constant of one cabinet frame (1/59.96 s): the picture's own time while the rate is on
+
+[[patch]]
+# the time each picture gives the animations (afp_do_render's first argument), in seconds
+address = 0x102abe70
+original = "829d883c"   # 0.016677 s
+per_picture = true      # while the rate is on: its own picture's time (at 120 Hz half of it)
+
+# Between the cabinet's ticks these count by 0 (the step made a 6-byte nop), so they keep its pace
+
+[[patch]]
+# the play screen's picture count (0x10de78dc): what blinks on odd pictures, colour cycles, loops of 160
+address = 0x100cdc66
+original = "011ddc78de10"   # add [0x10de78dc], ebx (1)
+replace = "660f1f440000"
+between_ticks = true
+
+[[patch]]
+# the play screen's own count from its start (0x1099aebc: something once at 30)
+address = 0x100dc3d6
+original = "ff05bcae9910"   # inc [0x1099aebc]
+replace = "660f1f440000"
+between_ticks = true
+
+[[patch]]
+# pictures without a button held (0x10de7950): a warning at 600, the stage ended at 1200 (20 s)
+address = 0x100dcea0
+original = "ff055079de10"   # inc [0x10de7950]
+replace = "660f1f440000"
+between_ticks = true
+
+[[patch]]
+# each player's character: pictures since its state (a reaction, a pose) began (0x10999fb0, +0xac a player)
+address = 0x100d9aa0
+original = "ff47f8"   # inc [edi-8]
+replace = "0f1f00"
+between_ticks = true
+
+[[patch]]
+# a 21-picture loop of the play screen's (0..20, three of them 12 bytes apart; 0x10999f70 the first)
+address = 0x100d77e4
+original = "ff47f8"   # inc [edi-8]
+replace = "0f1f00"
+between_ticks = true
+
+[[patch]]
+# the attract demo's length (0x109ce6f8: 2000 pictures from its start, counted down; it ends below 0)
+address = 0x100ced8d
+original = "668305f8e69c10ff"   # add word [0x109ce6f8], -1
+replace = "668305f8e69c1000"    # add word [0x109ce6f8], 0 (its flags as the count's own: not below 0)
+between_ticks = true

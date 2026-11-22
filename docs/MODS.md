@@ -710,6 +710,25 @@ program date): the same design as 9-14's, found by the same shapes in all four p
 | pop'n 17 | 2009022500 | 0x010408f8 | 0x0102b520 (2) | 18 |
 | pop'n 18 | 2010040500 | 0x0107c030 | 0x0106699c (2) | 20 |
 
+The last 32-bit PC pop'n (`games/popn28/mods/smooth-notes`, 2026-11-14; the program of 2025092400):
+the same song clock as pop'n 15-18 (`timeGetTime` from the song's start over a rate of 1.0, kept in
+milliseconds at 0x1099b194 as the play screen reads it), and the play screen's phase a halfword
+(0x109927a4) that is 2 while the song plays: the rate is on while both say so, in the attract
+demo's song too. Its animations are the AFP library's (`libafp-win32.dll`: every layer the game
+draws), moved on each picture by a time the game gives them, a constant of one cabinet frame
+(0.016677 s at 0x102abe70, `afp_do_render`'s first argument): `per_picture` makes it the rate's
+picture's time. The game's own counters of pictures, held to the cabinet's pace: the play screen's
+(0x10de78dc: what blinks on odd pictures, colour cycles), its count from its start (0x1099aebc), the
+pictures without a button held (0x10de7950: the stage ends at 1200, 20 s, with a warning at 600), each
+player's character's time in its state (0x10999fb0), a 21-picture loop (0x10999f70) and the attract
+demo's length (2000 pictures counted down at 0x109ce6f8). Found as pop'n 15-18's were (consecutive
+dumps at the rate, the heaps too; data watchpoints for the writers); the animations' time by its
+uses: the heaps' words moving each picture at 120 Hz fell from 92 to 38 with it. Checked under Wine
+at 80 Hz (what the nested 60 Hz display keeps up with: 80 pictures a second; at 120 the game drew
+80): a character's loop 197 frames against 148 at 60 (148 x 80/60 = 197.3), the demo 2,389 frames
+against 1,790 at 60.6 Hz (29.9 s and 29.5 s); the notes on the clock; the rate off at the song's
+end. Not checked: a real 120 or 240 Hz display (the owner's), judging at the rate.
+
 beatmania IIDX 16 EMPRESS on the PC (`games/iidx16/mods/high-frame-rate`, 2026-11-09; the program of
 2009072200): a game that counts everything in frames, its song's position too, so the clock-following
 design above doesn't fit. Its charts are milliseconds converted to frames as a song loads (0x489300,

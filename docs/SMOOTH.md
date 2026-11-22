@@ -10,7 +10,7 @@ third, the CRT beam, for a CRT's sharpness in motion rather than more pictures):
 
 | The game's play goes by | Way | Where | Games so far |
 |---|---|---|---|
-| a clock (a hardware timer read each frame) | more vsyncs: the game draws more pictures (`[[rate]]` mods) | per game: docs/MODS.md | pop'n music 9-14 (Python) |
+| a clock (a hardware timer read each frame) | more vsyncs: the game draws more pictures (`[[rate]]` mods) | per game: docs/MODS.md | pop'n music 9-14 (Python), pop'n music 15 to the last 32-bit PC one |
 | frames (each frame moves the notes a fixed step) | in-between pictures: HIRAKU draws them (`--smooth-motion`) | per core: every game on it | DJ Main, Firebeat, Twinkle, System 573 |
 | frames, on a Windows PC | in-between pictures: the game's own Direct3D draws them again, the notes moved (`--smooth-motion`) | the PC core (runtime/pc/) | beatmania IIDX RED to GOLD (9th style to EMPRESS) |
 | frames, its charts converted from milliseconds as they load | more vsyncs: the charts counted in half frames, the game at twice its rate (`[[rate]]` mod) | per game: docs/MODS.md | beatmania IIDX DJ TROOPERS, EMPRESS |

@@ -153,8 +153,15 @@ jobs:
         run: |
           for /f "usebackq tokens=*" %%i in (`call vswhere -latest -property installationPath`) do set "VSINSTPATH=%%i"
           call "%VSINSTPATH%\VC\Auxiliary\Build\vcvars64.bat" || exit /b
+          rem Visual Studio's own clang-cl where it has one: its C++ library refuses an older Clang than
+          rem the one it ships with ("STL1000: expected Clang 22 or newer", MSVC 14.52 against the
+          rem runner image's separate LLVM 20, November 2026); else the one on the path, as before
+          set "CLANGCL=clang-cl"
+          if exist "%VCINSTALLDIR%Tools\Llvm\x64\bin\clang-cl.exe" set "CLANGCL=%VCINSTALLDIR%Tools\Llvm\x64\bin\clang-cl.exe"
+          set "CLANGCL=%CLANGCL:\=/%"
+          "%CLANGCL%" --version || exit /b
           cmake -S reliquary -B reliquary\build -G Ninja -DCMAKE_BUILD_TYPE=Release ^
-            -DCMAKE_C_COMPILER=clang-cl -DCMAKE_CXX_COMPILER=clang-cl ^
+            "-DCMAKE_C_COMPILER=%CLANGCL%" "-DCMAKE_CXX_COMPILER=%CLANGCL%" ^
             "-DCMAKE_PREFIX_PATH=%cd%\reliquary\deps;%cd%\SDL3-3.4.18" ^
             -DENABLE_QT_UI=OFF -DENABLE_TESTS=OFF -DUSE_LINKED_FFMPEG=OFF -DDISABLE_ADVANCE_SIMD=ON ^
             "-DHIRAKU_DIR=%cd%\hiraku" -DHK_RELEASE=ON || exit /b

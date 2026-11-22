@@ -188,13 +188,25 @@ void announce(const std::string &key, const std::string &s) {
 // until commit-to-screen (the median of 10) is a refresh slower than the best: a miss. Then catch
 // up (the grid moves a refresh later: the machine waits one refresh, the sound queue absorbs it)
 // and commit a 32nd plus 1.5 ms earlier, and stay. Each later miss adds 0.75 ms.
+// A window is judged by how long after the refresh it was meant for its pictures came (t - target),
+// not by their commit to the screen. A picture is shown at the first refresh after its commit that
+// the deadline allows, so commit to screen is the lead less whole refreshes: it rose with every
+// raise of the lead (until it passed a refresh and fell by one) while its best stayed where the lead
+// was lowest. After the first miss it sat a 32nd plus 1.5 ms over the best; at 240 Hz, where half a
+// refresh is 2.08 ms, one more real miss (0.75 ms) put the windows after it over the line: each a
+// "miss", a refresh skipped and 0.75 ms more lead (2026-11-22, a 240 Hz display with fifo: leads of
+// 9.6 to 85.5 ms at exit, moved 10 to 118 times, 0.75 ms a move; at 35.6 ms, 41364 of 42088 pictures
+// shown a refresh or more before the one meant). At 60 and 120 Hz it took more real misses. The time
+// after the refresh meant is whole refreshes (the grid kept on the vblanks), the same whatever the
+// lead but for one fewer each time the lead passes a refresh; a miss still puts it one more
 int g_skip = 5;                // presented frames ignored (the window settling, or after a catch-up)
 bool g_sweep = getenv("HK_PACING_SWEEP") != nullptr;   // testing: keep moving the commit, to map the deadline
 int64_t g_prev_t = 0;          // the previous presented frame, 0 after a gap
 int g_prev_k = 0;              // ... and its refreshes
-int64_t g_best = 0;            // the shortest commit-to-screen median (0: none yet)
+int64_t g_best = 0;            // the shortest commit-to-screen median (0: none yet; the report's)
+int64_t g_best_late = 0;       // (Wayland) the least median time after the refresh meant (with g_best)
 std::vector<int64_t> g_window; // commit-to-screen times for the next median
-std::vector<int64_t> g_late;   // (DXGI) how late each picture reached the screen after its refresh
+std::vector<int64_t> g_late;   // how late each picture reached the screen after its refresh
 constexpr int64_t MARGIN = 3 * MS / 2;
 bool g_dxgi = false;           // presented through the DXGI swap chain (Windows: dxgi_feedback())
 bool g_fifo_on = false;        // presented through Wayland's fifo-v1 (each commit held behind the one before)
@@ -217,7 +229,7 @@ bool draining() { return g_fifo_on && g_drain && !(g_active && g_exact); }
         else n_late++;
     }
     g_prev_k = k;
-    if (g_debug) fprintf(stderr, "pacing: commit to screen %.3f ms, lead %.2f ms, overrun %d\n", d / 1e6, g_lead / 1e6, (int)overrun);
+    if (g_debug) fprintf(stderr, "pacing: commit to screen %.3f ms, %.3f ms after its refresh, lead %.2f ms, overrun %d\n", d / 1e6, e / 1e6, g_lead / 1e6, (int)overrun);
     if (overrun) {   // committed late: says nothing about the deadline
         // (DXGI: and the pictures after it may still be queued behind it, shown late with their
         // own commits on time: not a deadline missed either; counted as such, each of a game's
@@ -238,28 +250,26 @@ bool draining() { return g_fifo_on && g_drain && !(g_active && g_exact); }
         g_skip--;
         return;
     }
-    // A miss: on Wayland, the commit to the screen took half a refresh longer than its best (the
-    // frame waited a refresh more). DXGI's swap chain queues pictures, so a picture presented at
+    // A miss: on Wayland, the pictures came half a refresh later after the refresh each was meant
+    // for than at their best (the frame waited a refresh more). DXGI's swap chain queues pictures, so a picture presented at
     // any point of a refresh shows at the next and its commit to the screen says nothing (judged so,
     // the lead only grew: 219 ms on a cabinet); there a miss is a picture shown after the refresh
     // it was meant for
     g_window.push_back(d);
-    if (g_dxgi) g_late.push_back(t - target);
+    g_late.push_back(t - target);
     if (g_window.size() >= 10) {
         std::nth_element(g_window.begin(), g_window.begin() + 5, g_window.end());
         const int64_t median = g_window[5];
         g_window.clear();
+        std::nth_element(g_late.begin(), g_late.begin() + (long)g_late.size() / 2, g_late.end());
+        const int64_t late = g_late[g_late.size() / 2];
+        g_late.clear();
+        const bool first = !g_best;
+        if (first || median < g_best) g_best = median;
         bool missed = false;
-        if (g_dxgi) {
-            std::nth_element(g_late.begin(), g_late.begin() + (long)g_late.size() / 2, g_late.end());
-            missed = g_late[g_late.size() / 2] > g_T / 2;
-            g_late.clear();
-            if (!g_best || median < g_best) g_best = median;
-        } else if (!g_best || median < g_best) {
-            g_best = median;
-        } else {
-            missed = median > g_best + g_T / 2;
-        }
+        if (g_dxgi) missed = late > g_T / 2;
+        else if (first || late < g_best_late) g_best_late = late;
+        else missed = late > g_best_late + g_T / 2;
         // Wayland fifo: a miss after a late commit is the pictures still a refresh behind it (smooth
         // motion's, which go on queueing); caught up, but the deadline hasn't moved: the lead stays,
         // neither raised nor let down by this window (it falling through to the step below, a window
@@ -702,7 +712,7 @@ bool frame(double period) {
     // in nearly every window of ten frames: pop'n music 14 back at 60 Hz after a song at 240, a frame
     // shown late every 0.3 s, against one in 5 s before the song (its best from the 1-refresh frames,
     // each frame of 4 committed with 3 empty ones after it)
-    if (g_active && k != g_k) g_best = 0, g_window.clear(), g_skip = std::max(g_skip, 5);
+    if (g_active && k != g_k) g_best = 0, g_window.clear(), g_late.clear(), g_skip = std::max(g_skip, 5);
     g_active = true;
     g_k = k;
     if (g_smooth_asked && !g_smooth_motion) n_outside_locked++;

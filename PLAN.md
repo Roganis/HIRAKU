@@ -417,6 +417,8 @@ docs/PLAY.md, "Frame pacing".
 
 Full history: docs/PLAN-HISTORY.md §20.
 
+**The Wayland lead's runaway (2026-11-22).** A 240 Hz display's logs (KWin, fifo) ended with leads of 9.6 to 85.5 ms, moved 10 to 118 times, 0.75 ms a move, each move a refresh skipped. A window of ten pictures was judged a miss by its commit to the screen against the best seen; but that time is the lead less whole refreshes, so it rose with every raise of the lead while the best stayed: after the first miss it sat 1.6 ms over the best, and at 240 Hz (half a refresh 2.08 ms) one more real miss left every later window over the line. Now a window is judged by how long after the refresh it was meant for its pictures came (whole refreshes, the lead's raises not in it), as the DXGI side already was; the report's "commit to screen at best" is as before. `host_pacing` has a modelled display (a deadline wandering 0.8 ms, then 2 ms further off for 10 s, or 3 ms for good; 60/120/240 Hz, fifo or not, exact speed or not): 2-4 raises and the commit within 0.9 ms of the deadline, where the old rule at 240 Hz made 140-751 raises and leads of 106-565 ms. Not let down after a quiet minute as DXGI's is (each try under the deadline would be a refresh skipped). Not yet run on a 240 Hz display.
+
 **Open**
 - (build) M17, a song added to pop'n 14: the song list entry and its checksum, the chart commands, the `ele`/`bt`/`pre` ADPCM layout, a `[[song]]` laid into a free slot; not started.
 - (build) Media mods on Python 2 (its disk is PCSX2's DEV9 ATA); hard-disk file maps exist only for pop'n 14's family.

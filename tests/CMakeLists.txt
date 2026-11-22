@@ -123,7 +123,8 @@ if(WIN32 AND TARGET hiraku_host)
 endif()
 # Display pacing's judgement of the compositor's deadline (runtime/host/pacing.cpp) from made-up
 # presentation feedback, as Wayland's fifo-v1 gives it: windows missed after a late commit leave the
-# lead where it was; and the old catch-up (HK_PACING_DRAIN=0). (Windows: the swap chain tests)
+# lead where it was; a modelled display's moving deadline followed in a few raises at 60, 120 and
+# 240 Hz; and the old catch-up (HK_PACING_DRAIN=0). (Windows: the swap chain tests)
 if(NOT WIN32 AND TARGET hiraku_host)
   add_executable(test_pacing host/test_pacing.cpp)
   target_include_directories(test_pacing PRIVATE ${CMAKE_SOURCE_DIR}/runtime)

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "cabinet.h"
+#include "imagebase.h"
 #include "../shell/wintimer.h"
 
 #define WIN32_LEAN_AND_MEAN
@@ -792,8 +793,22 @@ static void waits_report(void);
 // rate: 1 tied to a [[rate]] (in place only while it's on), 2 also only between the cabinet's ticks,
 // 3 a float of one cabinet frame's time made the rate's picture's (its replace made as the rate comes on)
 // line: the patch's place in hiraku-pc's list (its patch_done), whichever lines were read
-static struct patch { uint8_t *at, *original, *replace; size_t n; int once, done, rate, line; } *g_patches;
+// mod_at: the address as the mod gave it (the program's own, at its preferred base: imagebase.h)
+static struct patch { uint8_t *at, *original, *replace; size_t n; int once, done, rate, line; uint32_t mod_at; } *g_patches;
 static int g_npatches;
+
+// The program (the last 32-bit PC pop'n's: its DLL) where Windows put it: the mods' addresses, the
+// [[rate]]s' words and the debug tools' addresses are its own at its preferred base, moved with it
+static struct hk_image g_img;
+static void program_image(void) {
+    static int done;
+    if (done) return;
+    done = 1;
+    HMODULE m = (HMODULE)hk_program();
+    hk_image_open(&g_img, m, (uintptr_t)m);
+}
+static uintptr_t moved(uint32_t addr) { return (uintptr_t)hk_image_move(&g_img, addr); }
+static uint32_t unmoved(uintptr_t addr) { return (uint32_t)hk_image_unmove(&g_img, addr); }
 
 static int unhex(const char *h, uint8_t **out) {
     const size_t n = strlen(h) / 2;
@@ -819,7 +834,8 @@ static char *word(char **at) {
 
 static void read_patches(void) {
     char *t = read_text(getenv("HK_PC_PATCHES"));
-    int line_no = -1, unread = 0;
+    int line_no = -1, unread = 0, moves = 0, fixed = 0;
+    program_image();
     for (char *line = t ? strtok(t, "\r\n") : NULL; line && line_no < 255; line = strtok(NULL, "\r\n")) {
         line_no++;
         // "ADDRESS ONCE ORIGINAL REPLACE [rate|ticks]"
@@ -828,14 +844,31 @@ static void read_patches(void) {
         if (!repl) { unread++; continue; }
         if (!kind) kind = "";
         struct patch p = {(uint8_t *)(uintptr_t)strtoul(addr, NULL, 16), NULL, NULL, 0, atoi(once), 0,
-                          !strcmp(kind, "rate") ? 1 : !strcmp(kind, "ticks") ? 2 : !strcmp(kind, "picture") ? 3 : 0, line_no};
+                          !strcmp(kind, "rate") ? 1 : !strcmp(kind, "ticks") ? 2 : !strcmp(kind, "picture") ? 3 : 0, line_no, 0};
         const int n = unhex(repl, &p.replace);
         if (n <= 0 || (strcmp(orig, "-") && unhex(orig, &p.original) != n)) { unread++; continue; }
         if (p.rate && (!p.original || p.once)) continue;   // (mods.cpp refuses these)
         if (p.rate == 3 && n != 4) continue;
         p.n = (size_t)n;
+        // where the program is now; its bytes at the fields it relocated as relocated
+        p.mod_at = (uint32_t)(uintptr_t)p.at;
+        p.at = (uint8_t *)moved(p.mod_at);
+        if ((uintptr_t)p.at != p.mod_at) {
+            moves++;
+            fixed += hk_image_fix_patch(&g_img, p.mod_at - (uint32_t)g_img.preferred, p.n, p.original, p.rate == 3 ? NULL : p.replace) > 0;
+        }
         g_patches = realloc(g_patches, sizeof *g_patches * (size_t)(g_npatches + 1));
         g_patches[g_npatches++] = p;
+    }
+    if (g_img.real != g_img.preferred) {
+        char path[MAX_PATH] = "?";
+        GetModuleFileNameA((HMODULE)hk_program(), path, sizeof path);
+        const char *name = strrchr(path, '\\');
+        hk_log("hiraku-pc: mods: %s at %08lx, not its own base %08lx: %d of the %d patches moved with it (%d with relocated bytes),"
+               " the [[rate]]s' words too", name ? name + 1 : path, (unsigned long)g_img.real, (unsigned long)g_img.preferred, moves,
+               g_npatches, fixed);
+    } else if (g_img.size && hk_program() != (void *)GetModuleHandleA(NULL)) {
+        hk_log("hiraku-pc: mods: the program's DLL at its own base %08lx", (unsigned long)g_img.real);
     }
     if (g_npatches) hk_log("hiraku-pc: mods: %d memory patches", g_npatches);
     if (unread) hk_log("hiraku-pc: mods: %d of the patches' lines couldn't be read: left out", unread);
@@ -906,7 +939,11 @@ static void apply_patches(void) {
         if (p->done || !present(p->at, p->n) || !memcmp(p->at, p->replace, p->n)) continue;   // gone, not there, in place
         if (p->original && memcmp(p->at, p->original, p->n)) continue;   // not loaded (yet): wait
         put(p->at, p->replace, p->n);
-        if (!hk_link()->patch_done[p->line]) hk_log("hiraku-pc: mods: patch at %p (%u bytes) in place", (void *)p->at, (unsigned)p->n);
+        if (!hk_link()->patch_done[p->line] && (uintptr_t)p->at == p->mod_at)
+            hk_log("hiraku-pc: mods: patch at %p (%u bytes) in place", (void *)p->at, (unsigned)p->n);
+        else if (!hk_link()->patch_done[p->line])
+            hk_log("hiraku-pc: mods: patch at %08lx (the mod's; %p in this run, %u bytes) in place", (unsigned long)p->mod_at, (void *)p->at,
+                   (unsigned)p->n);
         hk_link()->patch_done[p->line] = 1;
         if (p->once) p->done = 1;
     }
@@ -1127,8 +1164,10 @@ static void dbg_records(void) {
             const int direct = *e == '=';   // =ADDR: the buffer itself, not a pointer to it
             if (sscanf(e + direct, "%x:%x:%259[^,]%n", &p, &z, w[nw].dir, &used) != 3) break;
             used += direct;
-            w[nw].ptr = p, w[nw].size = z, w[nw].direct = direct, nw++, on = 1;
-            hk_log("hiraku-pc: debug: watching the buffers at %08x (%x bytes) into %s", p, z, w[nw - 1].dir);
+            program_image();   // (the program's own address: where it is in this run)
+            w[nw].ptr = moved(p), w[nw].size = z, w[nw].direct = direct, nw++, on = 1;
+            hk_log("hiraku-pc: debug: watching the buffers at %08x (%08lx in this run, %x bytes) into %s", p, (unsigned long)w[nw - 1].ptr, z,
+                   w[nw - 1].dir);
             e = e[used] == ',' ? e + used + 1 : NULL;
         }
     }
@@ -1139,7 +1178,7 @@ static void dbg_records(void) {
         while (k < w[i].nbufs && w[i].bufs[k] != now) k++;
         if (now && k == w[i].nbufs && w[i].nbufs < 8) {
             w[i].bufs[w[i].nbufs++] = now;
-            hk_log("hiraku-pc: debug: %08x holds %p", (unsigned)w[i].ptr, (const void *)now);
+            hk_log("hiraku-pc: debug: %08x holds %p", (unsigned)unmoved(w[i].ptr), (const void *)now);
         }
         for (k = 0; k < w[i].nbufs; k++) {
             const uint8_t *rec = w[i].bufs[k];
@@ -1201,7 +1240,8 @@ static void dbg_dumps(void) {
             // (written to: a section of code too, where the program is one (IIDX EMPRESS unpacked))
             if (!(sec->Characteristics & IMAGE_SCN_MEM_WRITE)) continue;
             char f[MAX_PATH + 48];
-            snprintf(f, sizeof f, "%s\\dump_f%u_%08x.bin", dir, (unsigned)frame, (unsigned)(uintptr_t)(base + sec->VirtualAddress));
+            // (named by the program's own address, at its preferred base: imagebase.h)
+            snprintf(f, sizeof f, "%s\\dump_f%u_%08x.bin", dir, (unsigned)frame, unmoved((uintptr_t)(base + sec->VirtualAddress)));
             FILE *o = fopen(f, "wb");
             if (o) fwrite(base + sec->VirtualAddress, 1, sec->Misc.VirtualSize, o), fclose(o);
         }
@@ -1219,7 +1259,8 @@ static void dbg_dumps(void) {
                 total += mi.RegionSize;
             }
         }
-        hk_log("hiraku-pc: debug: the program's globals dumped at picture %u", (unsigned)frame);
+        hk_log("hiraku-pc: debug: the program's globals dumped at picture %u (named by its own addresses; it is at %p in this run)",
+               (unsigned)frame, (void *)base);
     }
 }
 
@@ -1238,9 +1279,10 @@ static LONG CALLBACK watch_hit(EXCEPTION_POINTERS *e) {
         const CONTEXT *c = e->ContextRecord;
         if (hits[which]++ < 40) {
             const DWORD *sp = (const DWORD *)(uintptr_t)c->Esp;
-            hk_log("hiraku-pc: debug: %08lx run: eax %08lx ebx %08lx ecx %08lx edx %08lx esi %08lx edi %08lx ebp %08lx esp %08lx;"
+            hk_log("hiraku-pc: debug: %08lx (%08lx in this run) run: eax %08lx ebx %08lx ecx %08lx edx %08lx esi %08lx edi %08lx ebp %08lx esp %08lx;"
                    " stack %08lx %08lx %08lx %08lx %08lx %08lx %08lx %08lx",
-                   (unsigned long)dr[which], (unsigned long)c->Eax, (unsigned long)c->Ebx, (unsigned long)c->Ecx, (unsigned long)c->Edx,
+                   (unsigned long)unmoved(dr[which]), (unsigned long)dr[which], (unsigned long)c->Eax, (unsigned long)c->Ebx,
+                   (unsigned long)c->Ecx, (unsigned long)c->Edx,
                    (unsigned long)c->Esi, (unsigned long)c->Edi, (unsigned long)c->Ebp, (unsigned long)c->Esp, (unsigned long)sp[0],
                    (unsigned long)sp[1], (unsigned long)sp[2], (unsigned long)sp[3], (unsigned long)sp[4], (unsigned long)sp[5],
                    (unsigned long)sp[6], (unsigned long)sp[7]);
@@ -1256,8 +1298,9 @@ static LONG CALLBACK watch_hit(EXCEPTION_POINTERS *e) {
     while (k < n && seen[k] != at) k++;
     if (k == n && n < 32) {
         seen[n++] = at;
-        hk_log("hiraku-pc: debug: %08lx written before %08lx (thread %lu, now %08x)", (unsigned long)dr[which], (unsigned long)at,
-               GetCurrentThreadId(), *(const uint32_t *)(uintptr_t)dr[which]);
+        hk_log("hiraku-pc: debug: %08lx written before %08lx (%08lx, %08lx in this run; thread %lu, now %08x)", (unsigned long)unmoved(dr[which]),
+               (unsigned long)unmoved(at), (unsigned long)dr[which], (unsigned long)at, GetCurrentThreadId(),
+               *(const uint32_t *)(uintptr_t)dr[which]);
     }
     e->ContextRecord->Dr6 = 0;
     return EXCEPTION_CONTINUE_EXECUTION;
@@ -1292,7 +1335,8 @@ static void dbg_watch(void) {
         for (const char *p = e; p && *p && naddr < 4;) {
             char *end;
             if (*p == 'x') g_watch_exec |= 1u << naddr, p++;
-            addr[naddr++] = (uint32_t)strtoul(p, &end, 16);
+            program_image();   // (the program's own address: where it is in this run)
+            addr[naddr++] = (uint32_t)moved((uint32_t)strtoul(p, &end, 16));
             if (*end == ',') p = end + 1;
             else {
                 if (*end == ':') from = (uint32_t)strtoul(end + 1, NULL, 10);
@@ -1325,7 +1369,8 @@ static void dbg_watch(void) {
     }
     CloseHandle(snap);
     memcpy(g_watch_addr, addr, sizeof addr), g_watch_n = naddr;
-    hk_log("hiraku-pc: debug: watching %d addresses from %08x (%d threads, and those started later)", naddr, addr[0], threads);
+    hk_log("hiraku-pc: debug: watching %d addresses from %08x (%08x in this run; %d threads, and those started later)", naddr,
+           unmoved(addr[0]), addr[0], threads);
 }
 
 static const volatile float *g_chart_frame;   // IIDX DJ TROOPERS, EMPRESS: their charts' frame (chart_frame)
@@ -1337,7 +1382,7 @@ void hk_present_begin(void) {
     // the words a mod's [[rate]] looks at, for hiraku-pc (link.h, v9)
     struct hk_pc_link *l = hk_link();
     for (uint32_t i = 0; i < HK_PC_WATCHES; i++) {
-        const uint8_t *w = (const uint8_t *)(uintptr_t)l->watch_addr[i];
+        const uint8_t *w = (const uint8_t *)moved(l->watch_addr[i]);   // (the program's own address: where it is now)
         if (w) l->watch_val[i] = present(w, 4) ? *(const uint32_t *)w : 0;
     }
     rate_frame();

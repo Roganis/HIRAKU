@@ -4,7 +4,11 @@
 // game's, wherever Windows put it: "popn.dll+765bc"), ORIGINAL "-" for none (a cheat: written
 // each time). Each goes in whenever its original bytes are there, once if asked, as the 32-bit
 // games' DLL does (runtime/pc/cabinet.c): when the game's program is loaded, then each frame.
+// The game's DLL is wherever Windows (or Wine) put it: an address in it at its preferred base is
+// moved with it, and a patch's bytes at the fields its relocation table names are compared and
+// written as relocated (runtime/pc/imagebase.h), in a module's patch too.
 #include "pc64.h"
+#include "../pc/imagebase.h"
 #include "../pc/link.h"
 
 #include <stdio.h>
@@ -52,7 +56,11 @@ void pc64_patches_apply(void) {
     }
 }
 
-void pc64_patches_install(void) {
+void pc64_patches_install(HMODULE game) {
+    // the game's DLL where it is, once in the log
+    struct hk_image gi;
+    if (hk_image_open(&gi, game, (uintptr_t)game))
+        pc64_log("mods: the game's DLL at %llx (its own base %llx)", (unsigned long long)gi.real, (unsigned long long)gi.preferred);
     const char *list = getenv("HK_PC_PATCHES");
     FILE *f = list && *list ? fopen(list, "rb") : NULL;
     if (!f) return;
@@ -65,7 +73,7 @@ void pc64_patches_install(void) {
     if (!text) { fclose(f); return; }
     text[fread(text, 1, (size_t)(size > 0 ? size : 0), f)] = 0;
     fclose(f);
-    int bad = 0, unread = 0, line_no = -1;
+    int bad = 0, unread = 0, line_no = -1, moves = 0, fixed = 0;
     for (char *line = text, *next; *line && line_no < 255; line = next) {
         next = line + strcspn(line, "\n");
         if (*next) *next++ = 0;
@@ -85,20 +93,27 @@ void pc64_patches_install(void) {
         const char *orig = words[2], *repl = words[3];
         const int once = atoi(words[1]);
         BYTE *at = NULL;
+        struct hk_image im = gi;   // the image the patch is in
         char *plus = strrchr(where, '+');
-        if (plus) {   // MODULE+OFFSET
+        if (plus) {   // MODULE+OFFSET: from where the module is (an address in it at its base: moved)
             *plus = 0;
             HMODULE m = GetModuleHandleA(where);
-            if (m) at = (BYTE *)m + strtoull(plus + 1, NULL, 16);
+            const unsigned long long off = strtoull(plus + 1, NULL, 16);
+            if (m && hk_image_open(&im, m, (uintptr_t)m)) at = off < im.size ? (BYTE *)m + off : (BYTE *)(uintptr_t)hk_image_move(&im, off);
+            else if (m) at = (BYTE *)m + off;
             else if (bad++ < 4) pc64_log("mods: a patch in %s: the game has no such module", where);
-        } else {
-            at = (BYTE *)(uintptr_t)strtoull(where, NULL, 16);
+        } else {   // an address: the game's DLL's at its base, moved with it
+            const unsigned long long a = strtoull(where, NULL, 16);
+            at = (BYTE *)(uintptr_t)hk_image_move(&gi, a);
+            moves += (uintptr_t)at != a;
         }
         struct patch p = {at, NULL, NULL, 0, once, 0, line_no};
         const int n = unhex(repl, &p.replace);
         if (!at) continue;   // (said above)
         if (n <= 0 || (strcmp(orig, "-") && unhex(orig, &p.original) != n)) { unread++; continue; }
         p.n = (size_t)n;
+        if (im.size && (uintptr_t)at >= im.real && (uintptr_t)at - im.real < im.size)   // its bytes as the loader relocated them
+            fixed += hk_image_fix_patch(&im, (uint32_t)((uintptr_t)at - im.real), p.n, p.original, p.replace) > 0;
         struct patch *more = realloc(g_patches, sizeof *g_patches * (size_t)(g_npatches + 1));
         if (!more) break;
         g_patches = more;
@@ -106,6 +121,7 @@ void pc64_patches_install(void) {
     }
     free(text);
     if (g_npatches) pc64_log("mods: %d memory patches", g_npatches);
+    if (moves || fixed) pc64_log("mods: %d of them at an address moved with the game's DLL, %d with relocated bytes", moves, fixed);
     if (unread) pc64_log("mods: %d of the patches' lines couldn't be read: left out", unread);
     pc64_patches_apply();
 }

@@ -153,6 +153,12 @@ add_executable(test_c33video pc/test_c33video.c ${CMAKE_SOURCE_DIR}/runtime/pc/c
 target_include_directories(test_c33video PRIVATE ${CMAKE_SOURCE_DIR}/runtime/pc)
 add_test(NAME pc_c33_video COMMAND test_c33video)
 
+# A mod's addresses and bytes in a game's DLL loaded away from its base (runtime/pc/imagebase.h):
+# made-up PE32 and PE32+ images with a relocation table, "loaded" elsewhere
+add_executable(test_imagebase pc/test_imagebase.c ${CMAKE_SOURCE_DIR}/runtime/pc/imagebase.c)
+target_include_directories(test_imagebase PRIVATE ${CMAKE_SOURCE_DIR}/runtime/pc)
+add_test(NAME pc_imagebase COMMAND test_imagebase)
+
 # The picture's shader engine: FrameCount, frame history, feedback (needs a display and OpenGL
 # 3.3; skipped without them)
 if(TARGET hiraku_host)

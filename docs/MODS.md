@@ -925,6 +925,21 @@ so their memory and files are the game's own process's, not an emulated machine'
   PC games' do (its addresses as `popn22.dll` lays itself out, from 0x10000000), and `[[text]]` is
   looked for in that DLL.
 
+- **Addresses in a DLL game are the DLL's own, at its preferred base** (2026-11-22): the last
+  32-bit PC pop'n's `popn22.dll` (0x10000000) and the 64-bit pop'n's `popn.dll` (0x180000000) don't
+  always load there (Wine 11.22 moves every DLL that has a relocation table when the program
+  starting it is marked DYNAMIC_BASE, as HIRAKU's loaders are: a new place each run; Windows may
+  move one whose place is taken). A `[[patch]]` address, a `[[rate]]`'s words, `[[text]]`'s places
+  and the debug switches' addresses (`HK_PC_WATCH`, `HK_DBG_REC`) are written as a disassembler
+  shows the DLL at its preferred base; the game's side moves each one inside the DLL by where it is
+  now, and a patch's `original` and `replace` bytes at the fields the DLL's relocation table names
+  (an absolute operand: `add [0x10de78dc], ebx`) are compared and written as relocated (`replace`'s
+  only where it still holds an address in the DLL: a nop over the operand stays a nop). `HK_PC_DUMP`
+  names its files by the preferred address too. A 64-bit patch with `module` still gives an offset
+  in that module. `pc.log` says where the DLL is (`mods: popn22.dll at ..., not its own base ...`).
+  The EXE games (pop'n 15-18, the PC IIDX games, the ee'MALL station) are at their own base:
+  nothing changes there (`runtime/pc/imagebase.h`).
+
 ## Per core
 
 | core | patches | media |

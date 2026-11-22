@@ -307,7 +307,7 @@ QIcon glyph(const QString &what, QColor colour) {
             }
             p.drawRoundedRect(QRectF(12.2 * u, 3.5 * u, 1.8 * u, 9 * u), 0.6 * u, 0.6 * u);
             p.restore();
-        } else if (what == "speaker") {
+        } else if (what == "speaker" || what == "speaker-off") {   // (off: no sound, struck through)
             QPainterPath t;
             t.moveTo(2 * u, 6 * u);
             t.lineTo(5 * u, 6 * u);
@@ -320,6 +320,14 @@ QIcon glyph(const QString &what, QColor colour) {
             p.setPen(QPen(ink, 1.4 * u, Qt::SolidLine, Qt::RoundCap));
             p.setBrush(Qt::NoBrush);
             p.drawArc(QRectF(7 * u, 5 * u, 6 * u, 6 * u), -50 * 16, 100 * 16);
+            if (what == "speaker-off") {   // the stroke across, with a gap cut either side of it so it reads on the body
+                p.setCompositionMode(QPainter::CompositionMode_Clear);
+                p.setPen(QPen(Qt::transparent, 3.4 * u, Qt::SolidLine, Qt::RoundCap));
+                p.drawLine(QPointF(2.5 * u, 2.5 * u), QPointF(13.5 * u, 13.5 * u));
+                p.setCompositionMode(QPainter::CompositionMode_SourceOver);
+                p.setPen(QPen(ink, 1.4 * u, Qt::SolidLine, Qt::RoundCap));
+                p.drawLine(QPointF(2.5 * u, 2.5 * u), QPointF(13.5 * u, 13.5 * u));
+            }
         } else {
             p.drawRoundedRect(QRectF(3 * u, 3 * u, 10 * u, 10 * u), 2 * u, 2 * u);
         }

@@ -31,7 +31,8 @@ QColor ready();               // a game's status: ready to play
 QColor notable();             // ... ready, with something to know (first boot)
 QColor badge(const QString &family, QColor fallback);   // a series' badge colour, in Pop
 
-// a plain sign, drawn in one colour: "play", "pause", "stop", "prev", "next", "speaker"
+// a plain sign, drawn in one colour: "play", "pause", "stop", "prev", "next", "speaker",
+// "speaker-off" (struck through)
 QIcon glyph(const QString &what, QColor colour);
 
 // HIRAKU in big letters, each its own colour, on a slanted bar: the toolbar's logo in Pop

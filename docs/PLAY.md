@@ -271,6 +271,9 @@ Details: [PLAY-NOTES.md](PLAY-NOTES.md#the-game-menu-changing-games-from-the-cab
 The **Music** panel (**View > Music**) plays the MIDI files in `music` in the saves' folder;
 HIRAKU comes with none. They play on Keyboardmania's synth card once a Keyboardmania game is added,
 else a SoundFont, else Windows' own synth (**Settings > Audio > Music in the launcher** picks).
+The 16 parts' meters show what is heard: lower as the volume goes down, flat at 0, where the
+speaker by the slider is struck through. A volume under 20 saved before 0.12.0 (when the slider did
+nothing on Windows) is set back to the middle once, and the panel says so.
 
 Details: [PLAY-NOTES.md](PLAY-NOTES.md#music-in-the-launcher)
 

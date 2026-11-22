@@ -188,6 +188,11 @@ add_test(NAME midi_files COMMAND test_smf)
 add_executable(test_part_volume midi/test_part_volume.cpp)
 target_include_directories(test_part_volume PRIVATE ${CMAKE_SOURCE_DIR}/runtime)
 add_test(NAME midi_part_volume COMMAND test_part_volume)
+# The launcher's music volume (launcher/musicvolume.h): a volume saved while the slider did nothing
+# set back once, the parts' meters scaled by the volume
+add_executable(test_music_volume launcher/test_music_volume.cpp)
+target_include_directories(test_music_volume PRIVATE ${CMAKE_SOURCE_DIR}/launcher)
+add_test(NAME launcher_music_volume COMMAND test_music_volume)
 
 # The video recorder (runtime/host/record.h): made-up frames and sound to a file, read back with the
 # same FFmpeg libraries (frames, size, rate, times, pixels, every sound sample, sizes, a queue full)

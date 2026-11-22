@@ -23,9 +23,10 @@
 //   synth KIND TEXT     once, when it is ready (KIND card, font or windows)
 //   playing LENGTH TITLE   a song begins (TITLE: its name in the file, "" when it has none)
 //   at SECONDS          where the song is, twice a second (what is heard: the queued sound counted)
-//   levels HEX16        the 16 parts' levels as heard, a hex digit each (0-f: a note's velocity
-//                       times the part's volume and expression, falling away after it), 20 times a
-//                       second while any is up; then one of all 0
+//   levels HEX16        the 16 parts' levels as the song has them, a hex digit each (0-f: a note's
+//                       velocity times the part's volume and expression, falling away after it), 20
+//                       times a second while any is up; then one of all 0. Not scaled by the player's
+//                       volume, which the launcher knows (launcher/musicvolume.h: its meters scale them)
 //   ended               the song is over
 //   error TEXT          a file it couldn't play (then ended), or no synth at all (then it exits, 3)
 // --play: one file, the same as "play" on stdin, then quits once it ends (for trying it by hand).
@@ -180,11 +181,13 @@ struct WinSynth : Synth {
             MIDIHDR hdr{};
             hdr.lpData = data.data();
             hdr.dwBufferLength = hdr.dwBytesRecorded = (DWORD)n;
-            if (midiOutPrepareHeader(h, &hdr, sizeof hdr) != MMSYSERR_NOERROR) return;
-            if (midiOutLongMsg(h, &hdr, sizeof hdr) == MMSYSERR_NOERROR)
-                for (int k = 0; k < 1000 && !(hdr.dwFlags & MHDR_DONE); k++) Sleep(1);
-            midiOutUnprepareHeader(h, &hdr, sizeof hdr);
-            if (parts.afresh(b, n)) send_parts();   // (the synth's parts are back at 100)
+            if (midiOutPrepareHeader(h, &hdr, sizeof hdr) == MMSYSERR_NOERROR) {
+                if (midiOutLongMsg(h, &hdr, sizeof hdr) == MMSYSERR_NOERROR)
+                    for (int k = 0; k < 1000 && !(hdr.dwFlags & MHDR_DONE); k++) Sleep(1);
+                midiOutUnprepareHeader(h, &hdr, sizeof hdr);
+            }
+            // (the synth's parts are back at 100; sent again whether it went or not, never left at the song's)
+            if (parts.afresh(b, n)) send_parts();
             return;
         }
         if (uint8_t v; parts.volume(b, n, v)) return short_message(b[0], 7, v);

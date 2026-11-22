@@ -58,6 +58,7 @@ private:
     void showStatus(const QString &text, const QString &tip = QString());   // a problem, under the title
     void showTimes();
     void updateButtons();
+    void showSpeaker(bool again = false);   // the speaker by the volume (struck through at 0); again: a new look
     void send(const QString &line);
     QString songName(int index) const;
 
@@ -66,6 +67,7 @@ private:
     QToolButton *m_prev, *m_toggle, *m_next, *m_shuffle, *m_autoplay, *m_folder;
     MusicLevels *m_levels;
     QLabel *m_speaker;
+    bool m_speakerOff = false;           // (as it is drawn now)
     QProcess m_proc;
     QByteArray m_buffer;
     QList<QPointer<QProcess>> m_watched;
@@ -82,6 +84,7 @@ private:
     QString m_pending;                   // ... else the play command waits for it
     QString m_synth;                     // what it said
     QString m_problem;                   // the last thing that went wrong, shown under the title
+    QString m_note;                      // the volume set back at start (musicvolume.h): said until the slider moves
     QProcess m_fetch;                    // tools/musicfetch.py, getting the first songs
     QString m_fetchNote;                 // ... how far, shown under the title
     int m_fetchFound = 0, m_fetchDone = 0;

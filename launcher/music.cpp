@@ -24,6 +24,7 @@
 #include <utility>
 
 #include "config.h"
+#include "musicvolume.h"
 #include "theme.h"
 #include "../third_party/mdi/icons.h"
 
@@ -49,7 +50,9 @@ QToolButton *button(QWidget *parent, const QIcon &icon, const QString &fallback,
 }  // namespace
 
 // The 16 parts' levels as an LCD's segmented meters, as the MU100 shows them: what hiraku-midi
-// says ("levels" lines, 20 a second), risen to at once and falling smoothly, a peak on each
+// says ("levels" lines, 20 a second), risen to at once and falling smoothly, a peak on each. The
+// song's own levels, scaled by the player's volume as the dock shows it (musicvolume::meterScale):
+// what is heard, nothing at 0
 class MusicLevels : public QWidget {
 public:
     MusicLevels() {
@@ -60,7 +63,7 @@ public:
         connect(&m_tick, &QTimer::timeout, this, [this] {
             bool any = false;
             for (int k = 0; k < 16; k++) {
-                m_shown[k] = std::max(m_target[k], m_shown[k] - 0.06f);
+                m_shown[k] = std::max(m_target[k] * m_scale, m_shown[k] - 0.06f);
                 m_peak[k] = std::max(m_shown[k], m_peak[k] - 0.02f);
                 any = any || m_peak[k] > 0;
             }
@@ -73,6 +76,10 @@ public:
         if (!m_tick.isActive()) m_tick.start();
     }
     void clear() { set(QString(16, '0')); }
+    void setScale(float s) {
+        m_scale = s;
+        if (!m_tick.isActive()) m_tick.start();
+    }
 
 protected:
     void paintEvent(QPaintEvent *) override {
@@ -98,6 +105,7 @@ protected:
 private:
     static constexpr int kSegments = 7;
     float m_target[16] = {}, m_shown[16] = {}, m_peak[16] = {};
+    float m_scale = 1;
     QTimer m_tick;
 };
 
@@ -147,8 +155,23 @@ MusicPlayer::MusicPlayer(QWidget *parent) : QWidget(parent) {
     m_volume = new QSlider(Qt::Horizontal);
     m_volume->setRange(0, 100);
     m_volume->setFixedWidth(64);
-    m_volume->setValue(cfg::settings().value("music/volume", 45).toInt());
+    {
+        // a volume saved while the slider did nothing (Windows before 0.12.0): back to the middle,
+        // once per settings file (musicvolume.h)
+        auto &s = cfg::settings();
+        bool ok = false;
+        const int saved = s.value("music/volume").toInt(&ok);
+        const auto start = musicvolume::start(ok ? std::optional<int>(saved) : std::nullopt, s.contains("music/volumeChecked"));
+        if (start.reset) {
+            s.setValue("music/volume", start.volume);
+            m_note = "Volume set back to the middle (saved low before 0.12.0)";
+        }
+        s.setValue("music/volumeChecked", true);
+        m_volume->setValue(start.volume);
+    }
     m_volume->setToolTip("Volume");
+    m_levels->setScale(musicvolume::meterScale(m_volume->value()));
+    showSpeaker(true);
     arrange(false);
 
     connect(m_prev, &QToolButton::clicked, this, &MusicPlayer::previous);
@@ -170,6 +193,9 @@ MusicPlayer::MusicPlayer(QWidget *parent) : QWidget(parent) {
     connect(m_volume, &QSlider::valueChanged, this, [this](int v) {
         cfg::settings().setValue("music/volume", v);
         if (m_ready) send(QString("volume %1").arg(v));
+        m_levels->setScale(musicvolume::meterScale(v));
+        if (!m_note.isEmpty()) m_note.clear(), showSong();   // (said until the slider is moved)
+        showSpeaker();
     });
     // moving in the song: where the handle is let go, or where a click on the groove takes it
     auto seek = [this] {
@@ -453,13 +479,18 @@ void MusicPlayer::showSong() {
     if (m_held && m_playing) line += QString::fromUtf8(" · waits for the game");
     else if (m_playing && !m_ready && m_proc.state() != QProcess::NotRunning) line += QString::fromUtf8(" · starting…");
     else if (!m_synth.isEmpty()) line += QString::fromUtf8(" · ") + m_synth;
+    if (!m_note.isEmpty()) line = m_note;
     if (!m_problem.isEmpty()) line = QString::fromUtf8("⚠ ") + m_problem;
     if (!m_fetchNote.isEmpty() && m_songs.isEmpty()) title = "Getting the first songs", line = m_fetchNote;
     else if (!m_fetchNote.isEmpty()) line = m_fetchNote;
     m_title->setText(m_title->fontMetrics().elidedText(title, Qt::ElideRight, m_title->width()));
     m_title->setToolTip(tip);
     m_status->setText(m_status->fontMetrics().elidedText(line, Qt::ElideRight, m_status->width()));
-    m_status->setToolTip(m_problem.isEmpty() ? line : m_problem);
+    const bool noted = !m_note.isEmpty() && line == m_note;
+    m_status->setToolTip(!m_problem.isEmpty() ? m_problem
+                         : noted ? "The volume was set back to the middle: on Windows the slider did nothing before 0.12.0, "
+                                   "and a low volume saved then would be silent now"
+                                 : line);
     showTimes();
 }
 
@@ -487,13 +518,24 @@ void MusicPlayer::themeChanged() {
     // (Material Design Icons in the system's look too, not the desktop's icon theme)
     m_prev->setIcon(pop ? theme::glyph("prev", ink) : theme::icon(mdi::skip_previous));
     m_next->setIcon(pop ? theme::glyph("next", ink) : theme::icon(mdi::skip_next));
-    m_speaker->setPixmap((pop ? theme::glyph("speaker", ink) : theme::icon(mdi::volume_high)).pixmap(16, 16));
+    showSpeaker(true);
     m_folder->setIcon(theme::icon(mdi::folder_music));
     m_shuffle->setIcon(theme::icon(mdi::shuffle_variant));
     m_toggle->style()->unpolish(m_toggle);
     m_toggle->style()->polish(m_toggle);
     updateButtons();
     m_levels->update();
+}
+
+// the speaker by the slider: struck through at 0 (muted)
+void MusicPlayer::showSpeaker(bool again) {
+    const bool off = m_volume->value() == 0;
+    if (!again && off == m_speakerOff) return;
+    m_speakerOff = off;
+    const QColor ink = QApplication::palette().color(QPalette::WindowText);
+    const QIcon icon = theme::pop() ? theme::glyph(off ? "speaker-off" : "speaker", ink) : theme::icon(off ? mdi::volume_off : mdi::volume_high);
+    m_speaker->setPixmap(icon.pixmap(16, 16));
+    m_speaker->setToolTip(off ? "Muted" : QString());
 }
 
 void MusicPlayer::updateButtons() {

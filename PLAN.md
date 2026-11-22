@@ -1104,6 +1104,8 @@ A mod may carry two ways of one thing (charts in two timings, a picture in two s
 
 The launcher's Mods dialog has **Settings…** for the chosen mod (on or not), a panel with a tick box, a list or a number box a setting, the default marked, Defaults, the actions' keys read-only (`launcher/modsettingsdialog.cpp`, model `launcher/modsettings.h`), reading mod.toml with the loader's own reader (`runtime/host/modsettings.h`) and writing the game's settings file with its other lines kept. `hiraku --show mod-settings --shot FILE` captures it. Tests: `tests/mods/test_mod_choose.cpp` (ctest `mods_choose`), `tests/launcher/test_mod_settings.cpp` (`launcher_mod_settings`).
 
+**Quiet actions** (a mod author's request, 2026-11-22): a mod that shows its own values in its own panel had every key press also open HIRAKU's box over the game. `[[action]] notify = false` (capability `quiet`, offered wherever `actions` is) moves, clamps, keeps and logs the setting as before, repeats and bindings unchanged, and `mods::action()` returns no lines; only a setting a `when` names still says, once it changed, that its files and patches change from the next start. A script asks `hk.has("quiet")` (any capability). Tests in `mods_api`, `mods_choose`, `mods_script`, `launcher_mod_settings`.
+
 **Open**
 - (owner) a mod with two sets of files on a real game and on Windows itself: only the tests have chosen files.
 - (later) choices from the cabinet's game menu (the Mods dialog isn't there).

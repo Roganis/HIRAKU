@@ -203,6 +203,23 @@ int main(int argc, char **argv) {
     check(w == "# note\ntiming=0\naction.flip=key:F9\nretired=4\ncover=1\n", "written(): its line changed, a new one added, the rest kept");
     check(hk::modsettings::written("", {{"a", "1"}}) == std::string(hk::modsettings::kFileHead) + "a=1\n", "written() of a new file: the head line first");
 
+    // ---- a quiet action (notify = false) on a chosen-by setting ------------------------------------
+    // no box for its value, but "from the next start" once it changed: that no mod can show itself
+    put(mods + "/quiet-pick/mod.toml",
+        "name = \"Quiet pick\"\ngame = \"test\"\napi = 1\nrequires = [\"settings\", \"choose\", \"actions\", \"quiet\"]\n"
+        "[[setting]]\nname = \"t\"\nlabel = \"Pick\"\nchoices = [\"A\", \"B\"]\n"
+        "[[action]]\nname = \"next\"\nbinding = \"key:F2\"\nsetting = \"t\"\ndo = \"up\"\nnotify = false\n"
+        "[[patch]]\naddress = 0x100\noriginal = \"00\"\nreplace = \"01\"\nwhen = \"t=B\"\n");
+    e = load({mods + "/quiet-pick"});
+    check(e.empty(), "a quiet action on a chosen-by setting loads" + (e.empty() ? "" : ": " + e));
+    auto quiet = hk::mods::action(0, true);
+    check(setting("quiet-pick/t") == 1 && quiet.size() == 3 && quiet[1] == "Pick: B" && has(quiet[2], "next start"),
+          "a quiet action that changes a chosen-by setting: \"from the next start\" still said");
+    quiet = hk::mods::action(0, true);
+    check(setting("quiet-pick/t") == 1 && quiet.empty(), "... at its end (nothing changed): nothing said");
+    hk::saves::writer().drain();
+    check(has(read(g_root + "/user/data/mod-settings/test/quiet-pick.txt"), "t=1\n"), "... and kept");
+
     // ---- refused, with the file's line ------------------------------------------------------------
     auto mod = [&](const char *name, const std::string &body) {
         put(mods + "/" + name + "/mod.toml", body);

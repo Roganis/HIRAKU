@@ -123,6 +123,7 @@ struct Setting {
 struct Action {
     std::string name, label, binding, setting, what;   // what: "up", "down" or "toggle"
     std::string where;
+    bool notify = true;   // notify = false: no box over the game when it moves its setting (needs "quiet")
 };
 
 namespace detail {
@@ -225,7 +226,7 @@ inline Setting setting(const Table &t, const std::string &where) {
 
 inline Action action(const Table &t, const std::string &where) {
     using namespace detail;
-    known(t, where, {"name", "label", "binding", "setting", "do"});
+    known(t, where, {"name", "label", "binding", "setting", "do", "notify"});
     Action a;
     a.where = where;
     a.name = ident(t, where, "name");
@@ -235,6 +236,11 @@ inline Action action(const Table &t, const std::string &where) {
     if (a.what != "up" && a.what != "down" && a.what != "toggle")
         throw std::runtime_error(where + ": 'do' is \"up\", \"down\" (the setting by its step) or \"toggle\" (from its min to its max and back)");
     a.setting = str(t, where, "setting", true);
+    if (auto it = t.values.find("notify"); it != t.values.end()) {
+        if (t.is_string.at("notify") || (it->second != "true" && it->second != "false"))
+            throw std::runtime_error(where + ": 'notify' is true or false (no quotes)");
+        a.notify = it->second == "true";
+    }
     return a;
 }
 

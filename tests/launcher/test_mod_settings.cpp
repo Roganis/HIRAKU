@@ -38,11 +38,11 @@ int main(int argc, char **argv) {
     QDir(root).removeRecursively();
     const QString mod = root + "/mods/timing", file = root + "/mod-settings/test/timing.txt";
     put(mod + "/mod.toml",
-        "name = \"Timing\"\ngame = \"test\"\napi = 1\nrequires = [\"settings\", \"choose\", \"actions\"]\n"
+        "name = \"Timing\"\ngame = \"test\"\napi = 1\nrequires = [\"settings\", \"choose\", \"actions\", \"quiet\"]\n"
         "[[setting]]\nname = \"timing\"\nlabel = \"Backing track timing\"\nchoices = [\"Arcade\", \"PS2\"]\n"
         "[[setting]]\nname = \"cover\"\nlabel = \"Lane cover\"\nmin = 0\nmax = 1\ndefault = 1\n"
         "[[setting]]\nname = \"shift\"\nlabel = \"Judging (ms)\"\nmin = -100\nmax = 100\ndefault = 0\nstep = 5\n"
-        "[[action]]\nname = \"later\"\nlabel = \"Judging later\"\nbinding = \"key:Keypad 8\"\nsetting = \"shift\"\ndo = \"up\"\n"
+        "[[action]]\nname = \"later\"\nlabel = \"Judging later\"\nbinding = \"key:Keypad 8\"\nsetting = \"shift\"\ndo = \"up\"\nnotify = false\n"   // (a quiet one: read and listed as any)
         "[[action]]\nname = \"flip\"\nbinding = \"joy0:button3\"\nsetting = \"timing\"\ndo = \"toggle\"\n"
         "[[files]]\nfolder = \"alt/ps2\"\nwhen = \"timing=PS2\"\n");
 

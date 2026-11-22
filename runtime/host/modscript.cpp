@@ -306,6 +306,13 @@ int byte_of(lua_State *L, int i) {
     luaL_argcheck(L, v >= 0 && v <= 255, i, "0 to 255");
     return (int)v;
 }
+// hk.has(name): this core and build have that capability (mods::capabilities(): what `requires` may list)
+int l_has(lua_State *L) {
+    const char *name = luaL_checkstring(L, 1);
+    const std::vector<std::string> have = mods::capabilities();
+    lua_pushboolean(L, std::find(have.begin(), have.end(), name) != have.end());
+    return 1;
+}
 int l_rgb(lua_State *L) {
     const int r = byte_of(L, 1), g = byte_of(L, 2), b = byte_of(L, 3), a = lua_isnoneornil(L, 4) ? 255 : byte_of(L, 4);
     lua_pushinteger(L, (lua_Integer)((uint32_t)a << 24 | (uint32_t)r << 16 | (uint32_t)g << 8 | (uint32_t)b));
@@ -511,7 +518,7 @@ int open(lua_State *L) {
     const luaL_Reg hk[] = {{"read8", l_read8},   {"read16", l_read16},   {"read32", l_read32},           {"write8", l_write8},
                            {"write16", l_write16}, {"write32", l_write32}, {"setting", l_setting},     {"set_setting", l_set_setting},
                            {"counter", l_counter}, {"frame", l_frame},     {"time", l_time},           {"log", l_log},
-                           {"notice", l_notice},   {"rgb", l_rgb},         {nullptr, nullptr}};
+                           {"notice", l_notice},   {"rgb", l_rgb},         {"has", l_has},             {nullptr, nullptr}};
     luaL_setfuncs(L, hk, 0);
     lua_pushinteger(L, mods::API);
     lua_setfield(L, -2, "api");

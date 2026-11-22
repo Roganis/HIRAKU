@@ -91,7 +91,8 @@ std::vector<MemoryPatch> find_text(const TextPatch &t, const uint8_t *mem, size_
 // setting), and say what it needs (`requires`) and which program it was made for (`program`).
 constexpr int API = 1;
 // What a mod may need (requires = [...]): the core's and this build's (Core::mod_capabilities), the
-// shell's ("settings"), and what main() offers (offer(): "actions" where the build has a window)
+// shell's ("settings"), and what main() offers (offer(): "actions" where the build has a window;
+// "quiet", actions with notify = false, comes with it)
 std::vector<std::string> capabilities();
 void offer(const std::string &capability);
 // --mod-api's text: the version, the capabilities, the registers, the byte order, the program
@@ -107,7 +108,9 @@ bool hand_over(int argc, char **argv, const std::string &game);
 // The actions' bindings (a bindings file's spelling, host/input.h), each action's number its place
 std::vector<std::string> action_bindings();
 // An action's binding pressed (repeat: a key held down) or let go: what it changed, as lines to show
-// for a moment (the mod's name, the setting and its value); {} when nothing changed
+// for a moment (the mod's name, the setting and its value); {} when nothing changed. A quiet action
+// (notify = false) does the same but returns {}, save for a chosen-by setting it changed (its "from
+// the game's next start", which the mod can't show)
 std::vector<std::string> action(size_t id, bool down, bool repeat = false);
 std::string action_name(size_t id);   // "mod: action", for the log
 // The settings now ("folder/name", value), the counters ("folder/name", count)

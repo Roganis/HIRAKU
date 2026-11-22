@@ -277,6 +277,8 @@ binding = "key:Keypad 8"        # a bindings file's spelling: key:..., joy0:butt
 setting = "shift"
 do = "up"                       # "up" or "down" by its step (held: again and again), or "toggle"
                                 # (from min to max and back)
+# notify = false                # (optional) no box over the game when it moves the setting: for a
+                                # mod that shows its own values (needs "quiet" in requires)
 
 [[hook]]                        # before the instruction at `at` runs:
 at = 0x80012340                 # the program's own address (as a disassembler shows it)
@@ -312,7 +314,10 @@ tables and capabilities; one that changes a rule is API 2, and a HIRAKU says whi
   `action.<name>=key:...`, which the player may change there while the game isn't running (the
   file is written when a setting changes, as saves are). A value outside min..max is taken as the
   nearest end. A changed setting shows for two seconds in a box over the game (its mod, its label
-  and value) and in the log. `--mod-setting NAME=VALUE` (`MOD/NAME=VALUE`, MOD the mod's folder's
+  and value) and in the log. An action with `notify = false` (a mod that draws its values itself;
+  `requires` lists `quiet`) moves, keeps and logs its setting the same way, with no box; only a
+  setting a `when` names still says, once it changed, that its files and patches change from the
+  game's next start, which no mod can show. `notify = true` is the default, and needs nothing. `--mod-setting NAME=VALUE` (`MOD/NAME=VALUE`, MOD the mod's folder's
   name, where two mods have the name) sets one for a run without keeping it: scripts and tests.
 - **An action never takes one of the game's controls**: where the game has the same key or button,
   the game keeps it and the log says so once.
@@ -320,7 +325,8 @@ tables and capabilities; one that changes a rule is API 2, and a HIRAKU says whi
   API 2, this HIRAKU's is 1"); a capability in `requires` that this core or build hasn't ("this
   mod needs hook; this core/build has none (it has: settings, actions)"); a `[[hook]]`,
   `[[setting]]`, `[[action]]`, `[[files]]`, `choices` or a table's `when` in a mod without
-  `api = 1`, or not listed in its `requires` (`hook`, `settings`, `actions`, `choose`); a program other than `program`'s ("this mod is for the program
+  `api = 1`, or not listed in its `requires` (`hook`, `settings`, `actions`, `choose`, and `quiet`
+  for an action's `notify = false`); an action's `notify` other than true or false; a program other than `program`'s ("this mod is for the program
   whose SHA-1 is ...; this run's (...) is ..."); a register the machine hasn't; and a hook at an
   address in none of the program's functions (it would never run).
 - `program` is the SHA-1 of the whole program image the run loads (`dumps/<game>/program.bin` on
@@ -333,15 +339,15 @@ byte order and the program's SHA-1, and exits:
 ```
 $ hiraku-firebeat --game bm3final --mod-api
 mod API 1
-capabilities: hook settings script input choose memory actions draw
+capabilities: hook settings script input choose memory actions quiet draw
 registers: r0 r1 ... r31 cr xer lr ctr
 memory: big-endian
 program: 1b5bd916011107a82f5324558f60c1cbb144c0e3 (.../dumps/bm3final/program.bin)
 ```
 
 Which programs have what: `settings`, `script`, `input` and `choose` every one; `memory` every one whose
-machine is emulated (not the PC games, whose memory is their own process's); `actions` and `draw`
-every one with a window (all of a release's); `hook` only `hiraku-firebeat`, the executor
+machine is emulated (not the PC games, whose memory is their own process's); `actions` (and
+`quiet` with it) and `draw` every one with a window (all of a release's); `hook` only `hiraku-firebeat`, the executor
 (PLAN.md section 27), which builds the program's functions at start and puts a hook's step in
 before its instruction. A Firebeat game's
 own binary (`hiraku-bm3final`, built from source with the game's code compiled in) has no hooks:
@@ -458,6 +464,7 @@ ones; a colour is `0xRRGGBB` (opaque), `0xAARRGGBB`, or `hk.rgb(r, g, b [, a])`,
 | `hk.notice(text)` | a line on the window for three seconds, under the mod's name (and the log) |
 | `hk.rgb(r, g, b [, a])` | a colour |
 | `hk.api` | the mod API's version, 1 |
+| `hk.has(name)` | true where this core and build have that capability (`--mod-api`'s list), else false: what a mod.toml can't ask. Older builds have no `hk.has`: `hk.has and hk.has("quiet")` |
 
 **The sandbox**: Lua 5.4's base library less `dofile`, `loadfile` and `require` (`load` takes text
 only; `collectgarbage` only `"count"`; `print` goes to the log), and `string` (less `dump`),

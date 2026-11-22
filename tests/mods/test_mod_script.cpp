@@ -214,6 +214,8 @@ int main(int argc, char **argv) {
                               "assert(load('return 2 + 2')() == 4, 'load of text')\n"
                               "assert(not load('\\27Lua', 'x', 'b'), 'a binary chunk')\n"
                               "assert(string and table and math and utf8 and hk and hk.api == 1, 'the libraries')\n"
+                              "assert(hk.has('quiet') == true and hk.has('actions') == true and hk.has('memory') == true, 'hk.has: offered')\n"
+                              "assert(hk.has('no-such') == false and not pcall(hk.has), 'hk.has: not offered, no name')\n"
                               "first = math.random(1, 1000000)\n"
                               "function on_frame() hk.write32(0, first) end\n")});
     check(e.empty(), "a script with only base, string, table, math, utf8 and hk: its asserts hold" + (e.empty() ? "" : ": " + e));

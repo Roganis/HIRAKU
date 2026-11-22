@@ -4,9 +4,10 @@
 // name what's missing, the program's SHA-1, [[hook]]s as the core is handed them (a register or RAM
 // in the machine's byte order changed by a setting, scaled; a condition; a counter), [[setting]]s
 // clamped, stepped, kept in the user's folder and read back, [[action]]s moving them, and
-// --mod-setting. Made-up mods and addresses, no game.
+// --mod-setting; quiet actions (notify = false). Made-up mods and addresses, no game.
 //
 //   test_mod_api <scratch folder>      exit 0 when all hold
+#include <algorithm>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -123,6 +124,13 @@ const char *TIMING =
     "[[hook]]          # a set, by a number\n"
     "at = 0x3000\nset = \"r1\"\nvalue = -1\n";
 
+// a mod that shows its own values: its keys move a setting without HIRAKU's box (notify = false)
+const char *QUIET =
+    "name = \"Own panel\"\ngame = \"test\"\napi = 1\nrequires = [\"settings\", \"actions\", \"quiet\"]\n"
+    "[[setting]]\nname = \"level\"\nlabel = \"Level\"\nmin = 0\nmax = 3\ndefault = 1\n"
+    "[[action]]\nname = \"up\"\nbinding = \"key:Keypad 9\"\nsetting = \"level\"\ndo = \"up\"\nnotify = false\n"
+    "[[action]]\nname = \"down\"\nbinding = \"key:Keypad 3\"\nsetting = \"level\"\ndo = \"down\"\nnotify = true\n";
+
 }  // namespace
 
 hk::Core &hk::core() { return g_machine; }
@@ -142,7 +150,13 @@ int main(int argc, char **argv) {
     const std::string timing = mod("timing", TIMING);
     std::string e = load({timing});
     check(has(e, "this mod needs actions; this core/build has none"), "before main() offers actions (a window): refused (" + e + ")");
+    auto offered = [](const char *c) {
+        const auto have = hk::mods::capabilities();
+        return std::find(have.begin(), have.end(), c) != have.end();
+    };
+    check(!offered("quiet"), "no \"quiet\" without \"actions\"");
     hk::mods::offer("actions");
+    check(offered("quiet"), "\"quiet\" offered with \"actions\"");
     e = load({timing});
     check(e.empty(), "a mod with api = 1, requires and all three tables loads" + (e.empty() ? "" : ": " + e));
     check(g_machine.hooked.size() == 5, "its 5 hooks handed to the core (" + std::to_string(g_machine.hooked.size()) + ")");
@@ -214,6 +228,37 @@ int main(int argc, char **argv) {
     e = load({timing}, false);
     check(has(e, "--mod-setting nothing") && has(e, "no mod"), "--mod-setting of a name no mod has: refused (" + e + ")");
 
+    // quiet actions: the setting moved, clamped and kept as any action's, but no lines for the box
+    hk::saves::writer().drain();
+    e = load({mod("quiet", QUIET)});
+    check(e.empty(), "a mod with notify = false and \"quiet\" in requires loads" + (e.empty() ? "" : ": " + e));
+    check(hk::mods::action_bindings().size() == 2 && hk::mods::action_bindings()[0] == "key:Keypad 9", "a quiet action's binding as any");
+    said = hk::mods::action(0, true);
+    check(setting("quiet/level") == 2 && said.empty(), "a quiet action moves its setting (1 -> 2) and returns no lines");
+    for (int k = 0; k < 5; k++) said = hk::mods::action(0, true, true);
+    check(setting("quiet/level") == 3 && said.empty(), "held: repeats, stops at max (3), still no lines");
+    said = hk::mods::action(1, true);
+    check(setting("quiet/level") == 2 && said.size() == 2 && said[0] == "Own panel" && said[1] == "Level: 2",
+          "notify = true written out: the box's lines as before (\"" + (said.size() > 1 ? said[1] : "") + "\")");
+    hk::saves::writer().drain();
+    check(has(read(g_root + "/user/data/mod-settings/test/quiet.txt"), "level=2\n") &&
+              has(read(g_root + "/user/data/mod-settings/test/quiet.txt"), "action.up=key:Keypad 9\n"),
+          "a quiet action's change kept in the settings file, its binding too");
+    hk::mods::action(0, true);
+    hk::saves::writer().drain();
+    check(has(read(g_root + "/user/data/mod-settings/test/quiet.txt"), "level=3\n"), "... each change written");
+    const std::string quiet_head =
+        "name = \"x\"\ngame = \"test\"\napi = 1\nrequires = [\"settings\", \"actions\"]\n"
+        "[[setting]]\nname = \"s\"\nmin = 0\nmax = 1\ndefault = 0\n[[action]]\nname = \"a\"\nbinding = \"key:F1\"\nsetting = \"s\"\ndo = \"toggle\"\n";
+    e = load({mod("quiet-not-listed", quiet_head + "notify = false\n")});
+    check(has(e, "notify = false") && has(e, "doesn't list \"quiet\""), "notify = false without \"quiet\" in requires: refused (" + e + ")");
+    e = load({mod("loud-written", quiet_head + "notify = true\n")});
+    check(e.empty(), "notify = true needs nothing in requires" + (e.empty() ? "" : ": " + e));
+    e = load({mod("quiet-string", quiet_head + "notify = \"false\"\n")});
+    check(has(e, "mod.toml:10") && has(e, "'notify' is true or false"), "notify in quotes: refused, with its line (" + e + ")");
+    e = load({mod("quiet-number", quiet_head + "notify = 0\n")});
+    check(has(e, "mod.toml:10") && has(e, "'notify' is true or false"), "notify = 0: refused (" + e + ")");
+
     // ---- refused, with what's missing named --------------------------------------------------
     e = load({mod("no-api", "name = \"x\"\ngame = \"test\"\n[[hook]]\nat = 0x1000\ncount = \"n\"\n")});
     check(has(e, "[[hook]] is the mod API's") && has(e, "api = 1"), "[[hook]] without api = 1: refused (" + e + ")");
@@ -248,7 +293,7 @@ int main(int argc, char **argv) {
     e = load({mod("for-other", "name = \"x\"\ngame = \"test\"\napi = 1\nprogram = \"0000000000000000000000000000000000000000\"\n")});
     check(has(e, "this run's (" + program + ") is a9993e36"), "program = another one's: refused, both named (" + e + ")");
     const std::string text_api = hk::mods::api_text(g_root, "test");
-    check(has(text_api, "mod API 1\n") && has(text_api, "capabilities: hook settings") && has(text_api, "registers: r0 r1 r2 r3") &&
+    check(has(text_api, "mod API 1\n") && has(text_api, "capabilities: hook settings") && has(text_api, " actions quiet") && has(text_api, "registers: r0 r1 r2 r3") &&
               has(text_api, "big-endian") && has(text_api, "a9993e36"),
           "--mod-api's text");
 

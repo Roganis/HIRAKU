@@ -146,6 +146,7 @@ struct Action {
     std::string mod, name, label, binding;
     Setting *setting = nullptr;
     enum class Do { up, down, toggle } what = Do::up;
+    bool notify = true;   // false (notify = false, "quiet"): no box over the game, but for what the mod can't show
 };
 struct Counter {
     std::string mod, folder, name;
@@ -837,6 +838,7 @@ bool load(const std::vector<std::string> &dirs, const std::string &game, const s
                 } else if (t.kind == "action") {
                     used.try_emplace("actions", "[[action]]");
                     const modsettings::Action d = modsettings::action(t, where);
+                    if (!d.notify) used.try_emplace("quiet", "an [[action]] with notify = false");
                     PendingAction p;
                     p.a.mod = mod.name;
                     p.a.name = d.name;
@@ -845,6 +847,7 @@ bool load(const std::vector<std::string> &dirs, const std::string &game, const s
                     p.a.label = d.label;
                     p.a.binding = d.binding;
                     p.a.what = d.what == "up" ? Action::Do::up : d.what == "down" ? Action::Do::down : Action::Do::toggle;
+                    p.a.notify = d.notify;
                     p.setting = d.setting;
                     p.where = where;
                     actions.push_back(std::move(p));
@@ -1385,7 +1388,10 @@ std::vector<std::string> capabilities() {
     c.push_back("choose");     // ... files and patches chosen by a setting (`when`, [[files]], `choices`)
     if (core().mod_memory()) c.push_back("memory");   // ... and the machine's memory, where it's its own
     for (const std::string &o : g_offered)
-        if (std::find(c.begin(), c.end(), o) == c.end()) c.push_back(o);
+        if (std::find(c.begin(), c.end(), o) == c.end()) {
+            c.push_back(o);
+            if (o == "actions") c.push_back("quiet");   // ... and with them, actions that show no box (notify = false)
+        }
     return c;
 }
 
@@ -1477,7 +1483,13 @@ std::vector<std::string> action(size_t id, bool down, bool repeat) {
                 s.chooses ? (std::string(": the files and patches it chooses change ") + kNextStart).c_str() : "");
     }
     // (said even when it's at its end: the player sees where it is)
-    if (s.chooses) return {s.mod, s.label + ": " + shown(s), std::string("Files and patches: ") + kNextStart};
+    if (s.chooses) {
+        // a quiet action (notify = false) still says this once it changed: no mod can show that the
+        // files and patches change only at the next start (as hk.set_setting's change says it)
+        if (!a.notify && v == was) return {};
+        return {s.mod, s.label + ": " + shown(s), std::string("Files and patches: ") + kNextStart};
+    }
+    if (!a.notify) return {};   // the mod shows its values itself
     return {s.mod, s.label + ": " + shown(s)};
 }
 

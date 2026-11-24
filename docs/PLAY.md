@@ -97,6 +97,7 @@ The keys, with beatmania III as the example (each game's own are in its section)
 | Z S X D C | P1 keys 1–5 |
 | Left / Right (or Left Shift / A) | P1 turntable |
 | Space | P1 foot pedal |
+| R T, Y U, I O | P1 effector: parameter A, parameter B, program (− and +) |
 | 5 | coin (the game wants 2 for one player) |
 | 1 | P1 start |
 | F2 | test mode, 9 service |
@@ -454,6 +455,12 @@ They run like The Final. Each needs its MAME ROM set and two CHDs, the program C
 
 MAME marks 6th and 7th MIX's dongles BAD_DUMP, but the games accept them. 7th MIX's disk takes
 18 GB and can be on another drive.
+
+In all five the foot pedal (Space) turns the effector's effect on and off in a song, and R T,
+Y U and I O turn player 1's effect knobs (parameter A, parameter B, program). The
+cabinet's effects unit is replaced by HIRAKU's own effects: the 19 the game names, each knob doing
+what the unit's manual says it does, but the sound itself is a reconstruction, not the real
+unit's.
 
 Details: [PLAY-NOTES.md](PLAY-NOTES.md#beatmania-iii-append-core-remix-6th-mix-and-7th-mix)
 

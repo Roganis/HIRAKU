@@ -95,7 +95,7 @@ void security_w(uint8_t data) {
 }
 
 // ---- 16550 UARTs ---------------------------------------------------------------
-// Nothing is attached (the ST-224 effector is not emulated, as in MAME), so a
+// Nothing answers (beatmania III's effects unit only listens: spu/st224.h), so a
 // transmitted byte simply leaves after one character time; the transmitter-
 // empty interrupt is modelled because the game enables and services it.
 struct Uart {
@@ -939,6 +939,15 @@ void init(const Config &cfg) {
             }
         };
     }
+    if (cfg.family == "bm3") {
+        // channel 1's transmitter to the effects unit (the ST-224): what it's sent drives HIRAKU's
+        // stand-in on the SPU's effect outputs (spu/st224.h). HK_MIDI_LOG=1: each byte, with the frame
+        static bool log_midi = getenv("HK_MIDI_LOG") != nullptr;
+        g_midi[1].on_tx = [](uint8_t b) {
+            if (log_midi) fprintf(stderr, "midi> f%llu %02x\n", (unsigned long long)g_frame + 1, b);
+            spu::effects_midi(b);
+        };
+    }
     g_ata->irq = [](bool on) { cpu403::set_irq_line(cpu403::irq_ext(4), on); };
 
     auto master = std::make_unique<AtapiDrive>("cd0");
@@ -1209,8 +1218,9 @@ bool set_input(const std::string &name0, int value) try {
     else if (name == "P2 Foot") high8(g_in.in[0], 0x20);
     else if (name == "Turntable") g_in.turntable[port == "TURNTABLE_P2" ? 1 : 0] = (uint16_t)(value & 0x3ff);
     else if (name.rfind("Effect ", 0) == 0) {
-        int k = std::stoi(name.substr(7));
-        if (k < 1 || k > 7) return false;
+        size_t used = 0;
+        int k = std::stoi(name.substr(7), &used);
+        if (k < 1 || k > 7 || used != name.size() - 7) return false;   // ("Effect 1 +": a key of the window's, not the knob)
         g_in.effect[k - 1] = (uint8_t)(value & 0x1f);
     }
     else return false;

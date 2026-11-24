@@ -621,6 +621,7 @@ add_library(hiraku_rt STATIC
   runtime/dev/rf5c400.cpp
   runtime/dev/ymz280b.cpp
   runtime/spu/spu.cpp
+  runtime/spu/st224.cpp
   runtime/firebeat/board.cpp
   runtime/firebeat/spectrum.cpp
   runtime/firebeat/synth.cpp)

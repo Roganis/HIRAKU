@@ -8,6 +8,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <deque>
 #include <fstream>
 #include <memory>
 #include <vector>
@@ -20,6 +21,7 @@
 #include "../dev/rf5c400.h"
 #include "../firebeat/board.h"
 #include "../firebeat/spectrum.h"
+#include "st224.h"
 #include "volchip.h"
 
 extern "C" {
@@ -78,6 +80,43 @@ uint64_t g_samples = 0;                          // RF5C400 samples rendered so 
 std::function<void(const float *, int)> g_sink;
 std::vector<float> g_buf4, g_buf2;
 
+// beatmania III's effects unit (st224.h) on the RF5C400's effect outputs, fed what the game sends it
+// on the extend board's MIDI port: each byte at the sample of the moment it was sent.
+// HK_ST224=0: the effect outputs straight to the speakers, as MAME has them.
+St224 g_fx;
+const bool g_fx_on = [] {
+    const char *e = getenv("HK_ST224");
+    return !(e && e[0] == '0' && !e[1]);
+}();
+std::deque<std::pair<uint64_t, uint8_t>> g_fx_midi;   // (sample, byte), in order
+std::vector<float> g_fx_lr, g_spec;
+
+// the effect outputs of n samples from g_samples through the unit; false when it left them as
+// they were (nothing on, nothing waiting)
+bool run_effects(int n) {
+    if (!g_fx_on || (g_fx_midi.empty() && !g_fx.active())) {
+        g_fx.process(nullptr, n);   // (counts the samples only)
+        return false;
+    }
+    g_fx_lr.resize((size_t)n * 2);
+    for (int i = 0; i < n; i++) g_fx_lr[2 * i] = g_buf4[4 * i + 2], g_fx_lr[2 * i + 1] = g_buf4[4 * i + 3];
+    bool touched = false;
+    for (int i = 0; i < n;) {
+        while (!g_fx_midi.empty() && g_fx_midi.front().first <= g_samples + (uint64_t)i) {
+            g_fx.midi(g_fx_midi.front().second);
+            g_fx_midi.pop_front();
+        }
+        int m = n - i;
+        if (!g_fx_midi.empty()) m = (int)std::min<uint64_t>((uint64_t)m, g_fx_midi.front().first - (g_samples + (uint64_t)i));
+        touched |= g_fx.active();
+        g_fx.process(g_fx_lr.data() + 2 * i, m);   // (inactive: only counts the samples)
+        i += m;
+    }
+    if (!touched) return false;
+    for (int i = 0; i < n; i++) std::swap(g_buf4[4 * i + 2], g_fx_lr[2 * i]), std::swap(g_buf4[4 * i + 3], g_fx_lr[2 * i + 1]);
+    return true;   // (g_fx_lr: the effect outputs as they came)
+}
+
 void render_until(uint64_t cycles) {
     uint64_t target = (uint64_t)((double)cycles * g_rf->sample_rate() / SPU_HZ);
     while (g_samples < target) {
@@ -85,6 +124,7 @@ void render_until(uint64_t cycles) {
         g_buf4.resize((size_t)n * 4);
         g_buf2.resize((size_t)n * 2);
         g_rf->render(g_buf4.data(), n);
+        const bool fx = g_cfg.mix_effect && run_effects(n);
         for (int i = 0; i < n; i++) {
             float l = g_buf4[4 * i], r = g_buf4[4 * i + 1];
             if (g_cfg.mix_effect) { l += g_buf4[4 * i + 2]; r += g_buf4[4 * i + 3]; }
@@ -95,7 +135,19 @@ void render_until(uint64_t cycles) {
             const float gl = g_vol.gain(0), gr = g_vol.gain(1);
             for (int i = 0; i < n; i++) g_buf2[2 * i] *= gl, g_buf2[2 * i + 1] *= gr;
         }
-        if (g_cfg.mix_effect) spectrum::push(g_buf2.data(), n, (int)g_rf->sample_rate());   // beatmania III extend board
+        if (g_cfg.mix_effect) {   // beatmania III extend board
+            if (fx) {   // the spectrum analyser sees the sound before the effects unit, as in MAME
+                g_spec.resize((size_t)n * 2);
+                const float gl = g_vol.gain(0), gr = g_vol.gain(1);
+                for (int i = 0; i < n; i++) {
+                    g_spec[2 * i] = 0.5f * (g_buf4[4 * i] + g_fx_lr[2 * i]) * gl;
+                    g_spec[2 * i + 1] = 0.5f * (g_buf4[4 * i + 1] + g_fx_lr[2 * i + 1]) * gr;
+                }
+                spectrum::push(g_spec.data(), n, (int)g_rf->sample_rate());
+            } else {
+                spectrum::push(g_buf2.data(), n, (int)g_rf->sample_rate());
+            }
+        }
         if (g_sink) g_sink(g_buf2.data(), n);
         g_samples += (uint64_t)n;
     }
@@ -229,6 +281,13 @@ const Stats &stats() {
     return g_stats;
 }
 void set_audio_sink(std::function<void(const float *, int)> sink) { g_sink = std::move(sink); }
+
+void effects_midi(uint8_t b) {
+    if (!g_present || !g_cfg.mix_effect || !g_fx_on) return;
+    // the sample of this moment (as render_until counts them: the 68000's cycles of now)
+    const double cycles = (double)now() * SPU_HZ / (double)CPU_HZ;
+    g_fx_midi.push_back({(uint64_t)(cycles * g_rf->sample_rate() / SPU_HZ), b});
+}
 
 void catch_up() {
     if (!g_present || g_running) return;

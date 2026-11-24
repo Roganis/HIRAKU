@@ -29,6 +29,11 @@ void ppc_write(uint32_t offset, uint8_t v);
 // Bring the 68000 (and the sound it produces) up to the current virtual time.
 void catch_up();
 
+// beatmania III: a byte the game sent its effects unit (the extend board's MIDI port), at this moment
+// of virtual time. The unit (st224.h) works on the RF5C400's effect outputs; HK_ST224=0 leaves them
+// as they are (as MAME).
+void effects_midi(uint8_t b);
+
 // Stereo output at 44.1 kHz, delivered in chunks as virtual time advances.
 void set_audio_sink(std::function<void(const float *lr, int frames)> sink);
 

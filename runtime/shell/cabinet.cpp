@@ -31,6 +31,21 @@ std::vector<Control> make_bm3() {
     c.push_back({"B", "Test mode B", "Cabinet", false, "key:F4"});
     // the floppy drive's slot (--floppy): a press takes the player's disk out, or puts it in
     c.push_back({"Floppy", "Floppy disk (take out / put in)", "Cabinet", false, "key:Insert"});
+    // the effector's knobs (MAME's EFFECT1-7: player 1's PARAM A, PARAM B, PROGRAM, the ELEMENT
+    // switch, player 2's three), which the game reads as turns: each on an axis, or turned by two
+    // keys or buttons (runtime/host/input.cpp). Player 1's knobs on R T, Y U, I O: keys no other
+    // control of the beatmania games (one bindings file) and nothing of the window's takes
+    struct Knob { int n; const char *what, *minus, *plus; };
+    const Knob knobs[7] = {{1, "Player 1 effect: parameter A", "key:R", "key:T"}, {2, "Player 1 effect: parameter B", "key:Y", "key:U"},
+                           {3, "Player 1 effect: program", "key:I", "key:O"},        {4, "Effect element switch", "", ""},
+                           {5, "Player 2 effect: parameter A", "", ""},             {6, "Player 2 effect: parameter B", "", ""},
+                           {7, "Player 2 effect: program", "", ""}};
+    for (const Knob &k : knobs) {
+        const std::string n = "Effect " + std::to_string(k.n), l = k.what;
+        c.push_back({n, l + " (analog axis)", "Effector", true, ""});
+        c.push_back({n + " -", l + " − (as a button)", "Effector", false, k.minus});
+        c.push_back({n + " +", l + " + (as a button)", "Effector", false, k.plus});
+    }
     return c;
 }
 

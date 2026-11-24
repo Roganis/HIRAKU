@@ -316,6 +316,12 @@ public:
         }
         return fb::set_input(name, value);
     }
+    // beatmania III's effector knobs ("Effect 1".."Effect 7"): their count as the game reads it, so
+    // keys turn them on from where an axis or a cabinet board left them
+    int input_position(const std::string &name) const override {
+        if (fb::family() != "bm3" || name.size() != 8 || name.rfind("Effect ", 0) != 0 || name[7] < '1' || name[7] > '7') return -1;
+        return fb::inputs().effect[name[7] - '1'];
+    }
     bool card_read(int player, const std::string &number) override {
         if (!changer_) return false;
         changer_->touch(player, number);

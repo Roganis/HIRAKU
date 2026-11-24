@@ -163,6 +163,12 @@ add_executable(test_volchip spu/test_volchip.cpp)
 target_include_directories(test_volchip PRIVATE ${CMAKE_SOURCE_DIR}/runtime)
 add_test(NAME spu_volume_chip COMMAND test_volchip)
 
+# beatmania III's effects unit stand-in (runtime/spu/st224.h): the game's MIDI read, bypass to the
+# bit, an echo where DELAY puts it, the same in pieces, every program, no clicks
+add_executable(test_st224 spu/test_st224.cpp ${CMAKE_SOURCE_DIR}/runtime/spu/st224.cpp)
+target_include_directories(test_st224 PRIVATE ${CMAKE_SOURCE_DIR}/runtime)
+add_test(NAME spu_st224 COMMAND test_st224)
+
 # The C33 cabinet's small display (runtime/pc/c33video.h: ee'MALL's video board) drawn from a
 # made-up board: tiles, palette rows, the bank, a hidden layer, a layer over another, the blank bit
 add_executable(test_c33video pc/test_c33video.c ${CMAKE_SOURCE_DIR}/runtime/pc/c33video.c)

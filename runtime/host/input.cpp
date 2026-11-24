@@ -129,6 +129,12 @@ void load_text(const std::string &text, const char *origin, bool file = false) {
 // binding's *<scale>), as the last one pressed for that input set it
 std::map<std::string, double> g_press_speed;
 
+// beatmania III's effector knobs turned by keys or buttons: "Effect 1 -" .. "Effect 7 +"
+bool knob_key(const std::string &name) {
+    return name.size() == 10 && name.rfind("Effect ", 0) == 0 && name[7] >= '1' && name[7] <= '7' && name[8] == ' ' &&
+           (name[9] == '+' || name[9] == '-');
+}
+
 void press(const std::string &name, bool down, double speed = 1.0) {
     if (down) g_press_speed[name] = speed;
     int &n = g_held[name];
@@ -139,6 +145,7 @@ void press(const std::string &name, bool down, double speed = 1.0) {
     if (name.find("Turntable") != std::string::npos) return;   // handled in input_update
     if (name.find(" Wheel Up") != std::string::npos || name.find(" Wheel Down") != std::string::npos) return;   // likewise
     if (name.rfind("Volume ", 0) == 0 && (name.find(" Up") != std::string::npos || name.find(" Down") != std::string::npos)) return;
+    if (knob_key(name)) return;   // (beatmania III's effector knobs: likewise)
     menukey::input(name, n > 0 ? 1 : 0);   // (the way out to the game menu watches what the game is given)
     modscript::input(name, n > 0 ? 1 : 0);   // (... and mods' scripts, on_input)
     core().set_input(name, n > 0 ? 1 : 0);
@@ -150,6 +157,7 @@ int analog_max(const std::string &name) {
     if (name.size() > 6 && name.compare(name.size() - 6, 6, " Wheel") == 0) return 255;   // Keyboardmania's wheels
     if (name.find("Effect Knob") != std::string::npos) return 3;                            // GuitarFreaks
     if (name.rfind("Volume ", 0) == 0) return 15;                                            // IIDX's effector sliders
+    if (name.size() == 8 && name.rfind("Effect ", 0) == 0) return 31;                      // beatmania III's effector knobs
     return -1;
 }
 std::map<std::string, double> g_analog;   // each such control's position (keys move it too)
@@ -552,6 +560,32 @@ void input_update(double ms) {
         const int to = std::clamp(now + dir * steps, 0, 15);
         if (to != now) core().set_input(n, to);
         g_analog[n] = to;
+    }
+    // beatmania III's effector knobs on keys or buttons ("Effect N -"/"+"). The game reads each knob
+    // once a frame and takes the change of its 5-bit count (a count a PARAM's unit, PROGRAM's effect,
+    // a notch of the ELEMENT switch). A press turns it one count at once; held, on after 0.3 s:
+    // a PARAM 50 counts a second (its 0-100 in two seconds), PROGRAM and ELEMENT 5 (an effect at a
+    // time). From where the knob is (an axis, a cabinet board); at most 8 counts at a time, so a late
+    // update can't turn it past half its count, which the game would take the other way
+    if (core().family() == "bm3") {
+        static int was[7];
+        static double t[7];
+        for (int k = 0; k < 7; k++) {
+            const std::string n = "Effect " + std::to_string(k + 1);
+            const int dir = (g_held[n + " +"] > 0 ? 1 : 0) - (g_held[n + " -"] > 0 ? 1 : 0);
+            const double every = (k == 2 || k == 3 || k == 6) ? 200.0 : 20.0;   // ms a count, held
+            int steps = 0;
+            if (dir && dir != was[k]) steps = 1, t[k] = -300.0;
+            else if (dir)
+                for (t[k] += ms; t[k] >= every; t[k] -= every) steps++;
+            was[k] = dir;
+            if (!steps) continue;
+            int now = core().input_position(n);
+            if (now < 0) now = g_analog.count(n) ? (int)std::lround(g_analog[n]) : 0;
+            const int to = (now + dir * std::min(steps, 8)) & 31;
+            core().set_input(n, to);
+            g_analog[n] = to;
+        }
     }
     for (int p = 0; p < 2; p++) {
         std::string base = p == 0 ? "P1 Turntable" : "P2 Turntable";

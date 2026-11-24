@@ -186,6 +186,29 @@ the setting changes nothing); the chip isn't known, so its steps are taken as ev
 The Final; the other four's sound boards turn it alike. `HK_SPU_VOLUME=0` leaves the chip out, as
 MAME does.
 
+**The effector** (all five games): the foot pedal (Space) turns an effect on and off in a song,
+and the effector's knobs choose it: per player a PROGRAM knob (19 effects: AUTO PAN, CHORUS,
+DELAY, DIMENSION, DISTORTION, EXCITER, EXTREAM EQ, FLANGER, HIGH PASS, LO FI EFFECT, LOW PASS,
+PHASER, PITCH SHIFTER, RESONANCE, REVERB, RING MODULATOR, STEP CRY, TREMOLO, VOLUME BASS) and two
+PARAM knobs, shown under the lanes; the ELEMENT switch between them picks what goes through it
+(the music, the keys). The controls are `Effect 1` to `Effect 7`: player 1's PARAM A, PARAM B and
+PROGRAM, the ELEMENT switch, player 2's PARAM A, PARAM B and PROGRAM; the game takes them as knobs
+that turn, so a move counts, not where it is. In the launcher's Controls (group Effector) each
+is an analog axis and a − and + key or button; player 1's three are on R and T (parameter A), Y
+and U (parameter B), I and O (program), the rest unbound. A press turns a knob one step (one
+effect, for a program); held, after 0.3 s a parameter runs 50 a second (0 to 100 in two seconds)
+and a program 5 effects a second. The ELEMENT switch goes from the middle (music and keys) to
+music only or keys only in two steps either way. A BIO2's sliders turn them too. On the cabinet the effects were an outboard unit
+(an ST-224) that the game drives over MIDI; MAME has none, so there the effect changes nothing.
+HIRAKU has a stand-in for it on the sound board's effect outputs, where the game sends the sound
+while an effect is on. What each PARAM does follows the unit's manual (DELAY's time up to half a
+second, PITCH SHIFTER an octave either way, EXTREAM EQ taking a band away or keeping only it,
+RESONANCE a filter that opens as the sound gets louder...); the ranges the manual doesn't give and
+the sounds themselves are HIRAKU's: no recording of the unit was at hand, so they are a
+reconstruction, not the unit's sound. Off, the sound is as before to the bit. Test
+mode's SOUND CHECK shows the effect the pedal turned on. `HK_ST224=0` leaves the stand-in out, as
+MAME; `HK_MIDI_LOG=1` logs what the game sends it.
+
 **Codes, typed for you:** the button codes players typed on the cabinet (hidden songs, modes),
 for the games that have a `games/<id>/macros.txt`.
 - **In the window:** Ctrl+1 to Ctrl+9 type the game's first to ninth code where you are now, for
@@ -314,7 +337,7 @@ The first reader of each kind is player 1's, the second player 2's. A card held 
 
 ### Cabinet I/O: beatmania IIDX's BIO2
 
-`--bio2 PATH` (**Settings > Cabinet I/O**) takes a real IIDX cabinet's BIO2 board, as IIDX 25 and 26 drive it (its BI2A firmware), on its USB serial port. Its keys, turntables, start, EFFECT, VEFX, TEST, SERVICE, effector sliders and coin become the game's controls, and the game's lamps light its key lamps, panel, spotlights and neon, with the ticker showing beatmania IIDX's 16-segment display. It's for the beatmania games: IIDX on Twinkle uses everything, and III and the DJ Main games use what their cabinets have. beatmania III has five keys a side, a foot pedal, its service panel's A and B and an effector of seven controls: on the IIDX cabinet a side's keys 6 and 7 are its pedal, EFFECT and VEFX are A and B (the test mode's buttons), and the five sliders are the effector's first five controls (the game's test mode shows them; the effects themselves were an outboard unit, the ST-224, which HIRAKU doesn't have). Its lamps light the cabinet's: the key and start LEDs their own, the four effect LEDs the two panel lamps, a side's three lamps and its C-RAY tubes that side's four spotlights, its neons the neon. In the DJ Main games a turn of the turntable is a turn of the game's own 8-bit position, a count of the board one of the game's. A board with IIDX 27's BI2X firmware speaks Konami's newer ACIO2, which HIRAKU doesn't yet; it says so. The layout is spice2x's, not yet checked on a board: if the turntables turn the wrong way or a control is missing, `HK_ACIO_LOG=1` shows the board's packets.
+`--bio2 PATH` (**Settings > Cabinet I/O**) takes a real IIDX cabinet's BIO2 board, as IIDX 25 and 26 drive it (its BI2A firmware), on its USB serial port. Its keys, turntables, start, EFFECT, VEFX, TEST, SERVICE, effector sliders and coin become the game's controls, and the game's lamps light its key lamps, panel, spotlights and neon, with the ticker showing beatmania IIDX's 16-segment display. It's for the beatmania games: IIDX on Twinkle uses everything, and III and the DJ Main games use what their cabinets have. beatmania III has five keys a side, a foot pedal, its service panel's A and B and an effector of seven controls: on the IIDX cabinet a side's keys 6 and 7 are its pedal, EFFECT and VEFX are A and B (the test mode's buttons), and the five sliders are the effector's first five controls (player 1's PARAM A, PARAM B and PROGRAM, the ELEMENT switch and player 2's PARAM A; the game takes a slider's move as a knob's turn, unchecked on a board; the effects themselves are HIRAKU's stand-in for the cabinet's outboard unit, see "The effector"). Its lamps light the cabinet's: the key and start LEDs their own, the four effect LEDs the two panel lamps, a side's three lamps and its C-RAY tubes that side's four spotlights, its neons the neon. In the DJ Main games a turn of the turntable is a turn of the game's own 8-bit position, a count of the board one of the game's. A board with IIDX 27's BI2X firmware speaks Konami's newer ACIO2, which HIRAKU doesn't yet; it says so. The layout is spice2x's, not yet checked on a board: if the turntables turn the wrong way or a control is missing, `HK_ACIO_LOG=1` shows the board's packets.
 
 ### Cabinet I/O: pop'n music's USB I/O board
 

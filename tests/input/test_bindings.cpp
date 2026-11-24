@@ -10,6 +10,7 @@
 // once a value of its isn't one an 8-bit axis gives (host/axisturn.h).
 //
 //   test_bindings      exit 0 when all hold (0 with a note where SDL has no joysticks to make up)
+#include <algorithm>
 #include <cstdio>
 #include <cstdlib>
 #include <fstream>
@@ -21,6 +22,7 @@
 
 #include "host/axisturn.h"
 #include "host/input.h"
+#include "shell/cabinet.h"
 #include "shell/core.h"
 
 namespace {
@@ -31,7 +33,8 @@ public:
     std::map<std::string, int> inputs;
     int turned[2] = {0, 0};
     bool init(const Options &) override { return true; }
-    const std::string &family() const override { static const std::string f = "popn"; return f; }
+    std::string fam = "popn";
+    const std::string &family() const override { return fam; }
     void set_frame_hook(FrameHook) override {}
     void set_audio_sink(AudioSink) override {}
     void set_on_fatal(std::function<void()>) override {}
@@ -43,6 +46,10 @@ public:
     uint64_t frame_count() const override { return 0; }
     bool set_input(const std::string &name, int value) override { inputs[name] = value; return true; }
     int input_position(const std::string &name) const override {
+        if (name.rfind("Effect ", 0) == 0) {   // (beatmania III's knobs: their count, 0 at the start)
+            auto it = inputs.find(name);
+            return it == inputs.end() ? 0 : it->second;
+        }
         if (name.rfind("Volume ", 0) != 0) return -1;
         auto it = inputs.find(name);
         return it == inputs.end() ? 8 : it->second;   // (as Twinkle's: in the middle at the start)
@@ -111,7 +118,10 @@ int main() {
                            "P1 Turntable = joy0:axis0, joy0:axis2*0.75\n"
                            "P2 Turntable = joy0:axis1*0.3\n"
                            "Volume 2 Up = key:U\n"
-                           "Volume 2 Down = key:J\n";
+                           "Volume 2 Down = key:J\n"
+                           "Effect 1 - = key:O\n"
+                           "Effect 1 + = key:P\n"
+                           "Effect 3 + = key:I\n";
     hk::host::input_init(file);
     auto &in = g_machine.inputs;
 
@@ -145,6 +155,64 @@ int main() {
     check(in["Volume 2"] == 0, "held down long: at the bottom, no further");
     key(SDLK_J, false);
     hk::host::input_update(1);
+
+    // beatmania III's effector knobs on keys: a press one count at once; held, a PARAM 50 counts a
+    // second after 0.3 s (0-100 in about two seconds), PROGRAM 5; the count wraps as the knob's does
+    {
+        g_machine.fam = "bm3";
+        auto frames = [](int n) {
+            for (int f = 0; f < n; f++) hk::host::input_update(1000.0 / 60.0);
+        };
+        key(SDLK_P, true);
+        frames(1);
+        check(in["Effect 1"] == 1 && !in.count("Effect 1 +"), "a PARAM's + key: one count at once (the key itself not given to the game)");
+        frames(17);   // (0.3 s in all)
+        check(in["Effect 1"] <= 2, "held 0.3 s: hardly more yet");
+        int at = in["Effect 1"], turned = 0, most = 0;
+        for (int f = 0; f < 60; f++) {   // a second more: about 50 counts, none more than 8 a frame
+            frames(1);
+            const int d = (in["Effect 1"] - at) & 31;
+            turned += d, most = std::max(most, d), at = in["Effect 1"];
+        }
+        check(turned >= 48 && turned <= 52 && most <= 2, "held: 50 counts a second, a count or two a frame");
+        key(SDLK_P, false);
+        frames(1);
+        const int stop = in["Effect 1"];
+        frames(30);
+        check(in["Effect 1"] == stop, "let go: it stays");
+        key(SDLK_O, true);
+        frames(1);
+        check(in["Effect 1"] == ((stop - 1) & 31), "the - key: a count down");
+        key(SDLK_O, false);
+        frames(1);
+        in["Effect 1"] = 0;   // (an axis or a cabinet board left it at 0)
+        key(SDLK_O, true);
+        frames(1);
+        check(in["Effect 1"] == 31, "down from 0: 31, the count wraps as the knob's");
+        key(SDLK_O, false);
+        frames(1);
+        key(SDLK_I, true);
+        frames(4);
+        key(SDLK_I, false);
+        frames(1);
+        check(in["Effect 3"] == 1, "PROGRAM's key pressed a few frames: one count, one effect");
+        key(SDLK_I, true);
+        frames(18 + 60);
+        key(SDLK_I, false);
+        frames(1);
+        check(in["Effect 3"] >= 1 + 5 && in["Effect 3"] <= 1 + 7, "PROGRAM held 1.3 s: 5 counts a second after the first");
+        // the defaults: player 1's three knobs on R T, Y U, I O, the rest unbound
+        const std::string d = hk::cab::default_bindings("bm3");
+        check(d.find("Effect 1 - = key:R") != std::string::npos && d.find("Effect 1 + = key:T") != std::string::npos &&
+                  d.find("Effect 2 - = key:Y") != std::string::npos && d.find("Effect 2 + = key:U") != std::string::npos &&
+                  d.find("Effect 3 - = key:I") != std::string::npos && d.find("Effect 3 + = key:O") != std::string::npos &&
+                  d.find("Effect 4 + =") == std::string::npos,
+              "beatmania III's defaults: player 1's knobs on R T, Y U, I O");
+        int knobs = 0;
+        for (const auto &c : hk::cab::controls("bm3")) knobs += c.name.rfind("Effect ", 0) == 0;
+        check(knobs == 21, "beatmania III's controls: seven knobs, an axis and two keys each");
+        g_machine.fam = "popn";
+    }
 
     // the rest with a controller SDL makes up (opened as one plugged in after the start)
     SDL_JoystickID pad = plug();

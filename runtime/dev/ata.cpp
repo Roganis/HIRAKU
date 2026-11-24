@@ -133,12 +133,19 @@ bool DiscImage::open(const std::string &path0) {
         nsectors_ = last.start + last.frames;
         return true;
     }
-    // a single data track: tell the sector format from the file itself
-    uint8_t head[16];
-    if (image::pread(f_, head, 16, 0) != 16) return false;
+    // a single data track: tell the sector format from the file itself (a raw sector's own header
+    // says its mode, whatever the sheet says). Mode 1 has its 2048 bytes after the 16-byte header;
+    // a mode 2 sector of a CD-ROM XA disc has an 8-byte subheader first (4 bytes, written twice):
+    // its data at 24. Read as mode 1, every sector came 8 bytes early and the game's checks of its
+    // disc failed (pop'n music Animelo 2 JAA's program disc, 2026-11-24).
+    uint8_t head[24];
+    if (image::pread(f_, head, 24, 0) != 24) return false;
     static const uint8_t sync[12] = {0, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0};
     Track t;
-    if (memcmp(head, sync, 12) == 0 && size % 2352 == 0) { t.size = 2352; t.skip = 16; }
+    if (memcmp(head, sync, 12) == 0 && size % 2352 == 0) {
+        t.size = 2352;
+        t.skip = head[15] == 2 && memcmp(head + 16, head + 20, 4) == 0 ? 24 : 16;
+    }
     else if (size % 2048 == 0) { t.size = 2048; t.skip = 0; }
     else return false;
     nsectors_ = (uint32_t)(size / t.size);

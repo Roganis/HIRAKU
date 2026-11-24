@@ -5,7 +5,7 @@ A Firebeat BIOS boots the program CD, reads one executable from its ISO9660
 root, LZSS-unpacks it to RAM at 0x80000000 and jumps through the last word of
 the unpacked image. This module does the same thing offline:
 
-    disc image (.iso / .bin+.cue, 2048 or 2352-byte MODE1 sectors)
+    disc image (.iso / .bin+.cue: 2048-byte sectors, or raw 2352-byte ones of mode 1 or mode 2 XA)
       -> ISO9660 root -> HIKARU.EXE / FIREBEAT.EXE
       -> optional ParaPara "!:EXE:00" wrapper
       -> u32 LE unpacked size + Konami LZSS
@@ -40,12 +40,15 @@ class Disc:
         self.path = path
         self.f = open(path, "rb")
         size = os.fstat(self.f.fileno()).st_size
-        head = self.f.read(16)
+        head = self.f.read(24)
         if head[:12] == self.SYNC and size % 2352 == 0:
+            # the sector's own header says its mode: mode 1 has its data after the 16-byte header, a
+            # mode 2 sector of a CD-ROM XA disc after an 8-byte subheader too (4 bytes, twice)
             mode = head[15]
-            if mode != 1:
-                raise ValueError(f"{path}: raw sector mode {mode}, expected MODE1")
-            self.raw, self.stride, self.skip = True, 2352, 16
+            if mode not in (1, 2):
+                raise ValueError(f"{path}: raw sector mode {mode}, expected mode 1 or 2")
+            xa = mode == 2 and head[16:20] == head[20:24]
+            self.raw, self.stride, self.skip = True, 2352, 24 if xa else 16
         elif size % 2048 == 0:
             self.raw, self.stride, self.skip = False, 2048, 0
         else:

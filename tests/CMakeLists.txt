@@ -151,6 +151,12 @@ add_executable(test_ata_state ata/test_ata_state.cpp)
 target_link_libraries(test_ata_state PRIVATE hiraku_ata)
 target_include_directories(test_ata_state PRIVATE ${CMAKE_SOURCE_DIR}/runtime)
 add_test(NAME ata_state COMMAND test_ata_state)
+# A disc image's sector format told from the file: 2048-byte sectors, raw mode 1, raw mode 2 (CD-ROM
+# XA: its data 8 bytes further), alone and through a sheet
+add_executable(test_disc_modes ata/test_disc_modes.cpp)
+target_link_libraries(test_disc_modes PRIVATE hiraku_ata)
+target_include_directories(test_disc_modes PRIVATE ${CMAKE_SOURCE_DIR}/runtime)
+add_test(NAME disc_modes COMMAND test_disc_modes)
 
 # The Firebeat SPU board's up/down volume control (runtime/spu/volchip.h): steps, limits, channels
 add_executable(test_volchip spu/test_volchip.cpp)
@@ -636,6 +642,7 @@ if(HK_BASH AND HK_CURL AND NOT WIN32)
 endif()
 # tools/runpath.py: a packaged program's run path keeps only the package's own folders
 find_program(HK_READELF readelf)
+  add_test(NAME tools_fbexe_disc COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/tools/test_fbexe_disc.py)
 if(Python3_Interpreter_FOUND AND HK_READELF AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
   add_test(NAME package_run_paths COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/tools/test_runpath.py ${CMAKE_C_COMPILER})
 endif()

@@ -688,6 +688,11 @@ std::string default_bindings(const std::string &family) {
     return s;
 }
 
+double dial_keys_per_frame(const std::string &family) {
+    // (the owner's choice for the station, 2026-11-24: 3-4 counts, to be tuned by feel)
+    return family == "eemall" ? 4.0 : 15.0;
+}
+
 std::vector<Entry> parse_list_file(const std::string &text) {
     std::vector<Entry> out;
     size_t pos = 0;

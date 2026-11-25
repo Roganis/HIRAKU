@@ -31,6 +31,10 @@ const std::vector<Control> &controls(const std::string &family);
 const std::vector<Lamp> &lamps(const std::string &family);
 // The defaults as a bindings file ("<name> = <bindings>" lines)
 std::string default_bindings(const std::string &family);
+// How far a turntable's or dial's key ("P1 Turntable +"/"-") turns it, in counts a 60 Hz frame:
+// 15 (about MAME's KEYDELTA) for every family but ee'MALL's, whose dial gives a game of its list
+// every 20 counts (4: a short press moves a game or two)
+double dial_keys_per_frame(const std::string &family);
 
 // Bindings/lights file syntax: "<name> = <item>[, <item>...]" lines, '#' comments.
 // Each entry is (name, items) in file order; a later entry for a name replaces an

@@ -21,6 +21,7 @@
 #include "mods.h"
 #include "modscript.h"
 #include "notice.h"
+#include "script.h"
 #include "warp.h"
 
 namespace hk::host {
@@ -274,6 +275,17 @@ void add_joystick(SDL_Joystick *j) {
 
 void input_init(const std::string &file) {
     SDL_InitSubSystem(SDL_INIT_JOYSTICK);
+    // a script's press of a turntable's key the core doesn't take itself: as the key held (input_update)
+    script::set_key_input([](const std::string &name, int value) {
+        const size_t n = name.size();
+        if (knob_key(name)) {   // (and beatmania III's effector knobs' keys, likewise)
+            press(name, value != 0);
+            return true;
+        }
+        if (n < 12 || (name.compare(n - 11, 11, "Turntable +") != 0 && name.compare(n - 11, 11, "Turntable -") != 0)) return false;
+        press(name, value != 0);
+        return true;
+    });
     load_text(cab::default_bindings(core().family()), "defaults");
     if (!file.empty()) {
         std::ifstream in(file);
@@ -587,17 +599,25 @@ void input_update(double ms) {
             g_analog[n] = to;
         }
     }
+    // keys: the family's counts per 60 Hz frame (cab::dial_keys_per_frame: about MAME's KEYDELTA, 15,
+    // for all but ee'MALL's dial), as counts a millisecond
+    static std::string keys_family;
+    static double keys_per_ms = 0.9;
+    if (core().family() != keys_family) {
+        keys_family = core().family();
+        keys_per_ms = cab::dial_keys_per_frame(keys_family) * 60.0 / 1000.0;   // (15: 0.9 exactly, as before)
+    }
     for (int p = 0; p < 2; p++) {
         std::string base = p == 0 ? "P1 Turntable" : "P2 Turntable";
-        // keys: about MAME's KEYDELTA (15 counts per 60 Hz frame); a button's speed times that (a
-        // digital turntable, as a PS2 controller's, sends a button held while it turns)
+        // keys: a button's speed times the family's (a digital turntable, as a PS2 controller's, sends
+        // a button held while it turns)
         static double frac[2] = {0, 0};
         auto speed = [](const std::string &n) {
             auto it = g_press_speed.find(n);
             return g_held[n] > 0 ? (it == g_press_speed.end() ? 1.0 : it->second) : 0.0;
         };
         double v = speed(base + " +") - speed(base + " -");
-        frac[p] += v * ms * 0.9;
+        frac[p] += v * ms * keys_per_ms;
         int whole = (int)frac[p];
         frac[p] -= whole;
         if (whole) core().turntable_add(p, whole);

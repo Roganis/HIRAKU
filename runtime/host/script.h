@@ -18,5 +18,8 @@ void close();
 // Something happened (any thread): lines `on "NAME" +N action` (or `on "NAME"#K +N`, its K-th time)
 // run their action N frames after it. hiraku-pc's: "ea:MODULE.METHOD", each e-AMUSEMENT call
 void event(const std::string &name);
+// Inputs the core doesn't take (a turntable's or dial's keys, "P1 Turntable +"/"-") go here: the
+// window's controls (host/input.cpp) take them as those keys held, at the family's speed
+void set_key_input(std::function<bool(const std::string &name, int value)> take);
 
 }  // namespace hk::script

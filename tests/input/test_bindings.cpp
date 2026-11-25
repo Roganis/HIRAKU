@@ -7,7 +7,8 @@
 // turntable on an axis: a wrap of the axis is a turn (1024 counts), a step of an 8-bit controller's
 // one of the game's (4 counts), each across the wrap too (255 to 0, a single unit of SDL's), either
 // way and at another speed, and what's under a count isn't lost. A 16-bit axis is read as before,
-// once a value of its isn't one an 8-bit axis gives (host/axisturn.h).
+// once a value of its isn't one an 8-bit axis gives (host/axisturn.h). A turntable's key turns it
+// 15 counts a 60 Hz frame, ee'MALL's dial 4 (the family's speed, shell/cabinet.h).
 //
 //   test_bindings      exit 0 when all hold (0 with a note where SDL has no joysticks to make up)
 #include <algorithm>
@@ -119,6 +120,7 @@ int main() {
                            "P2 Turntable = joy0:axis1*0.3\n"
                            "Volume 2 Up = key:U\n"
                            "Volume 2 Down = key:J\n"
+                           "P1 Turntable + = key:R\n"
                            "Effect 1 - = key:O\n"
                            "Effect 1 + = key:P\n"
                            "Effect 3 + = key:I\n";
@@ -373,6 +375,29 @@ int main() {
         for (int v : later) ok &= e.turn((Sint16)v) == before(from, v), from = v;
         ok &= e.turn((Sint16)(-32768 + 257 * 20)) == before(from, -32768 + 257 * 20);   // (16 bits for good)
         check(ok, "16-bit, its first values 8-bit ones: as 8-bit until then, as before after, no jump");
+    }
+
+    // the turntable's key: 15 counts a 60 Hz frame (as before), ee'MALL's dial 4 (cab::dial_keys_per_frame)
+    {
+        auto held = [](int frames) {
+            g_machine.turned[0] = 0;
+            key(SDLK_R, true);
+            for (int f = 0; f < frames; f++) hk::host::input_update(1000.0 / 60.0);
+            key(SDLK_R, false);
+            hk::host::input_update(1000.0 / 60.0);
+            return g_machine.turned[0];
+        };
+        const int popn = held(6);
+        check(popn >= 89 && popn <= 90, "a turntable key held 6 frames: 15 counts a frame");
+        g_machine.fam = "eemall";
+        const int dial = held(6);
+        check(dial >= 23 && dial <= 24, "ee'MALL's dial key held 6 frames: 4 counts a frame");
+        g_machine.fam = "iidx";
+        const int iidx = held(6);
+        check(iidx >= 89 && iidx <= 91, "back to IIDX's: 15 again");
+        check(hk::cab::dial_keys_per_frame("iidx") == 15.0 && hk::cab::dial_keys_per_frame("djbm") == 15.0 &&
+                  hk::cab::dial_keys_per_frame("eemall") == 4.0,
+              "the families' key speeds");
     }
 
     std::remove(file.c_str());

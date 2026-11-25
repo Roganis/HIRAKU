@@ -50,10 +50,13 @@ std::mutex g_events_lock;
 std::vector<std::string> g_events;   // happened since the last frame
 std::map<std::string, int> g_seen;
 
+std::function<bool(const std::string &, int)> g_key_input;   // (set_key_input)
+
 void set_field(const std::string &name, int64_t value) {
     host::menukey::input(name, (int)value);   // (a script holding the way out to the game menu, in a window)
     modscript::input(name, (int)value);       // (mods' scripts see it as a player's, on_input)
-    if (!core().set_input(name, (int)value)) fprintf(stderr, "script: unknown input field '%s'\n", name.c_str());
+    if (!core().set_input(name, (int)value) && !(g_key_input && g_key_input(name, (int)value)))
+        fprintf(stderr, "script: unknown input field '%s'\n", name.c_str());
 }
 
 // A button change made at frame f, applied core().script_button_delay() frames later.
@@ -247,5 +250,7 @@ void close() {
     if (g_log) fclose(g_log);
     g_frames = g_log = nullptr;
 }
+
+void set_key_input(std::function<bool(const std::string &, int)> take) { g_key_input = std::move(take); }
 
 }  // namespace hk::script

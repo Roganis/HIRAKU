@@ -86,6 +86,7 @@ extern char **environ;
 #include "pc/c33.h"
 #include "pc/owed.h"
 #include "pc/process.h"
+#include "pc/readahead.h"
 #include "eamuse/server.h"
 #include "eamuse/lobby.h"
 #include "eamuse/netrelay.h"
@@ -747,6 +748,17 @@ public:
             for (const std::string &f : list_files(contents_ + "/" + dir))
                 if (!copy_in(contents_ + "/" + dir + "/" + f, run + "/" + dir + "/" + f)) return false;
         if (!link_folder(run + "/data", contents_ + "/data", "data")) return false;
+        // On a hard disk: what the song list reads on the game's frame thread as it moves, ahead
+        // (runtime/pc/readahead.h): the songs' banners whole, and each song's preview, in the last
+        // 768 KB of its sound pack (0.47 to 0.70 MB from its end in a sample of 30) and the pack's header
+        if (hk::pc::on_hard_disk(contents_ + "/data")) {
+            std::vector<std::pair<std::string, uint64_t>> ahead = {{contents_ + "/data/tex/system/kc.ifs", 0}};
+            std::error_code ec;
+            for (const auto &d : std::filesystem::directory_iterator(contents_ + "/data/sd", ec))
+                for (const std::string &f : list_files(d.path().string()))
+                    if (f.size() > 4 && f.compare(f.size() - 4, 4, ".ifs") == 0) ahead.push_back({d.path().string() + "/" + f, 768 << 10});
+            hk::pc::read_ahead(std::move(ahead), "the song list's previews");
+        }
         // DXVK's 32-bit Direct3D 9 when it is in bin/pc/dxvk32/ (Wine's own draws the game's pictures
         // after its start-up checks magnified into a corner, as the 64-bit game's: PLAN.md section 32)
         const std::string dxvk = bin_dir() + "/pc/dxvk32/d3d9.dll";

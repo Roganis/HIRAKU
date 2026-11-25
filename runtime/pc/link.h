@@ -16,7 +16,7 @@
 #include <stdint.h>
 
 #define HK_PC_LINK_MAGIC 0x4b50484bu   // "HKPK"
-#define HK_PC_LINK_VERSION 15u
+#define HK_PC_LINK_VERSION 16u
 #define HK_PC_WATCHES 8u                           // [[rate]]'s words of the game's memory
 
 // The pad's bits, as Konami's ezusb.dll gives them to pop'n music (usbPadRead)
@@ -144,9 +144,10 @@ struct hk_pc_link {
     volatile uint32_t fx_volume_milli;
     volatile uint32_t fx_seq;
     // (v13) The frame beatmania IIDX DJ TROOPERS and EMPRESS count their charts' times in (ns; 0: not
-    // such a game, or no chart read yet): 16.6528 ms with the operator's DISPLAY TYPE A, 16.6806 ms
-    // with B (runtime/pc/cabinet.c chart_frame). hiraku-pc runs the game at the rate its music keeps
-    // with the charts then
+    // such a game, or no chart read yet): 16.6528 ms with the monitor check's result 0 (output mode
+    // VGA, or AUTO measuring a 60.05 Hz monitor), 16.6806 ms with 1 (S-VIDEO, 59.94 Hz)
+    // (runtime/pc/cabinet.c chart_frame). hiraku-pc runs the game at the rate its music keeps with the
+    // charts then. (v16) GOLD: its check's result, given as the same two frames
     volatile uint32_t chart_frame_ns;
     // (v14) The CPU time the game's process has used so far, all its threads (ms), and when that
     // was read (ms, the process's tick count); the DLL writes them about once a second, 0 until
@@ -164,7 +165,14 @@ struct hk_pc_link {
     volatile uint32_t type_seq;
     volatile uint8_t type_ring[16];
     volatile uint32_t typing;
+    // (v16) beatmania IIDX GOLD, DJ TROOPERS, EMPRESS: their start-up's monitor check, as the cabinet's
+    // set-up left it (runtime/pc/c02_setup.c): 0 no such check (or not known yet), 1 the operator's
+    // output mode was AUTO and HIRAKU set it (no check), 2 the operator's VGA/DVI, 3 the operator's
+    // S-VIDEO (59.94 Hz), 4 AUTO kept (HK_PC_MONITOR_CHECK=1: the game measures); + HK_PC_CHECK_DVI
+    // when the game names its digital mode DVI (GOLD) rather than VGA
+    volatile uint32_t monitor_check;
 };
+#define HK_PC_CHECK_DVI 0x100u
 
 // A quad the game drew (two triangles in screen space, one texture): the texture (its address, the
 // same from picture to picture), and the place it covers in whole pixels

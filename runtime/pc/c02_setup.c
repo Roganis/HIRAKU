@@ -88,6 +88,37 @@ static int __cdecl load_or_set_up(void) {
         s[g_display_type] = 1;
         if (!why) why = "the display type set (A)";
     }
+    // GOLD (later programs), DJ TROOPERS, EMPRESS: the output mode (cabinet.c hk_monitor_check). AUTO
+    // makes every start-up time 3000 frames (50 s of MONITOR CHECK) to tell a 60.05 Hz monitor from a
+    // 59.94 Hz one; HIRAKU gives the game its frames at the rate its charts want whatever the PC's
+    // display, so the digital mode (VGA; GOLD calls it DVI) is set instead, on a saved cabinet too.
+    // An operator's VGA/DVI or S-VIDEO is kept (hiraku-pc follows the result); HK_PC_MONITOR_CHECK=1
+    // keeps AUTO, the game measuring as it does on its cabinet
+    uint8_t *mode;
+    const int check = hk_monitor_check(&mode, NULL);
+    if (check < 0) hk_log("hiraku-pc: C02: the monitor check found but not its output mode setting: left to the game");
+    else if (check > 0 && (mode < g_settings || mode >= g_settings + g_settings_size))
+        hk_log("hiraku-pc: C02: the output mode setting outside the operator settings: left to the game");
+    else if (check > 0) {
+        const size_t at = (size_t)(mode - g_settings);
+        const char *digital = g_display_type ? "VGA" : "DVI";   // (DJ TROOPERS and EMPRESS have a display type)
+        const uint32_t dvi = g_display_type ? 0 : HK_PC_CHECK_DVI;
+        const char *keep = getenv("HK_PC_MONITOR_CHECK");
+        uint32_t said;
+        if (s[at] == 0 && keep && atoi(keep) == 1) {
+            said = 4;
+            hk_log("hiraku-pc: C02: output mode AUTO kept (HK_PC_MONITOR_CHECK=1): the game times its monitor at start-up");
+        } else if (s[at] == 0) {
+            s[at] = 1;
+            said = 1;
+            hk_log("hiraku-pc: C02: output mode AUTO -> %s: the start-up's 50 s monitor check is not needed, HIRAKU keeps the rate", digital);
+            if (!why) why = "the output mode set";
+        } else {
+            said = s[at] == 1 ? 2 : 3;
+            hk_log("hiraku-pc: C02: output mode %s (the operator's): no monitor check", s[at] == 1 ? digital : "S-VIDEO");
+        }
+        hk_link()->monitor_check = said | dvi;
+    }
     // HIRAKU's arcade in Tokyo where the operator has set no shop (as 9th style's, ezusb_c02.c)
     static const char unset[] = "\x96\xa2\x90\xdd\x92\xe8";   // 未設定, Shift-JIS
     if (!s[SHOP_NAME] || !memcmp(s + SHOP_NAME, unset, sizeof unset)) {

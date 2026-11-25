@@ -1292,9 +1292,12 @@ private:
     // notes and keysounds drift apart through each song (0.1 s in two minutes at 60). Measured from
     // the charts (their bar lines against their tempo, all songs): 9th style to DistorteD count
     // frames of 59.939 Hz, GOLD of 60.034 Hz; DJ TROOPERS and EMPRESS keep milliseconds (0.99975 of
-    // the music's) and count them in frames of the operator's DISPLAY TYPE (A 60.05 Hz, B 59.95 Hz:
-    // the DLL says which, chart_frame_ns), so 60.035 Hz or 59.935. Display sync shows them at 60 on a
-    // 120 Hz display (0.1 % faster or slower), the sound with them
+    // the music's) and count them in frames of their monitor check's result (60.05 Hz, or 59.95 with a
+    // 59.94 Hz monitor: the operator's output mode VGA or S-VIDEO, or with AUTO the start-up's timing
+    // of 3000 frames; the DLL says which, chart_frame_ns), so 60.035 Hz or 59.935; GOLD shortens its
+    // charts by 59.94/60.05 with the result 1 (GOLD_SLOW). HIRAKU's cabinet set-up puts AUTO to the
+    // digital mode (c02_setup.c), so no check runs. Display sync shows them at 60 on a 120 Hz display
+    // (0.1 % faster or slower), the sound with them
     double cab_hz() const { return cab_hz_; }
     double cabinet_rate() const {
         if (family_ != "iidx" || pc64_ || pc32_) return 60.0;
@@ -1302,6 +1305,7 @@ private:
         return n >= 15 ? 60.05 * CHART_MS : n == 14 ? 60.034 : 59.939;
     }
     static constexpr double CHART_MS = 0.99975;   // DJ TROOPERS' and EMPRESS's chart milliseconds, in the music's
+    static constexpr double GOLD_SLOW = 0.998172;  // GOLD's charts with a 59.94 Hz monitor (its own factor)
 
     // The C02 cabinet's controls (the family iidx's names, shell/cabinet.cpp) to its pad (link.h)
     // A key's change, with when it happened (link.h: pad_ev): presses judged by their time (press.c)
@@ -1865,12 +1869,36 @@ private:
         tick_ += per_frame_;
         ++frame_;
         if (frame_hook_) frame_hook_(frame_, rgb, w, h);   // (mods::frame: set_vsync_rate)
-        // DJ TROOPERS' and EMPRESS's display type, as their charts are read: the rate it gives them
+        // GOLD's, DJ TROOPERS' and EMPRESS's monitor check (the operator's output mode, else the
+        // start-up's measurement), as the DLL set it up and as their charts are read: the rate it gives them
+        if (const uint32_t mc = link_->monitor_check; mc != monitor_check_) {
+            monitor_check_ = mc;
+            const char *digital = mc & HK_PC_CHECK_DVI ? "DVI" : "VGA";
+            switch (mc & 0xff) {
+            case 1:
+                printf("hiraku-pc: the game's start-up monitor check is skipped (its output mode set from AUTO to %s): "
+                       "HIRAKU keeps the game at its charts' rate\n", digital);
+                break;
+            case 2: printf("hiraku-pc: the game's output mode is %s (the operator's): no monitor check at start-up\n", digital); break;
+            case 3:
+                printf("hiraku-pc: the game's output mode is S-VIDEO (the operator's): no monitor check, the game counts 59.94 Hz frames\n");
+                break;
+            case 4: printf("hiraku-pc: the game's output mode stays AUTO (HK_PC_MONITOR_CHECK=1): it times its monitor for 50 s at start-up\n"); break;
+            }
+            fflush(stdout);
+        }
         if (const uint32_t ns = link_->chart_frame_ns; ns && ns != chart_frame_ns_) {
             chart_frame_ns_ = ns;
-            const double hz = 1e9 / ns * CHART_MS;
-            printf("hiraku-pc: the charts are counted in frames of %.2f Hz (display type %c): the game runs at %.3f Hz\n",
-                   1e9 / ns, ns < 16666667 ? 'A' : 'B', hz);
+            const bool slow = ns >= 16666667;   // the check's result 1: S-VIDEO, a 59.94 Hz monitor
+            // GOLD counts its charts in frames of 60.034 Hz and, with the result 1, shortens them by
+            // 59.94/60.05; DJ TROOPERS and EMPRESS count them in the frame the result gives
+            const bool gold = game_ == "iidx14";
+            const double hz = gold ? (slow ? 60.034 * GOLD_SLOW : 60.034) : 1e9 / ns * CHART_MS;
+            if (gold)
+                printf("hiraku-pc: the monitor check's result: %s: the game runs at %.3f Hz\n", slow ? "59.94 Hz (S-VIDEO)" : "60.05 Hz", hz);
+            else
+                printf("hiraku-pc: the charts are counted in frames of %.2f Hz (output mode %s): the game runs at %.3f Hz\n", 1e9 / ns,
+                       slow ? "S-VIDEO" : "VGA", hz);
             fflush(stdout);
             if (std::fabs(hz - cab_hz_) > 0.001) {
                 if (hz_ == cab_hz_ && !want_hz_) want_hz_ = hz;
@@ -2352,6 +2380,7 @@ private:
     // ghz() and where it last changed (a [[rate]]): the tick, the time and the sound samples then
     double hz_ = 60.0, want_hz_ = 0, sec0_ = 0, cab_hz_ = 60.0;
     uint32_t chart_frame_ns_ = 0;   // link.h chart_frame_ns, as last taken
+    uint32_t monitor_check_ = 0;    // link.h monitor_check, as last said
     uint64_t t0_ = 0, samp0_ = 0;
     mutable uint32_t watch_copy_[HK_PC_WATCHES] = {};
     bool repeating_ = false;   // show() of the last picture again (frame_repeated)

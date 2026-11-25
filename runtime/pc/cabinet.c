@@ -1374,6 +1374,7 @@ static void dbg_watch(void) {
 }
 
 static const volatile float *g_chart_frame;   // IIDX DJ TROOPERS, EMPRESS: their charts' frame (chart_frame)
+static volatile uint32_t *g_check_result;     // IIDX GOLD: its monitor check's result (chart_frame)
 int hk_chart_scale = 1;   // a mod's charts counted in frames this many times shorter (chart_frame)
 
 // Each Present, Direct3D 9's or 8's (d3d8.c): the mods' patches and the debug watch first, before
@@ -1389,6 +1390,9 @@ void hk_present_begin(void) {
     if (g_chart_frame) {
         const float ms = *g_chart_frame * (float)hk_chart_scale;
         l->chart_frame_ns = ms > 15.0f && ms < 18.0f ? (uint32_t)(ms * 1e6f + 0.5f) : 0;
+    } else if (g_check_result) {   // GOLD: its check's result as the same two frames (VGA/DVI, S-VIDEO)
+        const uint32_t r = *g_check_result;
+        l->chart_frame_ns = r == 0 ? 16652800u : r == 1 ? 16680600u : 0;
     }
     if (g_npatches) apply_patches();
     dbg_records();
@@ -2178,12 +2182,70 @@ static void unlimit_frames(void) {
     if (!n) hk_log("hiraku-pc: no frame wait of the game's own found (its pictures may come late in the frame)");
 }
 
+// The monitor check of beatmania IIDX GOLD (all but its first program), DJ TROOPERS and EMPRESS: with
+// the operator's output mode AUTO, the start-up times 3000 of its frames (timeGetTime: cmp eax,3000;
+// jne; call edi; sub eax,[T0]; cmp eax,50004) and keeps 1 when they took longer (a 59.94 Hz monitor:
+// S-VIDEO), else 0 (VGA, or GOLD's DVI: 60.05 Hz). VGA or S-VIDEO set gives that at once. The result
+// picks the frame DJ TROOPERS and EMPRESS count their charts in (chart_frame, below); GOLD shortens
+// every chart's times by 59.94/60.05 when it is 1. The setting's reader and the result's setter are
+// found where the operator menu leaves (call G; cmp eax,1; jne; push 0; jmp; call G; cmp eax,2;
+// jne; push 1; call SET), each perhaps through a jump: G = movsx eax,byte [S]; ret, SET = mov eax,
+// [esp+4]; mov [R],eax; ret. 1 with both, -1 with the measurement but not them, 0 without a check
+static uint8_t *code_target(uint8_t *call) {
+    uint8_t *to = call + 5 + *(const int32_t *)(call + 1);
+    if (present(to, 5) && to[0] == 0xe9) to += 5 + *(const int32_t *)(to + 1);
+    return present(to, 10) ? to : NULL;
+}
+int hk_monitor_check(uint8_t **setting, volatile uint32_t **result) {
+    static const uint8_t measure[20] = {0x3d, 0xb8, 0x0b, 0, 0, 0x75, 0, 0xff, 0xd7, 0x2b, 0x05, 0, 0, 0, 0, 0x3d, 0x54, 0xc3, 0, 0};
+    static const uint8_t measure_m[20] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0, 0xff, 0xff, 0xff, 0xff, 0, 0, 0, 0, 0xff, 0xff, 0xff, 0xff, 0xff};
+    static const uint8_t leave[25] = {0xe8, 0, 0, 0, 0, 0x83, 0xf8, 0x01, 0x75, 0x04, 0x6a, 0x00, 0xeb, 0,
+                                      0xe8, 0, 0, 0, 0, 0x83, 0xf8, 0x02, 0x75, 0x0a, 0x6a};
+    static int state = 2;   // (2: not looked yet)
+    static uint8_t *s;
+    static volatile uint32_t *r;
+    if (state == 2) {
+        state = 0;
+        char *base = (char *)hk_program();
+        IMAGE_NT_HEADERS *nt = (IMAGE_NT_HEADERS *)(base + ((IMAGE_DOS_HEADER *)base)->e_lfanew);
+        IMAGE_SECTION_HEADER *sec = IMAGE_FIRST_SECTION(nt);
+        for (WORD k = 0; k < nt->FileHeader.NumberOfSections; k++, sec++) {
+            if (!(sec->Characteristics & IMAGE_SCN_MEM_EXECUTE)) continue;
+            uint8_t *code = (uint8_t *)base + sec->VirtualAddress;
+            for (size_t i = 0; i + 32 <= sec->Misc.VirtualSize; i++) {
+                size_t j = 0;
+                if (!state) {
+                    while (j < 20 && (code[i + j] & measure_m[j]) == measure[j]) j++;
+                    if (j == 20) state = -1;
+                }
+                for (j = 0; j < 25 && (code[i + j] == leave[j] || j == 13 || (j >= 1 && j <= 4) || (j >= 15 && j <= 18)); j++) {}
+                if (j < 25 || code[i + 25] != 0x01 || code[i + 26] != 0xe8) continue;
+                uint8_t *g = code_target(code + i), *g2 = code_target(code + i + 14), *set = code_target(code + i + 26);
+                if (!g || g != g2 || !set || g[0] != 0x0f || g[1] != 0xbe || g[2] != 0x05 || g[7] != 0xc3) continue;
+                if (memcmp(set, "\x8b\x44\x24\x04\xa3", 5) || set[9] != 0xc3) continue;
+                s = (uint8_t *)(uintptr_t)*(const uint32_t *)(g + 3);
+                r = (volatile uint32_t *)(uintptr_t)*(const uint32_t *)(set + 5);
+            }
+        }
+        if (state && s && r) state = 1;
+    }
+    if (setting) *setting = state > 0 ? s : NULL;
+    if (result) *result = state > 0 ? r : NULL;
+    return state;
+}
+
 // beatmania IIDX DJ TROOPERS and EMPRESS take their charts' times (ms) into frames as they read them,
-// at a frame the operator's DISPLAY TYPE picks: 16.6528 ms (A, 60.05 Hz) or 16.6806 ms (B, 59.95 Hz),
-// set into one float just before (mov ds:X, 0x418538ea or 0x418571cd). Found by those two stores,
-// read each picture for hiraku-pc (link.h, v13), which runs the game at the rate that keeps its music
-// with the notes (g_chart_frame, above)
+// at a frame the monitor check's result picks (above: the output mode, or the measurement): 16.6528
+// ms (VGA, 60.05 Hz) or 16.6806 ms (S-VIDEO, 59.95 Hz), set into one float just before (mov ds:X,
+// 0x418538ea or 0x418571cd). Found by those two stores, read each picture for hiraku-pc (link.h,
+// v13), which runs the game at the rate that keeps its music with the notes (g_chart_frame, above).
+// GOLD has no such frame: its check's result itself is read (g_check_result) and handed over as the
+// same two frames, hiraku-pc running GOLD at its charts' rate times 59.94/60.05 when it is 1
 static void chart_frame(void) {
+    if (hk_monitor_check(NULL, NULL) > 0) {   // (taken back below for DJ TROOPERS and EMPRESS)
+        hk_monitor_check(NULL, &g_check_result);
+        if (!present((const uint8_t *)g_check_result, 4)) g_check_result = NULL;
+    }
     char *base = (char *)hk_program();
     IMAGE_NT_HEADERS *nt = (IMAGE_NT_HEADERS *)(base + ((IMAGE_DOS_HEADER *)base)->e_lfanew);
     IMAGE_SECTION_HEADER *sec = IMAGE_FIRST_SECTION(nt);
@@ -2197,10 +2259,11 @@ static void chart_frame(void) {
             for (size_t j = i + 10; j + 10 <= size && j < i + 64; j++)
                 if (code[j] == 0xc7 && code[j + 1] == 0x05 && !memcmp(code + j + 2, code + i + 2, 4) && !memcmp(code + j + 6, b, 4)) {
                     g_chart_frame = (const volatile float *)(uintptr_t)*(const uint32_t *)(code + i + 2);
-                    hk_log("hiraku-pc: the charts' frame (the display type's) at %p", (const void *)g_chart_frame);
+                    g_check_result = NULL;
+                    hk_log("hiraku-pc: the charts' frame (the monitor check's) at %p", (const void *)g_chart_frame);
                     // a mod that counts the charts in shorter frames (a high frame rate's: the frame
                     // halved, the game run at twice the rate while a chart plays): by how much, so
-                    // that hiraku-pc still hears the display type and the judging takes the lanes'
+                    // that hiraku-pc still hears the check's frame and the judging takes the lanes'
                     // distances back to the cabinet's frames (press.c)
                     for (int q = 0; q < g_npatches; q++) {
                         const struct patch *p = &g_patches[q];
@@ -2217,6 +2280,7 @@ static void chart_frame(void) {
                 }
         }
     }
+    if (g_check_result) hk_log("hiraku-pc: the monitor check's result at %p (GOLD's: hiraku-pc follows it)", (const void *)g_check_result);
 }
 
 // A fault's place and the way to it, in the log (the game's own handler ends it quietly): the module

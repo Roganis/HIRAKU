@@ -28,6 +28,8 @@
 //                 in (pop'n 15-18; press.c)
 //   HK_PC_JUDGE_OFFSET milliseconds taken off each press's time before it's judged (positive: the
 //                 player presses later, for a display or sound that comes late)
+//   HK_PC_MONITOR_CHECK 1: beatmania IIDX GOLD to EMPRESS keep the output mode AUTO, the start-up
+//                 timing the monitor for 50 s as on the cabinet (else HIRAKU sets VGA/DVI: c02_setup.c)
 //   HK_PAD_SCRIPT for tests: a file of "SECONDS BITS MS" lines, the pad bits held MS milliseconds
 //                 that many seconds after the board started (bit 22: a coin)
 #pragma once
@@ -98,6 +100,10 @@ extern void (*hk_picture_more)(uint32_t *pixels, unsigned *w, unsigned *h);
 extern void (*hk_between)(void);
 // a mod's charts counted in frames this many times shorter (IIDX EMPRESS at a high frame rate), else 1
 extern int hk_chart_scale;
+// beatmania IIDX GOLD (later programs), DJ TROOPERS, EMPRESS: their start-up's monitor check. 1: found,
+// with the operator's output-mode byte (0 AUTO: measured, 1 VGA/DVI, 2 S-VIDEO) and the check's result
+// word (0 60.05 Hz, 1 59.94); -1: the measurement found but not those; 0: no such check
+int hk_monitor_check(uint8_t **setting, volatile uint32_t **result);
 // ... the Direct3D 9 games' (d3d9_smooth.c): their device's hooks; at each Present, the frame's end
 // (its picture read back or not) and, once the game may draw the next, its start; before a Reset
 struct IDirect3DDevice9;

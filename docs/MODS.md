@@ -578,7 +578,7 @@ machine's own time while a word of the game's memory keeps changing (two frames 
 two still: back to the machine's rate). `hz = "display"` follows the display's refresh rate, so
 the game's frames meet the display's one for one (display pacing then shows each for one
 refresh). `hz = "x2"` (to `"x8"`) is a whole multiple of the machine's own rate as it is (a PC
-IIDX's display type: 59.935 or 60.035 Hz), for a game whose mod counts in shorter frames itself
+IIDX's monitor check's: 59.935 or 60.035 Hz), for a game whose mod counts in shorter frames itself
 (beatmania IIDX EMPRESS, below), where only an exact multiple keeps its music with its notes.
 `chart_times = 2` (with `hz = "x2"`) has a PC IIDX of 9th style to GOLD read its chart files with
 every time doubled (below). The CPUs keep their clocks, so each frame has less time; a game that keeps up draws
@@ -739,7 +739,7 @@ end. Not checked: a real 120 or 240 Hz display (the owner's), judging at the rat
 beatmania IIDX 16 EMPRESS on the PC (`games/iidx16/mods/high-frame-rate`, 2026-11-09; the program of
 2009072200): a game that counts everything in frames, its song's position too, so the clock-following
 design above doesn't fit. Its charts are milliseconds converted to frames as a song loads (0x489300,
-with the frame of the operator's DISPLAY TYPE: 16.6528 ms for A, 16.6806 for B, kept in 0x2951764),
+with the frame the monitor check gives: 16.6528 ms for VGA, 16.6806 for S-VIDEO, kept in 0x2951764),
 and the scroll's speed is figured from the same frame (0x4879f0, 0x4892c0). The mod halves both
 frames: the charts are counted in half frames, and the game runs at exactly twice its rate
 (`hz = "x2"`, 120.07 or 119.87 Hz) while the chart's position (0x029393b0) moves, in a song and in the
@@ -755,7 +755,7 @@ attract demo, so its notes move twice as often at the same speed, in step with i
   (runtime/pc/cabinet.c `chart_frame`, `hk_chart_scale`) and, around the game's judging, takes each
   lane's distance back to whole frames (the frame it falls in; runtime/pc/press.c, the same place
   as `--press-time`), so each window is as long in time as on the cabinet. hiraku-pc still hears the
-  display type (the frame given doubled).
+  monitor check's frame (the frame given doubled).
 - Held to the cabinet's pace (`between_ticks`): the engine's animated objects (each drawn at its
   frame, then stepped: 0x405642), the effects' objects (judgements, combo), the keys' bombs, beams
   and presses, the turntables' pictures, the play and demo screens' frame counters and fades, a
@@ -783,7 +783,7 @@ after 20 s. Checked under Wine against the same song at 60 Hz: the same notes, b
 and gauge at the same moment; a song played to its end in 6,766 frames at both rates; an idle song
 ended at the same moment (2,555 and 2,557 frames); the judging windows the same in both
 (0x298d8e0: ±2, ±7, ±15 frames for the keys); the demo the same length and combos. Then played by
-the owner on a 240 Hz display (2026-11-10, display type B: 119.87 Hz): nothing found wrong.
+the owner on a 240 Hz display (2026-11-10, the check's 59.95 Hz frame: 119.87 Hz): nothing found wrong.
 
 beatmania IIDX 9th style to GOLD on the PC (`games/iidx9` to `iidx14/mods/high-frame-rate`, 2026-11-14;
 the programs 9th style JAH, 10th style JAE, RED JAD, HAPPY SKY JAD, DistorteD JAG, GOLD 2007072301)

@@ -5,27 +5,27 @@ description = "While a song plays (and the attract demo), the game runs at twice
 
 # DJ TROOPERS is EMPRESS's engine (games/iidx16/mods/high-frame-rate, docs/MODS.md): it counts
 # everything in frames, the song's position too, and converts its charts (in milliseconds) to frames
-# as a song loads (0x47c750, with the frame of the operator's DISPLAY TYPE: 16.6528 ms for A,
-# 16.6806 for B, kept in 0x029c53f4). Halved, the charts are in half frames and the game, at twice
+# as a song loads (0x47c750, with the frame of the monitor check's result: 16.6528 ms for VGA,
+# 16.6806 for S-VIDEO, kept in 0x029c53f4). Halved, the charts are in half frames and the game, at twice
 # its rate, plays them at the same speed; HIRAKU's DLL sees the halved frame and judges each press
 # with the lanes' distances taken back to whole frames. The places below were found from EMPRESS's
 # by the code around them (the hiraku-high-frame-rate skill's portpatches.py), each read again here.
 
 [[rate]]
-hz = "x2"                      # exactly twice the cabinet's rate (59.935 or 60.035 Hz, as the display type)
+hz = "x2"                      # exactly twice the cabinet's rate (59.935 or 60.035 Hz, as the monitor check's result)
 while_changing = 0x029ad048    # the chart's position (frames from its start): while a chart plays (the
                                # attract demo's HOW TO PLAY lesson too: a chart on autoplay)
 
 # --- the charts in half frames, and what the chart code counts with them
 
 [[patch]]
-# the charts' frame, DISPLAY TYPE A: 16.6528 ms -> 8.3264
+# the charts' frame, output mode VGA (60.05 Hz): 16.6528 ms -> 8.3264
 address = 0x0047c75e
 original = "ea388541"
 replace = "ea380541"
 
 [[patch]]
-# ... DISPLAY TYPE B: 16.6806 ms -> 8.3403
+# ... S-VIDEO (59.95 Hz): 16.6806 ms -> 8.3403
 address = 0x0047c76a
 original = "cd718541"
 replace = "cd710541"

@@ -225,7 +225,8 @@ std::vector<std::string> FolderStore::strays() const {
     for (const auto &e : std::filesystem::directory_iterator(dir_, ec)) {
         const std::string name = e.path().filename().string();
         Named n;
-        if (name != "format" && name != ea::FOLDER_LOCK && !named(name, n)) out.push_back(name);
+        // (folders aside: the ee'MALL shop's files, eemall-shop, are no table's)
+        if (name != "format" && name != ea::FOLDER_LOCK && e.is_regular_file(ec) && !named(name, n)) out.push_back(name);
     }
     std::sort(out.begin(), out.end());
     return out;

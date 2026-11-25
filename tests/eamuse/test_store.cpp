@@ -60,6 +60,8 @@ int main() {
         {tables::userdata_c00, {"E0040100000000AA"}, "userdata-E0040100000000AA"},
         {tables::userdata, {"D11", "E0040100000000AA"}, "userdata-D11-E0040100000000AA"},
         {tables::eemall, {"E0040100000000AA"}, "eemall-E0040100000000AA"},
+        {tables::eemall_owned, {"E0040100000000AA"}, "eemall-owned-E0040100000000AA"},
+        {tables::eemall_station, {}, "eemall-station"},
         {tables::player, {"C20", "E0040100000000AA"}, "player-C20-E0040100000000AA"},
         {tables::pdata, {"F14", "48524B0000000001"}, "pdata-F14-48524B0000000001"},
         {tables::pscore, {"J39", "48524B0000000001"}, "pscore-J39-48524B0000000001"},
@@ -207,6 +209,9 @@ int main() {
                   FolderStore::table_of("userdata-C20-X", k) == &tables::userdata && k == Key{"C20", "X"} &&
                   FolderStore::table_of("userdata-X", k) == &tables::userdata_c00 && FolderStore::table_of("p24-plays", k) == &tables::p24_plays &&
                   FolderStore::table_of("E13-rank-exp", k) == &tables::rank_exp && FolderStore::table_of("net_event-F14", k) == &tables::setting &&
+                  FolderStore::table_of("eemall-station", k) == &tables::eemall_station &&
+                  FolderStore::table_of("eemall-owned-X", k) == &tables::eemall_owned && k == Key{"X"} &&
+                  FolderStore::table_of("eemall-X", k) == &tables::eemall &&
                   !FolderStore::table_of("format", k),
               "table_of: the singleton, then the most specific pattern");
     }

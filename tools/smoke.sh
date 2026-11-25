@@ -73,6 +73,12 @@ done
 # hiraku-server is a package of its own (tools/package-server.sh): it needs the system's SQLite
 if [ -e "$root/bin/hiraku-server$ext" ]; then bad "bin/hiraku-server$ext is in the package (it has its own: tools/package-server.sh)"
 else ok "no hiraku-server in the package (its own: tools/package-server.sh)"; fi
+# the PC games' cabinet DLLs: with pop'n's, the C02's (IIDX 9th style on) and the C33's (the ee'MALL station)
+if [ -e "$root/bin/pc/ezusb.dll" ]; then
+  miss=""
+  for f in c02/ezusb.dll c33/ezusb.dll c33/ezusb_video.dll; do [ -f "$root/bin/pc/$f" ] || miss="$miss $f"; done
+  [ -z "$miss" ] && ok "bin/pc: the C02 and C33 cabinets' DLLs" || bad "bin/pc lacks:$miss"
+fi
 # Windows: FFmpeg is one set of DLLs in bin\ for every program, the Python core's too (tools/ffmpeg-min.sh)
 if [ "$how" = wine ]; then
   ff=$(ls "$root/bin" | grep -ciE '^(avcodec|avformat|avutil)-[0-9]+\.dll$' || true)

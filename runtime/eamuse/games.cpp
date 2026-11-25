@@ -97,6 +97,25 @@ const Setting COURSES_9 = {"courses", "Ranking courses", TEXT, 0, 0, "1 0 1 2 3 
                            "Seven numbers, space-separated: the ranking's number, then the six courses the attract mode's "
                            "internet ranking shows (0-11 each).",
                            &tables::iidx9_courses};
+// ee'MALL 1st Avenue (server_eemall.cpp): its songs locked until bought, and HIRAKU's rates (Konami's
+// prices and rates are lost: these are guesses)
+const Setting EEMALL_STATION = {"station", "Songs locked until bought", NUMBER, -1, 1, "-1",
+                                "1: the pop'n games open the ee'MALL songs bought at the station (and the points); 0: the owner's "
+                                "eemall-CARD lists, as before; -1: 1 once a station has booted against this server or the shop's "
+                                "catalogue (tools/eemall_catalogue.py) is in its folder, else 0.",
+                                BY_GAME};
+const Setting EEMALL_CREDIT = {"credit_points", "Points a pop'n credit earns", NUMBER, 0, 1000, "100",
+                               "ee'MALL points a pop'n credit played with a card earns, handed to the station at its next visit "
+                               "(HIRAKU's guess, a song for three credits: the owner's choice, 2026-11-24; 30 was too slow).",
+                               BY_GAME};
+const Setting EEMALL_PRICE = {"song_price", "A song's price", NUMBER, 1, 99999, "300",
+                              "A song's price in points at the station's RECORDS, written into the shop by "
+                              "tools/eemall_catalogue.py (HIRAKU's guess).",
+                              BY_GAME};
+const Setting EEMALL_GIFT = {"restaurant_gift", "The RESTAURANT's free dish", NUMBER, 0, 2, "1",
+                             "The RESTAURANT's free dish (500 points): 1 once a day per card, 0 never, 2 on every visit "
+                             "(restrant.get's sub_code; Konami's rule is lost).",
+                             BY_GAME};
 }  // namespace
 
 const std::vector<Setting> &server_settings() {
@@ -205,7 +224,8 @@ const std::vector<Game> &games() {
         {"", "GuitarFreaks V2", "F03", Family::gfdm_v, {&S::answer_gfdmv, later, shared, popn9}, {}, &GFDMV_READERS},
         {"gfdm573-gf", "GuitarFreaks (System 573)", "?39", Family::gfdm_573, {&S::answer_gfdm, shared}, {}, &GFDM573_READERS},
         {"gfdm573-dm", "DrumMania (System 573)", "?40", Family::gfdm_573, {&S::answer_gfdm, shared}, {}, &GFDM573_READERS},
-        {"eemall", "ee'MALL 1st Avenue", "C33", Family::eemall, {&S::answer_eemall, shared, popn9}, {}},
+        {"eemall", "ee'MALL 1st Avenue", "C33", Family::eemall, {&S::answer_eemall, shared, popn9},
+         {EEMALL_STATION, EEMALL_CREDIT, EEMALL_PRICE, EEMALL_GIFT}},
         // last: a model no row above names, answered as a later pop'n (its phase by the call's model: phase-Z99)
         {"", "a game the table doesn't name", "", Family::unknown, {later, shared, popn9}, {phase(-1)}},
     };

@@ -333,6 +333,8 @@ if(Python3_Interpreter_FOUND AND NOT WIN32)
   # ... several servers on one data folder, and the bounds on what a server keeps
   add_test(NAME eamuse_shared_folder COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/eamuse/test_shared_folder.py $<TARGET_FILE:hiraku-eamuse>)
   add_test(NAME eamuse_iidx_records COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/eamuse/test_iidxrecords.py $<TARGET_FILE:hiraku-eamuse>)
+  # ... the ee'MALL station's shop: tools/eemall_catalogue.py on a made-up table, the folder served, a purchase
+  add_test(NAME eamuse_eemall_shop COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/eamuse/test_eemall_shop.py $<TARGET_FILE:hiraku-eamuse>)
   # ... every game family's calls against the answers recorded for them (eamuse/transcripts/), and the
   # data folder's files as they leave it: what work on the server must not change
   add_test(NAME eamuse_transcripts COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/eamuse/test_transcripts.py $<TARGET_FILE:hiraku-eamuse>)
@@ -644,6 +646,8 @@ if(Python3_Interpreter_FOUND AND Python3_VERSION VERSION_GREATER_EQUAL 3.11)
   add_test(NAME ingest_python_support COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/tools/test_ingest_python.py)
   # ... and one given by its MAME set or CHD: added from its .py2/.py1 beside them, or told what it needs
   add_test(NAME ingest_python_set COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/tools/test_ingest_python_set.py)
+  # ... and the ee'MALL station's drive (C33/JAx, its data the C33 folder), as its backup holds it
+  add_test(NAME ingest_eemall COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/tools/test_ingest_eemall.py)
 endif()
 # tools/ingest.py --place: a game's folder moved into dumps/ or read where it is
 if(Python3_Interpreter_FOUND AND Python3_VERSION VERSION_GREATER_EQUAL 3.11)

@@ -36,6 +36,7 @@ import re
 import shutil
 import struct
 import subprocess
+import time
 import zlib
 import sys
 import tomllib
@@ -1513,7 +1514,11 @@ def main() -> int:
     if pcs:
         rc = 0
         for f, (game, program, data) in pcs:
-            if args.place == "move":   # the folder holding prog/ and data/, into dumps/<game>/
+            if args.place == "move" and game["pc"].get("data_folder") == "..":   # the program's parent, into dumps/<game>/
+                to = os.path.join(args.out, game["id"], os.path.basename(os.path.normpath(data)))
+                print(f"folder   {os.path.basename(os.path.normpath(data))} ({move_file(data, to)} into {game['id']}/)")
+                program, data = os.path.join(to, os.path.relpath(program, data)), to
+            elif args.place == "move":   # the folder holding prog/ and data/, into dumps/<game>/
                 top = os.path.dirname(os.path.normpath(data))
                 to = os.path.join(args.out, game["id"], os.path.basename(top))
                 print(f"folder   {os.path.basename(top)} ({move_file(top, to)} into {game['id']}/)")
@@ -1615,6 +1620,8 @@ def revisions_folder(folder: str) -> tuple[dict, str, str] | None:
     if not named:
         print(f"note     {program}: not a revision's folder by its name (three letters, as JAD); "
               "a program changed since the cabinet may not start")
+    if game["pc"].get("data_folder") == "..":   # (ee'MALL: the drive's C33 folder holds JAx and its data)
+        return game, os.path.abspath(program), os.path.abspath(os.path.dirname(program))
     if not datas:
         return None
     # the data folder beside a program folder, else the only one
@@ -1803,9 +1810,22 @@ def ingest_rest(args) -> int:
     return ingest_auto(args, args.inputs)
 
 
+def eemall_shop(started: float, rc: int) -> int:
+    """The ee'MALL station's shop (tools/eemall_catalogue.py) made again when the station, pop'n 12
+    or pop'n 13 was added by this run: its songs are theirs. Its failure is said, never the add's"""
+    added = [g for g in ("eemall", "popn12", "popn13")
+             if os.path.exists(p := os.path.join(ROOT, "dumps", g, "machine.txt")) and os.path.getmtime(p) >= started]
+    if added:
+        done = subprocess.run([sys.executable, os.path.join(ROOT, "tools", "eemall_catalogue.py"), "--quiet"])
+        print(f"eemall   the ee'MALL shop {'brought up to date' if done.returncode == 0 else 'NOT made (tools/eemall_catalogue.py said why)'}"
+              f" ({', '.join(added)} added)")
+    return rc
+
+
 if __name__ == "__main__":
     try:
-        sys.exit(main())
+        _started = time.time() - 1
+        sys.exit(eemall_shop(_started, main()))
     except Exception as e:   # (not SystemExit) a fault half way: say so as a game that failed does, files back
         import traceback
         traceback.print_exc()

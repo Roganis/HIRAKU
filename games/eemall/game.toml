@@ -11,5 +11,6 @@ layout = "revisions"
 board = "c33"           # the C33 cabinet's I/O board, its video board and the touch panel on COM1
 drive = 'D:\C33'        # where the station is: its program in JAx, Resource beside it
 data_as = 'D:\C33'      # the program names its files by whole paths (D:\C33\Resource\...)
+data_folder = ".."      # (tools/ingest.py) its data is the program folder's parent, the drive's C33 (no data/ of its own)
 save_drive = 'E:\'      # its two backup drives (backupram-data.bin and book.bin on each, the downloads on E:)
 save_drive2 = 'F:\'

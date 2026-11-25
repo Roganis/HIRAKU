@@ -888,4 +888,32 @@ start and run.
 - EMPRESS: a new pass accepts terms (turntable left to はい, then a key).
 - Not yet: KONAMI ID, rivals, most rankings; lamps and ticker unchecked. Under Wine only so far.
 
+**ee'MALL 1st Avenue** (Konami's e-AMUSEMENT shop station, the C33 cabinet): drop the station's
+drive D (the folder holding `C33`, or `C33` itself). An extracted C: drive isn't needed. Its backup
+drives E: and F: are made in its save folder.
+
+- **Controls:** A (Z), B (X), the dial (Left / Right, or a pad's axis), Coin (5), Card (Insert),
+  Test (F2), Service (9). The touch panel is drawn right of the main picture: click it with the
+  mouse. While the station shows its touch keyboard, the PC keyboard types on it (Backspace
+  deletes, Enter ends).
+- **A visit:** the card is pop'n music 9's card of the same number (Settings > e-AMUSEMENT, card 0):
+  play pop'n 9 with it first, as the station turns away a card never played. Register a KONAMI ID
+  and its 4-digit password at the station, or type the password. Coins become tickets. AMUSEMENT
+  has four mini-games; points are kept on HIRAKU's server. EXIT on the map ends the visit.
+- **The shop:** Konami's shop server and its catalogue are lost; HIRAKU makes its own from your
+  games when the station, pop'n music 12 or 13 is added (`tools/eemall_catalogue.py`; run it again
+  by hand after changing a price). RECORDS sells the ee'MALL songs of your pop'n 12 and 13 (their
+  titles, the game's name as the artist, and each song's own 10-second preview from your pop'n
+  disk while the cursor rests on it); a song bought opens in their ee'MALL folder (CHALLENGE
+  mode) for that card, which needs a KONAMI ID. With a station among your games these songs are
+  locked until bought, as in the arcade. Points come from the mini-games and from pop'n credits
+  played with the card (100 a credit, collected at your next visit); a song costs 300. Both are
+  HIRAKU's guesses: `hiraku-eamuse --set eemall song_price N` / `credit_points N` on the server's
+  folder. RECORDS' SELL buys a song back for half its price; it then leaves the games again.
+  POLICE BOX (lost and found) opens with the shop (nothing is ever handed in: it gives the ticket back). Konami's goods and the DJ mini-game's
+  songs are lost: GOODS stays closed on the map and AMUSEMENT doesn't offer the DJ game, as on a
+  station without shop data. Without your pop'n 12 or 13 there is no shop (the station
+  then keeps RECORDS and POLICE BOX closed too).
+- Under Wine only so far: never run on real Windows or the cabinet's hardware.
+
 Details: [PLAY-NOTES.md](PLAY-NOTES.md#bemani-pc-popn-music-1518-beatmania-iidx-9th-style-to-empress)

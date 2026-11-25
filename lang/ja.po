@@ -1022,6 +1022,12 @@ msgctxt "Game"
 msgid "C02 with data and its programs, a folder each by revision (JAA, JAB...: the last is run)"
 msgstr "data とプログラムを含む C02（リビジョンごとのフォルダー JAA、JAB…：最後のものが起動されます）"
 
+#. (the ee'MALL station's drive D:) C33, JAE, Resource, boot, C33.csv: folder and file names
+#: launcher/games.cpp
+msgctxt "Game"
+msgid "C33 with Resource, boot, C33.csv and its program's folder (JAE), or the folder holding it (D, beside an extracted C: drive, which isn't needed). Its E: and F: drives (its backups) are made in its save folder"
+msgstr "Resource、boot、C33.csv とプログラムのフォルダー（JAE）を含む C33、またはそれを含むフォルダー（D。並んで展開された C: ドライブは不要です）。E: と F: ドライブ（バックアップ）はセーブフォルダーに作られます"
+
 #: launcher/games.cpp
 msgctxt "Game"
 msgid "prog (its programs, by date) and data"

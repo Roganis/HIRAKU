@@ -127,7 +127,7 @@ std::string Server::answer(const Call &c, const Request &r, const std::string &h
 }
 
 // pop'n music 9's own modules (C00), which the other games fall back to
-std::string Server::answer_popn9(const Game &, const Call &, const Request &r, const std::string &host) {
+std::string Server::answer_popn9(const Game &g, const Call &, const Request &r, const std::string &host) {
     const std::string &m = r.module, &f = r.method;
     if (m == "userdata" && f == "read") {   // 109: not registered (0x184ca0)
         const std::string card = attr(r.attrs, "card");
@@ -139,6 +139,7 @@ std::string Server::answer_popn9(const Game &, const Call &, const Request &r, c
         const std::string card = attr(r.attrs, "card");
         if (!safe_name(card) || r.inner.size() > USERDATA_MAX) return "<userdata status=\"1\"/>";   // (a card's record is a few KiB)
         store_->put(tables::userdata_c00, {card}, "<userdata status=\"0\" time=\"" + esc(attr(r.attrs, "time")) + "\">" + r.inner + "</userdata>");
+        if (g.family == Family::popn9) eemall_played(card);   // a credit's end: its ee'MALL points (server_eemall.cpp; station mode only)
         return "<userdata status=\"0\"/>";
     }
     if (m == "rank") {
@@ -215,6 +216,10 @@ std::string Server::answer_shared(const Game &, const Call &, const Request &r, 
         };
         if (f == "ctou") {   // card to user: 112 = none
             const Record *u = owner(card);
+            // pop'n 13 names the card by its player's ref id (cardmng): that ref id's card
+            if (!u && !card.empty())
+                for (const Record &c : from_lines(store_->get(tables::cards, {})))
+                    if (attr(c, "refid") == card && (u = owner(attr(c, "cardid")))) break;
             if (!u) return "<userid status=\"112\"/>";
             return "<userid status=\"0\" user=\"" + esc(attr(*u, "user")) + "\" active=\"" + esc(attr(*u, "active")) + "\"/>";
         }
@@ -277,7 +282,7 @@ std::string Server::handle(const std::string &req) try {
         const size_t sp = req.find(' ', 4);
         const std::string path = req.substr(4, sp == std::string::npos ? std::string::npos : sp - 4);
         if (std::string shop; eemall_shop_file(path, shop)) {   // the ee'MALL station's shop server (server_eemall.cpp)
-            if (log) log("GET " + path + " -> the shop's list, " + std::to_string(shop.size()) + " bytes");
+            if (log) log("GET " + path + " -> the shop's file, " + std::to_string(shop.size()) + " bytes");
             return "HTTP/1.0 200 OK\r\nContent-Type: text/xml\r\nContent-Length: " + std::to_string(shop.size()) + "\r\n\r\n" + shop;
         }
         const std::string text = message();

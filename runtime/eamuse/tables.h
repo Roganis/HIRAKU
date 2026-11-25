@@ -22,6 +22,11 @@ inline constexpr Table userdata_c00{"userdata_c00", "userdata-{}"};
 inline constexpr Table userdata{"userdata", "userdata-{}-{}"};
 // pop'n 9-14's ee'MALL items, by card: one number a line
 inline constexpr Table eemall{"eemall", "eemall-{}"};
+// ee'MALL songs bought at the station (server_eemall.cpp), by card: a line a song (its game family's
+// model and item number, the station's number); and the mark that a station booted against this
+// server (station mode, server_eemall.cpp's eemall_station)
+inline constexpr Table eemall_owned{"eemall_owned", "eemall-owned-{}"};
+inline constexpr Table eemall_station{"eemall_station", "eemall-station"};
 
 // pop'n 10-14: mileage and tickets, by game and card
 inline constexpr Table player{"player", "player-{}-{}"};
@@ -86,7 +91,7 @@ inline constexpr Table arcade{"arcade", "arcade-{}-{}-{}"};
 
 // Every table, for tests and tools
 inline constexpr const Table *all[] = {
-    &cards, &refid, &numbering, &users, &userdata_c00, &userdata, &eemall, &player, &pdata, &pscore, &pplays,
+    &cards, &refid, &numbering, &users, &userdata_c00, &userdata, &eemall, &eemall_owned, &eemall_station, &player, &pdata, &pscore, &pplays,
     &phc, &phcs, &p24, &p24s, &p24_plays, &lobby24, &rank_score, &rank_hitasura, &rank_gamblerz, &rank_exp,
     &rank_ir, &rank_shop, &shop_phase, &iidx9_scores, &iidx9_weekly, &iidx9_ranking, &iidx_players,
     &iidx_scores, &iidx_courses, &gfdmv_cards, &gfdmv_gdid, &gfdmv, &gfdm_cards, &gfdm, &message, &setting,

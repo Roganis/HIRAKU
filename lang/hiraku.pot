@@ -1005,6 +1005,12 @@ msgctxt "Game"
 msgid "C02 with data and its programs, a folder each by revision (JAA, JAB...: the last is run)"
 msgstr ""
 
+#. (the ee'MALL station's drive D:) C33, JAE, Resource, boot, C33.csv: folder and file names
+#: launcher/games.cpp
+msgctxt "Game"
+msgid "C33 with Resource, boot, C33.csv and its program's folder (JAE), or the folder holding it (D, beside an extracted C: drive, which isn't needed). Its E: and F: drives (its backups) are made in its save folder"
+msgstr ""
+
 #: launcher/games.cpp
 msgctxt "Game"
 msgid "prog (its programs, by date) and data"

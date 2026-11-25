@@ -51,6 +51,8 @@ if [ -d "$build/pc" ]; then
   cp "$build"/pc/ezusb.dll "$build"/pc/libacio.dll "$d/bin/pc/"
   # the C02 cabinet's board (beatmania IIDX 9th style) and its later games' (RED), in a folder of their own
   for f in ezusb.dll RtEffect.dll; do if [ -f "$build/pc/c02/$f" ]; then mkdir -p "$d/bin/pc/c02" && cp "$build/pc/c02/$f" "$d/bin/pc/c02/"; fi; done
+  # the C33 cabinet's (the ee'MALL station): its I/O board, video board and touch panel, and a forwarder
+  for f in ezusb.dll ezusb_video.dll; do if [ -f "$build/pc/c33/$f" ]; then mkdir -p "$d/bin/pc/c33" && cp "$build/pc/c33/$f" "$d/bin/pc/c33/"; fi; done
   cp "$build"/pc/hiraku-pc64.exe "$d/bin/pc/" 2>/dev/null || true
   cp "$build"/pc/hiraku-pc32.exe "$d/bin/pc/" 2>/dev/null || true
 fi

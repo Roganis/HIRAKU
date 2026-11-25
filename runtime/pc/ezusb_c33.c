@@ -36,7 +36,14 @@
 //   Keys typed on the PC keyboard (link.h: type_ring) become touches on that key of the program's
 //   touch keyboard, its places read from TouchPanel.dll's own key table as the program has it.
 //
-// Each call is logged the first times it's made (all of them with HK_PC_USB_LOG).
+// - Two patches of the program while HIRAKU's shop is on the server: GOODS stays closed and the DJ
+//   mini-game out of AMUSEMENT's list, as without a shop (the owner's decision, 2026-11-24; at the end).
+//
+// Each call is logged the first times it's made (all of them with HK_PC_USB_LOG). Test switches,
+// for scripted runs only and off unless set: HK_PC_C33_STEPS (presses keyed on the program's scene)
+// and HK_PC_C33_SCENE_LOG (test_steps below); HK_PC_C33_VIDEO_DUMP=FOLDER (the small display's
+// pages, for the translation: video_dump); HK_PC_C33_GOODS=1 and HK_PC_C33_DJ=1 (the program's own
+// GOODS and AMUSEMENT list with a shop: close_goods, leave_out_dj at the end).
 #define WIN32_LEAN_AND_MEAN
 #define COBJMACROS
 #include <windows.h>
@@ -421,6 +428,7 @@ static int g_control;      // bit 0 the shown VRAM bank, 1 the palette bank, 2 t
 static int g_flash_block = -1, g_rect[5] = {-1};
 static int g_flash_loaded;
 static int g_vwdt;   // the watchdog's seconds (0: stopped)
+
 static void video_dump(const char *why);
 
 // The flash is the board's own, kept in the save folder (HK_PC_VIDEO_FLASH) as a real board keeps it:
@@ -435,6 +443,26 @@ static void flash_load(void) {
         if (fread(g_flash, 1, sizeof g_flash, fh) != sizeof g_flash) memset(g_flash, 0xff, sizeof g_flash);
         fclose(fh);
     }
+    // The program writes video.img into the flash only when it finds the flash blank, and the flash
+    // holds the image as it is, from its first byte. A mod (the English one) gives another video.img
+    // (mapped as the program will read it: the mod's file first): a kept flash that doesn't start
+    // with the image the program reads now is started blank, so the program writes it again; added
+    // or taken away, a mod shows at the first start
+    static uint8_t img[sizeof g_flash];
+    char b[MAX_PATH];
+    const char *at = hk_map_path("D:\\C33\\Resource\\video\\video.img", b);
+    FILE *ih = fh ? fopen(at, "rb") : NULL;
+    if (ih) {
+        const size_t n = fread(img, 1, sizeof img, ih);
+        const int more = fgetc(ih) != EOF;
+        fclose(ih);
+        size_t used = 0;   // (a blank flash: the program writes it anyway)
+        while (used < n && g_flash[used] == 0xff) used++;
+        if (n && !more && used < n && memcmp(g_flash, img, n)) {
+            memset(g_flash, 0xff, sizeof g_flash);
+            hk_log("hiraku-pc: C33: the kept flash isn't %s: the small display's pictures written again", at);
+        }
+    }
 }
 static void flash_save(void) {
     const char *f = getenv("HK_PC_VIDEO_FLASH");
@@ -442,10 +470,8 @@ static void flash_save(void) {
 }
 
 // --- starting, the firmware, the watchdog
-static DWORD WINAPI movie_check(LPVOID arg);
 CALL4(usbVStart) {
     static int n_;
-    if (!n_ && getenv("HK_PC_C33_MOVIE_CHECK")) CloseHandle(CreateThread(NULL, 0, movie_check, NULL, 0, NULL));
     return SAID(0);
 }
 STUB(usbVStartWithFile, 0)
@@ -660,7 +686,6 @@ struct c33_key;
 static const struct c33_key *key_table(int *n);
 static void key_places(struct c33_key_place *out, int *n);
 static void touch_where(int *x, int *y);
-static void video_dump(const char *why);
 static void c33_picture(uint32_t *px, unsigned *w, unsigned *h) {
     static unsigned pictures;
     if (++pictures % 600 == 0) video_dump("ten seconds on");
@@ -688,9 +713,10 @@ static void c33_picture(uint32_t *px, unsigned *w, unsigned *h) {
     *w = (unsigned)W, *h = (unsigned)H;
 }
 
-// For bringing the board up: HK_PC_C33_VIDEO_DUMP=FOLDER, the board's state (its memory, palette,
-// registers) written there each time the program shows another picture (a bank turned, the layers
-// changed), at most 300 times: "vNNNN.bin" = the pages, the palette, attr, scale, scroll, control
+// TEST SWITCH, for the translation's pictures (off unless set): HK_PC_C33_VIDEO_DUMP=FOLDER, the
+// board's state (its memory, palette, registers) written there each time the program shows another
+// picture (a bank turned, the layers changed; and every 600 pictures), at most 300 times:
+// "vNNNN.bin" = the pages, the palette, attr, scale, scroll, control
 static void video_dump(const char *why) {
     static int n = -1;
     static const char *dir;
@@ -802,7 +828,7 @@ static void touch_send(int down, uint8_t x, uint8_t y) {
     const uint8_t p[4] = {(uint8_t)(down ? 0xfe : 0xfd), x, y, 0xff};
     com_queue(p, 4);
     static int n;
-    if (n++ < 40 || usb_log()) hk_log("touch: %s at %u, %u (the panel's numbers)", down ? "touched" : "let go", x, y);
+    if (n++ < 40 || usb_log()) hk_log("touch: %s at %u, %u (the panel's numbers), %lu ms", down ? "touched" : "let go", x, y, GetTickCount());
 }
 // Where the panel is touched now (TouchPanel.dll's units), x -1 nowhere
 static void touch_where(int *x, int *y) { *x = g_touch.down ? g_touch.cx : -1, *y = g_touch.cy; }
@@ -810,9 +836,23 @@ static void touch_where(int *x, int *y) { *x = g_touch.down ? g_touch.cx : -1, *
 // Called as the program polls the port: the link's touch, else the typed keys one by one. A touch
 // is held for 120 ms at least (TouchPanel.dll sees it in its own polls, every 25 ms, and the program
 // in its frames), and its report read before it's let go
+static uint8_t g_keys[256];   // the typed keys waiting their turn (g_keys_in - g_keys_out of them)
+static uint32_t g_keys_in, g_keys_out;
 static void touch_feed(void) {
     struct hk_pc_link *l = hk_link();
     const DWORD now = GetTickCount();
+    // the typed keys, taken from the link's ring (16) at once, into a queue of their own: they waited
+    // there for their turn and a quick typist's 17th key wrote over the first
+    while (g_touch.typed != l->type_seq) {
+        if (l->type_seq - g_touch.typed > 16) {
+            hk_log("touch: %u typed keys lost (more than 16 between two polls)", l->type_seq - g_touch.typed - 16);
+            g_touch.typed = l->type_seq - 16;
+        }
+        const uint8_t c = l->type_ring[g_touch.typed % 16];
+        g_touch.typed++;
+        if (g_keys_in - g_keys_out < sizeof g_keys) g_keys[g_keys_in++ % sizeof g_keys] = c;
+        else hk_log("touch: a typed key lost (256 waiting)");
+    }
     const int held = (int)l->touch_down;
     if (held || g_touch.key_phase == 0) {
         if (held) {
@@ -845,9 +885,8 @@ static void touch_feed(void) {
         if (now - g_touch.key_since >= 120) g_touch.key_phase = 0;
         return;
     }
-    while (g_touch.typed != l->type_seq) {
-        uint8_t c = l->type_ring[g_touch.typed % 16];
-        g_touch.typed++;
+    while (g_keys_out != g_keys_in) {
+        uint8_t c = g_keys[g_keys_out++ % sizeof g_keys];
         if (c >= 'a' && c <= 'z') c = (uint8_t)(c - 32);
         // the keyboard's own keys for deleting and for done (the two wide keys under it, '[' and ']')
         if (c == '\b') c = '[';
@@ -873,7 +912,11 @@ static hangar_t g_hangar;
 static volatile DWORD g_hangar_at;
 static char __cdecl c33_hangar(int a, int b, int mode, int d) {
     g_hangar_at = GetTickCount() | 1;
-    return g_hangar(a, b, mode, d);
+    const char r = g_hangar(a, b, mode, d);
+    static char last;
+    if (r != last && usb_log()) hk_log("touch: the touch keyboard reads %d, %lu ms", r, GetTickCount());   // (HK_PC_USB_LOG)
+    last = r;
+    return r;
 }
 // (and the test mode's TOUCH PANEL CHECK reading it: TestModeSetting.dll's GetTouchPanelCtrCharLevel)
 typedef char(__cdecl *charlevel_t)(int);
@@ -998,7 +1041,7 @@ typedef BOOL(WINAPI *CopyFileA_t)(LPCSTR, LPCSTR, BOOL);
 typedef HANDLE(WINAPI *CreateFileW_t)(LPCWSTR, DWORD, DWORD, LPSECURITY_ATTRIBUTES, DWORD, DWORD, HANDLE);
 typedef HMMIO(WINAPI *mmioOpenA_t)(LPSTR, LPMMIOINFO, DWORD);
 static fopen_t g_fopen;
-static path_t g_remove, g_mkdir;
+static path_t g_remove, g_mkdir, g_rmdir;
 static stat_t g_stat;
 static fstream_t g_ifstream, g_ofstream;
 static mmioOpenA_t g_mmioOpenA;
@@ -1021,6 +1064,12 @@ static int __cdecl c33_remove(const char *p) {
 static int __cdecl c33_mkdir(const char *p) {
     char b[MAX_PATH];
     return g_mkdir(hk_map_path(p, b));
+}
+// (the shop's download: its folders on E: are removed before they are made again; unmapped, a
+// station with a shop to fetch stopped at E155 SHOP SERVER ERROR)
+static int __cdecl c33_rmdir(const char *p) {
+    char b[MAX_PATH];
+    return g_rmdir(hk_map_path(p, b));
 }
 static int __cdecl c33_stat(const char *p, void *st) {
     char b[MAX_PATH];
@@ -1071,42 +1120,6 @@ static int WINAPI c33_MultiByteToWideChar(UINT page, DWORD fl, LPCCH s, int n, L
         }
     }
     return (g_next_mbtowc ? g_next_mbtowc : MultiByteToWideChar)(page, fl, s, n, w, wn);
-}
-
-// For bringing the movies up, HK_PC_C33_MOVIE_CHECK=NAME (default 0103.m1v): the walk movie's whole
-// path as the program names it, through the hook above, opened the way DXShow.dll opens it
-// (IAMMultiMediaStream: Initialize, AddMediaStream(primary video), OpenFile) and its length logged
-static DWORD WINAPI movie_check(LPVOID arg) {
-    (void)arg;
-    static const GUID clsid = {0x49c47ce5, 0x9ba4, 0x11d0, {0x82, 0x12, 0x00, 0xc0, 0x4f, 0xc3, 0x2c, 0x45}};
-    static const GUID iid = {0xbebe595c, 0x9a6f, 0x11d0, {0x8f, 0xde, 0x00, 0xc0, 0x4f, 0xd9, 0x18, 0x9d}};
-    static const GUID video = {0xa35ff56a, 0x9fda, 0x11d0, {0x8f, 0xdf, 0x00, 0xc0, 0x4f, 0xd9, 0x18, 0x9d}};
-    const char *name = getenv("HK_PC_C33_MOVIE_CHECK");
-    char path[MAX_PATH];
-    snprintf(path, sizeof path, "D:\\C33\\Resource\\movie2\\%s", name && strchr(name, '.') ? name : "0103.m1v");
-    WCHAR w[MAX_PATH];
-    if (c33_MultiByteToWideChar(CP_ACP, 0, path, -1, w, MAX_PATH) <= 0) return 0;
-    const DWORD attr = GetFileAttributesW(w);
-    hk_log("hiraku-pc: movie check: %s %s", path, attr == INVALID_FILE_ATTRIBUTES ? "not found" : "found");
-    HMODULE ole = LoadLibraryA("ole32.dll");
-    typedef HRESULT(WINAPI * init_t)(LPVOID);
-    typedef HRESULT(WINAPI * create_t)(REFCLSID, LPUNKNOWN, DWORD, REFIID, LPVOID *);
-    init_t init = ole ? (init_t)(void *)GetProcAddress(ole, "CoInitialize") : NULL;
-    create_t create = ole ? (create_t)(void *)GetProcAddress(ole, "CoCreateInstance") : NULL;
-    if (!init || !create) return 0;
-    init(NULL);
-    IAMMultiMediaStream *ms = NULL;
-    HRESULT hr = create(&clsid, NULL, CLSCTX_INPROC_SERVER, &iid, (void **)&ms);
-    if (SUCCEEDED(hr)) hr = IAMMultiMediaStream_Initialize(ms, STREAMTYPE_READ, 0, NULL);
-    if (SUCCEEDED(hr)) hr = IAMMultiMediaStream_AddMediaStream(ms, NULL, &video, 0, NULL);
-    const HRESULT added = hr;
-    if (SUCCEEDED(hr)) hr = IAMMultiMediaStream_OpenFile(ms, w, 0);
-    STREAM_TIME len = 0;
-    if (SUCCEEDED(hr)) IAMMultiMediaStream_GetDuration(ms, &len);
-    hk_log("hiraku-pc: movie check: the stream %s (%#lx, adding the video %#lx), %.2f s", SUCCEEDED(hr) ? "opened" : "not opened",
-           (unsigned long)hr, (unsigned long)added, (double)len / 1e7);
-    if (ms) IAMMultiMediaStream_Release(ms);
-    return 0;
 }
 
 // The walk movies' pictures. DXShow.dll takes each frame from IDirectDrawMediaStream's own sample
@@ -1177,6 +1190,7 @@ static void *crt_hook(const char *dll, const char *fn) {
         TAKE("fopen", *(void **)&g_fopen, c33_fopen)
         TAKE("remove", *(void **)&g_remove, c33_remove)
         TAKE("_mkdir", *(void **)&g_mkdir, c33_mkdir)
+        TAKE("_rmdir", *(void **)&g_rmdir, c33_rmdir)
         TAKE("_stat", *(void **)&g_stat, c33_stat)
     }
     if (!_stricmp(dll, "msvcirt.dll")) {
@@ -1223,6 +1237,90 @@ static void *c33_hook(const char *dll, const char *fn, void *next) {
     return NULL;
 }
 
+// ================================================================ what the shop leaves closed
+// (the owner's decision, 2026-11-24). With HIRAKU's shop on the server (its records, made from the
+// player's pop'n music 12/13), one flag of the program ("shop data present") opens RECORDS, GOODS and
+// POLICE BOX together, and lets AMUSEMENT offer the DJ mini-game. HIRAKU has no goods (an empty
+// GOODS says "load error, restart" at BUY) and the DJ game's songs are lost (it would play silent
+// stand-ins), so both stay as they were before the shop: GOODS shown closed on the map, the DJ game
+// out of AMUSEMENT's list. RECORDS and POLICE BOX stay open. Each found by its code's shape (only
+// revision JAE is known), checked before it's written; not found: a line in the log, nothing patched.
+// Test switches, for scripted runs only: HK_PC_C33_GOODS=1 leaves GOODS open, HK_PC_C33_DJ=1 the DJ
+// game in the list (the program's own behaviour).
+static uint8_t *c33_find(const uint8_t *pat, const uint8_t *mask, size_t n, int *count) {
+    char *base = (char *)hk_program();
+    IMAGE_NT_HEADERS *nt = (IMAGE_NT_HEADERS *)(base + ((IMAGE_DOS_HEADER *)base)->e_lfanew);
+    IMAGE_SECTION_HEADER *sec = IMAGE_FIRST_SECTION(nt);
+    uint8_t *found = NULL;
+    *count = 0;
+    for (WORD s = 0; s < nt->FileHeader.NumberOfSections; s++, sec++) {
+        if (!(sec->Characteristics & IMAGE_SCN_MEM_EXECUTE)) continue;
+        uint8_t *code = (uint8_t *)base + sec->VirtualAddress;
+        for (size_t i = 0; i + n <= sec->Misc.VirtualSize; i++) {
+            size_t k = 0;
+            while (k < n && (code[i + k] & mask[k]) == (pat[k] & mask[k])) k++;
+            if (k == n && !(*count)++) found = code + i;
+        }
+    }
+    return found;
+}
+static void c33_write(uint8_t *at, const void *bytes, size_t n) {
+    DWORD old;
+    VirtualProtect(at, n, PAGE_EXECUTE_READWRITE, &old);
+    memcpy(at, bytes, n);
+    VirtualProtect(at, n, old, &old);
+    FlushInstructionCache(GetCurrentProcess(), at, n);
+}
+
+// GOODS: the map's gate for a place (eemall.exe JAE 0x4195b0, the place's number in edi; it decides
+// both whether the place is drawn closed and whether the cursor stops there) asks the flag
+//   call FLAG (mov eax,[ecx+X]; ret); test eax,eax; jne open; mov eax,edi; sub eax,0; je no;
+//   sub eax,4; je no; sub eax,2; jne open
+// (places 0 RECORDS, 4 POLICE BOX, 6 GOODS: closed without shop data). That call goes through a few
+// bytes that answer "no shop data" for place 6 alone, so GOODS is closed just as before the shop.
+static void close_goods(void) {
+    static const uint8_t pat[] = {0xe8, 0, 0, 0, 0, 0x85, 0xc0, 0x75, 0, 0x8b, 0xc7, 0x83, 0xe8, 0x00, 0x74, 0, 0x83,
+                                  0xe8, 0x04, 0x74, 0, 0x83, 0xe8, 0x02, 0x75, 0};
+    static const uint8_t mask[] = {0xff, 0, 0, 0, 0, 0xff, 0xff, 0xff, 0, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0, 0xff,
+                                   0xff, 0xff, 0xff, 0, 0xff, 0xff, 0xff, 0xff, 0};
+    const char *sw = getenv("HK_PC_C33_GOODS");
+    if (sw && *sw == '1') return (void)hk_log("hiraku-pc: C33: GOODS left open (HK_PC_C33_GOODS)");
+    int n;
+    uint8_t *call = c33_find(pat, mask, sizeof pat, &n);
+    uint8_t *flag = call ? call + 5 + *(int32_t *)(call + 1) : NULL;
+    // (the flag's reader: mov eax,[ecx+X]; ret)
+    if (n != 1 || IsBadReadPtr(flag, 7) || flag[0] != 0x8b || flag[1] != 0x81 || flag[6] != 0xc3)
+        return (void)hk_log("hiraku-pc: C33: the map's gate not found (%d such places): GOODS opens with the shop", n);
+    // cmp edi,6; je no; jmp FLAG; no: xor eax,eax; ret
+    uint8_t *th = VirtualAlloc(NULL, 16, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
+    if (!th) return (void)hk_log("hiraku-pc: C33: no memory for GOODS' gate: GOODS opens with the shop");
+    static const uint8_t code[] = {0x83, 0xff, 0x06, 0x74, 0x05, 0xe9, 0, 0, 0, 0, 0x31, 0xc0, 0xc3};
+    memcpy(th, code, sizeof code);
+    const int32_t to_flag = (int32_t)((uintptr_t)flag - ((uintptr_t)th + 10));
+    memcpy(th + 6, &to_flag, 4);
+    FlushInstructionCache(GetCurrentProcess(), th, sizeof code);
+    const int32_t to_th = (int32_t)((uintptr_t)th - ((uintptr_t)call + 5));
+    c33_write(call + 1, &to_th, 4);
+    hk_log("hiraku-pc: C33: GOODS closed (the map's gate at %p)", (void *)call);
+}
+
+// The DJ mini-game: AMUSEMENT's list (JAE 0x436610) leaves out the game whose scene is 0x12 only
+// while the shop has no records:
+//   mov eax,[RECORDS]; test eax,eax; jg keep; cmp dword [edi*4+SCENES],0x12; je skip
+// the jg goes (two nops): the DJ game is left out whatever the shop holds.
+static void leave_out_dj(void) {
+    static const uint8_t pat[] = {0xa1, 0, 0, 0, 0, 0x85, 0xc0, 0x7f, 0x0a, 0x83, 0x3c, 0xbd, 0, 0, 0, 0, 0x12, 0x74, 0};
+    static const uint8_t mask[] = {0xff, 0, 0, 0, 0, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0, 0, 0, 0, 0xff, 0xff, 0};
+    const char *sw = getenv("HK_PC_C33_DJ");
+    if (sw && *sw == '1') return (void)hk_log("hiraku-pc: C33: the DJ game left in AMUSEMENT's list (HK_PC_C33_DJ)");
+    int n;
+    uint8_t *at = c33_find(pat, mask, sizeof pat, &n);
+    if (n != 1) return (void)hk_log("hiraku-pc: C33: AMUSEMENT's list not found (%d such places): the DJ game is offered with the shop", n);
+    static const uint8_t nops[] = {0x90, 0x90};
+    c33_write(at + 7, nops, 2);
+    hk_log("hiraku-pc: C33: the DJ game left out of AMUSEMENT's list (at %p)", (void *)at);
+}
+
 BOOL WINAPI DllMain(HINSTANCE h, DWORD why, LPVOID r) {
     (void)h, (void)r;
     if (why == DLL_PROCESS_ATTACH) {
@@ -1233,6 +1331,8 @@ BOOL WINAPI DllMain(HINSTANCE h, DWORD why, LPVOID r) {
         hk_set_device_hook(c33_hook);
         hk_cabinet_start();
         hk_log("hiraku-pc: C33: the I/O board, the video board and the touch panel are HIRAKU's");
+        close_goods();
+        leave_out_dj();
     }
     return TRUE;
 }

@@ -43,7 +43,7 @@ struct Cabinet {
 class Server {
 public:
     // dir: where the server keeps what it must remember (cards, player data), or "" for nothing
-    explicit Server(std::string dir) : store_(std::make_unique<FolderStore>(std::move(dir))) {}
+    explicit Server(std::string dir) : eemall_shop(dir.empty() ? "" : dir + "/eemall-shop"), store_(std::make_unique<FolderStore>(std::move(dir))) {}
     // ... or what it is given keeps it (store.h)
     explicit Server(std::unique_ptr<Store> store) : store_(std::move(store)) {}
 
@@ -67,6 +67,10 @@ public:
     // game sets its clock to it): in the core, the emulated clock (reproducible runs); in
     // hiraku-eamuse, the host's clock in Japan time unless told otherwise.
     std::function<int64_t()> now;
+    // The ee'MALL station's shop (server_eemall.cpp): the folder of the files it downloads, as
+    // tools/eemall_catalogue.py writes them from the player's own games (the data folder's
+    // eemall-shop; "": none, the station is told there is no catalogue)
+    std::string eemall_shop;
 
     // The protocol's own pieces, public for tools and tests.
     static std::vector<uint8_t> key(const std::string &info);   // "1-xxxxxxxx-xxxx"
@@ -150,7 +154,17 @@ private:
     // ... a visit's calls: the card's player, its KONAMI ID, tickets, points and items ("": not one)
     std::string eemall_visit(const Game &, const Call &, const Request &r);
     // ... and the shop server it then downloads from by plain GETs: the file at path, or false
-    static bool eemall_shop_file(const std::string &path, std::string &body);
+    bool eemall_shop_file(const std::string &path, std::string &body);
+    // ee'MALL songs locked until bought (docs/EAMUSE3.md, "ee'MALL"): on when the owner says so (the
+    // station's setting "station"), else once a station has booted against this server or the shop's
+    // catalogue is in its folder. Off: the owner's eemall-CARD lists, as before
+    bool eemall_station() const;
+    // what a pop'n game's eemall.get answers in station mode: the card's songs bought for that
+    // game family (model's three letters), its points and the points its plays earned since
+    std::string eemall_get_bought(const std::string &model, const std::string &card);
+    // a credit played with a card on a pop'n game: its ee'MALL points (credit_points), kept for the
+    // station's next personaldata.playnum (station mode only)
+    void eemall_played(const std::string &card);
     // beatmania IIDX 10th style, RED, HAPPY SKY and DistorteD (D01, E11, ECO, FDD): their module named
     // after the model (pc, music, ranking, weekly, grade, shop), 9th style's way with the player's
     // record added
@@ -185,6 +199,7 @@ private:
     uint32_t serial_ = 0;   // for the answers' X-Eamuse-Info: deterministic
     std::string src_;       // the asking cabinet (the call's srcid)
     std::string eemall_card_;   // the ee'MALL station's card of the call's personaldata.write, for the i_set after it
+    std::map<std::string, std::string> eemall_visitor_;   // each station's (srcid) card of its last personaldata.read
     Cabinet cab_;           // ... and its arcade (cabinet)
     std::string self_;      // this server, among those sharing its data folder (a random number)
     // What a server others can reach keeps is bounded (a call registers a card, writes a card's file):

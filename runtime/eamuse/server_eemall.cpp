@@ -3,10 +3,13 @@
 #include "eamuse/server_parts.h"
 #include "shell/sys.h"
 
+#include <algorithm>
 #include <cctype>
 #include <cstdio>
 #include <cstdlib>
 #include <ctime>
+#include <fstream>
+#include <iterator>
 
 namespace hk::ea {
 
@@ -27,8 +30,15 @@ namespace hk::ea {
 std::string Server::answer_eemall(const Game &g, const Call &c, const Request &r, const std::string &host) {
     const std::string &m = r.module, &f = r.method;
     if (std::string a = eemall_visit(g, c, r); !a.empty()) return a;
-    if (m == "services" && f == "get")
+    if (m == "services" && f == "get") {
+        // a station boots against this server: from now on its songs are locked until bought in
+        // the pop'n games that share this folder (station mode's -1, eemall_station)
+        if (store_->get(tables::eemall_station, {}).empty()) {
+            store_->put(tables::eemall_station, {}, to_line({{"model", c.model}}));
+            if (log) log("ee'MALL: a station booted against this server: its songs are locked until bought (setting station)");
+        }
         return services(host, {"pcbtracker", "posevent", "numbering", "package", "userdata", "local", "shopinf", "userid"});
+    }
     if (m == "pcbtracker" && f == "alive") return "<pcbtracker status=\"0\" expire=\"600\"/>";
     if (m == "package" && f == "list") return "<package status=\"0\"/>";
     if (m == "shopinf" && f == "getsservip") {
@@ -40,10 +50,25 @@ std::string Server::answer_eemall(const Game &g, const Call &c, const Request &r
     return "";
 }
 
-// The shop server's lists (plain XML, the station's GET has no Host header and LF line ends): one
-// list naming the other, and that one empty (no /C33/file.xml: no catalogue for the station)
+// The shop server's files (the station's GET has no Host header and LF line ends; it needs a
+// Content-Length and the header's end as CR LF, SSRNet.dll 0x10009260). With a catalogue in the shop
+// folder (tools/eemall_catalogue.py: its three lists, plain XML, and the station's files, most of
+// them in the station's cipher) and station mode on, that folder's file of the path. Else two
+// tiny lists: one naming the other, and that one empty (no /C33/file.xml: no catalogue for the
+// station, which then keeps RECORDS, GOODS and POLICE BOX shut)
 bool Server::eemall_shop_file(const std::string &path, std::string &body) {
     static const char empty[] = "<datasync></datasync>";   // 21 bytes, MD5 cadefd108db93db56ef7dd2cdb5b16fa
+    // a path of the folder's: letters, digits, '.', '_', '-', folders by '/', no part starting with '.'
+    bool fit = path.size() > 1 && path.size() < 200 && path[0] == '/' && !eemall_shop.empty();
+    for (size_t i = 0; fit && i < path.size(); i++) {
+        const char ch = path[i];
+        fit = std::isalnum((unsigned char)ch) || ch == '_' || ch == '-' || (ch == '.' && path[i - 1] != '/') || (ch == '/' && i + 1 < path.size() && path[i + 1] != '/');
+    }
+    if (fit && sys::exists(eemall_shop + "/sum/file.xml") && eemall_station()) {   // the catalogue's files
+        std::ifstream in(eemall_shop + path, std::ios::binary);
+        if (in) return body.assign(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>()), true;
+        return false;
+    }
     if (path == "/file.xml") return body = empty, true;
     if (path == "/sum/file.xml")
         return body = "<datasync><list url=\"/file.xml\" path=\"file.xml\" size=\"21\" sum=\"cadefd108db93db56ef7dd2cdb5b16fa\"/></datasync>", true;
@@ -116,7 +141,70 @@ std::vector<std::pair<std::string, std::string>> eemall_items(const std::string 
     return v;
 }
 
+// The pop'n songs the station sells (docs/EAMUSE3.md, "ee'MALL"): a game's eemall.get item N is a
+// song of that game family, numbered from its first ee'MALL song: pop'n 10's own (C20), and pop'n
+// 11's, which 12 and 13 read too (D11). The station stamps every record it sells pop'n 9's model
+// (eemall.exe 0x40a4bd), so the catalogue's own number says which: family's base + N
+// (tools/eemall_catalogue.py makes them so: D11's item 5 is the station's 11005)
+struct EemallFamily {
+    const char *model;
+    long base;
+};
+constexpr EemallFamily EEMALL_FAMILIES[] = {{"D11", 11000}, {"C20", 20000}};
+constexpr long EEMALL_FAMILY_ITEMS = 999;
+
+// The family whose items a game reads: pop'n 10 its own, pop'n 11-13 pop'n 11's ("": none)
+std::string eemall_family(const std::string &model) {
+    const std::string m = model.substr(0, 3);
+    if (m == "C20") return "C20";
+    if (m == "D11" || m == "E12" || m == "E13") return "D11";
+    return "";
+}
+
+// A station number to its family and item (false: not a pop'n song of the catalogue's)
+bool eemall_song(long station, std::string &family, long &item) {
+    for (const EemallFamily &f : EEMALL_FAMILIES)
+        if (station > f.base && station <= f.base + EEMALL_FAMILY_ITEMS) return family = f.model, item = station - f.base, true;
+    return false;
+}
+
 }  // namespace
+
+bool Server::eemall_station() const {
+    const Game *g = game_by_id("eemall");
+    const std::string v = g ? setting(*store_, *g, "station") : "";
+    char *end = nullptr;
+    long on = std::strtol(v.c_str(), &end, 10);   // (the owner's file: "1\n"; anything else: -1)
+    if (end == v.c_str()) on = -1;
+    if (on == 1) return true;
+    if (on == 0) return false;
+    return !store_->get(tables::eemall_station, {}).empty() || (!eemall_shop.empty() && sys::exists(eemall_shop + "/sum/file.xml"));
+}
+
+std::string Server::eemall_get_bought(const std::string &model, const std::string &card) {
+    const std::string family = eemall_family(model);
+    std::string items;
+    size_t count = 0;
+    if (!family.empty() && safe_name(card))
+        for (const Record &s : from_lines(store_->get(tables::eemall_owned, {card})))
+            if (attr(s, "family") == family && num(s, "num") > 0 && count < 99) items += "<item num=\"" + std::to_string(num(s, "num")) + "\"/>", count++;
+    // the card's points: as the station last wrote them, and what its plays earned since (the
+    // station collects those at its next visit: personaldata.playnum)
+    const std::vector<Record> p = safe_name(card) ? from_lines(store_->get(tables::player, {"C33", card})) : std::vector<Record>{};
+    const long point = p.empty() ? 0 : num(p[0], "point"), pending = p.empty() ? 0 : num(p[0], "pending");
+    return "<eemall status=\"0\" now_point=\"" + std::to_string(point) + "\" add_point=\"" + std::to_string(pending) + "\">" + items + "</eemall>";
+}
+
+void Server::eemall_played(const std::string &card) {
+    if (!safe_name(card) || !eemall_station()) return;
+    const Game *g = game_by_id("eemall");
+    const long points = g ? std::strtol(setting(*store_, *g, "credit_points").c_str(), nullptr, 10) : 0;
+    if (points <= 0) return;
+    std::vector<Record> v = from_lines(store_->get(tables::player, {"C33", card}));
+    Record p = v.empty() ? Record{} : v[0];
+    p["pending"] = std::to_string(std::min(num(p, "pending") + points, 99999L));
+    store_->put(tables::player, {"C33", card}, to_line(p));
+}
 
 // Tickets and points last 60 days after a visit (the program's own rule, shown on its screens).
 // The station doesn't check it: it only gives back the date and time this server sends
@@ -160,6 +248,7 @@ std::string Server::eemall_visit(const Game &, const Call &, const Request &r) {
         p["seq"] = std::to_string(std::strtol(attr(p, "seq").c_str(), nullptr, 10) + 1);
         p["model"] = eemall_card_model(attr(r.attrs, "card_header"));
         keep_record(card, p);
+        eemall_visitor_[src_] = card;   // (restrant.get names no card: this station's visitor)
         const Record u = owner(card);
         auto n = [&](const char *k) { const std::string v = attr(p, k); return v.empty() ? std::string("0") : v; };
         std::string items;
@@ -190,8 +279,21 @@ std::string Server::eemall_visit(const Game &, const Call &, const Request &r) {
             }
         return "<personaldata status=\"0\" card_num=\"" + std::to_string(count) + "\">" + items + "</personaldata>";
     }
-    if (m == "personaldata" && f == "playnum")   // points earned on other games (0x10002170): none kept yet
-        return "<personaldata status=\"0\" point=\"0\"/>";
+    if (m == "personaldata" && f == "playnum") {
+        // points earned on other games by a card of the KONAMI ID (0x10002170: point, kept with the
+        // card's entry of clist, 0x1000c150): in station mode the points its pop'n credits earned
+        // since (eemall_played), handed over once
+        const std::string card = attr(r.attrs, "card_id");
+        if (!eemall_station() || card.empty() || !safe_name(card)) return "<personaldata status=\"0\" point=\"0\"/>";
+        Record p = record(card);
+        const long pending = num(p, "pending");
+        if (pending > 0) {
+            p["pending"] = "0";
+            keep_record(card, p);
+            if (log) log("ee'MALL: card " + card + ": " + std::to_string(pending) + " points from its plays handed to the station");
+        }
+        return "<personaldata status=\"0\" point=\"" + std::to_string(std::max(pending, 0L)) + "\"/>";
+    }
     if (m == "personaldata" && (f == "ticket" || f == "write" || f == "i_set")) {
         // ticket (coins became tickets, 0x10002790), write (the visit's end, 0x10002930) and its second
         // element i_set (the player's whole inventory: model<i>, item_no<i>). All answer status only.
@@ -210,9 +312,23 @@ std::string Server::eemall_visit(const Game &, const Call &, const Request &r) {
                 Record p = record(eemall_card_);
                 p["items"] = items;
                 keep_record(eemall_card_, p);
-                // pop'n music 9's items also go on the list the pop'n games read (tables::eemall, one
-                // number a line); numbers already there (the owner's) stay
-                if (!popn.empty()) {
+                const bool station = eemall_station();
+                if (station) {
+                    // station mode: the pop'n songs the card now holds, by family and item, for the
+                    // games' eemall.get. The station's inventory is the whole truth (a song sold back
+                    // or thrown away is gone)
+                    std::string owned;
+                    for (const auto &it : eemall_items(items)) {
+                        std::string family;
+                        long item = 0;
+                        if (it.first.compare(0, 3, "C00") == 0 && eemall_song(std::strtol(it.second.c_str(), nullptr, 10), family, item))
+                            owned += to_line({{"family", family}, {"num", std::to_string(item)}, {"station", it.second}});
+                    }
+                    if (owned != store_->get(tables::eemall_owned, {eemall_card_})) store_->put(tables::eemall_owned, {eemall_card_}, owned);
+                }
+                // as before (no station mode): pop'n music 9's items also go on the list the pop'n
+                // games read (tables::eemall, one number a line); numbers already there (the owner's) stay
+                if (!station && !popn.empty()) {
                     std::string list = store_->get(tables::eemall, {eemall_card_});
                     for (size_t at = 0; at < popn.size();) {
                         const size_t e = popn.find('\n', at);
@@ -247,7 +363,30 @@ std::string Server::eemall_visit(const Game &, const Call &, const Request &r) {
     if (m == "recieved" && f == "get") return "<recieved status=\"0\"/>";                              // nothing received
     if (m == "address" && f == "get") return "<address status=\"0\"/>";                                // no address book
     if (m == "lostdata" && f == "read") return "<lostdata status=\"0\" lost_num=\"0\"/>";              // POLICE BOX: nothing lost
-    if (m == "restrant" && f == "get") return "<restrant status=\"0\" sub_code=\"0\"/>";               // RESTAURANT: no event
+    if (m == "restrant" && f == "get") {
+        // RESTAURANT (eemall.exe 0x4453ce..0x4454b2: the scene's menu, a value a dish from the table at
+        // 0x4e1ab0; 0x442227: dish 2 pays 500 points, 8 300, 9 200, the others by the food game's
+        // score). sub_code 0 leaves the menu as it is: dish 2, "free service while it lasts", is
+        // served, and pays its 500 points on every visit (seen in a run). 0x64 (100) gives dish 2's
+        // value as 1000000 instead of -1000000 (0x445452): read as the free dish sold out [guess:
+        // the sign as "free" was not traced further]; 0x65 does the same for dish 3, 9999 both,
+        // 0x67 another flag. The setting restaurant_gift: 1 (default) the free dish once a day per
+        // card (the visitor of this station's last personaldata.read), 0 never, 2 every visit
+        const Game *g = game_by_id("eemall");
+        const std::string v = g ? setting(*store_, *g, "restaurant_gift") : "";
+        const long rule = v.empty() ? 1 : std::strtol(v.c_str(), nullptr, 10);
+        const auto who = eemall_visitor_.find(src_);
+        bool gift = rule == 2;
+        if (rule == 1 && who != eemall_visitor_.end()) {
+            Record p = record(who->second);
+            if (attr(p, "gift") != today) {
+                gift = true;
+                p["gift"] = today;
+                keep_record(who->second, p);
+            }
+        }
+        return std::string("<restrant status=\"0\" sub_code=\"") + (gift ? "0" : "100") + "\"/>";
+    }
     return "";
 }
 

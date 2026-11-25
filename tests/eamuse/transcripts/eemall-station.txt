@@ -1,0 +1,138 @@
+# ee'MALL songs locked until bought (docs/EAMUSE3.md, "ee'MALL"): the pop'n games' eemall.get, the
+# station's points from the pop'n games' credits (personaldata.playnum) and its purchases (i_set).
+# Made-up card 2003010000000010 with the KONAMI ID hiraku33, the same number in every game (one card
+# for all). First as before (the owner's setting station 0): the owner's hand list eemall-CARD
+file station-C33 0
+file users user=hiraku33\tpass=1234\tcards=2003010000000010\tactive=1
+file eemall-2003010000000010 1
+model E12:J:A:A:2004111700
+> <userid method="ctou" card="2003010000000010"/>
+< 200 <response><userid status="0" user="hiraku33" active="1"></userid></response>
+> <eemall method="get" card_id="2003010000000010"/>
+< 200 <response><eemall status="0" now_point="0" add_point="0"><item num="1"/></eemall></response>
+# pop'n 13 names the card by its player's ref id in userid.ctou: found through the cards (else 112,
+# and the game never asks eemall.get)
+model E13:J:A:A:2005090500
+> <cardmng method="inquire" cardtype="1" cardid="2003010000000010" update="1"/>
+< 200 <response><cardmng status="0" refid="48524B0000000001" binded="0" expired="0" newflag="1"></cardmng></response>
+> <cardmng method="getrefid" cardtype="1" cardid="2003010000000010" newflag="1" passwd="1234"/>
+< 200 <response><cardmng status="0" refid="48524B0000000001"></cardmng></response>
+>e <userid method="ctou" card="48524B0000000001"/>
+< 200 info=1-484b0001-0001 <response><userid status="0" user="hiraku33" active="1"></userid></response>
+>e <userid method="ctou" card="48524B00000000FF"/>
+< 200 info=1-484b0002-0002 <response><userid status="112"></userid></response>
+> <eemall method="get" card_id="2003010000000010"/>
+< 200 <response><eemall status="0" now_point="0" add_point="0"><item num="1"/></eemall></response>
+# a credit's end with station mode off: no points kept
+> <E13 type="playerdata" method="set" ref_id="48524B0000000001" option="9" chara_num="33"><music num="5" sheet="1" data="4" score="81000"/></E13>
+< 200 <response><E13 status="0"></E13></response>
+
+# Station mode by itself (-1): a station boots against this server. From then on the hand list
+# opens nothing: only what was bought does
+file station-C33 -1
+model C33:J:A:E
+>e <services method="get" model="C33:J:A:E"/>
+< 200 info=1-484b0003-0003 <response><services expire="600" status="0"><item name="pcbtracker" url="http://cabinet.test:8080/"/><item name="posevent" url="http://cabinet.test:8080/"/><item name="numbering" url="http://cabinet.test:8080/"/><item name="package" url="http://cabinet.test:8080/"/><item name="userdata" url="http://cabinet.test:8080/"/><item name="local" url="http://cabinet.test:8080/"/><item name="shopinf" url="http://cabinet.test:8080/"/><item name="userid" url="http://cabinet.test:8080/"/></services></response>
+model E12:J:A:A:2004111700
+> <eemall method="get" card_id="2003010000000010"/>
+< 200 <response><eemall status="0" now_point="0" add_point="0"></eemall></response>
+# a song bought (written by hand: family D11, item 3): pop'n 12 and 13 read it, pop'n 10 doesn't
+# (its family is its own), pop'n 12 carrying a pop'n 11 card over asks for pop'n 11's (D11)
+file eemall-owned-2003010000000010 family=D11\tnum=3\tstation=11003
+> <eemall method="get" card_id="2003010000000010"/>
+< 200 <response><eemall status="0" now_point="0" add_point="0"><item num="3"/></eemall></response>
+> <eemall method="get" card_id="2003010000000010" model="D11:J:A:A"/>
+< 200 <response><eemall status="0" now_point="0" add_point="0"><item num="3"/></eemall></response>
+model E13:J:A:A:2005090500
+> <eemall method="get" card_id="2003010000000010"/>
+< 200 <response><eemall status="0" now_point="0" add_point="0"><item num="3"/></eemall></response>
+model C20:J:A:A
+> <eemall method="get" card_id="2003010000000010"/>
+< 200 <response><eemall status="0" now_point="0" add_point="0"></eemall></response>
+# credits played with the card: pop'n 9 and 10 (userdata.write), 12 (playerdata set by card), 13
+# (by ref id): 100 points each (credit_points), shown as add_point
+model C00:J:A:A
+>e <userdata method="write" card="2003010000000010" time="2003-06-01 12:00:00+9"><b>AAAA</b></userdata>
+< 200 info=1-484b0004-0004 <response><userdata status="0"></userdata></response>
+model C20:J:A:A
+>e <userdata method="write" card="2003010000000010" time="2003-06-01 12:00:00+9"><b>AAAA</b></userdata>
+< 200 info=1-484b0005-0005 <response><userdata status="0"></userdata></response>
+model E12:J:A:A:2004111700
+> <E12 type="playerdata" method="set" card_id="2003010000000010" option="5"><music num="5" sheet="0" data="1" score="80000"/></E12>
+< 200 <response><E12 status="0"></E12></response>
+model E13:J:A:A:2005090500
+> <E13 type="playerdata" method="set" ref_id="48524B0000000001" option="9"><music num="5" sheet="1" data="4" score="82000"/></E13>
+< 200 <response><E13 status="0"></E13></response>
+> <eemall method="get" card_id="2003010000000010"/>
+< 200 <response><eemall status="0" now_point="0" add_point="400"><item num="3"/></eemall></response>
+# a visit: the station collects the 400 points (playnum, once), the player buys D11's song 5 (the
+# station's number 11005) and keeps an item of pop'n 9's and the station's own; the song bought by
+# hand is not in the station's inventory, so the card no longer holds it
+model C33:J:A:E
+mask time="\d{4}-\d\d-\d\d \d\d:\d\d:(\d\d)\+9"
+> <personaldata method="read" model="C33:J:A:E" card_header="68234101e9" card_data="00100000000001032000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000" ipg="0"/>
+< 200 <response><personaldata status="0" konami_id="hiraku33" pass="81dc9bdb52d04dc20036dbd8313ed055" date="2003-06-01" model="C00:J:A:A" play_num="0" point="0" chara_num="0" chara_model="" post_num="0" item_num="0" ticket_num="0" card_id="2003010000000010" seq="1" id_s="1" record_shop="1" userdata_flag="0" id_limit="0" time="2003-06-01 12:00:*+9"></personaldata></response>
+> <personaldata method="clist" user_id="hiraku33"/>
+< 200 <response><personaldata status="0" card_num="1"><item card_id="2003010000000010" model="C00:J:A:A"/></personaldata></response>
+> <personaldata method="playnum" card_id="2003010000000010" user_id="hiraku33" model="C00:J:A:A" seq="1"/>
+< 200 <response><personaldata status="0" point="400"></personaldata></response>
+> <personaldata method="playnum" card_id="2003010000000010" user_id="hiraku33" model="C00:J:A:A" seq="1"/>
+< 200 <response><personaldata status="0" point="0"></personaldata></response>
+> <personaldata method="write" user_id="hiraku33" src_id="01201000000000C33001" play_num="1" item_num="3" point="7" chara_num="0" chara_model="" ticket_num="3" ipg="0" card_id="2003010000000010" card_model="C00:J:A:A" seq="1" time="2003-06-01 21:00:00+9" date="2003-06-01" ofs="0000000000020000" last="1"/><personaldata method="i_set" user_id="hiraku33" seq="1" item_num="3" model0="C00:J:A:A" item_no0="11005" model1="C00:J:A:A" item_no1="7" model2="C33:J:A:E" item_no2="65537"/>
+< 200 <response><personaldata status="0"></personaldata><personaldata status="0"></personaldata></response>
+model E12:J:A:A:2004111700
+> <eemall method="get" card_id="2003010000000010"/>
+< 200 <response><eemall status="0" now_point="7" add_point="0"><item num="5"/></eemall></response>
+model C20:J:A:A
+> <eemall method="get" card_id="2003010000000010"/>
+< 200 <response><eemall status="0" now_point="7" add_point="0"></eemall></response>
+# the second visit: the items come back as the station sent them, no points waiting
+model C33:J:A:E
+> <personaldata method="read" model="C33:J:A:E" card_header="68234101e9" card_data="00100000000001032000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000" ipg="0"/>
+< 200 <response><personaldata status="0" konami_id="hiraku33" pass="81dc9bdb52d04dc20036dbd8313ed055" date="2003-06-01" model="C00:J:A:A" play_num="1" point="7" chara_num="0" chara_model="" post_num="0" item_num="3" ticket_num="3" card_id="2003010000000010" seq="2" id_s="1" record_shop="1" userdata_flag="0" id_limit="0" time="2003-06-01 12:00:*+9"><item num="11005" model="C00:J:A:A"/><item num="7" model="C00:J:A:A"/><item num="65537" model="C33:J:A:E"/></personaldata></response>
+> <personaldata method="playnum" card_id="2003010000000010" user_id="hiraku33" model="C00:J:A:A" seq="2"/>
+< 200 <response><personaldata status="0" point="0"></personaldata></response>
+# the owner's rate 0: credits earn nothing
+file credit_points-C33 0
+model E12:J:A:A:2004111700
+> <E12 type="playerdata" method="set" card_id="2003010000000010" option="5"><music num="5" sheet="0" data="1" score="80000"/></E12>
+< 200 <response><E12 status="0"></E12></response>
+> <eemall method="get" card_id="2003010000000010"/>
+< 200 <response><eemall status="0" now_point="7" add_point="0"><item num="5"/></eemall></response>
+# the RESTAURANT's free dish (restrant.get names no card: the station's last card read): once a day
+# a card (sub_code 0 serves it), else 100; the owner's restaurant_gift 2: every visit, 0: never
+model C33:J:A:E
+> <restrant method="get"/>
+< 200 <response><restrant status="0" sub_code="0"></restrant></response>
+> <restrant method="get"/>
+< 200 <response><restrant status="0" sub_code="100"></restrant></response>
+file restaurant_gift-C33 2
+> <restrant method="get"/>
+< 200 <response><restrant status="0" sub_code="0"></restrant></response>
+file restaurant_gift-C33 0
+> <restrant method="get"/>
+< 200 <response><restrant status="0" sub_code="100"></restrant></response>
+# no catalogue in the data folder: the shop server's two lists still say "nothing for this station"
+get /sum/file.xml
+< 200 <datasync><list url="/file.xml" path="file.xml" size="21" sum="cadefd108db93db56ef7dd2cdb5b16fa"/></datasync>
+get /file.xml
+< 200 <datasync></datasync>
+get /C33/file.xml
+< 404
+= 9d2985a1e831c8ff7d610d4ddb2ca1d3c47baeb4dacb4c5e16a7da4ef9c2e0a4 68 cards
+= 9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa 2 credit_points-C33
+= 4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865 2 eemall-2003010000000010
+= 7f3f889b48acfec7e11c37f5dec2ba13744455c45a4c678df5f68bfce61c260a 31 eemall-owned-2003010000000010
+= b1f38b27dbd78fa4ac19a10850d5f4410e2689b9313a31302cb827857254682d 16 eemall-station
+= 4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865 2 format
+= f37cc231f79f5a34132d67860b6b2b71cf2553e7691c80fa2f6e8ba3a6970630 1800 pdata-E12-2003010000000010
+= 16f1906540b2d2d4be1e0258e5ca6fc9b9eca4532f069cc1e38a429aa4d96a08 3436 pdata-E13-48524B0000000001
+= 2ac343155e9f2779d4cb88aad1a4a2754b0f9e44ed108c79e5d74414f57360aa 164 player-C33-2003010000000010
+= cfac9b7c1c560b0604c3318979475271e27e6b2bb797eb96372b9a1d9fbd970e 26 pscore-E12-2003010000000010
+= 1b9049daa604a7aca0bd83f5a0a2ca07f412b56938ecdd56d10b38a87cbdcc46 26 pscore-E13-48524B0000000001
+= 53c234e5e8472b6ac51c1ae1cab3fe06fad053beb8ebfd8977b010655bfdd3c3 2 refid
+= 9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa 2 restaurant_gift-C33
+= ee3aa64bb94a50845d5024cd4bd20202a4567aed5cd5328c0d97e9920775fc28 3 station-C33
+= 509df3e4bb7322d935d32f90503bd995c7cae192f2f4493b1546bda0f30a746e 72 userdata-2003010000000010
+= 509df3e4bb7322d935d32f90503bd995c7cae192f2f4493b1546bda0f30a746e 72 userdata-C20-2003010000000010
+= eeb96b46c956984f1997d061d72c718fef2288b32a851907624b5754cca3b82e 56 users

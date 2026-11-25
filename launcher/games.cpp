@@ -51,7 +51,7 @@ void readManifest(const QString &path, Game &g) {
         QString k = m.captured(1), v = m.captured(2);
         if (!section.isEmpty()) {
             if (section == "pc" && k == "loader") g.loader = v, g.hidden = v == "pc64" || v == "pc32";
-            // (the C33 station: its board is there, adding its files and its package's DLLs are not yet)
+            // (the C33 station: it is added and visited, its shop and the songs it unlocks are not finished)
             if (section == "pc" && k == "board" && v == "c33") g.hidden = true;
             if (section == "python" && k == "board" && v == "python2") g.python2 = true;
             continue;
@@ -119,7 +119,11 @@ QString Game::howTo() const {
             // TR: what the game's folder holds, in "...as the cabinet's drive holds it: %2" (C02, JAA, JAB, prog, data: folder names)
             const QString holds = family == "iidx" ? tr("C02 with data and its programs, a folder each by revision (JAA, JAB...: "
                                                         "the last is run)")
-                                                   : tr("prog (its programs, by date) and data");
+                                  // TR: (the ee'MALL station's drive D:) C33, JAE, Resource, boot, C33.csv: folder and file names
+                                  : family == "eemall" ? tr("C33 with Resource, boot, C33.csv and its program's folder (JAE), or the "
+                                                            "folder holding it (D, beside an extracted C: drive, which isn't needed). "
+                                                            "Its E: and F: drives (its backups) are made in its save folder")
+                                                       : tr("prog (its programs, by date) and data");
 #ifdef _WIN32
             // TR: %1 is the game's title, %2 what the folder holds
             return tr("HIRAKU has no data for %1 yet. You need the game's own folder, as the cabinet's "

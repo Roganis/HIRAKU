@@ -142,7 +142,8 @@ a line, tab-separated `key=value` fields:
 - `users`: KONAMI IDs (user, pass, cards, active);
 - `rank-score`, `rank-hitasura`, `rank-gamblerz`: each entrant's best;
 - `eemall-CARD`: optional, ee'MALL item numbers for a card, one a line (the server owner writes these;
-  pop'n 9 itself never asks, see `eemall.i_get`);
+  pop'n 9 itself never asks, see `eemall.i_get`); with an ee'MALL station, the songs bought there
+  instead (`eemall-owned-CARD`, the shop `eemall-shop/`: "ee'MALL" below);
 - `message`: optional, written by the server owner: one line (up to 255 bytes, ASCII or
   Shift-JIS) that every cabinet downloads at start-up and scrolls across its title screen (see
   `package`). Delete it to stop.
@@ -1451,6 +1452,89 @@ needed. Its clears: 1 FAILED, 3 EASY CLEAR, 4 CLEAR (checked on music select); i
 out itself. libavs logs a parser's
 failure as "res: receiver returns failure" (`HK_PC_AVS_LOG`). A new pass is asked to accept terms
 (a page of its own) before NAME ENTRY.
+
+## ee'MALL (the station and the pop'n games' songs)
+
+Konami's ee'MALL 1st Avenue station (`C33:J:A:E`, game id `eemall`, hiraku-pc) speaks pop'n 9's
+e-AMUSE3 (`runtime/eamuse/server_eemall.cpp`). It sold songs for the pop'n games with points; a
+song bought opened in the games through `eemall.get`.
+
+**Item numbers are per game family** (each game's `eemall.get` parser): pop'n 10 turns item N into
+its music N + 389 (its own ee'MALL songs, downloaded onto the disk in the arcade: lost); pop'n 11,
+12 and 13 into music N + 449. pop'n 12 and 13 hold 87 such songs on their disks (items 1-87): a
+song is in the music select's ee'MALL folder (CHALLENGE mode) only when the card's list holds it,
+and the game asks only for a card with a KONAMI ID (`userid.ctou` 0). pop'n 14 never asks: its 47
+ee'MALL songs open by its event phase. pop'n 9 never asks (`eemall.i_get`, above).
+
+**Locked until bought** (the station's setting `station`, file `station-C33`): 1 on, 0 off, -1 (the
+default) on once a station has booted against this server (`eemall-station`) or the shop's
+catalogue is in the data folder (`eemall-shop`, below). On:
+- `eemall.get` answers the songs the card bought for the asking game's family (`model=` when the
+  call has one: pop'n 12 carrying a pop'n 11 card over asks for `D11`; else pop'n 10 its own, 11-13
+  pop'n 11's), `now_point` the card's points as the station last wrote them, `add_point` the
+  points its credits earned since. The owner's `eemall-CARD` lists open nothing.
+- a credit played with a card on pop'n 9-14 (pop'n 9-11's `userdata.write`, 12-14's `playerdata
+  set`) earns `credit_points` (default 100) points, kept in the card's `player-C33-CARD` (`pending`);
+  the station's `personaldata.playnum` for that card hands them over once.
+- the station's `i_set` (its whole inventory, sent with every `personaldata.write`) is the card's
+  songs: `eemall-owned-CARD`, a line a song (`family`, `num`, the station's `station` number). A
+  song sold back or thrown away at the station is gone from the games too.
+Off: as before, the owner's `eemall-CARD` lists (pop'n 9's items the station keeps are added to them).
+`userid.ctou` also finds a card named by its player's ref id (pop'n 13 sends that).
+
+**The shop.** The station downloads its catalogue from a shop server in the arcade
+(`shopinf.getsservip`, then plain `GET`s). HIRAKU's server is that shop server: it serves the data
+folder's `eemall-shop/`, which `tools/eemall_catalogue.py` writes from the player's own games (the
+installed pop'n 12 and 13: their ee'MALL songs' titles; never kept in the repo), and only when a
+station is installed (`dumps/eemall`). Without that folder the station is told there is no
+catalogue and keeps RECORDS, GOODS and POLICE BOX shut, as before. What the station reads (SSRNet.dll,
+eemall.exe of revision JAE):
+- three lists, plain XML: `/sum/file.xml` names `/file.xml`, which names `/C33/file.xml`, which
+  names the station's files: `<datasync><list url path size sum/>...</datasync>`; the station GETs
+  `"/" + path`, and checks `size` and `sum` (the MD5 of the file as served, lower-case hex). The
+  answer needs a `Content-Length` and its header's end as CR LF.
+- `C33/date.dat` (the data's version, 19 characters), `C33/records/sound.xml` (the songs:
+  `<eamuse-download><sound target title artist genre point bpm_start level_ee level_eh num url
+  vol_bt vol_ele vol_2mix anime/>...`, Shift-JIS; `point` the price, a song with 0 isn't listed;
+  `num` the station's number, 1-65535), each record's five files `C33/records/URL.001`-`.005` (`url`
+  four characters: the DJ mini-game's backing track, key sounds, their index and chart; `.005` the
+  RECORDS preview), and `C33/mychara/mychara.xml` (GOODS: characters, goods, clothes).
+  All but the lists are in the station's own cipher: `%eNc`, the plain length (32-bit
+  little-endian), then 8-byte blocks of a two-round block cipher in CBC mode (zero IV), whose
+  constants the tool reads from the player's SSRNet.dll.
+- The preview (`.005`) is streamed by the station itself (DXAudio.dll) once RECORDS' cursor rests
+  half a second on a record: the cipher, then PlayStation SPU ADPCM, stereo at 44.1 kHz, the left
+  and right channels' 16-byte blocks taking turns (a WAV is refused: silence). That is the format
+  of pop'n music 12's and 13's own music-select previews (10 s; each song slot's "pre" part), so the
+  tool takes each song's from the player's disk (a song's slot = its song table entry's number + 8;
+  the slots' scrambling differs between 12 and 13) and gives a short silence where it finds none.
+  The artist, which isn't text on the disks, is the first game's name (the SELL list shows
+  "title/artist").
+- The station stamps every record it sells as pop'n 9's (`C00:J:A:A`), so the station's number
+  says which song: a family's base + item (D11: 11000 + N, C20: 20000 + N).
+- A record whose `.001`-`.004` are missing is dropped (with none listed, RECORDS' BUY ends at
+  SYSTEM ERROR (NO FILE); so with no songs the tool writes no shop at all), and the station offers the DJ mini-game as soon as one record exists,
+  playing any of them. Their real files are lost: the tool gives every record one shared set, a
+  short silent song with no notes, and HIRAKU's cabinet DLL leaves the DJ game out of AMUSEMENT's
+  list (`runtime/pc/ezusb_c33.c`; `HK_PC_C33_DJ=1` offers it).
+- GOODS: an empty `mychara.xml` (Konami's goods are lost). The station opens GOODS with the shop
+  and its BUY then says "load error, restart", so the cabinet DLL keeps GOODS closed on the map
+  (`HK_PC_C33_GOODS=1` opens it). POLICE BOX: the lost-and-found list (`lostdata.read`), empty.
+- Titles are drawn full-width only (ASCII shows as blank): the tool writes ASCII in its full-width
+  forms. `target`'s bits are the SUPPORT box's machine icons (1 pop'n music, 2 GuitarFreaks, 4
+  drummania, 8 beatmania IIDX: 1 seen alone, the others by their order): the tool writes 1.
+- Prices and rates are HIRAKU's guesses (Konami's are lost): `song_price` (default 300 points,
+  read by the tool) and `credit_points` (100), the station's settings (`hiraku-eamuse --settings
+  eemall`, `--set eemall song_price 500`; the tool must run again after a price changes). The
+  RESTAURANT's dishes pay 200-500 points (eemall.exe 0x442227).
+- RESTAURANT (`restrant.get`, no attributes: its `sub_code` is the restaurant's event). With 0
+  its free dish ("free service while it lasts") is served and pays 500 points on every visit; 100
+  (0x64) changes that dish's value from -1000000 to 1000000 (eemall.exe 0x445452), read as "sold
+  out" (a guess: not seen on screen); 101 does the same for another dish, 9999 both. The setting
+  `restaurant_gift`: 1 (default) the free dish once a day per card (the station's last card read),
+  0 never, 2 every visit.
+- `tools/eemall_catalogue.py --items GAME IMAGE` prints what each item number opens in a pop'n
+  game's disk (popn9-popn14; the tables are for the revisions games/*/game.toml's `ee_sha1` names).
 
 ## The players' files
 

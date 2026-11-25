@@ -1,5 +1,7 @@
 # ee'MALL 1st Avenue (C33): the station's start-up, as the program sends it (services and pcbtracker
-# encrypted, package and shopinf in the clear); no shop server named
+# encrypted, package and shopinf in the clear); no shop server named. The owner's setting keeps the
+# songs as before (station 0: no "locked until bought"; eemall-station.txt has it on)
+file station-C33 0
 model C33:J:A:E
 >e <services method="get" model="C33:J:A:E"/>
 < 200 info=1-484b0001-0001 <response><services expire="600" status="0"><item name="pcbtracker" url="http://cabinet.test:8080/"/><item name="posevent" url="http://cabinet.test:8080/"/><item name="numbering" url="http://cabinet.test:8080/"/><item name="package" url="http://cabinet.test:8080/"/><item name="userdata" url="http://cabinet.test:8080/"/><item name="local" url="http://cabinet.test:8080/"/><item name="shopinf" url="http://cabinet.test:8080/"/><item name="userid" url="http://cabinet.test:8080/"/></services></response>
@@ -58,7 +60,9 @@ file player-C33-2003010000000028 date=2003-03-01\tpoint=500\tticket=9\tseq=4
 > <personaldata method="read" model="C33:J:A:E" card_header="68234101e9" card_data="00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000" ipg="0"/>
 < 200 <response><personaldata status="300"></personaldata></response>
 = 10159baf262b43a92d95db59dae1f72c645127301661e0a3ce4e38b295a97c58 2 eemall-2003010000000010
+= b1f38b27dbd78fa4ac19a10850d5f4410e2689b9313a31302cb827857254682d 16 eemall-station
 = 4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865 2 format
-= 2c7da982e86faf7bf6d86db11da9775b8b3d2fb220c1bc9b2145072d311a9ac5 108 player-C33-2003010000000010
+= 44ef8dffb5e680e95dd50eaf22c2630c1c02b5df9df7be78a982b5c0025958cb 124 player-C33-2003010000000010
 = 1ef271550746edaee14d13e5eca04534d369bb82f1625f95e360d2e5b8cf4e96 55 player-C33-2003010000000028
+= 9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa 2 station-C33
 = 287054c25f563b0d0f096521c3b77e0845b0564078bd3d0aaa5aa329facf4876 56 users

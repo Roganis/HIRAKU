@@ -251,6 +251,7 @@ std::string Server::answer_later(const Game &g, const Call &call, const Request 
         if (f == "write") {
             if (r.inner.size() > USERDATA_MAX) return "<userdata status=\"1\"/>";
             store_->put(tables::userdata, {game, card}, "<userdata status=\"0\" time=\"" + esc(attr(r.attrs, "time")) + "\">" + r.inner + "</userdata>");
+            if (g.family == Family::popn) eemall_played(card);   // pop'n 10, 11: a credit's end (ee'MALL points)
             return "<userdata status=\"0\"/>";
         }
     }
@@ -287,6 +288,9 @@ std::string Server::answer_later(const Game &g, const Call &call, const Request 
     }
     if (m == "eemall" && f == "get") {   // (0x19eda8) points, then <item num/> and <kisekae path pri/>
         const std::string card = attr(r.attrs, "card_id");
+        // a station among the player's games: the songs bought there for this game's family (pop'n
+        // 12 asks for pop'n 11's, model="D11...", when it carries a card over), and the points
+        if (eemall_station()) return eemall_get_bought(attr(r.attrs, "model").empty() ? game : attr(r.attrs, "model"), card);
         std::string items;
         const std::string list = safe_name(card) ? store_->get(tables::eemall, {card}) : "";
         size_t at = 0, count = 0;
@@ -488,6 +492,13 @@ std::string Server::answer_playerdata(const std::string &game, const Request &r)
         return with_record();
     }
     if (f == "set") {
+        // a credit's end: its ee'MALL points (server_eemall.cpp; station mode only), for the card
+        // (pop'n 13 and 14 name the player by ref id: its card from the cards)
+        std::string played = attr(r.attrs, "card_id");
+        if (!attr(r.attrs, "ref_id").empty())
+            for (const Record &c : from_lines(store_->get(tables::cards, {})))
+                if (attr(c, "refid") == attr(r.attrs, "ref_id")) played = attr(c, "cardid");
+        if (game == "E12" || game == "E13" || game == "F14") eemall_played(played);
         if (rec.size() != RECORD) blank();
         if (r.attrs.count("name")) set_name(attr(r.attrs, "name"));
         if (r.attrs.count("password")) set_password(attr(r.attrs, "password"));

@@ -618,6 +618,8 @@ endif()
 # tools/ingest.py --place: a game's folder moved into dumps/ or read where it is
 if(Python3_Interpreter_FOUND AND Python3_VERSION VERSION_GREATER_EQUAL 3.11)
   add_test(NAME ingest_place COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/tools/test_ingest_place.py)
+  # ... and a ROM set given as a folder: its .bin ROMs copied, a disc's .bin not
+  add_test(NAME ingest_romdir COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/tools/test_ingest_romdir.py)
   # ... and its walk of a dropped folder: links followed, but not up the tree or out through a Wine prefix's drives
   if(NOT WIN32)
     add_test(NAME ingest_walk COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/tools/test_ingest_walk.py)

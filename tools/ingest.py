@@ -101,10 +101,23 @@ def copy_romset(romset: str, romdir: str) -> list[str]:
     os.makedirs(romdir, exist_ok=True)
     names = []
     if os.path.isdir(romset):
-        # a MAME rompath folder: the set's files loose (CHDs and logs left out)
-        for n in sorted(os.listdir(romset)):
+        # a MAME rompath folder: the set's files loose (disc images and logs left out). A .bin is a ROM
+        # (ddr2m's h8a01.bin, Keyboardmania's synth program) unless a .cue beside it names it or it is
+        # a disc's size
+        listed = sorted(os.listdir(romset))
+        tracks = set()
+        for n in listed:
+            if n.lower().endswith(".cue"):
+                with open(os.path.join(romset, n), errors="replace") as f:
+                    tracks |= {m.lower() for m in re.findall(r'FILE\s+"?([^"\n]+?)"?\s+\w+\s*$', f.read(), re.M)}
+        for n in listed:
             src = os.path.join(romset, n)
-            if os.path.isfile(src) and not n.lower().endswith(IMAGES + (".log", ".part", ".txt")):
+            low = n.lower()
+            if low.endswith(".bin"):
+                disc = low in tracks or os.path.getsize(src) >= 64 << 20
+            else:
+                disc = low.endswith(IMAGES + (".log", ".part", ".txt"))
+            if os.path.isfile(src) and not disc:
                 shutil.copyfile(src, os.path.join(romdir, n))
                 names.append(n)
     elif romset.lower().endswith(".7z"):

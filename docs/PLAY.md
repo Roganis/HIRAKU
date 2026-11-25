@@ -814,6 +814,9 @@ controls and cards around it.
 - **Linux:** install Wine; the first start takes a minute. The IIDX movies need GStreamer's plugins
   base, bad and libav (32-bit ones too where Wine has a 32-bit half); without them the stages stay
   black, and the log says what is missing.
+- **IIDX stops as it starts with "Could not create source filter to graph! hr=0x80040216":** Windows
+  didn't find the game's movies. The data folder needs its `movie` folder (10th style opens one at
+  start-up); a copy without it is incomplete. The log says so.
 - **NVIDIA on Windows:** if the log says HIRAKU fell back to OpenGL, set "Vulkan/OpenGL present
   method" to "Prefer layered on DXGI Swapchain" for `bin\hiraku-pc.exe`.
 - **First start:** BACKUP ERROR 5-1502; HIRAKU restarts the game by itself.

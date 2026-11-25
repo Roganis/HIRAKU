@@ -513,7 +513,28 @@ public:
     bool link_data(const std::string &data) {
         data_dir_ = data;
         if (data_as_.rfind("..\\", 0) != 0) return true;
+        if (family_ == "iidx") movies_note(data);
         return link_folder(save_ + "/prog/" + data_as_.substr(3), data, data_as_);
+    }
+    // The IIDX games' movies: Windows' DirectShow (Wine's) opens them by name in the data's `movie`
+    // folder. Data without them: 10th style, which opens one as it starts, stops there with a box
+    // ("Could not create source filter to graph!  hr=0x80040216", DirectShow's "not found": checked on
+    // Windows 11, where a file that is there, even an empty one, passes that step); the other games'
+    // stages stay black. Said in the log, where a report shows it
+    static void movies_note(const std::string &data) {
+        std::string folder = data + "/movie";
+#ifndef _WIN32
+        if (DIR *d = opendir(data.c_str())) {   // (whatever its letters' case: Wine finds it so)
+            while (const dirent *e = readdir(d))
+                if (!strcasecmp(e->d_name, "movie")) folder = data + "/" + e->d_name;
+            closedir(d);
+        }
+#endif
+        if (!list_files(folder).empty()) return;
+        fprintf(stderr, "hiraku-pc: the game's data (%s) has no movies (no files in its movie folder): the stages' movies will "
+                        "be missing, and beatmania IIDX 10th style stops as it starts with \"Could not create source filter "
+                        "to graph\". The game's disk has them in data\\movie: this copy of the data is incomplete\n",
+                data.c_str());
     }
     // A folder AT that is the folder TO (made again each time: TO may have moved). Linux: a symbolic
     // link; Windows: a junction (no rights needed)

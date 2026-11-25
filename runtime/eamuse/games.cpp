@@ -226,6 +226,9 @@ const std::vector<Game> &games() {
         {"gfdm573-dm", "DrumMania (System 573)", "?40", Family::gfdm_573, {&S::answer_gfdm, shared}, {}, &GFDM573_READERS},
         {"eemall", "ee'MALL 1st Avenue", "C33", Family::eemall, {&S::answer_eemall, shared, popn9},
          {EEMALL_STATION, EEMALL_CREDIT, EEMALL_PRICE, EEMALL_GIFT}},
+        // the 64-bit PC beatmania IIDX (games/iidx33): its modules' prefix moves with each version
+        {"iidx-pc-later", "beatmania IIDX, later PC versions", "LDJ", Family::iidx_pc_later, {later, shared, popn9},
+         {}, &IIDX_READERS, /*unlisted*/ true, "IIDX33"},
         // last: a model no row above names, answered as a later pop'n (its phase by the call's model: phase-Z99)
         {"", "a game the table doesn't name", "", Family::unknown, {later, shared, popn9}, {phase(-1)}},
     };
@@ -244,6 +247,24 @@ bool matches(const char *pattern, const std::string &model, bool wild) {
     return has_wild == wild;
 }
 }  // namespace
+
+std::vector<std::string> own_modules(const Game &g) {
+    std::vector<std::string> out;
+    if (!g.module_prefix) return out;
+    // the later PC beatmania IIDX's (the game's log's module_add lines at start-up)
+    static const char *const IIDX_PC_LATER[] = {"pc", "music", "shop", "grade", "lobby", "streaming", "gameSystem"};
+    if (g.family == Family::iidx_pc_later)
+        for (const char *s : IIDX_PC_LATER) out.push_back(std::string(g.module_prefix) + s);
+    return out;
+}
+
+std::string module_suffix(const std::string &m) {
+    size_t p = 0;
+    while (p < m.size() && ((m[p] >= 'A' && m[p] <= 'Z') || (m[p] >= 'a' && m[p] <= 'z'))) p++;
+    const size_t letters = p;
+    while (p < m.size() && m[p] >= '0' && m[p] <= '9') p++;
+    return letters && p > letters ? m.substr(p) : "";
+}
 
 const Game *game_by_id(const std::string &id) {
     if (id.empty()) return nullptr;

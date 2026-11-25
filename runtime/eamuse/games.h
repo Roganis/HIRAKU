@@ -30,6 +30,7 @@ enum class Family {
     iidx14_16,        // beatmania IIDX GOLD on (libavs, pop'n 15's transport)
     gfdm_v,           // GuitarFreaks and DrumMania V (Konami Python 2)
     gfdm_573,         // the System 573 GuitarFreaks and DrumMania
+    iidx_pc_later,    // the later PC beatmania IIDX games (model LDJ)
     unknown,          // a model the table doesn't name
     eemall,           // Konami's ee'MALL station (1st Avenue, C33: a Windows PC, pop'n music 9's library)
 };
@@ -59,11 +60,19 @@ struct Game {
     const Readers *readers = nullptr;     // its players, names and scores (readers.h); null: not read yet
     bool unlisted = false;                // left out of what hiraku-server's API lists and shows (its own
                                           // switch, list_all_games, lists it): no effect on the answers
+    const char *module_prefix = nullptr;  // a game whose library names its own modules after its version:
+                                          // their prefix (own_modules(); the one place such a name is kept)
 };
 
 const std::vector<Game> &games();                 // the one table: every game the server answers
 const Game &game_of(const std::string &model);    // exact rows first, then rows with '?', then the row for a model it doesn't know
 const Game *game_by_id(const std::string &id);    // a row by its id, or by its model for a row without one; null: none
+// A game's own modules, as its library registers them (services.get lists them, or the library fails
+// their calls before sending): its module_prefix + each of its family's suffixes. Empty: none. The
+// answers match these modules by their suffix (module_suffix()), never by a versioned name
+std::vector<std::string> own_modules(const Game &);
+// A module's name after its letters+number prefix ("shop" of "<letters><number>shop"; "" if none)
+std::string module_suffix(const std::string &module);
 
 // The settings that are no game's: the title message, the data folder's limits
 const std::vector<Setting> &server_settings();

@@ -11,14 +11,19 @@
 //     neither a raw socket's rights nor Wine's. ea3's status 0x11 reads online (3) once they come
 //     back, and the game's own e-AMUSEMENT calls wait for that.
 #include <winsock2.h>
+#include <ws2tcpip.h>
 #include "pc64.h"
 
 #include <iphlpapi.h>
 #include <stdlib.h>
 #include <string.h>
 
+// (with winsock2.h first, mingw's headers leave GetProcAddress undeclared in C)
+extern FARPROC WINAPI GetProcAddress(HMODULE, LPCSTR);
+
 static struct in_addr g_ea_addr;
 static u_short g_ea_port;   // network order; 0: no server given
+static int g_log;           // HK_PC64_NET_LOG on this game: what the game is told and does on the network
 
 static void read_server(void) {
     const char *url = getenv("HK_PC64_EA"), *at = getenv("HK_PC_EA");   // a URL, or hiraku-pc's a.b.c.d:port
@@ -30,6 +35,8 @@ static void read_server(void) {
     }
 }
 
+static const char *ip4(struct in_addr a) { return inet_ntoa(a); }
+
 // --- the card
 static DWORD WINAPI GetAdaptersInfo_(PIP_ADAPTER_INFO info, PULONG size) {
     if (!size) return ERROR_INVALID_PARAMETER;
@@ -37,6 +44,7 @@ static DWORD WINAPI GetAdaptersInfo_(PIP_ADAPTER_INFO info, PULONG size) {
         *size = sizeof(IP_ADAPTER_INFO);
         return ERROR_BUFFER_OVERFLOW;
     }
+    if (g_log) pc64_log("net: GetAdaptersInfo -> the cabinet's card 192.168.0.2/24, gateway 192.168.0.1");
     memset(info, 0, sizeof *info);
     strcpy(info->AdapterName, "{48495241-4b55-0000-0000-000000000001}");
     strcpy(info->Description, "HIRAKU");
@@ -65,14 +73,23 @@ static DWORD WINAPI DeleteIPAddress_(ULONG context) {
 // --- e-AMUSEMENT's port
 static int(WSAAPI *r_connect)(SOCKET, const struct sockaddr *, int);
 static int WSAAPI connect_(SOCKET s, const struct sockaddr *a, int n) {
+    if (!r_connect) r_connect = (void *)GetProcAddress(GetModuleHandleA("ws2_32.dll"), "connect");
     if (g_ea_port && a && a->sa_family == AF_INET && n >= (int)sizeof(struct sockaddr_in)) {
         struct sockaddr_in in = *(const struct sockaddr_in *)a;
         if (in.sin_port == htons(80) && in.sin_addr.s_addr == g_ea_addr.s_addr) {
+            if (g_log) pc64_log("net: connect(%s:%u) -> the e-AMUSEMENT server's port %u", ip4(in.sin_addr), 80, ntohs(g_ea_port));
             in.sin_port = g_ea_port;
-            return r_connect(s, (struct sockaddr *)&in, sizeof in);
+            const int r = r_connect(s, (struct sockaddr *)&in, sizeof in);
+            if (g_log) pc64_log("net: connect = %d (err %d)", r, r ? WSAGetLastError() : 0);
+            return r;
         }
     }
-    return r_connect(s, a, n);
+    const int r = r_connect(s, a, n);
+    if (g_log && a && a->sa_family == AF_INET && n >= (int)sizeof(struct sockaddr_in)) {
+        const struct sockaddr_in *in = (const struct sockaddr_in *)a;
+        pc64_log("net: connect(%s:%u) = %d (err %d)", ip4(in->sin_addr), ntohs(in->sin_port), r, r ? WSAGetLastError() : 0);
+    }
+    return r;
 }
 
 // --- the keepalive's pings: a UDP socket stands in for each raw ICMP one
@@ -94,9 +111,12 @@ static SOCKET WSAAPI socket_(int af, int type, int proto) {
         if (s == INVALID_SOCKET) return s;
         memset(&g_ping[g_npings], 0, sizeof g_ping[g_npings]);
         g_ping[g_npings++].s = s;
+        if (g_log) pc64_log("net: socket(AF_INET, SOCK_RAW, IPPROTO_ICMP) -> a UDP socket %d, its echo replies answered at once", (int)s);
         return s;
     }
-    return socket(af, type, proto);
+    const SOCKET s = socket(af, type, proto);
+    if (g_log) pc64_log("net: socket(%d, %d, %d) = %d (err %d)", af, type, proto, (int)s, s == INVALID_SOCKET ? WSAGetLastError() : 0);
+    return s;
 }
 static int bind_pinger(int k) {
     if (g_ping[k].self.sin_port) return 0;
@@ -111,7 +131,17 @@ static int bind_pinger(int k) {
 }
 static int WSAAPI bind_(SOCKET s, const struct sockaddr *a, int len) {
     const int k = pinger(s);
-    return k < 0 ? bind(s, a, len) : bind_pinger(k);
+    if (k >= 0) {
+        const int r = bind_pinger(k);
+        if (g_log) pc64_log("net: bind(pinger %d) = %d", (int)s, r);
+        return r;
+    }
+    const int r = bind(s, a, len);
+    if (g_log && a && a->sa_family == AF_INET && len >= (int)sizeof(struct sockaddr_in)) {
+        const struct sockaddr_in *in = (const struct sockaddr_in *)a;
+        pc64_log("net: bind(%s:%u) = %d (err %d)", ip4(in->sin_addr), ntohs(in->sin_port), r, r ? WSAGetLastError() : 0);
+    }
+    return r;
 }
 static int WSAAPI closesocket_(SOCKET s) {
     const int k = pinger(s);
@@ -128,6 +158,11 @@ static u_short icmp_sum(const uint8_t *p, int n) {
 // An echo request: its reply as a raw socket gives it (an IPv4 header first, from the one pinged),
 // sent back to the stand-in for recvfrom and select to find
 static int ping_send(int k, const char *buf, int len, const struct sockaddr *to, int tolen) {
+    if (g_log && to && tolen >= (int)sizeof(struct sockaddr_in)) {
+        const struct sockaddr_in *in = (const struct sockaddr_in *)to;
+        pc64_log("net: ping sendto(%s:%u) len %d, icmp type %d%s", ip4(in->sin_addr), ntohs(in->sin_port), len,
+                 len > 0 ? (int)(uint8_t)buf[0] : -1, (len >= 8 && (uint8_t)buf[0] == 8) ? " (echo request: answered at once)" : "");
+    }
     if (len < 8 || len > 1400 || !to || tolen < (int)sizeof(struct sockaddr_in) || bind_pinger(k) || (uint8_t)buf[0] != 8) return len;
     uint8_t reply[1500];
     const int n = 20 + len;
@@ -152,6 +187,7 @@ static int ping_receive(int k, char *buf, int len, int flags, struct sockaddr *f
     struct sockaddr_in got;
     int gotlen = sizeof got;
     const int r = recvfrom(g_ping[k].s, buf, len, flags, (struct sockaddr *)&got, &gotlen);
+    if (g_log) pc64_log("net: ping recvfrom = %d (err %d)", r, r < 0 ? WSAGetLastError() : 0);
     if (r >= 0 && from && fromlen && *fromlen >= (int)sizeof(struct sockaddr_in)) {
         memcpy(from, &g_ping[k].last_to, sizeof(struct sockaddr_in));
         if (r >= 16) memcpy(&((struct sockaddr_in *)from)->sin_addr, buf + 12, 4);   // the reply's sender
@@ -192,8 +228,62 @@ static int WSAAPI WSARecvFrom_(SOCKET s, LPWSABUF bufs, DWORD n, LPDWORD got, LP
     return 0;
 }
 
+// HK_PC64_NET_LOG on this game: the calls the loader doesn't otherwise touch, logged and passed on.
+// Each wrapper never calls a NULL r_: if its module didn't import the call, the real one is taken
+// from the DLL's exports on first use
+static int(WSAAPI *r_getaddrinfo)(PCSTR, PCSTR, const ADDRINFOA *, PADDRINFOA *);
+static int WSAAPI getaddrinfo_(PCSTR node, PCSTR service, const ADDRINFOA *hints, PADDRINFOA *res) {
+    if (!r_getaddrinfo) r_getaddrinfo = (void *)GetProcAddress(GetModuleHandleA("ws2_32.dll"), "getaddrinfo");
+    const int r = r_getaddrinfo(node, service, hints, res);
+    if (g_log) {
+        pc64_log("net: getaddrinfo(\"%s\", \"%s\") = %d", node ? node : "", service ? service : "", r);
+        for (PADDRINFOA a = res ? *res : NULL; a && g_log; a = a->ai_next)
+            if (a->ai_family == AF_INET)
+                pc64_log("net:   -> %s:%u", ip4(((struct sockaddr_in *)a->ai_addr)->sin_addr), ntohs(((struct sockaddr_in *)a->ai_addr)->sin_port));
+    }
+    return r;
+}
+static int(WSAAPI *r_getnameinfo)(const struct sockaddr *, socklen_t, PSTR, DWORD, PSTR, DWORD, int);
+static int WSAAPI getnameinfo_(const struct sockaddr *a, socklen_t alen, PSTR host, DWORD hlen, PSTR serv, DWORD slen, int flags) {
+    if (!r_getnameinfo) r_getnameinfo = (void *)GetProcAddress(GetModuleHandleA("ws2_32.dll"), "getnameinfo");
+    const int r = r_getnameinfo(a, alen, host, hlen, serv, slen, flags);
+    if (g_log && a && a->sa_family == AF_INET)
+        pc64_log("net: getnameinfo(%s) = %d, host \"%s\" serv \"%s\"", ip4(((const struct sockaddr_in *)a)->sin_addr), r, host ? host : "", serv ? serv : "");
+    return r;
+}
+static DWORD(WINAPI *r_GetNetworkParams)(PFIXED_INFO, PULONG);
+static DWORD WINAPI GetNetworkParams_(PFIXED_INFO info, PULONG size) {
+    if (!r_GetNetworkParams) r_GetNetworkParams = (void *)GetProcAddress(GetModuleHandleA("iphlpapi.dll"), "GetNetworkParams");
+    const DWORD r = r_GetNetworkParams(info, size);
+    if (g_log && r == NO_ERROR && info) pc64_log("net: GetNetworkParams -> host \"%s\", domain \"%s\"", info->HostName, info->DomainName);
+    return r;
+}
+static DWORD(WINAPI *r_GetIfTable)(PMIB_IFTABLE, PULONG, BOOL);
+static DWORD WINAPI GetIfTable_(PMIB_IFTABLE t, PULONG size, BOOL order) {
+    if (!r_GetIfTable) r_GetIfTable = (void *)GetProcAddress(GetModuleHandleA("iphlpapi.dll"), "GetIfTable");
+    const DWORD r = r_GetIfTable(t, size, order);
+    if (g_log) pc64_log("net: GetIfTable = %lu, %lu row(s)", (unsigned long)r, r == NO_ERROR && t ? (unsigned long)t->dwNumEntries : 0ul);
+    return r;
+}
+
+// Called once the game's DLL is loaded too: the name lookups and the machine's names go to Wine
+// untouched today, so with the log on they are wrapped to be seen (and still passed on)
+void pc64_netlog_install(HMODULE avs, HMODULE game) {
+    if (!g_log) return;
+    r_getaddrinfo = pc64_import(avs, "ws2_32.dll", "getaddrinfo", (void *)getaddrinfo_);
+    r_getnameinfo = pc64_import(avs, "ws2_32.dll", "getnameinfo", (void *)getnameinfo_);
+    r_GetNetworkParams = pc64_import(avs, "iphlpapi.dll", "GetNetworkParams", (void *)GetNetworkParams_);
+    if (game) {
+        r_GetIfTable = pc64_import(game, "iphlpapi.dll", "GetIfTable", (void *)GetIfTable_);
+        void *g = pc64_import(game, "iphlpapi.dll", "GetNetworkParams", (void *)GetNetworkParams_);
+        if (!r_GetNetworkParams) r_GetNetworkParams = g;   // AVS didn't import it: the game's real one serves
+    }
+    if (r_getaddrinfo) pc64_log("net: name lookups logged (HK_PC64_NET_LOG)");
+}
+
 void pc64_net_install(HMODULE avs) {
     read_server();
+    g_log = pc64_game_is_iidx() && getenv("HK_PC64_NET_LOG") != NULL;
     // AVS2 imports Winsock by ordinal: 2 bind, 3 closesocket, 4 connect, 23 socket
     r_connect = pc64_import_ordinal(avs, "ws2_32.dll", 4, (void *)connect_);
     pc64_import_ordinal(avs, "ws2_32.dll", 2, (void *)bind_);

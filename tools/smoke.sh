@@ -73,6 +73,11 @@ done
 # hiraku-server is a package of its own (tools/package-server.sh): it needs the system's SQLite
 if [ -e "$root/bin/hiraku-server$ext" ]; then bad "bin/hiraku-server$ext is in the package (it has its own: tools/package-server.sh)"
 else ok "no hiraku-server in the package (its own: tools/package-server.sh)"; fi
+# the 64-bit PC games' loader: the stand-in DLL a game hard-imports beside it, or that game won't start
+if [ -e "$root/bin/pc/hiraku-pc64.exe" ]; then
+  [ -f "$root/bin/pc/nvEncodeAPI64.dll" ] && ok "bin/pc: the 64-bit loader with its stand-in DLL" ||
+    bad "bin/pc/hiraku-pc64.exe without nvEncodeAPI64.dll beside it (runtime/pc64/nvenc_stub.c)"
+fi
 # the PC games' cabinet DLLs: with pop'n's, the C02's (IIDX 9th style on) and the C33's (the ee'MALL station)
 if [ -e "$root/bin/pc/ezusb.dll" ]; then
   miss=""

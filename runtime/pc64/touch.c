@@ -10,6 +10,7 @@
 // size (it may be placed elsewhere and resized: display.c).
 #include "pc64.h"
 
+#include <ctype.h>
 #include <string.h>
 #include <windowsx.h>
 
@@ -26,21 +27,37 @@ static int ours(HTOUCHINPUT h) { return ((ULONG_PTR)h & 0xffff0000u) == HANDLE_B
 static BOOL(WINAPI *r_RegisterTouchWindow)(HWND, ULONG);
 static BOOL(WINAPI *r_GetTouchInputInfo)(HTOUCHINPUT, UINT, PTOUCHINPUT, int);
 static BOOL(WINAPI *r_CloseTouchInputHandle)(HTOUCHINPUT);
+static HWND(WINAPI *r_CreateWindowExA)(DWORD, const char *, const char *, DWORD, int, int, int, int, HWND, HMENU, HINSTANCE, void *);
+static BOOL(WINAPI *r_ShowWindow2)(HWND, int);
+static CRITICAL_SECTION g_ev_cs;   // the touch events kept for the game's reads, one writer at a time
 
 static void sub_screen_mouse(HWND w);
+static HWND main_screen(void);
+
+// case-insensitive "title contains word" (the game's window titles end in " main"/" sub")
+static int title_has(HWND w, const char *word) {
+    char title[64] = "", low[64] = "";
+    GetWindowTextA(w, title, sizeof title);
+    for (int i = 0; i < 63 && title[i]; i++)
+        low[i] = (char)tolower((unsigned char)title[i]);
+    return strstr(low, word) != NULL;
+}
 
 static BOOL WINAPI RegisterTouchWindow_(HWND w, ULONG flags) {
     if (g_nwindows < 4) g_windows[g_nwindows++] = w;
     if (r_RegisterTouchWindow) r_RegisterTouchWindow(w, flags);
     char title[64] = "";
     GetWindowTextA(w, title, sizeof title);
-    if (strstr(title, "Sub")) sub_screen_mouse(w);
+    pc64_log("RegisterTouchWindow hwnd %lx flags %lx title \"%s\"", (unsigned long)(ULONG_PTR)w, flags, title);
+    if (title_has(w, "sub")) sub_screen_mouse(w);
     return TRUE;
 }
 static BOOL WINAPI GetTouchInputInfo_(HTOUCHINPUT h, UINT n, PTOUCHINPUT in, int size) {
     if (!ours(h)) return r_GetTouchInputInfo(h, n, in, size);
     if (n < 1 || size != sizeof(TOUCHINPUT)) return FALSE;
     in[0] = g_events[(ULONG_PTR)h & 63];
+    pc64_log("the game reads our touch event %u: flags %lx at %ld,%ld", (unsigned)((ULONG_PTR)h & 63),
+             (unsigned long)in[0].dwFlags, in[0].x / 100, in[0].y / 100);
     return TRUE;
 }
 static BOOL WINAPI CloseTouchInputHandle_(HTOUCHINPUT h) {
@@ -48,11 +65,8 @@ static BOOL WINAPI CloseTouchInputHandle_(HTOUCHINPUT h) {
 }
 
 static HWND sub_screen(void) {
-    for (int i = 0; i < g_nwindows; i++) {
-        char title[64] = "";
-        GetWindowTextA(g_windows[i], title, sizeof title);
-        if (strstr(title, "Sub")) return g_windows[i];
-    }
+    for (int i = 0; i < g_nwindows; i++)
+        if (title_has(g_windows[i], "sub")) return g_windows[i];
     return NULL;
 }
 // A touch at (x, y) of the window's client area as it is (TOUCHINPUT has screen coordinates, in
@@ -60,6 +74,7 @@ static HWND sub_screen(void) {
 static void event(HWND w, int x, int y, DWORD flags) {
     POINT p = {x, y};
     ClientToScreen(w, &p);
+    EnterCriticalSection(&g_ev_cs);
     const unsigned k = g_nevents++ & 63;
     TOUCHINPUT *t = &g_events[k];
     memset(t, 0, sizeof *t);
@@ -67,6 +82,7 @@ static void event(HWND w, int x, int y, DWORD flags) {
     t->dwID = 1;
     t->dwFlags = flags | TOUCHEVENTF_PRIMARY;
     t->dwTime = GetTickCount();
+    LeaveCriticalSection(&g_ev_cs);
     PostMessageA(w, WM_TOUCH, 1, (LPARAM)(ULONG_PTR)(HANDLE_BASE | k));
 }
 
@@ -138,6 +154,93 @@ static void sub_screen_mouse(HWND w) {
              r.bottom - r.top, (unsigned long)GetWindowLongA(w, GWL_STYLE), IsWindowVisible(w) ? ", shown" : "");
 }
 
+// --- the mouse on the game's SECOND window (this game registers only its main window) ---
+// The second window (its title has "sub") is found when it is created or first shown, and its
+// window procedure is wrapped: the left button's down and drags become touches of the second
+// screen posted to the MAIN window (the one registered for touch), scaled to the sub picture's
+// 1280x720 whatever the window's size — the route pc64_touch takes when no sub window is
+// registered. The down and the moves are posted at once (PostMessage never blocks the present
+// path); the up is posted by a short-lived thread 100 ms after the release, so the game's
+// per-frame pump reads the down and the up in different frames.
+static WNDPROC g_sub2_proc;
+static int g_held2, g_last_lx2, g_last_ly2;
+static DWORD g_last_move2;
+
+static void touch_main(int x, int y, DWORD flags) {   // a touch of the second screen at (x,y) of its 1280x720
+    HWND w = main_screen();
+    if (!w) return;
+    RECT rc;
+    GetClientRect(w, &rc);
+    event(w, rc.right > 0 ? x * rc.right / 1280 : x, rc.bottom > 0 ? y * rc.bottom / 720 : y, flags);
+}
+static void sub_logical(HWND w, int cx, int cy, int *lx, int *ly) {   // client point -> the sub's 1280x720
+    RECT rc;
+    GetClientRect(w, &rc);
+    *lx = rc.right > 0 ? cx * 1280 / rc.right : cx;
+    *ly = rc.bottom > 0 ? cy * 720 / rc.bottom : cy;
+}
+static DWORD WINAPI sub_up_thread(void *p) {   // the up a few frames after the down
+    Sleep(100);
+    touch_main((int)(INT_PTR)p >> 16, (int)(INT_PTR)p & 0xffff, TOUCHEVENTF_UP);
+    return 0;
+}
+static void sub_up_later(void) {
+    CloseHandle(CreateThread(NULL, 0, sub_up_thread,
+                             (void *)(INT_PTR)((g_last_lx2 << 16) | (g_last_ly2 & 0xffff)), 0, NULL));
+}
+static LRESULT CALLBACK sub2_proc(HWND w, UINT m, WPARAM wp, LPARAM lp) {
+    int x, y, lx, ly;
+    switch (m) {
+    case WM_LBUTTONDOWN:
+    case WM_LBUTTONDBLCLK:
+        game_point(w, lp, &x, &y);
+        sub_logical(w, x, y, &lx, &ly);
+        g_held2 = 1, g_last_lx2 = lx, g_last_ly2 = ly, g_last_move2 = GetTickCount();
+        SetCapture(w);
+        touch_main(lx, ly, TOUCHEVENTF_DOWN | TOUCHEVENTF_INRANGE);
+        return 0;
+    case WM_MOUSEMOVE:
+        if (!g_held2) return 0;
+        game_point(w, lp, &x, &y);
+        if (GetTickCount() - g_last_move2 >= 4) {   // at most one move every 4 ms
+            sub_logical(w, x, y, &lx, &ly);
+            g_last_lx2 = lx, g_last_ly2 = ly, g_last_move2 = GetTickCount();
+            touch_main(lx, ly, TOUCHEVENTF_MOVE | TOUCHEVENTF_INRANGE);
+        }
+        return 0;
+    case WM_LBUTTONUP:
+        if (g_held2) { g_held2 = 0; ReleaseCapture(); sub_up_later(); }
+        return 0;
+    case WM_CAPTURECHANGED:
+        if (g_held2 && (HWND)lp != w) { g_held2 = 0; sub_up_later(); }
+        break;
+    case WM_RBUTTONDOWN: case WM_RBUTTONUP: case WM_MBUTTONDOWN: case WM_MBUTTONUP: case WM_MOUSEWHEEL:
+        return 0;
+    }
+    return CallWindowProcW(g_sub2_proc, w, m, wp, lp);
+}
+// wrap the second window at creation or first show (its title's word, as title_has does)
+static void maybe_wrap_sub(HWND w) {
+    if (!pc64_game_is_iidx() || !w || g_sub2_proc || w == g_sub) return;
+    for (int i = 0; i < g_nwindows; i++)
+        if (g_windows[i] == w) return;   // registered for touch: the other route handles it
+    if (!title_has(w, "sub")) return;
+    g_sub2_proc = (WNDPROC)SetWindowLongPtrW(w, GWLP_WNDPROC, (LONG_PTR)sub2_proc);
+    pc64_log("the second window %lx never registered for touch: its mouse touches through the main window",
+             (unsigned long)(ULONG_PTR)w);
+}
+static HWND WINAPI CreateWindowExA_(DWORD ex, const char *cls, const char *name, DWORD style, int x, int y, int w, int h,
+                                     HWND parent, HMENU menu, HINSTANCE inst, void *param) {
+    HWND hwnd = r_CreateWindowExA(ex, cls, name, style, x, y, w, h, parent, menu, inst, param);
+    if (hwnd) maybe_wrap_sub(hwnd);
+    return hwnd;
+}
+static BOOL WINAPI ShowWindow2_(HWND w, int how) {   // chained after display.c's own ShowWindow hook
+    const BOOL r = r_ShowWindow2(w, how);
+    if (how != SW_HIDE) maybe_wrap_sub(w);
+    return r;
+}
+
 // (x, y) of the game's 1280x800 in the window's client area as it is
 static void client_point(HWND w, int x, int y, int *cx, int *cy) {
     RECT rc;
@@ -173,16 +276,48 @@ void pc64_click(int x, int y) {
 }
 
 void pc64_touch(int x, int y) {
+    // A point of the second screen in its 1280x800. This game registers only its main window
+    // for touch; its WM_TOUCH handler scales a point to 1280x720 and then adds 1080 to Y, which
+    // maps a main-window touch into the second screen's band — so when no sub window is
+    // registered, the main window is the route and the point is scaled to 1280x720 instead.
     HWND w = sub_screen();
-    if (!w) return;
-    client_point(w, x, y, &x, &y);
-    event(w, x, y, TOUCHEVENTF_DOWN | TOUCHEVENTF_INRANGE);
+    int lw = SUB_W, lh = SUB_H;
+    if (!w) { w = main_screen(); lw = 1280; lh = 720; }
+    if (!w) { pc64_log("touch %d,%d: no window registered for touch", x, y); return; }
+    pc64_log("touch %d,%d: posted to window %lx as a 1280x800 point", x, y, (unsigned long)(ULONG_PTR)w);
+    RECT rc;
+    GetClientRect(w, &rc);
+    int cx = rc.right > 0 ? x * rc.right / lw : x;
+    int cy = rc.bottom > 0 ? y * rc.bottom / lh : y;
+    event(w, cx, cy, TOUCHEVENTF_DOWN | TOUCHEVENTF_INRANGE);
     for (int i = 0; i < 4; i++) {
         Sleep(33);
-        event(w, x, y, TOUCHEVENTF_MOVE | TOUCHEVENTF_INRANGE);
+        event(w, cx, cy, TOUCHEVENTF_MOVE | TOUCHEVENTF_INRANGE);
     }
     Sleep(33);
-    event(w, x, y, TOUCHEVENTF_UP);
+    event(w, cx, cy, TOUCHEVENTF_UP);
+}
+
+static HWND main_screen(void) {
+    for (int i = 0; i < g_nwindows; i++)
+        if (title_has(g_windows[i], "main")) return g_windows[i];
+    return NULL;
+}
+// A touch on the MAIN screen's window at (x, y) of its 1280x720 (tests; the title's "touch your
+// pass" prompt is on the main screen, and only the sub window's mouse becomes touches)
+void pc64_mtouch(int x, int y) {
+    HWND w = main_screen();
+    if (!w) return;
+    RECT rc;
+    GetClientRect(w, &rc);
+    const int cx = rc.right > 0 ? x * rc.right / 1280 : x, cy = rc.bottom > 0 ? y * rc.bottom / 720 : y;
+    event(w, cx, cy, TOUCHEVENTF_DOWN | TOUCHEVENTF_INRANGE);
+    for (int i = 0; i < 4; i++) {
+        Sleep(33);
+        event(w, cx, cy, TOUCHEVENTF_MOVE | TOUCHEVENTF_INRANGE);
+    }
+    Sleep(33);
+    event(w, cx, cy, TOUCHEVENTF_UP);
 }
 
 // A touch kept on the sub screen at (x, y) of its 1280x800 while HELD says so, MS at most (a button
@@ -220,9 +355,12 @@ void pc64_drag(int x0, int y0, int x1, int y1) {
 }
 
 void pc64_touch_install(HMODULE game) {
+    InitializeCriticalSection(&g_ev_cs);
     r_RegisterTouchWindow = pc64_import(game, "user32.dll", "RegisterTouchWindow", (void *)RegisterTouchWindow_);
     r_GetTouchInputInfo = pc64_import(game, "user32.dll", "GetTouchInputInfo", (void *)GetTouchInputInfo_);
     r_CloseTouchInputHandle = pc64_import(game, "user32.dll", "CloseTouchInputHandle", (void *)CloseTouchInputHandle_);
     r_GetClientRect = pc64_import(game, "user32.dll", "GetClientRect", (void *)GetClientRect_);
     r_ScreenToClient = pc64_import(game, "user32.dll", "ScreenToClient", (void *)ScreenToClient_);
+    r_CreateWindowExA = pc64_import(game, "user32.dll", "CreateWindowExA", (void *)CreateWindowExA_);
+    r_ShowWindow2 = pc64_import(game, "user32.dll", "ShowWindow", (void *)ShowWindow2_);   // chained after display.c's
 }

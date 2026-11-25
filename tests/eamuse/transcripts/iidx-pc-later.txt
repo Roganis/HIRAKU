@@ -1,0 +1,13 @@
+# The later PC beatmania IIDX (model LDJ, runtime/eamuse/games.cpp's iidx-pc-later row): services.get
+# lists the game's own modules under the row's prefix (own_modules()), and its shop module's getname
+# is answered by suffix with this server's shop name; the module's other start-up call gets the empty
+# fallback. Card players are not answered (on hold). Made-up data.
+model LDJ:J:A:A
+>e <services method="get"/>
+< 200 info=1-484b0001-0001 long:1649 sha256:b0eb938080aa41295bdebc6c6182fde92c118bfd501a39ff0a22dffac43573dd <response><services expire="600" status="0"><item name="posevent" url="http://cabinet.test:8080/"/><item name="pcbtracker" url="http://cabinet.test:8080/"/><item name="numbering" url="http://cabinet.t...
+>e <IIDX33shop method="getname"/>
+< 200 info=1-484b0002-0002 <response><IIDX33shop status="0" opname="HIRAKU" pid="13"></IIDX33shop></response>
+>e <IIDX33shop method="getclosingtime"/>
+< 200 info=1-484b0003-0003 <response><IIDX33shop status="0"></IIDX33shop></response>
+>e <facility method="get"/>
+< 200 info=1-484b0004-0004 <response><facility status="0" expire="600"><location><id>HIRAKU</id><country>JP</country><region>13</region><line>0</line></location><portfw><globalip>192.168.50.2</globalip><globalport>5700</globalport><privateport>5700</privateport></portfw><public><name>HIRAKU</name><flag>0</flag></public></facility></response>

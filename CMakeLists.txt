@@ -514,7 +514,7 @@ elseif(NOT WIN32 AND EXISTS /usr/x86_64-w64-mingw32/lib/libkernel32.a)
   endif()
 endif()
 if(HK_PC64_CC)
-  set(HK_PC64_SOURCES main.c log.c imports.c files.c link.c display.c board.c net.c touch.c sound.c script.c crt.c songs.c tables.c patches.c ../pc32/x86.c ../pc/imagebase.c)
+  set(HK_PC64_SOURCES main.c log.c imports.c files.c link.c display.c board.c board_iidx.c clock.c keystub.c net.c touch.c sound.c script.c crt.c songs.c tables.c patches.c inspect.c waits.c ../pc32/x86.c ../pc/imagebase.c)
   list(TRANSFORM HK_PC64_SOURCES PREPEND ${CMAKE_SOURCE_DIR}/runtime/pc64/ OUTPUT_VARIABLE HK_PC64_PATHS)
   add_custom_command(OUTPUT ${CMAKE_BINARY_DIR}/pc/hiraku-pc64.exe
     COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/pc
@@ -523,7 +523,15 @@ if(HK_PC64_CC)
             -ld3d9 -lsetupapi -lws2_32 -liphlpapi -lole32 -luuid
     DEPENDS ${HK_PC64_PATHS} runtime/pc64/pc64.h runtime/pc/imagebase.h runtime/pc/link.h runtime/pc32/x86.h runtime/shell/wintimer.h
     COMMENT "pc/hiraku-pc64.exe (64-bit)")
-  add_custom_target(hiraku-pc64 ALL DEPENDS ${CMAKE_BINARY_DIR}/pc/hiraku-pc64.exe)
+  # the stand-in for the one third-party DLL a 64-bit PC game hard-imports (runtime/pc64/nvenc_stub.c):
+  # beside the loader, first in the DLL search path
+  add_custom_command(OUTPUT ${CMAKE_BINARY_DIR}/pc/nvEncodeAPI64.dll
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/pc
+    COMMAND ${HK_PC64_CC} --target=x86_64-w64-mingw32 ${HK_PC64_SYS} -O2 -shared -fuse-ld=lld
+            -o ${CMAKE_BINARY_DIR}/pc/nvEncodeAPI64.dll ${CMAKE_SOURCE_DIR}/runtime/pc64/nvenc_stub.c
+    DEPENDS runtime/pc64/nvenc_stub.c
+    COMMENT "pc/nvEncodeAPI64.dll (64-bit stand-in)")
+  add_custom_target(hiraku-pc64 ALL DEPENDS ${CMAKE_BINARY_DIR}/pc/hiraku-pc64.exe ${CMAKE_BINARY_DIR}/pc/nvEncodeAPI64.dll)
 else()
   message(STATUS "No 64-bit Windows compiler (clang, lld and mingw-w64's x86_64 libraries): no hiraku-pc64")
 endif()

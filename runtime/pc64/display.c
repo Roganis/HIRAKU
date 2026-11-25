@@ -9,8 +9,8 @@
 //     for the sub screen (GetSwapChain(1), GetBackBuffer(1, ...)).
 //   - The main screen is reported at HK_PC64_MAIN_HZ (the cabinet's 120 by default) and the sub
 //     screen at 60, as the cabinet's are.
-// The game presents each screen through its own swap chain. HK_PC64_SNAPS=DIR:N writes both
-// screens' pictures every N presents to DIR as BMPs (tests).
+// The game presents each screen through its own swap chain. HK_PC64_SNAPS=DIR:N (or DIR:N:LO:HI,
+// frames LO..HI only) writes both screens' pictures every N presents to DIR as BMPs (tests).
 #define COBJMACROS
 #include "pc64.h"
 
@@ -33,6 +33,12 @@ static UINT main_hz(void) {
     if (!hz) hz = getenv("HK_PC64_MAIN_HZ") ? (UINT)atoi(getenv("HK_PC64_MAIN_HZ")) : 120;
     return hz;
 }
+static int g_disp_log;   // HK_PC64_DISP_LOG: what the game learns of the screens, and the mode it asks
+                         // Direct3D for, logged (tests)
+static int say_disp(void) {   // the enumeration logs are capped
+    static int n;
+    return g_disp_log && n++ < 400;
+}
 static void fix_hz(UINT *hz) {   // the PC's 60 Hz main screen reported at the cabinet's rate
     if (*hz >= 59 && *hz <= 61) *hz = main_hz();
 }
@@ -49,6 +55,7 @@ static void sub_mode_ex(D3DDISPLAYMODEEX *m) {
 // --- IDirect3D9Ex: a second adapter, in the first's group
 static UINT WINAPI GetAdapterCount_(IDirect3D9Ex *d) {
     UINT n = r3d.GetAdapterCount(d);
+    if (g_disp_log) pc64_log("disp: the PC tells of %u adapter(s); answered %u", n, n < 2 ? 2 : n);
     return n < 2 ? 2 : n;
 }
 static HRESULT WINAPI GetAdapterIdentifier_(IDirect3D9Ex *d, UINT a, DWORD f, D3DADAPTER_IDENTIFIER9 *id) {
@@ -57,7 +64,9 @@ static HRESULT WINAPI GetAdapterIdentifier_(IDirect3D9Ex *d, UINT a, DWORD f, D3
     return r;
 }
 static UINT WINAPI GetAdapterModeCount_(IDirect3D9Ex *d, UINT a, D3DFORMAT f) {
-    return a == 1 ? 1 : r3d.GetAdapterModeCount(d, a, f);
+    UINT n = a == 1 ? 1 : r3d.GetAdapterModeCount(d, a, f);
+    if (say_disp()) pc64_log("disp: adapter %u format %u: %u mode(s)", a, (unsigned)f, n);
+    return n;
 }
 static HRESULT WINAPI EnumAdapterModes_(IDirect3D9Ex *d, UINT a, D3DFORMAT f, UINT i, D3DDISPLAYMODE *m) {
     if (a == 1) {
@@ -67,6 +76,8 @@ static HRESULT WINAPI EnumAdapterModes_(IDirect3D9Ex *d, UINT a, D3DFORMAT f, UI
     }
     HRESULT r = r3d.EnumAdapterModes(d, a, f, i, m);
     if (SUCCEEDED(r)) fix_hz(&m->RefreshRate);
+    if (say_disp() && SUCCEEDED(r)) pc64_log("disp: adapter %u format %u mode %u: %ux%u at %u Hz format %u", a, (unsigned)f, i,
+                                             m->Width, m->Height, m->RefreshRate, (unsigned)m->Format);
     return r;
 }
 static HRESULT WINAPI GetAdapterDisplayMode_(IDirect3D9Ex *d, UINT a, D3DDISPLAYMODE *m) {
@@ -76,6 +87,7 @@ static HRESULT WINAPI GetAdapterDisplayMode_(IDirect3D9Ex *d, UINT a, D3DDISPLAY
     }
     HRESULT r = r3d.GetAdapterDisplayMode(d, a, m);
     if (SUCCEEDED(r)) fix_hz(&m->RefreshRate);
+    if (g_disp_log && SUCCEEDED(r)) pc64_log("disp: adapter %u's display mode: %ux%u at %u Hz format %u", a, m->Width, m->Height, m->RefreshRate, (unsigned)m->Format);
     return r;
 }
 static HRESULT WINAPI CheckDeviceType_(IDirect3D9Ex *d, UINT a, D3DDEVTYPE t, D3DFORMAT f, D3DFORMAT b, BOOL w) {
@@ -98,7 +110,9 @@ static HMONITOR WINAPI GetAdapterMonitor_(IDirect3D9Ex *d, UINT a) {
     return r3d.GetAdapterMonitor(d, a == 1 ? 0 : a);
 }
 static UINT WINAPI GetAdapterModeCountEx_(IDirect3D9Ex *d, UINT a, const D3DDISPLAYMODEFILTER *f) {
-    return a == 1 ? 1 : r3d.GetAdapterModeCountEx(d, a, f);
+    UINT n = a == 1 ? 1 : r3d.GetAdapterModeCountEx(d, a, f);
+    if (say_disp()) pc64_log("disp: adapter %u format %u (Ex): %u mode(s)", a, (unsigned)f->Format, n);
+    return n;
 }
 static HRESULT WINAPI EnumAdapterModesEx_(IDirect3D9Ex *d, UINT a, const D3DDISPLAYMODEFILTER *f, UINT i, D3DDISPLAYMODEEX *m) {
     if (a == 1) {
@@ -108,6 +122,8 @@ static HRESULT WINAPI EnumAdapterModesEx_(IDirect3D9Ex *d, UINT a, const D3DDISP
     }
     HRESULT r = r3d.EnumAdapterModesEx(d, a, f, i, m);
     if (SUCCEEDED(r)) fix_hz(&m->RefreshRate);
+    if (say_disp() && SUCCEEDED(r)) pc64_log("disp: adapter %u format %u mode %u (Ex): %ux%u at %u Hz format %u", a, (unsigned)f->Format, i,
+                                              m->Width, m->Height, m->RefreshRate, (unsigned)m->Format);
     return r;
 }
 static HRESULT WINAPI GetAdapterDisplayModeEx_(IDirect3D9Ex *d, UINT a, D3DDISPLAYMODEEX *m, D3DDISPLAYROTATION *rot) {
@@ -118,6 +134,7 @@ static HRESULT WINAPI GetAdapterDisplayModeEx_(IDirect3D9Ex *d, UINT a, D3DDISPL
     }
     HRESULT r = r3d.GetAdapterDisplayModeEx(d, a, m, rot);
     if (SUCCEEDED(r)) fix_hz(&m->RefreshRate);
+    if (g_disp_log && SUCCEEDED(r)) pc64_log("disp: adapter %u's display mode (Ex): %ux%u at %u Hz format %u", a, m->Width, m->Height, m->RefreshRate, (unsigned)m->Format);
     return r;
 }
 static HRESULT WINAPI GetAdapterLUID_(IDirect3D9Ex *d, UINT a, LUID *l) {
@@ -153,12 +170,20 @@ static void tc_reset(void) {
     g_tc_sets = 8, g_tc_shader = 0;
 }
 static HRESULT WINAPI Reset_(IDirect3DDevice9Ex *d, D3DPRESENT_PARAMETERS *p) {
+    if (g_disp_log)
+        pc64_log("disp: Reset %ux%u format %u windowed %d swap %u at %u Hz interval %lx",
+                 p->BackBufferWidth, p->BackBufferHeight, (unsigned)p->BackBufferFormat, p->Windowed,
+                 (unsigned)p->SwapEffect, p->FullScreen_RefreshRateInHz, (unsigned long)p->PresentationInterval);
     windowed(p);
     tc_reset();
     return rdev.Reset(d, p);
 }
 static HRESULT WINAPI ResetEx_(IDirect3DDevice9Ex *d, D3DPRESENT_PARAMETERS *p, D3DDISPLAYMODEEX *m) {
     (void)m;
+    if (g_disp_log)
+        pc64_log("disp: ResetEx %ux%u format %u windowed %d swap %u at %u Hz interval %lx",
+                 p->BackBufferWidth, p->BackBufferHeight, (unsigned)p->BackBufferFormat, p->Windowed,
+                 (unsigned)p->SwapEffect, p->FullScreen_RefreshRateInHz, (unsigned long)p->PresentationInterval);
     windowed(p);
     tc_reset();
     return rdev.ResetEx(d, p, NULL);
@@ -187,27 +212,43 @@ static void write_bmp(IDirect3DSurface9 *s, const char *path) {
     }
     IDirect3DSurface9_Release(sys);
 }
-static void snapshot(void) {
-    static char dir[MAX_PATH];
-    static int every = -1;
-    if (every < 0) {
-        const char *s = getenv("HK_PC64_SNAPS"), *colon = s ? strrchr(s, ':') : NULL;
-        every = 0;
-        if (colon && colon > s + 1) {   // a drive letter's colon isn't the separator
-            snprintf(dir, sizeof dir, "%.*s", (int)(colon - s), s);
-            every = atoi(colon + 1);
-        }
+// HK_PC64_SNAPS (tests): "DIR:N" or "DIR:N:LO:HI" — pictures every N presents, frames LO..HI only
+// (a drive letter's colon is not a separator)
+static struct { char dir[MAX_PATH]; int every; unsigned lo, hi; int done; } g_snap;
+static void snaps_parse(void) {
+    if (g_snap.done) return;
+    g_snap.done = 1;
+    g_snap.every = 0;
+    g_snap.lo = 0;
+    g_snap.hi = 0xffffffffu;
+    const char *s = getenv("HK_PC64_SNAPS");
+    if (!s) return;
+    const char *c1 = strchr(s + 2, ':');
+    if (!c1) return;
+    snprintf(g_snap.dir, sizeof g_snap.dir, "%.*s", (int)(c1 - s), s);
+    g_snap.every = atoi(c1 + 1);
+    const char *c2 = strchr(c1 + 1, ':');
+    if (c2) {
+        g_snap.lo = (unsigned)atol(c2 + 1);
+        const char *c3 = strchr(c2 + 1, ':');
+        if (c3) g_snap.hi = (unsigned)atol(c3 + 1);
     }
-    if (!every || pc64_frames % every) return;
+}
+static int snaps_on(unsigned f) {
+    return g_snap.every && f % (unsigned)g_snap.every == 0 && f >= g_snap.lo && f <= g_snap.hi;
+}
+static void snapshot(void) {
+    snaps_parse();
+    if (!snaps_on(pc64_frames)) return;
     char path[MAX_PATH + 32];
     IDirect3DSurface9 *bb;
     if (SUCCEEDED(rdev.GetBackBuffer(g_dev, 0, 0, D3DBACKBUFFER_TYPE_MONO, &bb))) {
-        snprintf(path, sizeof path, "%s\\snap-%06u-main.bmp", dir, pc64_frames);
+        snprintf(path, sizeof path, "%s\\snap-%06u-main.bmp", g_snap.dir, pc64_frames);
         write_bmp(bb, path);
         IDirect3DSurface9_Release(bb);
     }
     if (g_sub && SUCCEEDED(IDirect3DSwapChain9_GetBackBuffer(g_sub, 0, D3DBACKBUFFER_TYPE_MONO, &bb))) {
-        snprintf(path, sizeof path, "%s\\snap-%06u-sub.bmp", dir, pc64_frames);
+        snprintf(path, sizeof path, "%s\\snap-%06u-sub.bmp", g_snap.dir, pc64_frames);
         write_bmp(bb, path);
         IDirect3DSurface9_Release(bb);
     }
@@ -216,16 +257,11 @@ static void snapshot(void) {
 // main screen) with the snapshots
 static HRESULT WINAPI StretchRect_(IDirect3DDevice9Ex *d, IDirect3DSurface9 *src, const RECT *sr, IDirect3DSurface9 *dst, const RECT *dr,
                                    D3DTEXTUREFILTERTYPE f) {
-    static int every = -1;
-    if (every < 0) {
-        const char *e = getenv("HK_PC64_SNAPS"), *colon = e ? strrchr(e, ':') : NULL;
-        every = colon && colon > e + 1 ? atoi(colon + 1) : 0;
-    }
+    snaps_parse();
     D3DSURFACE_DESC sd;
-    if (every && src && pc64_frames % every == 0 && SUCCEEDED(IDirect3DSurface9_GetDesc(src, &sd)) && sd.Height == 480) {
-        const char *e = getenv("HK_PC64_SNAPS");
+    if (snaps_on(pc64_frames) && src && SUCCEEDED(IDirect3DSurface9_GetDesc(src, &sd)) && sd.Height == 480) {
         char path[MAX_PATH + 40];
-        snprintf(path, sizeof path, "%.*s\\snap-%06u-%ux480.bmp", (int)(strrchr(e, ':') - e), e, pc64_frames, sd.Width);
+        snprintf(path, sizeof path, "%s\\snap-%06u-%ux480.bmp", g_snap.dir, pc64_frames, sd.Width);
         write_bmp(src, path);
     }
     return rdev.StretchRect(d, src, sr, dst, dr, f);
@@ -413,6 +449,9 @@ static int to_link(IDirect3DSwapChain9 *s) {
                 rw = d.Width, rh = d.Height, pc64_log("the main screen goes to HIRAKU's window (%ux%u)", d.Width, d.Height);
         }
         D3DLOCKED_RECT lr;
+        LARGE_INTEGER rb0;   // HK_PC64_FRAME_LOG: the read-back (GPU surface to system memory, then
+        int64_t rb_us = 0;   // the per-pixel copy into the link) takes this long
+        if (getenv("HK_PC64_FRAME_LOG") && QueryPerformanceCounter(&rb0)) {} else rb0.QuadPart = 0;
         if (readback && SUCCEEDED(IDirect3DDevice9_GetRenderTargetData((IDirect3DDevice9 *)g_dev, bb, readback)) &&
             SUCCEEDED(IDirect3DSurface9_LockRect(readback, &lr, NULL, D3DLOCK_READONLY))) {
             for (UINT y = 0; y < d.Height; y++) {
@@ -423,22 +462,41 @@ static int to_link(IDirect3DSwapChain9 *s) {
             IDirect3DSurface9_UnlockRect(readback);
             ok = 1;
         }
+        if (rb0.QuadPart) {
+            LARGE_INTEGER q, f;
+            if (QueryPerformanceCounter(&q) && QueryPerformanceFrequency(&f))
+                rb_us = (q.QuadPart - rb0.QuadPart) * 1000000 / f.QuadPart;
+            pc64_note_readback((uint32_t)rb_us);
+        }
     }
     IDirect3DSurface9_Release(bb);
     if (ok) pc64_link_picture(d.Width, d.Height);
     return ok;
 }
 
+static uint32_t span_us(int64_t q0) {   // HK_PC64_FRAME_LOG: a span around a real call, in us
+    LARGE_INTEGER q, f;
+    if (!pc64_frame_log_on()) return 0;
+    if (!QueryPerformanceCounter(&q) || !QueryPerformanceFrequency(&f)) return 0;
+    return (uint32_t)((q.QuadPart - q0) * 1000000 / f.QuadPart);
+}
+static int64_t now_qpc(void) {
+    LARGE_INTEGER q;
+    return QueryPerformanceCounter(&q) ? q.QuadPart : 0;
+}
 static HRESULT WINAPI SwapChainPresent_(IDirect3DSwapChain9Ex *s, const RECT *a, const RECT *b, HWND w, const RGNDATA *r, DWORD f) {
+    const int64_t t0 = now_qpc();
     if ((void *)s == (void *)g_sub) {
         pc64_sub_frames++;
         keep_sub((IDirect3DSwapChain9 *)s);
     } else {
         pc64_frames++;
         snapshot();
-        if (pc64_host_shows() && to_link((IDirect3DSwapChain9 *)s)) return D3D_OK;   // not shown by the game's window
+        if (pc64_host_shows() && to_link((IDirect3DSwapChain9 *)s)) { pc64_note_present_span(span_us(t0)); return D3D_OK; }   // not shown by the game's window
     }
-    return rsc.Present(s, a, b, w, r, f);
+    const HRESULT hr = rsc.Present(s, a, b, w, r, f);
+    pc64_note_present_span(span_us(t0));
+    return hr;
 }
 
 // --- the windows
@@ -518,14 +576,39 @@ static BOOL WINAPI SetForegroundWindow_(HWND w) {
     return pc64_host_shows() ? TRUE : r_SetForegroundWindow(w);
 }
 static HRESULT WINAPI Present_(IDirect3DDevice9Ex *d, const RECT *a, const RECT *b, HWND w, const RGNDATA *r) {
+    const int64_t t0 = now_qpc();
     pc64_frames++;
     snapshot();
-    return rdev.Present(d, a, b, w, r);
+    const HRESULT hr = rdev.Present(d, a, b, w, r);
+    pc64_note_present_span(span_us(t0));
+    return hr;
 }
 static HRESULT WINAPI PresentEx_(IDirect3DDevice9Ex *d, const RECT *a, const RECT *b, HWND w, const RGNDATA *r, DWORD f) {
+    const int64_t t0 = now_qpc();
     pc64_frames++;
     snapshot();
-    return rdev.PresentEx(d, a, b, w, r, f);
+    const HRESULT hr = rdev.PresentEx(d, a, b, w, r, f);
+    pc64_note_present_span(span_us(t0));
+    return hr;
+}
+// HK_PC64_FRAME_LOG: the device's WaitForVBlank and GetRasterStatus, timed if the game calls them
+static HRESULT WINAPI WaitForVBlank_(IDirect3DDevice9Ex *d, UINT i) {
+    const int64_t t0 = now_qpc();
+    const HRESULT hr = rdev.WaitForVBlank(d, i);
+    pc64_note_devwait(0, span_us(t0));
+    return hr;
+}
+static HRESULT WINAPI GetRasterStatus_(IDirect3DDevice9Ex *d, UINT i, D3DRASTER_STATUS *s) {
+    const int64_t t0 = now_qpc();
+    const HRESULT hr = rdev.GetRasterStatus(d, i, s);
+    pc64_note_devwait(1, span_us(t0));
+    return hr;
+}
+static HRESULT WINAPI SwapGetRasterStatus_(IDirect3DSwapChain9Ex *s, D3DRASTER_STATUS *st) {
+    const int64_t t0 = now_qpc();
+    const HRESULT hr = rsc.GetRasterStatus(s, st);
+    pc64_note_devwait(1, span_us(t0));
+    return hr;
 }
 
 
@@ -599,8 +682,16 @@ static HRESULT WINAPI CreateDeviceEx_(IDirect3D9Ex *d, UINT a, D3DDEVTYPE t, HWN
     (void)modes;
     const int group = (flags & D3DCREATE_ADAPTERGROUP_DEVICE) != 0;
     D3DPRESENT_PARAMETERS sub = group ? pp[1] : (D3DPRESENT_PARAMETERS){0};
-    pc64_log("Direct3D: main %ux%u at %u Hz%s", pp[0].BackBufferWidth, pp[0].BackBufferHeight, pp[0].FullScreen_RefreshRateInHz,
-             group ? ", and the sub screen" : "");
+    pc64_log("Direct3D: main %ux%u at %u Hz, interval %lx%s", pp[0].BackBufferWidth, pp[0].BackBufferHeight,
+             pp[0].FullScreen_RefreshRateInHz, (unsigned long)pp[0].PresentationInterval, group ? ", and the sub screen" : "");
+    if (g_disp_log) {
+        pc64_log("disp: CreateDeviceEx adapter %u type %u focus %p flags %lx: main %ux%u format %u windowed %d swap %u at %u Hz interval %lx",
+                 a, (unsigned)t, (void *)focus, (unsigned long)flags, pp[0].BackBufferWidth, pp[0].BackBufferHeight,
+                 (unsigned)pp[0].BackBufferFormat, pp[0].Windowed, (unsigned)pp[0].SwapEffect,
+                 pp[0].FullScreen_RefreshRateInHz, (unsigned long)pp[0].PresentationInterval);
+        if (group) pc64_log("disp:   sub %ux%u format %u windowed %d at %u Hz interval %lx", sub.BackBufferWidth, sub.BackBufferHeight,
+                            (unsigned)sub.BackBufferFormat, sub.Windowed, sub.FullScreen_RefreshRateInHz, (unsigned long)sub.PresentationInterval);
+    }
     windowed(&pp[0]);
     HRESULT r = r3d.CreateDeviceEx(d, a, t, focus ? focus : pp[0].hDeviceWindow, flags & ~D3DCREATE_ADAPTERGROUP_DEVICE, pp, NULL, dev);
     if (FAILED(r)) {
@@ -619,6 +710,8 @@ static HRESULT WINAPI CreateDeviceEx_(IDirect3D9Ex *d, UINT a, D3DDEVTYPE t, HWN
         pc64_patch(&v->Present, Present_);
         pc64_patch(&v->StretchRect, StretchRect_);
         pc64_patch(&v->PresentEx, PresentEx_);
+        pc64_patch(&v->WaitForVBlank, WaitForVBlank_);   // HK_PC64_FRAME_LOG timings (pass-through)
+        pc64_patch(&v->GetRasterStatus, GetRasterStatus_);
         HMODULE nt = GetModuleHandleA("ntdll.dll");
         if (nt && GetProcAddress(nt, "wine_get_version")) {   // the missing coordinate sets (above)
             pc64_patch(&v->SetFVF, SetFVF_);
@@ -636,6 +729,7 @@ static HRESULT WINAPI CreateDeviceEx_(IDirect3D9Ex *d, UINT a, D3DDEVTYPE t, HWN
             IDirect3DSwapChain9ExVtbl *sv = (IDirect3DSwapChain9ExVtbl *)sc->lpVtbl;
             rsc = *sv;
             pc64_patch(&sv->Present, SwapChainPresent_);
+            pc64_patch(&sv->GetRasterStatus, SwapGetRasterStatus_);
             IDirect3DSwapChain9_Release(sc);
         }
     }
@@ -646,6 +740,10 @@ static HRESULT WINAPI CreateDeviceEx_(IDirect3D9Ex *d, UINT a, D3DDEVTYPE t, HWN
     return r;
 }
 static HRESULT WINAPI CreateDevice_(IDirect3D9Ex *d, UINT a, D3DDEVTYPE t, HWND focus, DWORD flags, D3DPRESENT_PARAMETERS *pp, IDirect3DDevice9 **dev) {
+    if (g_disp_log)
+        pc64_log("disp: CreateDevice adapter %u type %u focus %p flags %lx: %ux%u format %u windowed %d at %u Hz interval %lx", a, (unsigned)t,
+                 (void *)focus, (unsigned long)flags, pp->BackBufferWidth, pp->BackBufferHeight, (unsigned)pp->BackBufferFormat,
+                 pp->Windowed, pp->FullScreen_RefreshRateInHz, (unsigned long)pp->PresentationInterval);
     windowed(pp);
     return r3d.CreateDevice(d, a, t, focus, flags & ~D3DCREATE_ADAPTERGROUP_DEVICE, pp, dev);
 }
@@ -685,9 +783,23 @@ static LONG WINAPI GetDisplayConfigBufferSizes_(UINT32 f, UINT32 *np, UINT32 *nm
     LONG r = r_GetDisplayConfigBufferSizes(f, np, nm);
     if (r == ERROR_SUCCESS) {
         g_paths = *np, g_modes = *nm;
+        if (g_disp_log) pc64_log("disp: the PC has %u display path(s), %u mode(s)", g_paths, g_modes);
         *np += 1, *nm += 2;
     }
     return r;
+}
+// a target's friendly name, through the real DisplayConfigGetDeviceInfo
+static void target_name(LUID adapter, UINT32 id, char *out, size_t n) {
+    out[0] = '?', out[1] = 0;
+    if (!r_DisplayConfigGetDeviceInfo) return;
+    DISPLAYCONFIG_TARGET_DEVICE_NAME q;
+    memset(&q, 0, sizeof q);
+    q.header.type = DISPLAYCONFIG_DEVICE_INFO_GET_TARGET_NAME;
+    q.header.size = sizeof q;
+    q.header.adapterId = adapter;
+    q.header.id = id;
+    if (r_DisplayConfigGetDeviceInfo(&q.header) == ERROR_SUCCESS)
+        WideCharToMultiByte(CP_UTF8, 0, q.monitorFriendlyDeviceName, -1, out, (int)n, NULL, NULL);
 }
 static void cabinet_rate(DISPLAYCONFIG_RATIONAL *r) {
     if (r->Denominator && r->Numerator / r->Denominator >= 59 && r->Numerator / r->Denominator <= 61)
@@ -698,6 +810,19 @@ static LONG WINAPI QueryDisplayConfig_(UINT32 f, UINT32 *np, DISPLAYCONFIG_PATH_
     UINT32 p = g_paths, m = g_modes;
     LONG r = r_QueryDisplayConfig(f, &p, paths, &m, modes, topo);
     if (r != ERROR_SUCCESS) return r;
+    if (g_disp_log)
+        for (UINT32 i = 0; i < p; i++) {
+            char name[128];
+            target_name(paths[i].targetInfo.adapterId, paths[i].targetInfo.id, name, sizeof name);
+            UINT32 mi = paths[i].targetInfo.modeInfoIdx;
+            if (mi < m && modes[mi].infoType == DISPLAYCONFIG_MODE_INFO_TYPE_TARGET)
+                pc64_log("disp: path %u: \"%s\" %ux%u at %u/%u Hz%s", i, name,
+                         modes[mi].targetMode.targetVideoSignalInfo.activeSize.cx, modes[mi].targetMode.targetVideoSignalInfo.activeSize.cy,
+                         modes[mi].targetMode.targetVideoSignalInfo.vSyncFreq.Numerator, modes[mi].targetMode.targetVideoSignalInfo.vSyncFreq.Denominator,
+                         (paths[i].targetInfo.statusFlags & DISPLAYCONFIG_TARGET_IN_USE) ? " (in use)" : "");
+            else
+                pc64_log("disp: path %u: \"%s\"", i, name);
+        }
     for (UINT32 i = 0; i < p; i++) cabinet_rate(&paths[i].targetInfo.refreshRate);
     for (UINT32 i = 0; i < m; i++)
         if (modes[i].infoType == DISPLAYCONFIG_MODE_INFO_TYPE_TARGET) cabinet_rate(&modes[i].targetMode.targetVideoSignalInfo.vSyncFreq);
@@ -757,6 +882,8 @@ static LONG WINAPI DisplayConfigGetDeviceInfo_(DISPLAYCONFIG_DEVICE_INFO_HEADER 
 }
 
 void pc64_display_install(HMODULE game) {
+    const char *dl = getenv("HK_PC64_DISP_LOG");
+    g_disp_log = dl && *dl && *dl != '0';
     r_Direct3DCreate9Ex = pc64_import(game, "d3d9.dll", "Direct3DCreate9Ex", (void *)Direct3DCreate9Ex_);
     r_GetDisplayConfigBufferSizes = pc64_import(game, "user32.dll", "GetDisplayConfigBufferSizes", (void *)GetDisplayConfigBufferSizes_);
     r_QueryDisplayConfig = pc64_import(game, "user32.dll", "QueryDisplayConfig", (void *)QueryDisplayConfig_);
@@ -765,4 +892,144 @@ void pc64_display_install(HMODULE game) {
     r_MoveWindow = pc64_import(game, "user32.dll", "MoveWindow", (void *)MoveWindow_);
     r_SetForegroundWindow = pc64_import(game, "user32.dll", "SetForegroundWindow", (void *)SetForegroundWindow_);
     if (!r_Direct3DCreate9Ex || !r_QueryDisplayConfig) pc64_log("the game doesn't import Direct3DCreate9Ex/QueryDisplayConfig: not the 64-bit PC pop'n?");
+}
+
+// --- The AFP layouts' pictures looked up by name (a 64-bit PC IIDX's music select, 2026-11-23)
+// The game's layout library (afp-utils.dll) finds a picture in a texture list by comparing its name
+// with every entry's, one by one (avs2-core's string compare). The music select asks for its list
+// bars' picture dozens of times a frame through a list of thousands: 27 million compares a second,
+// half of the game's main thread, 11 ms frames for a 120 Hz game. The search is answered here the
+// same way (the first entry of that name, or none), with the answers kept: a kept entry is checked
+// (the list, its size and the entry's name the same) before it is given; "none" is looked for again
+// every 16th time. HK_PC64_AFP_NAMES=0: the library's own search. Found by its code's shape; not
+// found, nothing changes (a log line).
+typedef int (*afp_cmp_t)(const char *, const char *);
+static void **g_afp_cmp_slot;   // afp-utils' import of the compare (a diagnostic hook may sit in it)
+#define AFP_SLOTS 2048
+static struct afp_kept { const void *list, *base; unsigned h; int idx; WORD n, uses; char name[52]; } g_afp_kept[AFP_SLOTS];
+static volatile LONG g_afp_lock;
+static volatile LONG64 g_afp_calls, g_afp_kept_answers;
+
+static BYTE *afp_scan(BYTE *list, const char *name) {
+    const afp_cmp_t cmp = (afp_cmp_t)*g_afp_cmp_slot;
+    for (unsigned i = 0; i < *(WORD *)(list + 0xe); i++) {
+        BYTE *e = *(BYTE **)(list + 0x40) + 0x20 * (size_t)i;
+        if (cmp(*(const char **)(e + 0x18), name) == 0) return e;
+    }
+    return NULL;
+}
+// HK_PC64_AFP_LOG=1 (tests): every 10 s the names searched most since the last, each with its
+// list's size, where it was found (or "none") and how many searches went through the whole list
+#define AFP_STATS 256
+static int g_afp_log;
+static struct { const void *list; char name[52]; unsigned n_list; int idx; unsigned calls, scans; } g_afp_stat[AFP_STATS];
+static ULONGLONG g_afp_stat_t0;
+static void afp_stat(const void *list, const char *name, unsigned n_list, int idx, int scanned) {
+    unsigned h = 2166136261u ^ (unsigned)((uintptr_t)list >> 4);
+    for (const char *c = name; *c; c++) h = (h ^ (BYTE)*c) * 16777619u;
+    for (unsigned k = 0, i = h % AFP_STATS; k < 8; k++, i = (i + 1) % AFP_STATS) {
+        if (!g_afp_stat[i].calls) {
+            g_afp_stat[i].list = list;
+            snprintf(g_afp_stat[i].name, sizeof g_afp_stat[i].name, "%s", name);
+        } else if (g_afp_stat[i].list != list || strcmp(g_afp_stat[i].name, name))
+            continue;
+        g_afp_stat[i].n_list = n_list, g_afp_stat[i].idx = idx, g_afp_stat[i].calls++, g_afp_stat[i].scans += scanned;
+        break;
+    }
+    const ULONGLONG now = GetTickCount64();
+    if (!g_afp_stat_t0) g_afp_stat_t0 = now;
+    if (now - g_afp_stat_t0 < 10000) return;
+    g_afp_stat_t0 = now;
+    for (int r = 0; r < 12; r++) {   // the busiest twelve, then cleared
+        int best = -1;
+        for (int i = 0; i < AFP_STATS; i++)
+            if (g_afp_stat[i].calls && (best < 0 || g_afp_stat[i].calls > g_afp_stat[best].calls)) best = i;
+        if (best < 0) break;
+        pc64_log("afp names f%u: \"%s\" list %p of %u: %u searches, %u through the list, %s%d", pc64_frames, g_afp_stat[best].name,
+                 g_afp_stat[best].list, g_afp_stat[best].n_list, g_afp_stat[best].calls, g_afp_stat[best].scans,
+                 g_afp_stat[best].idx >= 0 ? "found at " : "none ", g_afp_stat[best].idx);
+        g_afp_stat[best].calls = 0;
+    }
+    memset(g_afp_stat, 0, sizeof g_afp_stat);
+}
+static BYTE *afp_find_(BYTE *list, const char *name) {
+    if (!list) return NULL;
+    const LONG64 n_calls = InterlockedIncrement64(&g_afp_calls);
+    if (n_calls == 1 << 20 || n_calls == 1 << 24)
+        pc64_log("afp names: %lld searches, %lld answered from those kept", (long long)n_calls, (long long)g_afp_kept_answers);
+    size_t len = 0;
+    unsigned h = 2166136261u ^ (unsigned)((uintptr_t)list >> 4);
+    for (; name && name[len] && len < sizeof g_afp_kept[0].name; len++) h = (h ^ (BYTE)name[len]) * 16777619u;
+    if (!name || len >= sizeof g_afp_kept[0].name || InterlockedCompareExchange(&g_afp_lock, 1, 0) != 0)
+        return afp_scan(list, name);   // (a long name, or another thread in the table: as the library does)
+    BYTE *const base = *(BYTE **)(list + 0x40);
+    const WORD n = *(WORD *)(list + 0xe);
+    struct afp_kept *k = &g_afp_kept[h % AFP_SLOTS];
+    BYTE *r;
+    if (k->list == list && k->base == base && k->n == n && k->h == h && !strcmp(k->name, name) &&
+        (k->idx >= 0 ? ((afp_cmp_t)*g_afp_cmp_slot)(*(const char **)(base + 0x20 * (size_t)k->idx + 0x18), name) == 0
+                     : (++k->uses & 15) != 0)) {
+        r = k->idx >= 0 ? base + 0x20 * (size_t)k->idx : NULL;
+        g_afp_kept_answers++;
+        if (g_afp_log) afp_stat(list, name, n, k->idx, 0);
+    } else {
+        r = afp_scan(list, name);
+        k->list = list, k->base = base, k->n = n, k->h = h, k->uses = 0;
+        k->idx = r ? (int)((r - base) / 0x20) : -1;
+        memcpy(k->name, name, len + 1);
+        if (g_afp_log) afp_stat(list, name, n, k->idx, 1);
+    }
+    InterlockedExchange(&g_afp_lock, 0);
+    return r;
+}
+
+void pc64_afp_names_install(void) {
+    const char *v = getenv("HK_PC64_AFP_NAMES");
+    if (v && *v == '0') {
+        pc64_log("afp names: the layouts' own search (HK_PC64_AFP_NAMES=0)");
+        return;
+    }
+    const char *lg = getenv("HK_PC64_AFP_LOG");
+    g_afp_log = lg && *lg == '1';
+    HMODULE m = GetModuleHandleA("afp-utils.dll");
+    if (!m) return;
+    // the search's code (afp-utils of 2026: list in rcx, name in rdx; the compare's import at +80)
+    static const BYTE shape[] = {
+        0x48, 0x89, 0x74, 0x24, 0x20, 0x41, 0x54, 0x48, 0x83, 0xec, 0x20, 0x4c, 0x8b, 0xe2, 0x48, 0x8b, 0xf1, 0x48, 0x85, 0xc9,
+        0x75, 0x0e, 0x33, 0xc0, 0x48, 0x8b, 0x74, 0x24, 0x48, 0x48, 0x83, 0xc4, 0x20, 0x41, 0x5c, 0xc3, 0x48, 0x89, 0x5c, 0x24,
+        0x30, 0x33, 0xdb, 0x48, 0x89, 0x6c, 0x24, 0x38, 0x48, 0x89, 0x7c, 0x24, 0x40, 0x66, 0x3b, 0x59, 0x0e, 0x73, 0x2d, 0x8b,
+        0xfb, 0x0f, 0x1f, 0x00, 0x48, 0x8b, 0x46, 0x40, 0x49, 0x8b, 0xd4, 0x48, 0x8b, 0x4c, 0x07, 0x18, 0x48, 0x8d, 0x2c, 0x07,
+        0xff, 0x15, 0, 0, 0, 0, 0x85, 0xc0, 0x74, 0x2b, 0x0f, 0xb7, 0x46, 0x0e, 0xff, 0xc3, 0x48, 0x83, 0xc7, 0x20,
+        0x3b, 0xd8, 0x7c, 0xd8, 0x33, 0xc0, 0x48, 0x8b, 0x6c, 0x24, 0x38, 0x48, 0x8b, 0x5c, 0x24, 0x30, 0x48, 0x8b, 0x7c, 0x24,
+        0x40, 0x48, 0x8b, 0x74, 0x24, 0x48, 0x48, 0x83, 0xc4, 0x20, 0x41, 0x5c, 0xc3, 0x48, 0x8b, 0xc5, 0xeb, 0xe0};
+    BYTE *base = (BYTE *)m;
+    IMAGE_NT_HEADERS *nt = (IMAGE_NT_HEADERS *)(base + ((IMAGE_DOS_HEADER *)base)->e_lfanew);
+    IMAGE_SECTION_HEADER *s = IMAGE_FIRST_SECTION(nt);
+    BYTE *at = NULL;
+    int found = 0;
+    for (int i = 0; i < nt->FileHeader.NumberOfSections; i++, s++) {
+        if (!(s->Characteristics & IMAGE_SCN_MEM_EXECUTE)) continue;
+        BYTE *p = base + s->VirtualAddress, *end = p + s->Misc.VirtualSize;
+        for (; p + sizeof shape <= end; p++) {
+            size_t j = 0;
+            while (j < sizeof shape && (p[j] == shape[j] || (j >= 82 && j < 86))) j++;
+            if (j == sizeof shape) at = p, found++;
+        }
+    }
+    if (found != 1) {
+        pc64_log("afp names: the layouts' search not found (%d places of its shape): their own search", found);
+        return;
+    }
+    g_afp_cmp_slot = (void **)(at + 86 + *(int32_t *)(at + 82));
+    // its first 14 bytes (whole instructions: mov [rsp+20],rsi; push r12; sub rsp,20; mov r12,rdx) -> jmp [rip]; here
+    BYTE jump[14] = {0xff, 0x25, 0, 0, 0, 0};
+    void *to = (void *)afp_find_;
+    memcpy(jump + 6, &to, 8);
+    DWORD old;
+    VirtualProtect(at, sizeof jump, PAGE_EXECUTE_READWRITE, &old);
+    memcpy(at, jump, sizeof jump);
+    VirtualProtect(at, sizeof jump, old, &old);
+    FlushInstructionCache(GetCurrentProcess(), at, sizeof jump);
+    pc64_log("afp names: the layouts' picture search at afp-utils.dll+%llx answered with its answers kept (HK_PC64_AFP_NAMES=0: off)",
+             (unsigned long long)(at - base));
 }

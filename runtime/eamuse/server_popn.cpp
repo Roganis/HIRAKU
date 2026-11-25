@@ -74,6 +74,18 @@ std::string Server::answer_later(const Game &g, const Call &call, const Request 
         if (g.family == Family::popn_pc_later)   // the keepalive as pop'n 15-18's (its pings answered by HIRAKU's loader)
             items += "<item name=\"keepalive\" url=\"http://127.0.0.1/keepalive?pa=127.0.0.1&amp;ia=127.0.0.1&amp;"
                      "ga=192.168.0.1&amp;ma=127.0.0.1&amp;t1=2&amp;t2=10\"/>";
+        // a later PC beatmania IIDX (model LDJ): the same pcbevent and keepalive (its pings answered by
+        // the loader), and the modules its library registers at start-up (the game's log's
+        // module_add lines), or the library fails their calls before sending (boot status 1,2008)
+        if (g.family == Family::iidx_pc_later)
+            items += "<item name=\"pcbevent\" url=\"http://" + esc(host) + "/\"/>"
+                     "<item name=\"keepalive\" url=\"http://127.0.0.1/keepalive?pa=127.0.0.1&amp;ia=127.0.0.1&amp;"
+                     "ga=192.168.0.1&amp;ma=127.0.0.1&amp;t1=2&amp;t2=10\"/>";
+        if (g.family == Family::iidx_pc_later)
+            for (const char *mod : {"apsmanager", "sidmgr", "dlstatus", "eacoin", "ins"})
+                items += std::string("<item name=\"") + mod + "\" url=\"http://" + esc(host) + "/\"/>";
+        for (const std::string &mod : own_modules(g))   // the game's own modules (games.cpp: kept in one place)
+            items += "<item name=\"" + mod + "\" url=\"http://" + esc(host) + "/\"/>";
         return "<services expire=\"600\" status=\"0\">" + items + "</services>";
     }
     if (m == "facility" && f == "get" && g.family == Family::popn_pc_later) {   // the 64-bit PC pop'n: pcb.boot reads the location
@@ -314,6 +326,15 @@ std::string Server::answer_later(const Game &g, const Call &call, const Request 
         }
         return "<portfw status=\"0\"/>";
     }
+    // a later PC beatmania IIDX: its shop module's two start-up calls (the module's name is the
+    // game's prefix + "shop"; matched here by the suffix after the letters+number prefix). The
+    // getname answer is read for opname (a string) and pid (an int) and stored as the shop's name —
+    // the start-up check after it fails while the name is the default. As the older PC IIDX games'
+    // server answers it (server_iidx.cpp's shop getname): this server's shop name and prefecture.
+    // (getclosingtime's answer is not given: the game's handler rejected both shapes tried, so the
+    // call gets the empty fallback; it only feeds an info box, not a start-up stop)
+    if (g.family == Family::iidx_pc_later && f == "getname" && module_suffix(m) == "shop")
+        return "<" + m + " status=\"0\" opname=\"" + esc(shop_name()) + "\" pid=\"" + std::to_string(shop_pref()) + "\"/>";
     if (m == game) return answer_game(game, r);   // pop'n 11 on: <D11 type=.. method=..>
     return "";
 }

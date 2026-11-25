@@ -6,8 +6,8 @@
 //     that isn't there; the status is the inputs held (pc64_held).
 //   - The AMI2000 card reader (iccr-ami2000-api): a card held to it (the link's card, or HK_SCRIPT's)
 //     is its identifier once, and its type (1 an e-AMUSEMENT pass, 2 FeliCa), as spice2x's.
-//   - The license key (kbt.dll, kld.dll: on the cabinet, not in the game's folder): the game finds
-//     them with GetModuleHandleA and their calls with GetProcAddress; two keys present.
+//   - The license key (kbt.dll, kld.dll: on the cabinet, not in the game's folder): keystub.c,
+//     shared with the other board (board_iidx.c).
 #include "pc64.h"
 
 #include <setupapi.h>
@@ -143,6 +143,7 @@ static BOOL WINAPI DestroyList_(HDEVINFO s) { return s == DEVICES ? TRUE : r_Des
 static void Ami_void(void) {}
 static int Ami_zero(void) { return 0; }
 static const char *Ami_rom(void) { return "HIRAKU"; }
+const char *pc64_ami_rom(void) { return Ami_rom(); }   // the lid the game itself reports; used as the shop name on a first boot — the server's getname answer replaces it on the next start if it differs
 static int g_card_type;
 static uint32_t g_card_seen;
 volatile unsigned pc64_cards_given;
@@ -161,36 +162,6 @@ static uint64_t Ami_card(void) {
     for (int i = 0; i < 8; i++) id = id << 8 | uid[i];
     pc64_log("card: %016llx (%s)", (unsigned long long)id, g_card_type == 1 ? "e-AMUSEMENT pass" : "FeliCa");
     return id;
-}
-
-// --- the license key: two keys (spice2x's stubs: the key status, 16 bytes a key)
-typedef struct { uint32_t v1; uint8_t v2, v3, v4, v5; uint32_t v6, v7; } key_status;
-static int __cdecl key_zero(void) { return 0; }
-static int __cdecl key_status_(key_status *st) {
-    memset(st, 0, 2 * sizeof *st);
-    for (int i = 0; i < 2; i++) st[i].v2 = 1, st[i].v4 = 1, st[i].v7 = ~0u;
-    return 0;
-}
-static void __cdecl key_run(void (__cdecl *f)(void *), void *arg) {
-    if (f) f(arg);
-}
-static char g_kbt, g_kld;
-#define KBT ((HMODULE)&g_kbt)
-#define KLD ((HMODULE)&g_kld)
-static HMODULE(WINAPI *r_GetModuleHandleA)(LPCSTR);
-static FARPROC(WINAPI *r_GetProcAddress)(HMODULE, LPCSTR);
-static HMODULE WINAPI GetModuleHandleA_(LPCSTR name) {
-    if (name && !_stricmp(name, "kbt.dll")) return KBT;
-    if (name && !_stricmp(name, "kld.dll")) return KLD;
-    return r_GetModuleHandleA(name);
-}
-static FARPROC WINAPI GetProcAddress_(HMODULE m, LPCSTR name) {
-    if (m != KBT && m != KLD) return r_GetProcAddress(m, name);
-    if (!HIWORD((ULONG_PTR)name)) return NULL;
-    if (!strcmp(name, "bt_get_ikey_status") || !strcmp(name, "k_bt0001")) return (FARPROC)(void *)key_status_;
-    if (!strcmp(name, "k_bt0002")) return (FARPROC)(void *)key_run;
-    if (!strncmp(name, "bt_fcheck_", 10)) return (FARPROC)(void *)key_zero;
-    return NULL;
 }
 
 #define HOOK(dll, name, fn, keep) do { void *o = pc64_import(game, dll, name, (void *)(fn)); \
@@ -230,6 +201,5 @@ void pc64_board_install(HMODULE game) {
     HOOK("iccr-ami2000-api.dll", "AMI2000_ReadCtrl", Ami_zero, NULL);
     HOOK("iccr-ami2000-api.dll", "AMI2000_GetCardType", Ami_type, NULL);
     HOOK("iccr-ami2000-api.dll", "AMI2000_GetCardIdentifier", Ami_card, NULL);
-    HOOK("kernel32.dll", "GetModuleHandleA", GetModuleHandleA_, &r_GetModuleHandleA);
-    HOOK("kernel32.dll", "GetProcAddress", GetProcAddress_, &r_GetProcAddress);
+    pc64_keystub_install(game);
 }

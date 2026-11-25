@@ -40,17 +40,30 @@ static int (*ea3_boot)(node_t);
 
 volatile int pc64_scene = -1;
 
+// Which game this run starts, decided once from the game DLL's file name (a 64-bit PC IIDX's is
+// bm2dx.dll); asked through pc64_game_is_iidx (pc64.h)
+static int g_iidx_game;
+int pc64_game_is_iidx(void) { return g_iidx_game; }
+
 static FILE *g_reading;
 static int read_file(uint32_t context, void *to, size_t n) {
     (void)context;
     return (int)fread(to, 1, n, g_reading);
 }
 
-// AVS2's log: the loader's, and the game's scenes from it (the tests' script waits for them)
+// AVS2's log: the loader's, and the game's scenes from it (the tests' script waits for them).
+// The "boot_status" line marks the boot's ea3 phase; the start-up monitor check runs after it, so
+// it starts the check's span (link.c paces the span no faster than the 1/120 s grid). The title's
+// first "CMovieManager" line is always after the check on any boot and ends the span.
 static BOOL avs_log(const char *buf, DWORD size, HANDLE file) {
     (void)file;
     for (DWORD i = 0; i + 20 < size; i++)
         if (!memcmp(buf + i, "CSequence::Attach: ", 19)) pc64_scene = atoi(buf + i + 19);
+    if (pc64_game_is_iidx())
+        for (DWORD i = 0; i + 11 <= size; i++) {
+            if (!memcmp(buf + i, "boot_status", 10)) pc64_span_start();
+            else if (!memcmp(buf + i, "CMovieManager", 12)) pc64_span_end();
+        }
     FILE *f = pc64_log_file();
     fwrite(buf, 1, size, f);
     fflush(f);
@@ -136,6 +149,8 @@ int main(int argc, char **argv) {
     pc64_log("the timer: %.1f ms%s", timer / 1e4,
              full == 2 ? ", kept whatever the windows show" : full ? ", the speed kept whatever the windows show" : "");
     const char *game_dll = argc > 2 ? argv[2] : "popn.dll";
+    const char *dll_base = strrchr(game_dll, '\\');
+    g_iidx_game = !_stricmp(dll_base ? dll_base + 1 : game_dll, "bm2dx.dll");
     char contents[MAX_PATH], modules[MAX_PATH + 16];
     GetFullPathNameA(argv[1], sizeof contents, contents, NULL);
     snprintf(modules, sizeof modules, "%s\\modules", contents);
@@ -203,15 +218,29 @@ int main(int argc, char **argv) {
         if (avs_fs_lstat(to, st) <= 0) avs_fs_copy(from, to);
     }
 
+    // A 64-bit PC IIDX reads its own switches with getenv at its I/O and sound boot (its DLL's
+    // strings CONNECT_CAMERA, SOUND_OUTPUT_DEVICE, CONNECT_IO, CONNECT_ICCA): camera off takes its
+    // own dummy-camera path, and WASAPI is the sound path runtime/pc64/sound.c answers. CONNECT_IO
+    // and CONNECT_ICCA are left alone: the board and the reader stay "connected", answered by the
+    // stand-ins. Set before the game's DLL is loaded, for this game only
+    if (pc64_game_is_iidx()) {
+        SetEnvironmentVariableA("CONNECT_CAMERA", "0");
+        SetEnvironmentVariableA("SOUND_OUTPUT_DEVICE", "wasapi");
+        pc64_log("a 64-bit PC IIDX: its switches set for this run: CONNECT_CAMERA=0, SOUND_OUTPUT_DEVICE=wasapi");
+    }
     HMODULE game = LoadLibraryA(game_dll);
     if (!game) {
         pc64_log("%s didn't load (%lu)", game_dll, GetLastError());
         return 2;
     }
     pc64_files_install(game, save ? contents : NULL);
+    if (pc64_game_is_iidx()) pc64_clock_install(game);   // a 64-bit PC IIDX's clock record, first-boot TEST (clock.c)
     pc64_display_install(game);
-    pc64_board_install(game);
+    if (pc64_game_is_iidx()) pc64_afp_names_install();   // the music select's picture names (display.c)
+    if (pc64_game_is_iidx()) pc64_board_iidx_install(game);   // a 64-bit PC IIDX's board (board_iidx.c)
+    else pc64_board_install(game);
     pc64_touch_install(game);
+    pc64_monitor_install(game);   // link.c: the monitor check's meter clock (a 64-bit PC IIDX; =real keeps the real-time one)
     pc64_sound_install(game);
     pc64_trace_install(game);
     pc64_peek_install(game);
@@ -219,6 +248,9 @@ int main(int argc, char **argv) {
     pc64_crt_install(game);
     pc64_songs_install(game);
     pc64_patches_install(game);
+    pc64_inspect_install(game);
+    pc64_waits_install(game);   // waits.c: the game's own frame limiter off; the wait accounting when the frame log is on
+    pc64_netlog_install(core, game);
     int (*entry_init)(char *, node_t) = need(game, game_dll, "dll_entry_init");
     int (*entry_main)(void) = need(game, game_dll, "dll_entry_main");
 
@@ -287,9 +319,10 @@ int main(int argc, char **argv) {
     rewind(app);
     prop_t param = read_property(app, "app-config", 0x1000);
     fclose(app);
-    pc64_log("%s: dll_entry_init(%s)", game_dll, init_code);
-    if (!entry_init(init_code, property_search(param, NULL, "/param"))) {
-        pc64_log("dll_entry_init failed");
+    const int init_r = entry_init(init_code, property_search(param, NULL, "/param"));
+    pc64_log("%s: dll_entry_init(%s) -> %d", game_dll, init_code, init_r);
+    if (!init_r) {
+        pc64_log("dll_entry_init failed (returned %d): the game refuses to start", init_r);
         return 2;
     }
     char from_pc[64];
@@ -308,5 +341,6 @@ int main(int argc, char **argv) {
     pc64_script_start();
     int r = entry_main();
     pc64_log("dll_entry_main -> %d", r);
+    pc64_frame_log_exit();   // HK_PC64_FRAME_LOG: the exit line and the thread table (link.c)
     return r;
 }

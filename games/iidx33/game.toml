@@ -1,0 +1,13 @@
+# the 64-bit PC beatmania IIDX (model LDJ): a 64-bit Windows PC with AVS2 and two screens
+id = "iidx33"
+title = "beatmania IIDX 33 Sparkle Shower"
+title_latin = "beatmania IIDX 33 Sparkle Shower"   # for the game menu's font (ASCII)
+family = "iidx"         # IIDX cabinet: 7 keys and a turntable per player; the core gives this
+                        # family's control names on the link (HK_PC_C02_*), runtime/pc64/board_iidx.c
+                        # reads them into this board's status layout
+core = "pc"             # Konami's own DLL, started by HIRAKU's loader (runtime/pc64/, PLAN.md section 32)
+
+[pc]
+loader = "pc64"         # hiraku-pc64.exe: AVS2, then modules/bm2dx.dll
+dll = "bm2dx.dll"       # in contents/modules/, with prop/ and the data beside them
+model = "LDJ"           # prop/ea3-config.xml's soft/model

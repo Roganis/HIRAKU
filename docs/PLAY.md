@@ -344,7 +344,7 @@ about as loud as the others** (Settings > Audio, on by default; `--even-volume o
 |---|---|
 | System 573 | -5 dB |
 | Twinkle (beatmania IIDX 1st to 8th style) | -4 dB |
-| PC beatmania IIDX (9th style to EMPRESS) | -4 dB |
+| PC beatmania IIDX (9th style to EMPRESS; the 64-bit one, not measured) | -4 dB |
 | PC pop'n music (15 to 18, and the last 32-bit one) | -1 dB |
 | Firebeat | 0 |
 | Konami Python | +1 dB |

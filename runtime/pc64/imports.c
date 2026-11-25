@@ -47,3 +47,9 @@ void *pc64_import_ordinal(HMODULE m, const char *dll, WORD ordinal, void *fn) {
     pc64_patch(slot, fn);
     return old;
 }
+
+// The slot of DLL's import NAME in module M, without pointing it anywhere (to find the game's
+// own call sites of an import by their code's shape)
+void **pc64_import_slot(HMODULE m, const char *dll, const char *name) {
+    return import_slot(m, dll, name, 0);
+}

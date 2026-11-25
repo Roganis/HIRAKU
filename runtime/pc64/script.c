@@ -47,6 +47,11 @@ static DWORD WINAPI run(void *arg) {
             pc64_touch(x, y);
             continue;
         }
+        if (sscanf(action, "mtouch:%d:%d", &x, &y) == 2) {
+            pc64_log("script: mtouch %d,%d (scene %d, picture %u)", x, y, pc64_scene, pc64_frames);
+            pc64_mtouch(x, y);
+            continue;
+        }
         int x1, y1;
         if (sscanf(action, "drag:%d:%d:%d:%d", &x, &y, &x1, &y1) == 4) {
             pc64_log("script: drag %d,%d to %d,%d (scene %d, picture %u)", x, y, x1, y1, pc64_scene, pc64_frames);

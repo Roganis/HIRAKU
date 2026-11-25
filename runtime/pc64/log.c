@@ -127,15 +127,23 @@ void pc64_trace_install(HMODULE game) {
 }
 
 // HK_PC64_PEEK (tests): "SECONDS;WHAT;WHAT..." logs the game's memory every SECONDS, each WHAT an
-// address as popn.dll's (0x180...), then * (the pointer there) and +N in turn, then :SIZE, as
-// "0x180fe6270*+0xc:64" (a global's object, 64 bytes from its +0xc)
+// address as the game's (0x180...), then * (the pointer there) and +N in turn, then :SIZE, as
+// "0x180fe6270*+0xc:64" (a global's object, 64 bytes from its +0xc). The head may be "fN" instead
+// of seconds: then the log comes every N frames (pc64_frames), for reading a gate over a boot.
 static const char *g_peek;
 static HMODULE g_peek_game;
 static DWORD WINAPI peek_run(void *arg) {
     (void)arg;
-    const int every = atoi(g_peek);
+    const int frame_mode = *g_peek == 'f';
+    const long every = atol(frame_mode ? g_peek + 1 : g_peek);
+    unsigned next_f = 0;
     for (;;) {
-        Sleep((DWORD)(every > 0 ? every : 5) * 1000);
+        if (frame_mode) {
+            while (pc64_frames < next_f) Sleep(20);
+            next_f = pc64_frames + (every > 0 ? (unsigned)every : 300);
+        } else {
+            Sleep((DWORD)(every > 0 ? every : 5) * 1000);
+        }
         for (const char *w = strchr(g_peek, ';'); w; w = strchr(w, ';')) {
             char *at;
             unsigned long long a = strtoull(++w, &at, 0) - 0x180000000ull + (unsigned long long)(uintptr_t)g_peek_game;
@@ -150,7 +158,7 @@ static DWORD WINAPI peek_run(void *arg) {
                 if (IsBadReadPtr((void *)(uintptr_t)(a + i), 1)) break;
                 sprintf(hex + 3 * i, "%02x ", ((const unsigned char *)(uintptr_t)a)[i]);
             }
-            pc64_log("peek %.*s: %s", (int)strcspn(w, ";"), w, ok ? hex : "(no pointer)");
+            pc64_log("peek f%u %.*s: %s", pc64_frames, (int)strcspn(w, ";"), w, ok ? hex : "(no pointer)");
         }
     }
     return 0;

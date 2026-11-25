@@ -20,6 +20,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 
 #ifndef AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM   // (older mingw headers: Ubuntu 22.04's)
 #define AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM 0x80000000
@@ -55,6 +56,34 @@ static HRESULT WINAPI GetMixFormat_(IAudioClient *c, WAVEFORMATEX **f) {
     }
     return h;
 }
+// The boot probes the device with IsFormatSupported (exclusive mode, no closest-match pointer —
+// measured: the game's ten boot probes all ask AUDCLNT_SHAREMODE exclusive) before anything else;
+// Windows answers only its own mix format's exact match, and under Wine the PC's device is at
+// another rate — but the loader's device runs at HK_PC_AUDIO_RATE and takes these, so when
+// hiraku-pc is the link its answer is yes (the same formats Initialize_ accepts)
+static int fmt_fits(const WAVEFORMATEX *f, int *is_float) {
+    *is_float = f->wFormatTag == WAVE_FORMAT_IEEE_FLOAT;
+    if (f->wFormatTag == WAVE_FORMAT_EXTENSIBLE && f->cbSize >= 22)
+        *is_float = IsEqualGUID(&((const WAVEFORMATEXTENSIBLE *)f)->SubFormat, &float_format);
+    return f->nSamplesPerSec == HK_PC_AUDIO_RATE && f->nChannels >= 1 && f->nChannels <= 8 &&
+           ((*is_float && f->wBitsPerSample == 32) || (!*is_float && (f->wBitsPerSample == 16 || f->wBitsPerSample == 32)));
+}
+static int g_iidx;   // this game's DLL (its boot probes IsFormatSupported; the first pc64 game's
+                    // boot does not take that answer, so it keeps the device's own)
+static HRESULT WINAPI IsFormatSupported_(IAudioClient *c, AUDCLNT_SHAREMODE m, const WAVEFORMATEX *f, WAVEFORMATEX **closest) {
+    if (!f) return r_client.IsFormatSupported(c, m, f, closest);
+    int is_float;
+    const int fits = fmt_fits(f, &is_float);
+    if (g_iidx && fits && !closest && pc64_link() && !getenv("HK_PC64_WINE_SOUND")) {
+        pc64_log("sound: IsFormatSupported %s, %u Hz, %u channels, %u bits%s: yes, through hiraku-pc", m ? "exclusive" : "shared",
+                 (unsigned)f->nSamplesPerSec, f->nChannels, f->wBitsPerSample, is_float ? " float" : "");
+        return S_OK;
+    }
+    const HRESULT h = r_client.IsFormatSupported(c, m, f, closest);
+    pc64_log("sound: IsFormatSupported %s, %u Hz, %u channels, %u bits%s: %08lx", m ? "exclusive" : "shared", (unsigned)f->nSamplesPerSec,
+             f->nChannels, f->wBitsPerSample, is_float ? " float" : "", (unsigned long)h);
+    return h;
+}
 // The device's clock (to_ring): its frequency and start, frames played, the event's period
 static LARGE_INTEGER g_freq, g_t0;
 static uint64_t g_clock;      // frames the device has played
@@ -73,11 +102,8 @@ static HRESULT WINAPI Initialize_(IAudioClient *c, AUDCLNT_SHAREMODE m, DWORD fl
     // started and its sound thread faulted): Windows converts it, as Wine does unasked
     const HRESULT first = h;
     if (FAILED(h) && !m) h = r_client.Initialize(c, m, flags | AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM | AUDCLNT_STREAMFLAGS_SRC_DEFAULT_QUALITY, d, p, f, session);
-    int is_float = f->wFormatTag == WAVE_FORMAT_IEEE_FLOAT;
-    if (f->wFormatTag == WAVE_FORMAT_EXTENSIBLE && f->cbSize >= 22)
-        is_float = IsEqualGUID(&((const WAVEFORMATEXTENSIBLE *)f)->SubFormat, &float_format);
-    const int fits = f->nSamplesPerSec == HK_PC_AUDIO_RATE && f->nChannels >= 1 && f->nChannels <= 8 &&
-                     ((is_float && f->wBitsPerSample == 32) || (!is_float && (f->wBitsPerSample == 16 || f->wBitsPerSample == 32)));
+    int is_float;
+    const int fits = fmt_fits(f, &is_float);
     const int ours = pc64_link() && fits && !g_s.on && !getenv("HK_PC64_WINE_SOUND");   // (tests: Wine's device)
     if (ours && FAILED(h)) {   // the device never plays the stream: the loader is the device all the same
         pc64_log("sound: the PC's device refused the game's format (%08lx, %08lx): through hiraku-pc all the same", (unsigned long)first,
@@ -122,11 +148,13 @@ static HRESULT WINAPI GetDevicePeriod_(IAudioClient *c, REFERENCE_TIME *def, REF
     const REFERENCE_TIME p = (REFERENCE_TIME)g_period * 10000000 / HK_PC_AUDIO_RATE;
     if (def) *def = p;
     if (min) *min = p;
+    pc64_log("sound: GetDevicePeriod: %lld ms", (long long)(p / 10000));
     return S_OK;
 }
 static HRESULT WINAPI SetEventHandle_(IAudioClient *c, HANDLE e) {
     if (!g_s.on) return r_client.SetEventHandle(c, e);
     g_s.event = e;
+    pc64_log("sound: SetEventHandle %p", e);
     return S_OK;
 }
 static HRESULT WINAPI Start_(IAudioClient *c) {
@@ -223,6 +251,60 @@ static HRESULT WINAPI rc_ReleaseBuffer(IAudioRenderClient *r, UINT32 n, DWORD fl
             pc64_log("sound: written %u, played %u, peak %.3f; ring made %u, taken %u; the game late %u times", g_s.written, g_s.played,
                      (double)peak, l->audio_made, l->audio_taken, g_late);
             said = g_s.written, peak = 0;
+        }
+        // ... and each of the game's channels' peak over 10 s, as it is received here (before the
+        // fold: channel 0 goes left and channel 1 right, at unity gain, the rest are dropped)
+        static float ch_peak[8];
+        static UINT32 ch_said;
+        static int fold_said;
+        if (!fold_said) {
+            fold_said = 1;
+            pc64_log("sound: the fold: of the game's %u channel(s), channel 0 to the left, channel 1 to the right, unity gain; the others dropped", g_s.channels);
+        }
+        const int ch = g_s.channels < 8 ? (int)g_s.channels : 8;
+        // tests only: per 10 s, for channels 2-7 also their correlation with channels 0 and 1
+        // (normalised, -1..1) and their level relative to them — copies of the front pair read
+        // r~1, channels with their own content do not
+        static double acc_n, acc_sum[8], acc_sq[8], acc_c0[8], acc_c1[8];
+        if (!(flags & AUDCLNT_BUFFERFLAGS_SILENT))
+            for (UINT32 i = 0; i < n; i++) {
+                const BYTE *in = g_s.staging + i * frame;
+                float v[8];
+                for (int c = 0; c < ch; c++) {
+                    v[c] = sample(in + c * g_s.bytes);
+                    const float a = v[c] > 0 ? v[c] : -v[c];
+                    if (a > ch_peak[c]) ch_peak[c] = a;
+                    acc_sum[c] += v[c], acc_sq[c] += (double)v[c] * v[c];
+                    if (c >= 2) acc_c0[c] += (double)v[c] * v[0], acc_c1[c] += (double)v[c] * v[1];
+                }
+                acc_n += 1;
+            }
+        if (g_s.written - ch_said >= 10 * (UINT32)HK_PC_AUDIO_RATE) {
+            char line[160], *p = line;
+            int left = (int)sizeof line;
+            for (int c = 0; c < ch; c++) {
+                const int w = snprintf(p, (size_t)left, " c%d %.3f", c, (double)ch_peak[c]);
+                p += w, left -= w;
+                ch_peak[c] = 0;
+            }
+            pc64_log("sound: channel peaks over 10 s:%s", line);
+            char cline[256], *q = cline;
+            int cleft = (int)sizeof cline;
+            for (int c = 2; c < ch; c++) {
+                const double vc = acc_n * acc_sq[c] - acc_sum[c] * acc_sum[c];
+                const double v0 = acc_n * acc_sq[0] - acc_sum[0] * acc_sum[0];
+                const double v1 = acc_n * acc_sq[1] - acc_sum[1] * acc_sum[1];
+                const double r0 = vc > 0 && v0 > 0 ? (acc_n * acc_c0[c] - acc_sum[c] * acc_sum[0]) / sqrt(vc * v0) : 0;
+                const double r1 = vc > 0 && v1 > 0 ? (acc_n * acc_c1[c] - acc_sum[c] * acc_sum[1]) / sqrt(vc * v1) : 0;
+                const double rms_c = sqrt(acc_sq[c] / acc_n), rms_0 = sqrt(acc_sq[0] / acc_n), rms_1 = sqrt(acc_sq[1] / acc_n);
+                const int w = snprintf(q, (size_t)cleft, " c%d r0 %.2f r1 %.2f x0 %.2f x1 %.2f", c, r0, r1,
+                                       rms_0 > 0 ? rms_c / rms_0 : 0, rms_1 > 0 ? rms_c / rms_1 : 0);
+                q += w, cleft -= w;
+                acc_sum[c] = acc_sq[c] = acc_c0[c] = acc_c1[c] = 0;
+            }
+            acc_sum[0] = acc_sq[0] = acc_sum[1] = acc_sq[1] = acc_n = 0;
+            pc64_log("sound: channels 2+ vs 0/1 over 10 s:%s", cline);
+            ch_said = g_s.written;
         }
     }
     return S_OK;
@@ -324,6 +406,7 @@ static HRESULT WINAPI Activate_(IMMDevice *d, REFIID iid, DWORD ctx, PROPVARIANT
         IAudioClientVtbl *v = ((IAudioClient *)*out)->lpVtbl;
         r_client = *v;
         pc64_patch(&v->GetMixFormat, GetMixFormat_);
+        pc64_patch(&v->IsFormatSupported, IsFormatSupported_);
         pc64_patch(&v->Initialize, Initialize_);
         pc64_patch(&v->GetBufferSize, GetBufferSize_);
         pc64_patch(&v->GetCurrentPadding, GetCurrentPadding_);
@@ -368,6 +451,14 @@ static HRESULT WINAPI CoCreateInstance_(REFCLSID c, LPUNKNOWN outer, DWORD ctx, 
 }
 
 void pc64_sound_install(HMODULE game) {
+    g_iidx = pc64_game_is_iidx();
     r_CoCreateInstance = pc64_import(game, "ole32.dll", "CoCreateInstance", (void *)CoCreateInstance_);
     if (!r_CoCreateInstance) pc64_log("the game doesn't import CoCreateInstance: its sound as it is");
+}
+
+void pc64_sound_pos(unsigned *written, unsigned *played) {   // for link.c's HK_PC64_SYNC_LOG line
+    EnterCriticalSection(&g_s.lock);
+    if (written) *written = g_s.written;
+    if (played) *played = g_s.played;
+    LeaveCriticalSection(&g_s.lock);
 }

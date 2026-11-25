@@ -147,6 +147,8 @@ if [ -d "$build/pc" ]; then
   # the C33 cabinet's (the ee'MALL station): its I/O board, video board and touch panel, and a forwarder
   for f in ezusb.dll ezusb_video.dll; do if [ -f "$build/pc/c33/$f" ]; then mkdir -p "$d/bin/pc/c33" && cp "$build/pc/c33/$f" "$d/bin/pc/c33/"; fi; done
   cp "$build"/pc/hiraku-pc64.exe "$d/bin/pc/" 2>/dev/null || true
+  # ... and beside it the stand-in for the one third-party DLL a 64-bit game hard-imports (nvenc_stub.c)
+  cp "$build"/pc/nvEncodeAPI64.dll "$d/bin/pc/" 2>/dev/null || true
   cp "$build"/pc/hiraku-pc32.exe "$d/bin/pc/" 2>/dev/null || true
 fi
 # HK_PACKAGE_DXVK: a folder with DXVK's 64-bit d3d9.dll and its LICENSE, beside the loader (hiraku-pc

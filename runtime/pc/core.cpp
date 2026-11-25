@@ -372,6 +372,7 @@ public:
         c02_ = m["board"] == "c02" || m["board"] == "c02-driver";
         c02_driver_ = m["board"] == "c02-driver";
         c33_ = m["board"] == "c33";
+        iidx_pad_ = c02_;
         data_as_ = m.count("data_as") ? m["data_as"] : drive + "\\data";
 
         // The save folder: the program's copy (HIRAKU's DLLs for Konami's), the backup drive (e/)
@@ -631,6 +632,9 @@ public:
     // folder's run/; the same link. machine.txt: core=pc, loader=pc64, contents=PATH, family=pcpopnhc
     bool init_pc64(const Options &o, std::map<std::string, std::string> &m, const std::string &contents) {
         pc64_ = true;
+        // their cabinet's rate is their own 120 a second (not a 60 Hz cabinet's at a mod's rate: none
+        // of the [[rate]] conditions, ghz() > cab_hz(), apply to them)
+        cab_hz_ = hz_ = 120.0;
         g_plain_letters = true;   // (win_path)
         contents_ = contents;
         if (contents_.empty() || !hk::sys::is_dir(contents_ + "/modules")) {
@@ -638,6 +642,7 @@ public:
             return false;
         }
         family_ = m.count("family") ? m["family"] : "pcpopnhc";
+        iidx_pad_ = family_ == "iidx";   // a 64-bit game of this family takes the series' control names
         // the controllers go on while the touch screen's window has the focus (a click there takes it
         // under Wine, whatever the window asks): SDL's joystick events in the background too
         set_env("SDL_JOYSTICK_ALLOW_BACKGROUND_EVENTS", "1");
@@ -993,7 +998,7 @@ public:
     uint64_t between_drawn_ = 0, between_late_ = 0;
     // The C02 cabinet's turntables: the host's counts (1024 a turn) to the board's 0-255
     void turntable_add(int player, int delta) override {
-        if (!(c02_ || c33_) || !link_ || player < 0 || player > 1) return;
+        if (!(iidx_pad_ || c33_) || !link_ || player < 0 || player > 1) return;
         tt_frac_[player] += delta;
         const int whole = tt_frac_[player] / 4;
         tt_frac_[player] -= whole * 4;
@@ -1050,6 +1055,10 @@ public:
             printf("hiraku-pc: the game late for %llu frames and drew them at once after (its notes kept with its music)%s\n",
                    (unsigned long long)made_up_,
                    not_made_up_ ? (", " + std::to_string(not_made_up_) + " more in pauses (as they came)").c_str() : "");
+        if (frame_padded_ || frame_dropped_)
+            printf("hiraku-pc: the 64-bit loader's sound a frame's at a time (no display sync): %.2f s of silence where it had "
+                   "none yet, %.2f s dropped to stay within a frame and a half of it\n", frame_padded_ / (double)HK_PC_AUDIO_RATE,
+                   frame_dropped_ / (double)HK_PC_AUDIO_RATE);
         if (not_made_up_rate_)
             printf("hiraku-pc: at the mod's rate (in a song), %llu pictures late by more than half a second together were not made "
                    "up: the game couldn't keep the rate (the rate steps down when its pictures take too long)\n",
@@ -1234,12 +1243,17 @@ public:
                 }
                 next_slot(std::chrono::steady_clock::now(), true);
             } else if (sound_on_ && !ahead_ && now - go_at_ > std::chrono::microseconds((long long)(5e5 * per_frame_ / ghz())) &&
-                       (int32_t)(sound_for(tick_ + per_frame_) - link_->audio_made) > 0) {
+                       (sound_by_frame() ? !frame_sound_ahead_ : (int32_t)(sound_for(tick_ + per_frame_) - link_->audio_made) > 0)) {
                 // the picture is late (half a frame): its frame's sound goes on without it, before
                 // the sound output runs dry (the game's sounds of this frame come with the next)
-                sound_until(sound_for(tick_ + per_frame_));
-                take_sound();
-            } else if (!take_sound()) {
+                if (sound_by_frame()) {   // (the 64-bit loader's: the frame's share, once)
+                    frame_sound((uint32_t)(samples_at(tick_ + per_frame_) - samples_at(tick_)));
+                    frame_sound_ahead_ = true;
+                } else {
+                    sound_until(sound_for(tick_ + per_frame_));
+                    take_sound();
+                }
+            } else if (sound_by_frame() || !take_sound()) {
                 hk::sys::sleep_for(std::chrono::microseconds(100));
             }
             if (!patches_.empty()) patches_said();
@@ -1278,6 +1292,11 @@ public:
         };
         if (c02_) return c02_input(name, value, bit);
         if (c33_) return c33_input(name, value, bit);
+        // a 64-bit game of the family "iidx": the series' control names go the C02 way (its keys,
+        // starts, VEFX/Effect, turntables, sliders, both players' 10-keys with Clear onto the link's
+        // keypad/keypad2) - but its card stays this core's own (below: the reader, not the old
+        // magnetic card)
+        if (iidx_pad_ && name != "Card" && name != "P2 Card") return c02_input(name, value, bit);
         if (name.rfind("P1 Button ", 0) == 0) {
             const int k = std::atoi(name.c_str() + 10);
             if (k < 1 || k > 9) return false;
@@ -1338,7 +1357,7 @@ public:
             if (b != last_lamps_) last_lamps_ = b, changes_++;
             return lamps_;
         }
-        if (c02_) {
+        if (iidx_pad_) {   // the C02 cabinet's, or a 64-bit game of the family "iidx" (runtime/pc64/board_iidx.c)
             const uint32_t led = link_ ? link_->led : 0, top = link_ ? link_->top_lamp : 0, neon = link_ ? link_->top_neon : 0;
             const uint32_t all = b | led << 16 | top << 20 | neon << 28;
             for (size_t i = 0; i < l.size(); i++) {
@@ -1841,9 +1860,24 @@ private:
         go_at_ = std::chrono::steady_clock::now();
         link_->go_host_us = host_us(go_at_);
         link_->not_shown = !ahead_ && pics_ + 1 < per_frame_;
-        link_->game_hz_milli = (uint32_t)std::lround(ghz() * 1000);
+        link_->game_hz_milli = link_hz_milli();
         std::atomic_thread_fence(std::memory_order_release);
         link_->frame_go = seq;
+    }
+
+    // The game's pictures a second as the link tells them (game_hz_milli): the game's own rate, but
+    // for the 64-bit loader with display sync on, the rate the shell really keeps - the display's
+    // measured refresh over its refreshes in a frame, times the pictures in a frame (119.88 or
+    // 120.04 on a "120 Hz" display, not the nominal 120). The 64-bit IIDX's start-up monitor check
+    // is shown that rate and stores it (runtime/pc64/link.c, pc64_span_start). The 32-bit games'
+    // DLLs read the figure as the [[rate]]'s (cabinet.c, press.c): theirs stays ghz()
+    uint32_t link_hz_milli() const {
+        if (pc64_ && hk::host::pacing::active() && !hk::host::pacing::exact_speed()) {
+            const double hz = hk::host::pacing::refresh_hz();
+            const int k = hk::host::pacing::refreshes_per_frame();
+            if (hz > 0 && k > 0) return (uint32_t)std::lround(per_frame_ * hz / k * 1000);
+        }
+        return (uint32_t)std::lround(ghz() * 1000);
     }
 
     // The game's time in its own frames (ticks: cab_hz() a second, the 64-bit PC pop'n's 120), each
@@ -1911,16 +1945,47 @@ private:
         effector_.set(s);
     }
 
-    // The sound mixed so far, to the shell's output (HIRAKU's: device, latency, pacing). true if any
-    bool take_sound() {
+    // The 64-bit loader's sound comes on its own clock (runtime/pc64/sound.c: its device's periods by
+    // the PC's clock, as the game fills them), not a frame's at a time as the DLLs' mix. With display
+    // sync the display paces and the sound is taken as it comes. Without it the shell paces by its
+    // sound queue (host/window.cpp: a frame's sound pushed, then a wait until the queue is down to its
+    // target), and sound taken as it came refilled the queue by as much as the wait itself had lasted:
+    // each wait longer than the last (80 ms, then 150 ms a frame, ten frames a second, the music on
+    // in real time; 2026-11-23). So then each frame shown takes a frame's sound (frame_sound), the
+    // loader's surplus kept for the next frames
+    bool sound_by_frame() const { return pc64_ && !hk::host::pacing::active(); }
+    // A frame's sound for sound_by_frame: `n` samples, the loader's oldest. Short of them (its first
+    // periods, or after a pause), silence makes up the frame's; more than a frame's left after it
+    // (a hold-up's, the clocks' drift) is dropped down to half a frame's, so the sound stays within a
+    // frame and a half of the loader's (its periods come 2.5 ms apart: the half frame is their margin)
+    void frame_sound(uint32_t n) {
+        if (!audio_sink_ || !n) return;
+        const uint32_t have = link_->audio_made - link_->audio_taken;
+        take_sound(std::min(have, n));
+        if (have < n) {
+            silence_.assign(2 * (size_t)(n - have), 0.0f);
+            audio_sink_(silence_.data(), (int)(n - have));
+            frame_padded_ += n - have;
+        }
+        const uint32_t left = link_->audio_made - link_->audio_taken;
+        if (left > n) {
+            link_->audio_taken = link_->audio_made - n / 2;
+            frame_dropped_ += left - n / 2;
+        }
+    }
+
+    // The sound mixed so far (at most `most` samples), to the shell's output (HIRAKU's: device,
+    // latency, pacing). true if any
+    bool take_sound(uint32_t most = UINT32_MAX) {
         const uint32_t made = link_->audio_made, taken = link_->audio_taken;
-        if (made == taken || !audio_sink_) return false;
+        if (made == taken || !audio_sink_ || !most) return false;
         std::atomic_thread_fence(std::memory_order_acquire);
         const float *ring = (const float *)((const char *)link_ + HK_PC_AUDIO);
         uint32_t at = taken;
+        const uint32_t stop = taken + std::min(made - taken, most);
         effector_settings();
-        while (at != made) {
-            const uint32_t i = at & (HK_PC_AUDIO_FRAMES - 1), n = std::min(made - at, HK_PC_AUDIO_FRAMES - i);
+        while (at != stop) {
+            const uint32_t i = at & (HK_PC_AUDIO_FRAMES - 1), n = std::min(stop - at, HK_PC_AUDIO_FRAMES - i);
             fx_buf_.assign(ring + 2 * i, ring + 2 * (i + n));   // the cabinet's sound effects (the ring's the DLL's)
             effector_.process(fx_buf_.data(), (int)n);
             audio_sink_(fx_buf_.data(), (int)n);
@@ -1952,14 +2017,20 @@ private:
             sound_on_ = true;
             sound_base_ = link_->audio_made - (uint32_t)samples_at(tick_);
         }
-        if (sound_on_) {
+        if (sound_on_ && sound_by_frame()) {   // (unless the frame's share went ahead of a late picture)
+            if (!frame_sound_ahead_) frame_sound((uint32_t)(samples_at(tick_ + per_frame_) - samples_at(tick_)));
+            frame_sound_ahead_ = false;
+        } else if (sound_on_) {
             sound_until(sound_for(tick_ + per_frame_));
+            take_sound();
         } else if (audio_sink_) {   // no sound from the game yet (starting): a frame's silence
             const int n = (int)(samples_at(tick_ + per_frame_) - samples_at(tick_));
             silence_.assign(2 * (size_t)n, 0.0f);
             audio_sink_(silence_.data(), n);
+            take_sound();
+        } else {
+            take_sound();
         }
-        take_sound();
         if (w <= 0 || h <= 0) rgb = black_.data(), w = 640, h = 480;
         last_rgb_ = rgb, last_w_ = w, last_h_ = h;
         tick_ += per_frame_;
@@ -2157,7 +2228,7 @@ private:
     bool start_game() {
         std::vector<std::string> cmd = {win_path(run_prog_ + "/" + exe_)};
         std::string dir = win_path(run_prog_);
-        if (pc64_) cmd = {win_path(loader_), win_path(contents_)}, dir = win_path(save_ + "/run");
+        if (pc64_) cmd = {win_path(loader_), win_path(contents_), exe_}, dir = win_path(save_ + "/run");
         if (pc32_) cmd.push_back("."), dir = win_path(save_ + "/run");   // the loader's game folder: run/, AVS2's root
         if (process_.start(cmd, dir)) return true;
         fprintf(stderr, "hiraku-pc: can't start %s (error %lu)\n", cmd[0].c_str(), GetLastError());
@@ -2353,6 +2424,7 @@ private:
         const std::string dir = g_wine_paths.through(prefix, pc64_ || pc32_ ? save_ + "/run" : run_prog_);
         std::vector<std::string> args = {wine_, exe_plain ? exe_path : win_path(exe_path)};
         if (pc64_ || pc32_) args.push_back(game_dir);
+        if (pc64_) args.push_back(exe_);   // the game's DLL, the loader's argv[2] (its default is the first pc64 game's)
         // the folders the game is given by a link (win_path: those with letters outside ASCII), now that
         // Wine's folder is there
         if (std::string why; !g_wine_paths.make(prefix, &why)) {
@@ -2419,6 +2491,8 @@ private:
     bool c02_ = false;                // the C02 cabinet's board (beatmania IIDX 9th style, PLAN.md section 33)
     bool c02_driver_ = false;         // ... under its driver (IIDX RED, PLAN.md section 36)
     bool c33_ = false;                // the C33 cabinet's boards (Konami's ee'MALL 1st Avenue station)
+    bool iidx_pad_ = false;           // this cabinet's control names on the link (c02_, or a 64-bit game of
+                                      // family "iidx": its keys, starts, VEFX/Effect, turntables, sliders)
     std::string data_as_;             // the name the game gives its data folder (HK_PC_MAP)
     int tt_frac_[2] = {};             // turntable_add's counts not yet a whole step
     bool crt_ = false;                // --single-screen: the 64-bit loader's single-screen mode
@@ -2472,6 +2546,8 @@ private:
     bool slow_said_ = false;   // (the frame loop: the game not keeping its rate, said once)
     int slow_run_ = 0;         // ... its pictures shown while owed since the last one made up
     uint64_t made_up_ = 0, not_made_up_ = 0;
+    uint64_t frame_padded_ = 0, frame_dropped_ = 0;   // frame_sound's silence and its dropped samples
+    bool frame_sound_ahead_ = false;                  // this frame's share given ahead of its late picture
     uint64_t not_made_up_rate_ = 0;   // ... of them at a mod's [[rate]] (in a song: the report says so)
     // the game's hold-ups, for the report: from the second `t` of the run, `n` frames shown again
     struct LateRun { double t; uint64_t first, last; uint32_t n; };

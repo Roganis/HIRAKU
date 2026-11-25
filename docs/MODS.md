@@ -755,6 +755,10 @@ at 80 Hz (what the nested 60 Hz display keeps up with: 80 pictures a second; at 
 80): a character's loop 197 frames against 148 at 60 (148 x 80/60 = 197.3), the demo 2,389 frames
 against 1,790 at 60.6 Hz (29.9 s and 29.5 s); the notes on the clock; the rate off at the song's
 end. Not checked: a real 120 or 240 Hz display (the owner's), judging at the rate.
+The "80" was the game's own wait, not the display: before each Present it slept until 2 ms before
+16 ms after the last one returned, 10 ms of every frame (runtime/pc/cabinet.c `unlimit_frames`
+takes it out since 2026-11-23); since then it draws 120 and 240 pictures a second in the rig, 0.8 ms
+each.
 
 beatmania IIDX 16 EMPRESS on the PC (`games/iidx16/mods/high-frame-rate`, 2026-11-09; the program of
 2009072200): a game that counts everything in frames, its song's position too, so the clock-following

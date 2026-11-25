@@ -1794,6 +1794,13 @@ static void WINAPI my_Sleep(DWORD ms) {
     Sleep(ms);
     waited(__builtin_return_address(0), t0);
 }
+static DWORD WINAPI my_SleepEx(DWORD ms, BOOL alertable) {
+    LARGE_INTEGER t0;
+    QueryPerformanceCounter(&t0);
+    const DWORD r = SleepEx(ms, alertable);
+    waited(__builtin_return_address(0), t0);
+    return r;
+}
 static DWORD WINAPI my_WaitForSingleObject(HANDLE h, DWORD ms) {
     LARGE_INTEGER t0;
     QueryPerformanceCounter(&t0);
@@ -2011,6 +2018,7 @@ static void *cabinet_hook_for(const char *dll, const char *fn) {
     if (!_stricmp(dll, "sonet.dll")) return avs_logged(dll, fn);
     if (g_waitlog < 0) g_waitlog = getenv("HK_PC_WAITLOG") != NULL;
     if (g_waitlog && !_stricmp(dll, "kernel32.dll") && !strcmp(fn, "Sleep")) return (void *)my_Sleep;
+    if (g_waitlog && !_stricmp(dll, "kernel32.dll") && !strcmp(fn, "SleepEx")) return (void *)my_SleepEx;
     if (g_waitlog && !_stricmp(dll, "kernel32.dll") && !strcmp(fn, "WaitForSingleObject")) return (void *)my_WaitForSingleObject;
     if (g_waitlog && !_stricmp(dll, "user32.dll") && !strcmp(fn, "MsgWaitForMultipleObjects")) return (void *)my_MsgWaitForMultipleObjects;
     if (!_stricmp(dll, "kernel32.dll") && !strcmp(fn, "CreateThread") && getenv("HK_PC_THREADLOG")) return (void *)my_CreateThread;
@@ -2180,6 +2188,23 @@ static void unlimit_frames(void) {
         const size_t size = sec->Misc.VirtualSize;
         for (size_t i = 16; i + 40 < size; i++) {
             uint8_t *p = code + i;
+            // The last 32-bit PC pop'n's: a time 16 ms after the last Present (timeGetTime + 16, kept in
+            // a word), and before the next one a SleepEx until 2 ms before it, at most 10 ms (`call
+            // [timeGetTime]; mov ecx,[due]; sub ecx,eax; cmp ecx,12; jle`; three places): every picture
+            // held 10 ms past HIRAKU's start of the frame. The subtraction made `xor ecx,ecx`: no time
+            // left, no sleep
+            if (p[0] == 0x8b && p[1] == 0x0d && p[6] == 0x2b && p[7] == 0xc8 && p[8] == 0x83 && p[9] == 0xf9 && p[10] == 0x0c &&
+                p[11] == 0x7e && mentions(p - 6, 6, tgt) && sleep_ex && mentions(p + 12, 40, sleep_ex)) {
+                DWORD old;
+                VirtualProtect(p + 6, 2, PAGE_EXECUTE_READWRITE, &old);
+                p[6] = 0x33;   // sub ecx,eax -> xor ecx,ecx
+                p[7] = 0xc9;
+                VirtualProtect(p + 6, 2, old, &old);
+                FlushInstructionCache(GetCurrentProcess(), p + 6, 2);
+                hk_log("hiraku-pc: the game's own wait for 16 ms after its last picture at %p: left to HIRAKU's pacing", (void *)p);
+                n++;
+                continue;
+            }
             // cmp eax, 12-15 ms (pop'n 15: 14; IIDX RED: 13); jae
             if (p[0] != 0x83 || p[1] != 0xf8 || p[2] < 0x0c || p[2] > 0x0f || p[3] != 0x73) continue;
             // before it: timeGetTime's slot loaded, a call through a register, a subtraction

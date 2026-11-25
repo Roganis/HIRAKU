@@ -1008,7 +1008,7 @@ target_compile_options(hiraku_mametw PRIVATE -w -O2)
 
 # the PS1's R3000 recompiled as on the 573 (runtime/sys573/mips.h: the same code, built in here too)
 # and the 573's session cable (runtime/sys573/link.h), which joins a club kit's IIDX cabinet to its DDR one
-add_library(hiraku_twinkle STATIC runtime/twinkle/board.cpp runtime/twinkle/core.cpp runtime/sys573/mips.cpp
+add_library(hiraku_twinkle STATIC runtime/twinkle/board.cpp runtime/twinkle/core.cpp runtime/twinkle/m65851.cpp runtime/sys573/mips.cpp
   runtime/sys573/mipsjit.cpp runtime/sys573/idle.cpp runtime/sys573/link.cpp runtime/dev/m68000_loops.cpp)
 target_include_directories(hiraku_twinkle PUBLIC runtime)
 target_link_libraries(hiraku_twinkle PUBLIC hiraku_jit)

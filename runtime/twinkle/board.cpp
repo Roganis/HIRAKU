@@ -4,6 +4,7 @@
 // differs, a comment says so.
 #include "twinkle/board.h"
 #include "twinkle/spuctrl.h"
+#include "twinkle/m65851.h"
 #if HK_TWINKLE_VIDEO
 #include "twinkle/video.h"
 #endif
@@ -45,6 +46,7 @@
 #include <sys/stat.h>
 
 #include <cstdio>
+#include <deque>
 #include <map>
 
 namespace hk::twinkle {
@@ -70,6 +72,44 @@ const Config *g_build = nullptr;
 // the club kits' session cable to a DDR cabinet's process (Config::session_host), when there is one
 k573::SessionLink g_link;
 bool session(const Config &c) { return !c.session_host.empty() || !c.session_join.empty(); }
+
+// The sound board's effect chip (twinkle/m65851.h, a stand-in): its serial port on the 68000's
+// 0x230000 bits 0-2, each word kept with the RF5C400 sample it takes effect at, and the RF5C400's
+// main outputs treated by it in run(). HK_M65851=0 leaves it out (the sound as MAME's).
+struct EffectChip {
+    const bool on = M65851::enabled();
+    M65851Port port;
+    M65851 chip;
+    sound_stream *rf = nullptr;
+    std::deque<std::pair<u64, u16>> words;   // (sample, word), in order
+    std::vector<float> lr;
+    void latch(u16 bits, const attotime &now) {
+        u16 w;
+        if (on && port.write(bits & 7, w)) words.emplace_back(rf ? rf->index_at(now) : 0, w);
+    }
+    // the n RF5C400 samples at the front of its outputs through the chip, words taking effect at
+    // their samples; nothing touched while it leaves the sound as it is
+    void run(size_t n) {
+        if (!on || !rf || (words.empty() && !chip.active())) return;
+        auto &L = rf->m_out[0], &R = rf->m_out[1];
+        const u64 base = rf->m_write_sample - L.size();
+        lr.resize(n * 2);
+        for (size_t i = 0; i < n; i++) lr[2 * i] = L[i], lr[2 * i + 1] = R[i];
+        bool touched = false;
+        for (size_t i = 0; i < n;) {
+            while (!words.empty() && words.front().first <= base + i) chip.write(words.front().second), words.pop_front();
+            size_t m = n - i;
+            if (!words.empty()) m = (size_t)std::min<u64>(m, words.front().first - (base + i));
+            if (chip.active()) chip.process(lr.data() + 2 * i, (int)m), touched = true;
+            i += m;
+        }
+        if (touched)
+            for (size_t i = 0; i < n; i++) L[i] = lr[2 * i], R[i] = lr[2 * i + 1];
+    }
+    void skip() {   // the samples dropped (nobody listens): the words only
+        for (; !words.empty(); words.pop_front()) chip.write(words.front().second);
+    }
+} g_fx;
 
 // MAME's ioport output field: the write callback runs when its bits change
 // (dynamic_field::write)
@@ -519,6 +559,7 @@ void twinkle_state::spu_ctrl_w(u16 data) {
     for (int k = 0; k < 4; k++)
         if (acks >> k & 1) m_audiocpu->set_input_line(line[k], CLEAR_LINE);
     m_spu_ctrl = data;
+    g_fx.latch(data, machine().time());   // bits 0-2: the effect chip's serial port (g_fx)
 }
 
 void twinkle_state::spu_ata_irq(int state) {
@@ -887,6 +928,7 @@ const u32 *render_between(double t, int &w, int &h) {
         else if (dynamic_cast<rf5c400_device *>(s->m_device)) rf = s;
         else if (dynamic_cast<cdda_device *>(s->m_device)) cd = s;
     }
+    g_fx.rf = rf;
     // --fine-sound (Config::fine_sound): the sound for the host every millisecond of machine time,
     // not in MAME's 50 Hz pieces (see the 573's run(), runtime/sys573/board.cpp). The machine is
     // unchanged, the sound isn't: MAME's RF5C400 applies key-on, key-off and the channel registers
@@ -903,6 +945,7 @@ const u32 *render_between(double t, int &w, int &h) {
         // (on the session cable, the mix is made for the DDR cabinet even with no sound here)
         if ((!g.audio_sink && !g_link.is_open()) || !spu || !rf) {
             for (sound_stream *s : m.m_streams) for (auto &o : s->m_out) o.clear();
+            g_fx.skip();
             continue;
         }
         if (g.cfg.fine_sound && m.time() >= next_audio) {
@@ -915,6 +958,7 @@ const u32 *render_between(double t, int &w, int &h) {
         if (cd) n = std::min({n, cd->m_out[0].size(), cd->m_out[1].size()});
         for (int k = 2; k < rf->output_count(); k++) rf->m_out[k].clear();
         if (!n) continue;
+        g_fx.run(n);   // the RF5C400's main outputs through the effect chip (the SPU and the CD not)
         std::vector<float> lr(n * 2);
         for (int ch = 0; ch < 2; ch++) {
             auto &s = spu->m_out[ch], &r = rf->m_out[ch];

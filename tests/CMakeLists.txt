@@ -181,6 +181,13 @@ add_executable(test_spuctrl twinkle/test_spuctrl.cpp)
 target_include_directories(test_spuctrl PRIVATE ${CMAKE_SOURCE_DIR}/runtime)
 add_test(NAME twinkle_spu_ctrl COMMAND test_spuctrl)
 
+# The Twinkle sound board's effect chip stand-in (runtime/twinkle/m65851.h): the games' words read
+# off the serial pins, the reset words untouched to the bit, the key's pitch, the delay's time,
+# level and phase, the tone at 100 Hz and 10 kHz, the same in pieces
+add_executable(test_m65851 twinkle/test_m65851.cpp ${CMAKE_SOURCE_DIR}/runtime/twinkle/m65851.cpp)
+target_include_directories(test_m65851 PRIVATE ${CMAKE_SOURCE_DIR}/runtime)
+add_test(NAME twinkle_m65851 COMMAND test_m65851)
+
 # The C33 cabinet's small display (runtime/pc/c33video.h: ee'MALL's video board) drawn from a
 # made-up board: tiles, palette rows, the bank, a hidden layer, a layer over another, the blank bit
 add_executable(test_c33video pc/test_c33video.c ${CMAKE_SOURCE_DIR}/runtime/pc/c33video.c)

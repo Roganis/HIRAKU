@@ -708,7 +708,12 @@ style credit is 3 coins by default.
 | Start | 1 | 2 |
 
 Effect is E, VEFX W, coin 5, Test and Service F2 and 9. The effector's sliders have no default
-binding. The background videos play, which MAME doesn't show; which clip goes with which song
+binding. With Effect on, the fourth and fifth sliders change the music's and the keys' level, and
+VEFX's effect is heard with the first slider as its amount (KEY: the music's key, -5 to +3 half
+tones; ECHO: the echo's repeats; SRD1 to SRD3, which sound the same: the surround's level) and the
+second and third as bass and treble. The sound board's effect chip isn't in MAME: HIRAKU's is a
+stand-in, made from the chip's data sheet and not compared with a cabinet (`HK_M65851=0` leaves it
+out). The background videos play, which MAME doesn't show; which clip goes with which song
 still needs checking against a real cabinet.
 
 ### The club kits: beatmania IIDX × DDR 2nd Club Version

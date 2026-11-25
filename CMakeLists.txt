@@ -591,7 +591,7 @@ target_include_directories(chdr_mini PRIVATE third_party/libchdr/include third_p
 target_compile_definitions(chdr_mini PRIVATE _7ZIP_ST Z7_ST)
 target_compile_options(chdr_mini PRIVATE -O2 -w)
 target_link_libraries(chdr_mini PRIVATE ${HK_ZSTD} ZLIB::ZLIB)
-add_library(hiraku_image STATIC runtime/dev/image.cpp)
+add_library(hiraku_image STATIC runtime/dev/image.cpp runtime/dev/diskahead.cpp)
 target_include_directories(hiraku_image PUBLIC runtime)
 target_link_libraries(hiraku_image PUBLIC hk_libchdr hiraku_sys)
 add_executable(hiraku-chdcat runtime/dev/chdcat.cpp)

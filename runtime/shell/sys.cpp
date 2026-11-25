@@ -319,6 +319,14 @@ void will_need(int fd, uint64_t off, uint64_t n) {
 
 uint64_t will_need_read() { return read_ahead().done.load(); }
 
+void background_reads(int) { SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_BELOW_NORMAL); }
+
+uint64_t memory_available() {
+    MEMORYSTATUSEX ms{};
+    ms.dwLength = sizeof ms;
+    return GlobalMemoryStatusEx(&ms) ? (uint64_t)ms.ullAvailPhys : 0;
+}
+
 bool make_dir(const std::string &path) {
     struct _stat64 st;
     return _mkdir(path.c_str()) == 0 || (_stat64(path.c_str(), &st) == 0 && (st.st_mode & _S_IFDIR));
@@ -773,6 +781,25 @@ void will_need(int fd, uint64_t off, uint64_t n) {
 }
 uint64_t will_need_read() { return 0; }   // (the kernel reads it)
 
+void background_reads(int fd) {
+    // the disk's idle class (BFQ and mq-deadline honour it: mq-deadline sends none of its requests
+    // while a request of the normal class waits), and only what is asked: the kernel's own read-ahead
+    // on top would put MBs on the drive at once (4 MB on btrfs), which a game's read would queue behind
+    syscall(SYS_ioprio_set, 1 /* IOPRIO_WHO_PROCESS */, (int)syscall(SYS_gettid), 3 << 13 /* IOPRIO_CLASS_IDLE */);
+    posix_fadvise(fd, 0, 0, POSIX_FADV_RANDOM);
+}
+
+uint64_t memory_available() {
+    FILE *f = fopen("/proc/meminfo", "r");
+    if (!f) return 0;
+    char line[256];
+    unsigned long long kb = 0;
+    while (fgets(line, sizeof line, f))
+        if (sscanf(line, "MemAvailable: %llu kB", &kb) == 1) break;
+    fclose(f);
+    return (uint64_t)kb * 1024;
+}
+
 bool make_dir(const std::string &path) {
     struct stat st;
     return mkdir(path.c_str(), 0755) == 0 || (stat(path.c_str(), &st) == 0 && S_ISDIR(st.st_mode));
@@ -876,7 +903,16 @@ void warm_files(const std::vector<std::string> &paths, uint64_t max_bytes) {
         if (p.size() > 4 && (p.compare(p.size() - 4, 4, ".cue") == 0 || p.compare(p.size() - 4, 4, ".CUE") == 0))
             list.push_back(p.substr(0, p.size() - 4) + ".bin");
     }
-    std::thread([list, max_bytes] {
+    // With the disk read-ahead on (HK_DISK_AHEAD not 0, runtime/dev/diskahead.h): no more than half the
+    // memory free now (beatmania IIDX's 20 GB sound disk on a 4 GB PC: its first 6 GB went through
+    // the cache and out again for 100 s), in the disk's idle class, 256 KB at a time: each of the
+    // game's own cold reads waited ~120 ms behind this reader's 4 MB ones on the N4020's eMMC
+    // (2026-11-25). HK_DISK_AHEAD=0: as before, up to max_bytes whatever the memory
+    const char *ahead = getenv("HK_DISK_AHEAD");
+    const bool quiet = !(ahead && ahead[0] == '0' && ahead[1] == 0);
+    if (quiet) max_bytes = std::min(max_bytes, memory_available() / 2);
+    if (!max_bytes) return;
+    std::thread([list, max_bytes, quiet] {
 #ifdef _WIN32
         // (not THREAD_MODE_BACKGROUND_BEGIN: it lowers the memory priority of the pages read too, the
         // first the system's cache lets go of)
@@ -884,12 +920,13 @@ void warm_files(const std::vector<std::string> &paths, uint64_t max_bytes) {
 #else
         setpriority(PRIO_PROCESS, 0, 19);   // (this thread: Linux's nice is per thread)
 #endif
-        std::vector<char> buf(4 << 20);
+        std::vector<char> buf(quiet ? 256 << 10 : 4 << 20);
         uint64_t total = 0;
         const auto t0 = std::chrono::steady_clock::now();
         for (const std::string &p : list) {
             FILE *f = fopen(p.c_str(), "rb");
             if (!f) continue;
+            if (quiet) setvbuf(f, nullptr, _IONBF, 0), background_reads(fileno(f));
             size_t n;
             while (total < max_bytes && (n = fread(buf.data(), 1, buf.size(), f)) > 0) total += n;
             fclose(f);

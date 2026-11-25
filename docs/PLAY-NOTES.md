@@ -669,6 +669,16 @@ The overlay is drawn by the window over the picture it shows: no snapshot, recor
 has it, and the game computes the same with it. Its graph is redrawn ten times a second and its
 text once a second, some tens of microseconds each time.
 
+## Slow drives: disk read-ahead
+
+A game that reads its hard disk or CD image while you play (the Twinkle beatmania IIDX games, beatmania III and the other Firebeat games, the DJ Main games, a 573 with a hard disk) waits for the drive at each read, and on a slow drive (eMMC, a USB stick, a laptop's disk) a wait of a tenth of a second is a frozen picture and a break in the sound. Up to 0.14.0 HIRAKU asked the system for 8 or 16 MB at once, starting at the game's own sectors, and warmed the first 6 GB of a Twinkle game's disk into memory at start-up: on a small PC both stood in front of the game's own reads, and most of the long waits measured on a Celeron N4020 came from them, not from the drive.
+
+Now each image has a thread of its own that reads on from where the game reads, 256 KB at a time and no more than twice what the game has read along that stretch (4 MB at most), so the many short look-ups cost nothing extra and the game's own reads never queue behind a large one. The warm-ups read at most half the free memory, at the disk's idle priority. What is read is only what the game could read anyway and the game gets its bytes from its own read, so it plays exactly the same (every reference run is identical).
+
+Measured on the N4020 with eMMC storage, beatmania IIDX 8th style, two runs each way from a cold start: the sound's breaks in a song went from 1,341 and 1,891 to 147 and 74, the worst frame from 0.6–0.8 s to under 0.1 s, the longest wait on the disk from about 350 ms to about 33 ms. What is left is the eMMC waking up after a pause (about 20 ms for the first read at a new place), which reading ahead can't foresee. Not measured: the other games on that PC, Windows, and spinning disks, where a few runs gave mixed results.
+
+`HK_DISK_AHEAD=0` goes back to the old way, `HK_DISK_AHEAD=N` sets the most read ahead to N MB, and each run's log ends with a `disk ahead:` line per image: how much the game read, how much of it was there already, and how long the game waited.
+
 ## The last runs' logs
 
 The launcher keeps what each game printed (its log pane: the command line, the start-up, the

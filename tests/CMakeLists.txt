@@ -157,6 +157,12 @@ add_executable(test_disc_modes ata/test_disc_modes.cpp)
 target_link_libraries(test_disc_modes PRIVATE hiraku_ata)
 target_include_directories(test_disc_modes PRIVATE ${CMAKE_SOURCE_DIR}/runtime)
 add_test(NAME disc_modes COMMAND test_disc_modes)
+# The disk read-ahead (runtime/dev/diskahead.h) on a made-up image: the window kept after the
+# game's reads, new streams, the file's end, off; a hard disk read through it gets its bytes
+add_executable(test_diskahead dev/test_diskahead.cpp)
+target_link_libraries(test_diskahead PRIVATE hiraku_ata)
+target_include_directories(test_diskahead PRIVATE ${CMAKE_SOURCE_DIR}/runtime)
+add_test(NAME disk_read_ahead COMMAND test_diskahead ${CMAKE_CURRENT_BINARY_DIR})
 
 # The Firebeat SPU board's up/down volume control (runtime/spu/volchip.h): steps, limits, channels
 add_executable(test_volchip spu/test_volchip.cpp)

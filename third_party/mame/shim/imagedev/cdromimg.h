@@ -11,6 +11,11 @@
 #include "notifier.h"
 #include "imagedev/image.h"
 
+#include <map>
+#include <memory>
+
+namespace hk { class DiskAhead; }   // runtime/dev/diskahead.h
+
 class cdrom_file {
 public:
     static constexpr u32 MAX_TRACKS = 99, MAX_SECTOR_DATA = 2352, MAX_SUBCODE_DATA = 96;
@@ -68,6 +73,9 @@ private:
     toc cdtoc;
     file_part m_part[MAX_TRACKS + 1];
     std::vector<FILE *> m_files;
+    // HIRAKU: each plain file's read-ahead (a CHD's has its own), which times the reads too
+    std::map<FILE *, std::unique_ptr<hk::DiskAhead>> m_ahead;
+    void add_ahead(FILE *f, const std::string &path);
 };
 
 class cdrom_image_device : public device_t, public device_image_interface {

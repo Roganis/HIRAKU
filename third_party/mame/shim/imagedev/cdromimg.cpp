@@ -3,6 +3,7 @@
 #include <algorithm>
 #include "imagedev/cdromimg.h"
 
+#include "dev/diskahead.h"   // HIRAKU's read-ahead of a plain image
 #include "dev/image.h"   // HIRAKU's image reader: a CHD reads as chdman's extract
 
 #include <map>
@@ -25,7 +26,13 @@ bool track_type(const std::string &t, u32 &type, u32 &size) {
 }  // namespace
 
 cdrom_file::~cdrom_file() {
+    m_ahead.clear();
     for (FILE *f : m_files) hk::image::close(f);
+}
+
+void cdrom_file::add_ahead(FILE *f, const std::string &path) {
+    const int64_t size = hk::image::size(f);
+    if (size > 0 && !hk::image::is_chd(path) && !m_ahead.count(f)) m_ahead[f] = std::make_unique<hk::DiskAhead>(path, (uint64_t)size);
 }
 
 bool cdrom_file::open(const std::string &path) {
@@ -37,6 +44,7 @@ bool cdrom_file::open(const std::string &path) {
         FILE *f = hk::image::fopen_image(path);
         if (!f) return false;
         m_files.push_back(f);
+        add_ahead(f, path);
         u32 frames = (u32)(hk::image::size(f) / 2048);
         cdtoc.numtrks = 1;
         track_info &t = cdtoc.tracks[0];
@@ -71,9 +79,11 @@ bool cdrom_file::open(const std::string &path) {
             cur_le = true;   // "MOTOROLA" anywhere after the name, any case (no strcasestr on Windows)
             for (const char *s = rest; *s; s++)
                 if (!strncasecmp(s, "MOTOROLA", 8)) { cur_le = false; break; }
-            cur = hk::image::fopen_image(name.size() && name[0] == '/' ? name : dir + name);
+            const std::string file = name.size() && name[0] == '/' ? name : dir + name;
+            cur = hk::image::fopen_image(file);
             if (!cur) { fclose(cue); return false; }
             m_files.push_back(cur);
+            add_ahead(cur, file);
         } else if (!strncasecmp(p, "TRACK ", 6)) {
             char type[32] = {};
             int n = 0;
@@ -156,7 +166,12 @@ bool cdrom_file::read_partial(void *dst, u32 lba, u32 track, u32 offset, u32 len
     }
     const u32 frame = lba - t.logframeofs + (t.pgdatasize ? t.pregap : 0);
     u64 pos = fp.offset + (u64)frame * t.datasize + offset;
-    return hk::image::pread(fp.f, dst, len, pos) == (ssize_t)len;
+    auto a = m_ahead.find(fp.f);
+    hk::DiskAhead *ahead = a == m_ahead.end() ? nullptr : a->second.get();
+    if (ahead) ahead->before(pos, len);
+    const bool ok = hk::image::pread(fp.f, dst, len, pos) == (ssize_t)len;
+    if (ahead) ahead->after();
+    return ok;
 }
 
 bool cdrom_file::read_data(u32 lbasector, void *buffer, u32 datatype, bool) {

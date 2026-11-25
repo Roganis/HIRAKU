@@ -2,6 +2,7 @@
 #include "ata.h"
 
 #include "../core/prof.h"
+#include "diskahead.h"
 #include "image.h"
 #include "shell/sys.h"
 
@@ -18,12 +19,15 @@ namespace hk {
 
 namespace {
 // pread, timed: a read the game waits on stops the machine, so a slow one is reported (a cold
-// cache on a slow drive, a USB stick, a disk waking up). HK_DISK_LOG=1 reports every read.
-ssize_t timed_pread(FILE *f, void *buf, size_t n, off_t off, const std::string &name) {
+// cache on a slow drive, a USB stick, a disk waking up). HK_DISK_LOG=1 reports every read. A plain
+// file's read-ahead (diskahead.h) is told of it, and times it for its line at exit.
+ssize_t timed_pread(FILE *f, void *buf, size_t n, off_t off, const std::string &name, DiskAhead *ahead) {
     static const bool all = getenv("HK_DISK_LOG") != nullptr;
     static int reported = 0;
     const uint64_t t0 = prof::now_ns();
+    if (ahead) ahead->before((uint64_t)off, n);
     const ssize_t r = image::pread(f, buf, n, (uint64_t)off);   // a plain file's, or a CHD's (image.h)
+    if (ahead) ahead->after();
     const double ms = (double)(prof::now_ns() - t0) / 1e6;
     if (all || (ms >= 50.0 && reported < 20)) {
         if (!all) reported++;
@@ -90,12 +94,19 @@ bool DiscImage::parse_cue(const std::string &cue, std::string &bin) {
 // several ms of host I/O in one emulated instant; the whole image takes about a
 // second to read sequentially, during boot. Large images (DVDs, disks) are left
 // to the kernel.
+// With the read-ahead on (diskahead.h), only an image half the free memory holds is read (a PC short
+// of memory would let it go again before the game reads it), and behind the game's own reads: the
+// disk's idle class, 256 KB at a time, nothing more asked of the drive at once. On the N4020's eMMC
+// each cold read of the game's waited ~120 ms behind this reader's 1 MB reads (2026-11-25).
 void warm_cache(const std::string &path, uint64_t size) {
     if (size > (1536ull << 20) || getenv("HK_NO_PREFETCH")) return;
-    std::thread([path] {
+    const bool quiet = DiskAhead::switched_on();
+    if (quiet && size > sys::memory_available() / 2) return;
+    std::thread([path, quiet] {
         int fd = ::open(path.c_str(), O_RDONLY | O_BINARY);
         if (fd < 0) return;
-        std::vector<char> buf(1 << 20);
+        if (quiet) sys::background_reads(fd);
+        std::vector<char> buf(quiet ? 256 << 10 : 1 << 20);
         for (uint64_t off = 0; sys::pread(fd, buf.data(), buf.size(), off) > 0; off += buf.size()) {}
         ::close(fd);
     }).detach();
@@ -119,6 +130,7 @@ bool DiscImage::open(const std::string &path0) {
     const uint64_t size = (uint64_t)size0;
     struct stat st;   // a CHD: its compressed file is what gets read
     warm_cache(path, image::is_chd(path) && stat(path.c_str(), &st) == 0 ? (uint64_t)st.st_size : size);
+    if (!image::is_chd(path)) ahead_ = std::make_unique<DiskAhead>(path, size);
     if (cue && (tracks_.size() > 1 || tracks_[0].audio)) {
         // file offsets: each track's sectors at its own size, in order
         uint64_t off = 0;
@@ -180,10 +192,10 @@ bool DiscImage::read_sectors(uint32_t lba, uint32_t n, uint8_t *out) const {
         const uint32_t run = std::min(n, t.frames - (lba - t.start));
         const off_t off = (off_t)(t.offset + (uint64_t)(lba - t.start) * t.size);
         if (t.size == 2048 && t.skip == 0) {
-            if (timed_pread(f_, out, (size_t)run * 2048, off, name_) != (ssize_t)run * 2048) return false;
+            if (timed_pread(f_, out, (size_t)run * 2048, off, name_, ahead_.get()) != (ssize_t)run * 2048) return false;
         } else {
             raw.resize((size_t)run * t.size);
-            if (timed_pread(f_, raw.data(), raw.size(), off, name_) != (ssize_t)raw.size()) return false;
+            if (timed_pread(f_, raw.data(), raw.size(), off, name_, ahead_.get()) != (ssize_t)raw.size()) return false;
             for (uint32_t k = 0; k < run; k++) memcpy(out + (size_t)k * 2048, raw.data() + (size_t)k * t.size + t.skip, 2048);
         }
         lba += run;
@@ -200,6 +212,9 @@ bool DiscImage::read_sectors(uint32_t lba, uint32_t n, uint8_t *out) const {
 // A READ inside the range last asked for, with half of READ_AHEAD still ahead of its end, asks for
 // nothing new: the call walks the whole range's pages each time (8 MB of them, for a READ of a few
 // sectors: pop'n music 7 makes hundreds a second while it loads a song).
+// With the read-ahead on (a plain file's, diskahead.h) none of this is asked: its thread follows the
+// reads instead (the hint's range held the READ's own sectors, and on a slow drive the READ waited
+// for much of the 8 MB).
 constexpr uint64_t READ_AHEAD = 8ull << 20;
 
 static void advise(FILE *f, uint64_t off, uint64_t n, uint64_t &from, uint64_t &to) {
@@ -210,20 +225,20 @@ static void advise(FILE *f, uint64_t off, uint64_t n, uint64_t &from, uint64_t &
 }
 
 void DiscImage::prefetch(uint32_t lba, uint32_t count) const {
-    if (!count || lba >= nsectors_) return;
+    if (!count || lba >= nsectors_ || (ahead_ && ahead_->on())) return;
     const Track &t = tracks_[track_of(lba)];
     uint64_t off = t.offset + (uint64_t)(lba - t.start) * t.size;
     advise(f_, off, (uint64_t)count * t.size, advised_from_, advised_to_);
 }
 
 void DiskImage::prefetch(uint32_t lba, uint32_t count) const {
-    if (count) advise(f_, (uint64_t)lba * 512, (uint64_t)count * 512, advised_from_, advised_to_);
+    if (count && !(ahead_ && ahead_->on())) advise(f_, (uint64_t)lba * 512, (uint64_t)count * 512, advised_from_, advised_to_);
 }
 
 bool DiskImage::read_sectors(uint32_t lba, uint32_t n, uint8_t *out) const {
     prof::Scope ps(prof::DISK);
     if (lba >= nsectors_ || n > nsectors_ - lba) return false;
-    return timed_pread(f_, out, (size_t)n * 512, (off_t)lba * 512, name_) == (ssize_t)n * 512;
+    return timed_pread(f_, out, (size_t)n * 512, (off_t)lba * 512, name_, ahead_.get()) == (ssize_t)n * 512;
 }
 
 bool DiscImage::read_audio(uint32_t lba, uint8_t *out) const {
@@ -244,6 +259,7 @@ bool DiskImage::open(const std::string &path) {
     name_ = base_name(path);
     const int64_t size = image::size(f_);
     nsectors_ = size > 0 ? (uint32_t)((uint64_t)size / 512) : 0;
+    if (size > 0 && !image::is_chd(path)) ahead_ = std::make_unique<DiskAhead>(path, (uint64_t)size);
     return nsectors_ > 0;
 }
 

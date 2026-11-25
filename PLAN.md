@@ -1182,3 +1182,16 @@ What PARAM A and B do (the unit's two edit controls) follows the unit's manual, 
 - (owner) how the cabinet's effects really sound (a recording of a cabinet): the meanings are the manual's, the ranges and sounds a guess.
 - (owner) the knob keys' rates by feel (a press a step; held, a PARAM 50 a second, PROGRAM and ELEMENT 5), and a controller's axis on a knob.
 - (parked) the unit's level scale (0-99 taken as a straight gain, 70 as unity); its own converters and sample rate: not modelled.
+
+## 56. Disk read-ahead (slow drives)
+
+The N4020 baseline (0.14.0, 2026-11-24) had the two games with a 20 GB hard disk at full speed with stalls of 0.1-0.7 s on single reads from the eMMC. Cause, measured there with probes: HIRAKU's own hints, not the drive. A 16 KB cold read takes 21 ms alone and 0.8 ms back to back, but 118 ms (worst 318) behind the 16 MB `WILLNEED` the hard-disk shim asked for at the game's own sectors (`runtime/dev/ata.cpp` asked 8 MB the same way), 121 ms during Twinkle's 6 GB start-up warm-up (100-120 s of 4 MB reads on a PC with 3.6 GB), and 284 ms (worst 890) behind both. Fragmentation was not it (2,007 extents for 20.5 GB, mostly uncompressed). The emulated drives' own time (1.3 ms of seek in MAME's ATA, none in HIRAKU's) is too short to hide a host read behind.
+
+`runtime/dev/diskahead.{h,cpp}` (`hk::DiskAhead`), one per plain image file, in `ata.cpp` and the MAME shims `harddriv` and `cdromimg`: a thread with its own handle (the kernel's read-ahead off on it) reads on from the game's reads, 256 KB at a time, up to twice what the game has read along the stretch and 4 MiB at most; a read at a new place is made by the caller in one 64 KB request. The game's bytes still come from its own read. The warm-ups read at most half the free memory at the disk's idle priority (`sys::background_reads`, `sys::memory_available`). `HK_DISK_AHEAD=0`: the old hints and warm-ups exactly; `=N`: the cap in MiB; `HK_DISK_AHEAD_LOG=1`: a line per stretch. A `disk ahead:` line per image at exit, either way. ctest `disk_read_ahead`.
+
+Checked: the 69 regress cases with a disk or CD image identical with it on (five with it off); on the N4020, beatmania IIDX 8th style, cold, two runs each way: sound breaks after 10 s 1,341 / 1,891 -> 147 / 74, worst frame 579 / 786 ms -> 90 / 68 ms, longest wait on the disk 337 / 374 ms -> 33 / 32 ms; headless digests identical to the reference both ways.
+
+**Open**
+- (build) the eMMC's wake-up (about 21 ms for a first read after 0.3 s of rest): a small read every 50 ms in play would keep it awake, at some power; not built.
+- (build) spinning disks: cold runs on a 5400 rpm disk gave mixed results (one 1.1 s wait with it on); not tuned, not understood.
+- (owner) Windows (cross-compiled only); beatmania III, the 573 and DJ Main on the small PC; the window's own warm-up and Twinkle's DVD reader are unchanged.

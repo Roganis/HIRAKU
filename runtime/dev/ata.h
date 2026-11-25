@@ -12,6 +12,8 @@
 #include <string>
 #include <vector>
 
+#include "diskahead.h"
+
 namespace hk {
 
 // A read-only disc image: .iso (2048-byte sectors), or .bin/.cue / raw track
@@ -41,6 +43,7 @@ private:
     bool parse_cue(const std::string &cue, std::string &bin);
     FILE *f_ = nullptr;
     mutable uint64_t advised_from_ = 0, advised_to_ = 0;   // prefetch's last range (ata.cpp)
+    std::unique_ptr<DiskAhead> ahead_;   // a plain file's read-ahead (not a CHD's: image.h has its own)
     std::string name_;   // the file's name, for the slow-read report
     uint32_t nsectors_ = 0;
     std::vector<Track> tracks_;
@@ -75,6 +78,7 @@ public:
 private:
     FILE *f_ = nullptr;
     mutable uint64_t advised_from_ = 0, advised_to_ = 0;   // prefetch's last range (ata.cpp)
+    std::unique_ptr<DiskAhead> ahead_;   // a plain file's read-ahead (dev/diskahead.h)
     std::string name_;
     uint32_t nsectors_ = 0;
     uint32_t cyls_ = 0, heads_ = 16, secs_ = 63;

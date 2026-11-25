@@ -10,7 +10,10 @@
 #include "harddisk.h"
 #include "imagedev/image.h"
 
+#include <memory>
 #include <unordered_map>
+
+namespace hk { class DiskAhead; }   // runtime/dev/diskahead.h
 
 class harddisk_image_device : public device_t, public device_image_interface {
 public:
@@ -33,7 +36,8 @@ private:
     int m_fd = -1;
     FILE *m_chd = nullptr;   // HIRAKU: a hard disk CHD, read in place (runtime/dev/image.h)
     u64 m_sectors = 0;
-    u64 m_readahead = ~u64(0);   // the 8 MiB stretch last read ahead
+    u64 m_readahead = ~u64(0);   // the 8 MiB stretch last read ahead (HK_DISK_AHEAD=0)
+    std::unique_ptr<hk::DiskAhead> m_ahead;   // the image's read-ahead, which times the reads too
     const u8 *m_map = nullptr;   // the image, mapped (a sector is then a copy, not a system call)
     size_t m_map_size = 0;
     hard_disk_file::info m_info;

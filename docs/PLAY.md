@@ -883,7 +883,8 @@ start and run.
   Keypad, P2 Card / P2 Keypad). A new card is registered in the game (DJ name, PIN); best EX score,
   DJ level and clear are kept per chart.
 - **The effector** (10th style on): Effect and VEFX work as on the cabinet, with HIRAKU's own echo,
-  reverb and EQ (and PITCH from GOLD on).
+  reverb and EQ (and PITCH from GOLD on). In 9th style the controls reach the game and no effect is
+  heard: how its cabinet made the effect isn't known yet.
 - EMPRESS: a new pass accepts terms (turntable left to はい, then a key).
 - Not yet: KONAMI ID, rivals, most rankings; lamps and ticker unchecked. Under Wine only so far.
 

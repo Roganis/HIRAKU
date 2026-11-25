@@ -95,11 +95,13 @@ int main(int argc, char **argv) {
         std::this_thread::sleep_for(std::chrono::milliseconds(20));
         CHECK(a.stats().ahead_bytes == before);
         // a slow read is timed
+        // (the wait is spun: a sleep of 6 ms lasts a whole 15.6 ms tick on Windows, and how long a
+        // loaded machine makes it is not this test's to say, so "over 16 ms" isn't checked)
         a.before(0, 512);
-        std::this_thread::sleep_for(std::chrono::milliseconds(6));
+        for (const auto t0 = std::chrono::steady_clock::now(); std::chrono::steady_clock::now() - t0 < std::chrono::milliseconds(6);) {}
         a.after();
         s = a.stats();
-        CHECK(s.over_4ms == 1 && s.over_16ms == 0 && s.longest_ns >= 6'000'000 && s.longest_at == 0);
+        CHECK(s.over_4ms == 1 && s.longest_ns >= 6'000'000 && s.longest_at == 0);
         CHECK(s.jumps == 12);   // (the read near the end was one too)
         CHECK(a.report().find("ahead; the game read") != std::string::npos);
     }

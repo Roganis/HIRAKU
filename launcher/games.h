@@ -22,6 +22,7 @@ public:
     double installSeconds = 0;           // fast start-up on a start that installs (game.toml install_seconds)
     bool hidden = false;                 // the AVS2 PC games ([pc] loader = "pc64", "pc32"): listed once unlocked
     QString loader;                      // [pc] loader: "pc64", "pc32", or none
+    bool python2 = false;                // Konami Python 2 ([python] board = "python2"): added from its .py2
     // Unavailable: a package (no source beside it) without a binary for the game: Firebeat and
     // Konami Python games in a release (PLAN.md section 28)
     enum Status { Ready, NotBuilt, NotInstalled, Unavailable } status = NotInstalled;

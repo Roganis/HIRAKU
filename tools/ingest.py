@@ -177,8 +177,13 @@ def set_roms(args, outdir: str, set_name: str) -> set[str]:
 def disk_names(game: dict) -> list[str]:
     """The game's disks, by MAME's names (its game.toml's)."""
     cd, hdd = game.get("cd", {}), game.get("hdd", {})
-    return [n for n in (hdd.get("chd"), cd.get("chd"), cd.get("msu_chd"), cd.get("hdd_chd"), cd.get("video_chd"),
-                        cd.get("install_chd"), cd.get("install2_chd")) if n]
+    names = [n for n in (hdd.get("chd"), cd.get("chd"), cd.get("msu_chd"), cd.get("hdd_chd"), cd.get("video_chd"),
+                         cd.get("install_chd"), cd.get("install2_chd")) if n]
+    if game.get("core") == "python":   # Konami Python: its disk's name in game.toml, and in MAME's set
+        names += [n for n in [game.get("python", {}).get("hdd")] if n]
+        if game.get("mame") in mameset.load():
+            names += [d[0] for d in mameset.needed_disks(game["mame"])]
+    return names
 
 
 def has_set(out: str, gid: str) -> bool:
@@ -673,6 +678,7 @@ def ingest_python2(args, py2: str) -> int:
     not DOWNLOAD: an update keeps the older game's), matched to games/*/game.toml's partition."""
     import configparser
     import pythonfs
+    PY_TRIED.add(os.path.abspath(py2))
     ini = configparser.ConfigParser(interpolation=None, strict=False, comment_prefixes=(";", "#"))
     ini.optionxform = str
     ini.read(py2, encoding="utf-8")
@@ -709,6 +715,7 @@ def ingest_python2(args, py2: str) -> int:
         return 1
     gid = game["id"]
     print(f"game     {gid}: {game['title']} (Konami Python 2, partition {code})")
+    PY_ADDED.add(gid)
     outdir = os.path.join(args.out, gid)
     for sub in ("rom", "bios", "keys"):
         os.makedirs(os.path.join(outdir, sub), exist_ok=True)
@@ -732,6 +739,7 @@ def ingest_python2(args, py2: str) -> int:
 def ingest_python(args, py1: str) -> int:
     """A Konami Python 1 game, from its .py1 descriptor (PCSX2 Reliquary's format)."""
     import configparser
+    PY_TRIED.add(os.path.abspath(py1))
     ini = configparser.ConfigParser(interpolation=None, strict=False, comment_prefixes=(";", "#"))
     ini.optionxform = str
     ini.read(py1, encoding="utf-8")
@@ -831,7 +839,7 @@ def ingest_python1(args, g: dict, base: str) -> int:
         img = pythonfs.open_image(disk)
         off, size, _ = pythonfs.records(img)["C"]
         ee_sha1 = hashlib.sha1(pythonfs.lz_decode(img.read(off, size))).hexdigest()
-    except OSError as e:
+    except (OSError, ValueError) as e:   # (ValueError: no Konami boot header on it)
         print(f"ERROR    reading {disk}: {e}")
         return 1
     game = next((x for x in all_games() if x.get("core") == "python"
@@ -841,6 +849,7 @@ def ingest_python1(args, g: dict, base: str) -> int:
         return 1
     gid = game["id"]
     print(f"game     {gid}: {game['title']} (Konami Python, EE program {ee_sha1[:12]})")
+    PY_ADDED.add(gid)
     outdir = os.path.join(args.out, gid)
     for sub in ("rom", "bios", "keys"):
         os.makedirs(os.path.join(outdir, sub), exist_ok=True)
@@ -1132,6 +1141,9 @@ def split_by_game(inputs: list[str]) -> list[list[str]]:
         except OSError:
             sha1 = None
         owners = [s for s, _ in mameset.disk_owner(sha1)] if sha1 else []
+        if not owners:   # another dump than MAME's: the sets with a disk of its name
+            stem = os.path.splitext(os.path.basename(c))[0]
+            owners = sorted(s for s, m in mameset.load().items() if any(d[0] == stem for d in m.get("disks", [])))
         given = [s for s in owners if s in keyed]
         mine = given or [s for s in owners if s in known]
         if len(set(mine)) == 1 or given:
@@ -1170,6 +1182,67 @@ def image_kind(path: str) -> str:
     return "cd"
 
 
+def descriptors(folder: str, ext: str) -> list[str]:
+    """A Konami Python descriptor (ext: .py1, .py2) in a folder given, at any depth (a collection's
+    folder holding the set's folder), or beside it (<folder>.py2, as Reliquary's collections have it)"""
+    found = sorted(os.path.join(base, n) for base, _, names in walk_links(folder) for n in names
+                   if n.lower().endswith(ext) and os.path.isfile(os.path.join(base, n)))
+    near = os.path.normpath(folder) + ext
+    return found + ([near] if os.path.isfile(near) else [])
+
+
+PY_ADDED = set()   # the Konami Python games added in this run (their set given too: nothing more to do)
+PY_TRIED = set()   # the descriptors read in this run (one that failed: said once)
+
+
+def python_from_set(args, hint: dict, inputs: list[str]) -> int:
+    """A Konami Python game told by its MAME set's or CHD's name: added from its descriptor (.py2,
+    .py1) found beside the files given or in a folder given, or (Python 1) from the folder holding
+    its CHD; otherwise an error saying what it is added from."""
+    two = hint.get("python", {}).get("board") == "python2"
+    ext = ".py2" if two else ".py1"
+    if hint["id"] in PY_ADDED:
+        print(f"note     {hint['title']} was added from its {ext} above: its MAME set is not needed")
+        return 0
+    found = []
+    for f in inputs:
+        if os.path.isdir(f):
+            found += descriptors(f, ext)
+        elif os.path.exists(f):
+            found += sorted(glob.glob(os.path.join(glob.escape(os.path.dirname(os.path.abspath(f))), "*" + ext)))
+    found = list(dict.fromkeys(os.path.abspath(f) for f in found))
+    named = [f for f in found if os.path.splitext(os.path.basename(f))[0].lower() in (hint["id"], hint.get("mame", "").lower())]
+    use = named[0] if named else found[0] if len(found) == 1 else None
+    if use in PY_TRIED:
+        print(f"note     {os.path.basename(use)} was read above")
+        return 0
+    if use:
+        print(f"found    {os.path.basename(use)} beside the files given: the game is added from it")
+        return ingest_python2(args, use) if two else ingest_python(args, use)
+    if not two:   # a Python 1 set's folder without its .py1: its files' names tell the .py1's keys
+        disks = {x["python"]["hdd"]: x["id"] for x in all_games() if x.get("python", {}).get("hdd")}
+        for d in dict.fromkeys(f if os.path.isdir(f) else os.path.dirname(os.path.abspath(f)) for f in inputs):
+            g = python1_folder(d)
+            if g is not None and disks.get(os.path.splitext(os.path.basename(g["HddImagePath"]))[0]) == hint["id"]:
+                print(f"found    {os.path.basename(d)}/ holds the set's files and its CHD: the game is added from them")
+                return ingest_python1(args, g, os.path.abspath(d))
+    if found:
+        print(f"ERROR    {hint['title']} ({hint['id']}): several {ext} files beside the files given "
+              f"({', '.join(os.path.basename(f) for f in found)}): give the game's own {ext} file")
+        return 1
+    if two:
+        print(f"ERROR    {hint['title']} ({hint['id']}) is a Konami Python 2 game: it is added from its .py2 file, the "
+              "small text file that names its disk image, the disk's ID, the iLink ID, the NVRAM and the two dongles. "
+              "Give that file, or the folder holding it; a MAME set and CHD alone are not enough "
+              "(docs/PLAY.md, Konami Python 2)")
+    else:
+        print(f"ERROR    {hint['title']} ({hint['id']}) is a Konami Python game: it is added from its .py1 file, the "
+              "small text file that names its disk image, its interface board's ROMs, its dongles and its memory "
+              "card files (given itself or in its folder), or from the set's folder holding its CHD. "
+              "A MAME set alone is not enough (docs/PLAY.md, Konami Python 1)")
+    return 1
+
+
 def ingest_auto(args, inputs: list[str]) -> int:
     games = all_games()
     files = gather(inputs, {g["mame"] for g in games if g.get("mame")})
@@ -1202,6 +1275,10 @@ def ingest_auto(args, inputs: list[str]) -> int:
                 also = [g["mame"] for g in have if g is not hint and g.get("mame")]
     if hint:
         print(f"game     {hint['id']}: {hint['title']} (from {'the set' if romsets else 'the CHD name'})")
+    # Konami Python: added from its descriptor (or a Python 1 set's folder), not from a set and CHD
+    # (nothing extracted for it: its disk is read as it is)
+    if hint and hint.get("core") == "python":
+        return python_from_set(args, hint, inputs + romsets + chds)
 
     # CHDs: extracted next to the game's other data (or set aside until the program says which game)
     dest = os.path.join(args.out, hint["id"] if hint else INCOMING)
@@ -1339,8 +1416,16 @@ def ingest_auto(args, inputs: list[str]) -> int:
         rc = ingest_twinkle(args, hint)
         move_set(args, hint["id"]) if rc == 0 else undo_moves()
         return rc
-    # its set alone, for a game added already from its CDs (which said NEXT: add the MAME set): the
-    # set's ROMs (the dongle, the SPU program) go in beside them
+    if core == "pc":
+        print(f"ERROR    {hint['title']} ({hint['id']}) is a PC game: it is added from its own folder, as the "
+              "cabinet's drive holds it, not from a MAME set or disk images")
+        return 1
+    if core not in (None, "", "firebeat"):   # (the cores above and Python are handled: one not known here)
+        print(f"ERROR    {hint['title']} ({hint['id']}) runs on HIRAKU's {core} core, whose games can't be added "
+              "from a MAME set or disk images")
+        return 1
+    # Firebeat: its set alone, for a game added already from its CDs (which said NEXT: add the MAME
+    # set): the set's ROMs (the dongle, the SPU program) go in beside them
     outdir = os.path.join(args.out, hint["id"])
     machine_txt = os.path.join(outdir, "machine.txt")
     if romsets and os.path.exists(machine_txt) and os.path.exists(os.path.join(outdir, "program.bin")):
@@ -1445,22 +1530,22 @@ def main() -> int:
     used = set(py1)
     for f in args.inputs:
         if os.path.isdir(f):
-            near = os.path.normpath(f) + ".py1"
-            found = sorted(glob.glob(os.path.join(f, "*.py1"))) + ([near] if os.path.exists(near) else [])
+            found = descriptors(f, ".py1")   # (at any depth: a collection's folder holding the set's)
             if found:
-                py1.append(found[0])
+                py1 += found
                 used.add(f)
             elif (g := python1_folder(f)) is not None:
                 folders.append((f, g))
                 used.add(f)
     if py1 or folders:
         rc = 0
-        for f in py1:
+        for f in dict.fromkeys(os.path.abspath(f) for f in py1):
             rc |= ingest_python(args, f)
         for f, g in folders:
             rc |= ingest_python1(args, g, os.path.abspath(f))
-        # the other games given with them (MAME sets, discs): on as below
-        rest = [f for f in args.inputs if f not in used and os.path.normpath(f) + ".py1" not in used]
+        # the other games given with them (MAME sets, discs, a folder's Python 2 games): on as below
+        rest = [f for f in args.inputs if (f not in used and os.path.normpath(f) + ".py1" not in used)
+                or (os.path.isdir(f) and descriptors(f, ".py2"))]
         if not rest:
             return rc
         print()
@@ -1688,13 +1773,22 @@ def ingest_pc(args, game: dict, program: str, data: str) -> int:
 
 def ingest_rest(args) -> int:
     """main's inputs past the Konami Python 1 games: Python 2, else MAME sets, CHDs, disc images."""
-    py2 = [f for f in args.inputs if f.lower().endswith(".py2")]
+    # Konami Python 2: each .py2 given, or in a folder given (at any depth: a collection's folder)
+    py2, used = [f for f in args.inputs if f.lower().endswith(".py2")], set()
     for f in args.inputs:
-        if os.path.isdir(f):
-            near = os.path.normpath(f) + ".py2"
-            py2 += sorted(glob.glob(os.path.join(f, "*.py2"))) + ([near] if os.path.exists(near) else [])
+        if os.path.isdir(f) and (found := descriptors(f, ".py2")):
+            py2 += found
+            used.add(f)
     if py2:
-        return ingest_python2(args, py2[0])
+        rc = 0
+        for f in dict.fromkeys(os.path.abspath(f) for f in py2):
+            rc |= ingest_python2(args, f)
+        # the other files given with them (a MAME set, its CHD: the game's own told so, others added)
+        args.inputs = [f for f in args.inputs if f not in used and not f.lower().endswith(".py2")]
+        if not args.inputs:
+            return rc
+        print()
+        return rc | ingest_rest(args)
     # several games at once: each on its own (a set given or forced by hand: all of it is one game)
     if not (args.romset or args.game or args.hdd or args.dvd or args.cd2):
         groups = split_by_game(args.inputs)

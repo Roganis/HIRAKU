@@ -261,11 +261,11 @@ MainWindow::MainWindow() {
     auto *addFiles = new QAction(tr("Add game files…"), this);
     theme::mark(addFiles, mdi::file_plus);
     addFiles->setToolTip(tr("Add a game from its files: the MAME ROM set (.zip/.7z), CHDs or disc images,\n"
-                            "or a Konami Python game's .py1 (PCSX2 Reliquary's descriptor).\n"
+                            "or a Konami Python game's .py1 or .py2 (PCSX2 Reliquary's descriptor).\n"
                             "You can also drop them on this window."));
     connect(addFiles, &QAction::triggered, this, [this] {
         QStringList f = QFileDialog::getOpenFileNames(this, tr("Add game files"), QString(),
-            tr("Game files (*.zip *.7z *.chd *.cue *.iso *.img *.bin *.py1);;All files (*)"));
+            tr("Game files (*.zip *.7z *.chd *.cue *.iso *.img *.bin *.py1 *.py2);;All files (*)"));
         if (!f.isEmpty()) addGameFiles(f);
     });
     auto *addFolder = new QAction(tr("Add a game folder…"), this);

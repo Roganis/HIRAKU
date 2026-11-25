@@ -1035,6 +1035,16 @@ msgctxt "Game"
 msgid "This HIRAKU has no hiraku-pc, which runs the PC games. Is the binaries folder right (Settings)?"
 msgstr ""
 
+#. %1 is the game's title; .py2 is a file kind and keys a folder name (keep them)
+#: launcher/games.cpp
+#, qt-format
+msgctxt "Game"
+msgid ""
+"HIRAKU has no data for %1 yet. You need your own dumps: the game's .py2 file (PCSX2 Reliquary's descriptor, which names the disk image, the disk's ID, the iLink ID, the NVRAM and the two dongles) with the files it names, the PS2 BIOS ps2-0190j-20030822.bin and the MagicGate key files in a folder named keys. A MAME set and CHD alone are not enough.\n"
+"\n"
+"Drop the .py2 (or its folder) with the BIOS and the keys folder on this window, or File > Add game files (the BIOS and keys only once: later games find them)."
+msgstr ""
+
 #. %1 is the game's title; bios and keys are folder names (keep them)
 #: launcher/games.cpp
 #, qt-format
@@ -1748,7 +1758,7 @@ msgstr ""
 msgctxt "MainWindow"
 msgid ""
 "Add a game from its files: the MAME ROM set (.zip/.7z), CHDs or disc images,\n"
-"or a Konami Python game's .py1 (PCSX2 Reliquary's descriptor).\n"
+"or a Konami Python game's .py1 or .py2 (PCSX2 Reliquary's descriptor).\n"
 "You can also drop them on this window."
 msgstr ""
 
@@ -1759,7 +1769,7 @@ msgstr ""
 
 #: launcher/mainwindow.cpp
 msgctxt "MainWindow"
-msgid "Game files (*.zip *.7z *.chd *.cue *.iso *.img *.bin *.py1);;All files (*)"
+msgid "Game files (*.zip *.7z *.chd *.cue *.iso *.img *.bin *.py1 *.py2);;All files (*)"
 msgstr ""
 
 #: launcher/mainwindow.cpp

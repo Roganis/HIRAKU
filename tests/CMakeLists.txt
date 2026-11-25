@@ -614,6 +614,8 @@ add_test(NAME mods_per_picture COMMAND test_per_picture)
 # finished when they're dropped
 if(Python3_Interpreter_FOUND AND Python3_VERSION VERSION_GREATER_EQUAL 3.11)
   add_test(NAME ingest_python_support COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/tools/test_ingest_python.py)
+  # ... and one given by its MAME set or CHD: added from its .py2/.py1 beside them, or told what it needs
+  add_test(NAME ingest_python_set COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/tools/test_ingest_python_set.py)
 endif()
 # tools/ingest.py --place: a game's folder moved into dumps/ or read where it is
 if(Python3_Interpreter_FOUND AND Python3_VERSION VERSION_GREATER_EQUAL 3.11)

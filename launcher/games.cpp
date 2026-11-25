@@ -53,6 +53,7 @@ void readManifest(const QString &path, Game &g) {
             if (section == "pc" && k == "loader") g.loader = v, g.hidden = v == "pc64" || v == "pc32";
             // (the C33 station: its board is there, adding its files and its package's DLLs are not yet)
             if (section == "pc" && k == "board" && v == "c33") g.hidden = true;
+            if (section == "python" && k == "board" && v == "python2") g.python2 = true;
             continue;
         }
         if (k == "id") g.id = v;
@@ -141,6 +142,15 @@ QString Game::howTo() const {
         return {};
     }
     if (core == "python") {   // Konami Python: PCSX2 Reliquary hosted, built in Reliquary's tree
+        if (status == NotInstalled && python2)
+            // TR: %1 is the game's title; .py2 is a file kind and keys a folder name (keep them)
+            return tr("HIRAKU has no data for %1 yet. You need your own dumps: the game's .py2 file (PCSX2 "
+                      "Reliquary's descriptor, which names the disk image, the disk's ID, the iLink ID, the NVRAM "
+                      "and the two dongles) with the files it names, the PS2 BIOS ps2-0190j-20030822.bin and the "
+                      "MagicGate key files in a folder named keys. A MAME set and CHD alone are not enough.\n\n"
+                      "Drop the .py2 (or its folder) with the BIOS and the keys folder on this window, or File > "
+                      "Add game files (the BIOS and keys only once: later games find them).")
+                .arg(title);
         if (status == NotInstalled)
             // TR: %1 is the game's title; bios and keys are folder names (keep them)
             return tr("HIRAKU has no data for %1 yet. You need your own dumps: the game's folder (its disk "

@@ -1058,6 +1058,19 @@ msgctxt "Game"
 msgid "This HIRAKU has no hiraku-pc, which runs the PC games. Is the binaries folder right (Settings)?"
 msgstr "Ce HIRAKU n'a pas hiraku-pc, qui fait tourner les jeux PC. Le dossier des exécutables (Paramètres) est-il le bon ?"
 
+#. %1 is the game's title; .py2 is a file kind and keys a folder name (keep them)
+#: launcher/games.cpp
+#, qt-format
+msgctxt "Game"
+msgid ""
+"HIRAKU has no data for %1 yet. You need your own dumps: the game's .py2 file (PCSX2 Reliquary's descriptor, which names the disk image, the disk's ID, the iLink ID, the NVRAM and the two dongles) with the files it names, the PS2 BIOS ps2-0190j-20030822.bin and the MagicGate key files in a folder named keys. A MAME set and CHD alone are not enough.\n"
+"\n"
+"Drop the .py2 (or its folder) with the BIOS and the keys folder on this window, or File > Add game files (the BIOS and keys only once: later games find them)."
+msgstr ""
+"HIRAKU n'a pas encore de données pour %1. Il vous faut vos propres dumps : le fichier .py2 du jeu (le descripteur de PCSX2 Reliquary, qui nomme l'image disque, l'ID du disque, l'ID iLink, la NVRAM et les deux dongles) avec les fichiers qu'il nomme, le BIOS PS2 ps2-0190j-20030822.bin et les fichiers de clé MagicGate dans un dossier nommé keys. Un set MAME et un CHD seuls ne suffisent pas.\n"
+"\n"
+"Déposez le .py2 (ou son dossier) avec le BIOS et le dossier keys sur cette fenêtre, ou Fichier > Ajouter des fichiers de jeu (le BIOS et les clés une seule fois : les jeux suivants les retrouvent)."
+
 #. %1 is the game's title; bios and keys are folder names (keep them)
 #: launcher/games.cpp
 #, qt-format
@@ -1791,11 +1804,11 @@ msgstr "Ajouter des fichiers de jeu…"
 msgctxt "MainWindow"
 msgid ""
 "Add a game from its files: the MAME ROM set (.zip/.7z), CHDs or disc images,\n"
-"or a Konami Python game's .py1 (PCSX2 Reliquary's descriptor).\n"
+"or a Konami Python game's .py1 or .py2 (PCSX2 Reliquary's descriptor).\n"
 "You can also drop them on this window."
 msgstr ""
-"Ajouter un jeu à partir de ses fichiers : le set de ROM MAME (.zip/.7z), des CHD ou des images disque,\n"
-"ou le .py1 d'un jeu Konami Python (le descripteur de PCSX2 Reliquary).\n"
+"Ajouter un jeu à partir de ses fichiers : le set de ROM MAME (.zip/.7z), des CHD ou des images disque,\n"
+"ou le .py1 ou le .py2 d'un jeu Konami Python (le descripteur de PCSX2 Reliquary).\n"
 "Vous pouvez aussi les déposer sur cette fenêtre."
 
 #: launcher/mainwindow.cpp
@@ -1805,8 +1818,8 @@ msgstr "Ajouter des fichiers de jeu"
 
 #: launcher/mainwindow.cpp
 msgctxt "MainWindow"
-msgid "Game files (*.zip *.7z *.chd *.cue *.iso *.img *.bin *.py1);;All files (*)"
-msgstr "Fichiers de jeu (*.zip *.7z *.chd *.cue *.iso *.img *.bin *.py1);;Tous les fichiers (*)"
+msgid "Game files (*.zip *.7z *.chd *.cue *.iso *.img *.bin *.py1 *.py2);;All files (*)"
+msgstr "Fichiers de jeu (*.zip *.7z *.chd *.cue *.iso *.img *.bin *.py1 *.py2);;Tous les fichiers (*)"
 
 #: launcher/mainwindow.cpp
 msgctxt "MainWindow"

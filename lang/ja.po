@@ -1058,6 +1058,19 @@ msgctxt "Game"
 msgid "This HIRAKU has no hiraku-pc, which runs the PC games. Is the binaries folder right (Settings)?"
 msgstr "この HIRAKU には、PC 版のゲームを動かす hiraku-pc がありません。実行ファイルのフォルダー（設定）は正しいですか？"
 
+#. %1 is the game's title; .py2 is a file kind and keys a folder name (keep them)
+#: launcher/games.cpp
+#, qt-format
+msgctxt "Game"
+msgid ""
+"HIRAKU has no data for %1 yet. You need your own dumps: the game's .py2 file (PCSX2 Reliquary's descriptor, which names the disk image, the disk's ID, the iLink ID, the NVRAM and the two dongles) with the files it names, the PS2 BIOS ps2-0190j-20030822.bin and the MagicGate key files in a folder named keys. A MAME set and CHD alone are not enough.\n"
+"\n"
+"Drop the .py2 (or its folder) with the BIOS and the keys folder on this window, or File > Add game files (the BIOS and keys only once: later games find them)."
+msgstr ""
+"%1 のデータがまだありません。ご自身のダンプが必要です：ゲームの .py2 ファイル（PCSX2 Reliquary の記述ファイル。ディスクイメージ、ディスクの ID、iLink ID、NVRAM、2 つのドングルを指定します）とそれが指定するファイル、PS2 BIOS の ps2-0190j-20030822.bin、keys という名前のフォルダーに入れた MagicGate のキーファイル。MAME のセットと CHD だけでは足りません。\n"
+"\n"
+".py2（またはそのフォルダー）を BIOS と keys フォルダーと一緒にこのウィンドウにドロップするか、ファイル > ゲームファイルを追加 を使ってください（BIOS とキーは一度だけで、以降のゲームはそれを使います）。"
+
 #. %1 is the game's title; bios and keys are folder names (keep them)
 #: launcher/games.cpp
 #, qt-format
@@ -1779,11 +1792,11 @@ msgstr "ゲームファイルを追加…"
 msgctxt "MainWindow"
 msgid ""
 "Add a game from its files: the MAME ROM set (.zip/.7z), CHDs or disc images,\n"
-"or a Konami Python game's .py1 (PCSX2 Reliquary's descriptor).\n"
+"or a Konami Python game's .py1 or .py2 (PCSX2 Reliquary's descriptor).\n"
 "You can also drop them on this window."
 msgstr ""
 "ファイルからゲームを追加します：MAME の ROM セット（.zip/.7z）、CHD、ディスクイメージ、\n"
-"または Konami Python ゲームの .py1（PCSX2 Reliquary の記述ファイル）。\n"
+"または Konami Python ゲームの .py1 か .py2（PCSX2 Reliquary の記述ファイル）。\n"
 "このウィンドウにドロップしても追加できます。"
 
 #: launcher/mainwindow.cpp
@@ -1793,8 +1806,8 @@ msgstr "ゲームファイルを追加"
 
 #: launcher/mainwindow.cpp
 msgctxt "MainWindow"
-msgid "Game files (*.zip *.7z *.chd *.cue *.iso *.img *.bin *.py1);;All files (*)"
-msgstr "ゲームファイル (*.zip *.7z *.chd *.cue *.iso *.img *.bin *.py1);;すべてのファイル (*)"
+msgid "Game files (*.zip *.7z *.chd *.cue *.iso *.img *.bin *.py1 *.py2);;All files (*)"
+msgstr "ゲームファイル (*.zip *.7z *.chd *.cue *.iso *.img *.bin *.py1 *.py2);;すべてのファイル (*)"
 
 #: launcher/mainwindow.cpp
 msgctxt "MainWindow"

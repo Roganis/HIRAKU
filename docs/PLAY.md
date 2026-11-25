@@ -10,7 +10,9 @@ folder**). Give them all at once, in any order:
 
 - the MAME ROM set (`.zip`, `.7z`, or a folder of its files);
 - the game's CHDs (they are unpacked with MAME's chdman: install MAME, or MAME's flatpak);
-- disc and disk images (`.cue`/`.bin`, `.iso`, `.img`).
+- disc and disk images (`.cue`/`.bin`, `.iso`, `.img`);
+- for a Konami Python game, its `.py1` or `.py2` (or the folder holding it): see
+  [Konami Python 1](#konami-python-1-popn-music-914) and [Konami Python 2](#konami-python-2-drummania-v-and-v2).
 
 HIRAKU recognises the game. Several games can go at once, a whole MAME `roms` folder too. CHDs
 given without their MAME set are kept, and the error names the set to add.
@@ -790,6 +792,17 @@ cabinets join with `--lan-host SOCKET` and `--lan-join SOCKET`, each with its ow
 data folder holds `1`.
 
 Details: [PLAY-NOTES.md](PLAY-NOTES.md#konami-python-1-popn-music-914)
+
+## Konami Python 2: DrumMania V and V2
+
+DrumMania V and V2 run on the same core as pop'n music 9–14.
+
+**Adding them:** drop the game's `.py2` on the launcher's window, or the folder holding it. The
+`.py2` (PCSX2 Reliquary's descriptor) is a small text file that names the disk image (a CHD or a
+raw image), the disk's ID, the iLink ID, the NVRAM and the two dongles; those files go with it.
+Drop the PS2 BIOS `ps2-0190j-20030822.bin` and the MagicGate `keys` folder once, as for Python 1.
+MAME's set and CHD alone are not enough: given without the `.py2`, adding the game says so (a
+`.py2` beside them is used). From a terminal: `tools/ingest.py /path/to/drmnvj.py2`.
 
 ## BEMANI PC: pop'n music 15–18, beatmania IIDX 9th style to EMPRESS
 

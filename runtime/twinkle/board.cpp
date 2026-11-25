@@ -3,6 +3,7 @@
 // framework shim, with MAME's own devices. The driver class below follows twinkle_state; where it
 // differs, a comment says so.
 #include "twinkle/board.h"
+#include "twinkle/spuctrl.h"
 #if HK_TWINKLE_VIDEO
 #include "twinkle/video.h"
 #endif
@@ -507,12 +508,16 @@ u32 twinkle_state::insec_r() {
     return (u32)(sda & 1) << 12;
 }
 
-// The SPU board's control register: bits 7-10 enable IRQs 1, 2, 4 and 6; a 1 -> 0 acknowledges
+// The SPU board's control register: bits 7-10 enable IRQs 1, 2, 4 and 6; a 1 -> 0 acknowledges.
+// MAME: only the first bit that fell (an else-if chain), which leaves the disk's interrupt up for
+// good when a write takes its bit down together with the tick's: twinkle/spuctrl.h has the story
+// (the game's "E730:HDD READ ERROR"). Here every bit that fell; HK_TW_ONE_ACK=1 is MAME's rule.
 void twinkle_state::spu_ctrl_w(u16 data) {
-    if (!(data & 0x0080) && (m_spu_ctrl & 0x0080)) m_audiocpu->set_input_line(M68K_IRQ_1, CLEAR_LINE);
-    else if (!(data & 0x0100) && (m_spu_ctrl & 0x0100)) m_audiocpu->set_input_line(M68K_IRQ_2, CLEAR_LINE);
-    else if (!(data & 0x0200) && (m_spu_ctrl & 0x0200)) m_audiocpu->set_input_line(M68K_IRQ_4, CLEAR_LINE);
-    else if (!(data & 0x0400) && (m_spu_ctrl & 0x0400)) m_audiocpu->set_input_line(M68K_IRQ_6, CLEAR_LINE);
+    static const bool one_ack = [] { const char *e = getenv("HK_TW_ONE_ACK"); return e && *e && *e != '0'; }();
+    static const int line[4] = {M68K_IRQ_1, M68K_IRQ_2, M68K_IRQ_4, M68K_IRQ_6};
+    const unsigned acks = hk::twinkle::spu_ctrl_acks(m_spu_ctrl, data, one_ack);
+    for (int k = 0; k < 4; k++)
+        if (acks >> k & 1) m_audiocpu->set_input_line(line[k], CLEAR_LINE);
     m_spu_ctrl = data;
 }
 

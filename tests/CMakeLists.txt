@@ -169,6 +169,12 @@ add_executable(test_st224 spu/test_st224.cpp ${CMAKE_SOURCE_DIR}/runtime/spu/st2
 target_include_directories(test_st224 PRIVATE ${CMAKE_SOURCE_DIR}/runtime)
 add_test(NAME spu_st224 COMMAND test_st224)
 
+# The Twinkle SPU board's interrupt acknowledges (runtime/twinkle/spuctrl.h): a control register
+# write that takes two enables down acknowledges both (issue 19: "E730:HDD READ ERROR")
+add_executable(test_spuctrl twinkle/test_spuctrl.cpp)
+target_include_directories(test_spuctrl PRIVATE ${CMAKE_SOURCE_DIR}/runtime)
+add_test(NAME twinkle_spu_ctrl COMMAND test_spuctrl)
+
 # The C33 cabinet's small display (runtime/pc/c33video.h: ee'MALL's video board) drawn from a
 # made-up board: tiles, palette rows, the bank, a hidden layer, a layer over another, the blank bit
 add_executable(test_c33video pc/test_c33video.c ${CMAKE_SOURCE_DIR}/runtime/pc/c33video.c)

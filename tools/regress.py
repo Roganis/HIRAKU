@@ -294,6 +294,12 @@ for _c, (_game, _frames, _args, *_rest) in list(CASES.items()):
         CASES[_c] = (_game, _frames, ["--mame-cd"] + _args, *_rest)
         if _c.endswith("-play"):
             CASES[_c + "-drive"] = (_game, _frames, _args, *_rest)
+# ... and on that drive, the sound board's disk interrupt arriving inside its 60 Hz handler (issue
+# 19): the sound-select key at a frame where one of the song's disk reads ends there. Both interrupts
+# are acknowledged by one write (runtime/twinkle/spuctrl.h); with MAME's rule the board hangs and the
+# game shows E730:HDD READ ERROR
+CASES["bmiidx2-play-ack"] = ("bmiidx2", 5000, ["--rtc", "1792043957", "--video", "off", "--script",
+                                               "oracle/scripts/bmiidx2-play-ack.his"], "bmiidx2-boot")
 
 # The club kits (PLAN.md section 24, phase 6): a DDR 2nd Club Version 573 and its IIDX cabinet in a
 # club session, two processes on one serial cable (runtime/sys573/link.h), each pair at once. The

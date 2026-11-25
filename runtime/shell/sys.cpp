@@ -904,9 +904,11 @@ bool copy_file(const std::string &from, const std::string &to) {
     std::ifstream in(from, std::ios::binary);
     if (!in) return false;
     std::ofstream out(to + ".part", std::ios::binary | std::ios::trunc);
-    out << in.rdbuf();
+    // (an empty file is copied too: a stream given nothing to put counts it as a failure, and a PC
+    // game with an empty file in its program folder didn't start: "can't copy", 2026-11-24)
+    if (in.peek() != std::ifstream::traits_type::eof()) out << in.rdbuf();
     out.close();
-    if (out.good() && replace_file(to + ".part", to)) return true;
+    if (out.good() && !in.bad() && replace_file(to + ".part", to)) return true;
     std::remove((to + ".part").c_str());
     return false;
 }

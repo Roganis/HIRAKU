@@ -51,6 +51,18 @@ int main() {
     check(write_file(save, nullptr, 0) && exists(save) && read(save).empty(), "no bytes: an empty file");
     check(!write_file(dir + "/no-such-folder/x", second), "a folder that isn't there: false");
 
+    // hk::sys::copy_file: the whole file, an empty one too (once taken as a failure: a PC game with an
+    // empty file in its program folder didn't start), over one that is there
+    const std::string copy = dir + "/copy.bin", empty = dir + "/empty.txt";
+    write_file(save, first);
+    check(copy_file(save, copy) && read(copy) == first, "a file copied whole");
+    check(write_file(empty, nullptr, 0) && copy_file(empty, copy) && exists(copy) && read(copy).empty(),
+          "an empty file copied, over the one there");
+    check(!exists(copy + ".part"), "nothing left beside the copy");
+    check(!copy_file(dir + "/no-such-file", copy) && exists(copy), "a file that isn't there: false, the copy from before kept");
+    std::remove(copy.c_str());
+    std::remove(empty.c_str());
+
     write_file(save, first);
 #ifndef _WIN32
     // the disk full: what is written beside the save goes to /dev/full (ENOSPC at the first write)

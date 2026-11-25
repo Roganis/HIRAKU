@@ -84,6 +84,7 @@ extern char **environ;
 #include "host/script.h"
 #include "pc/link.h"
 #include "pc/c33.h"
+#include "pc/owed.h"
 #include "pc/process.h"
 #include "eamuse/server.h"
 #include "eamuse/lobby.h"
@@ -812,7 +813,16 @@ public:
     bool set_vsync_rate(double hz) override {
         if (pc64_) return false;
         want_hz_ = hz > 0 ? hz : cab_hz();
+        rate_pics_.clear();
         return true;
+    }
+    // The game's time to a picture drawn and read back, from its frame's start: the 108th of the last
+    // 120 at the rate set (a [[rate]] steps down when it doesn't fit: host/ratestep.h)
+    double picture_ms() const override {
+        if (rate_pics_.size() < 120) return 0;
+        std::vector<float> v = rate_pics_;
+        std::nth_element(v.begin(), v.begin() + 107, v.end());
+        return v[107];
     }
     uint64_t frame_count() const override { return frame_; }
 
@@ -1028,6 +1038,10 @@ public:
             printf("hiraku-pc: the game late for %llu frames and drew them at once after (its notes kept with its music)%s\n",
                    (unsigned long long)made_up_,
                    not_made_up_ ? (", " + std::to_string(not_made_up_) + " more in pauses (as they came)").c_str() : "");
+        if (not_made_up_rate_)
+            printf("hiraku-pc: at the mod's rate (in a song), %llu pictures late by more than half a second together were not made "
+                   "up: the game couldn't keep the rate (the rate steps down when its pictures take too long)\n",
+                   (unsigned long long)not_made_up_rate_);
         if (!late_runs_.empty()) {   // when (a loading screen's is the game's own; one in a song shows)
             std::string l;
             size_t shown = 0;
@@ -1079,9 +1093,31 @@ public:
         // (BACKUP ERROR 5-1502); that is done for it, once, when they've been there a few seconds
         bool first_boot = !c02_ && !c33_ && !pc32_ && !pc64_ && list_files(run_e_ + "/settings").empty();
         auto backup_made = std::chrono::steady_clock::time_point{};
+        // last: when the frame shown last began; the frame after it is shown again when the game
+        // hasn't drawn its picture a period after that. At a mod's [[rate]], on a steady grid of the
+        // frames' period (never ahead of the time each was shown at): a picture late by less than a
+        // period, frame after frame (a game that can't quite keep the rate), added up when each
+        // late frame began its period anew, and the shell's frames, and with them the game's music
+        // (a frame's sound each), fell behind its song clock without end (2026-11-23: pop'n 18 at
+        // 240 Hz, the music 25 s behind its notes 54 s into a song). A pause longer than a quarter of
+        // a second (loading) starts the grid again
         auto last = std::chrono::steady_clock::now(), rate_from = last;
+        auto next_slot = [&](std::chrono::steady_clock::time_point at, bool shown) {
+            // (the grid only with HK_PC_RATE_GRID=1 for now: it was proven with the sound pacing, not
+            // yet with display sync, where the frames' real period is the display's and not the
+            // rate's own (a 120.07 Hz game on a 240.00 Hz display) and a grid of the rate's period
+            // would creep away from the frames shown; until then a rate that doesn't fit steps down)
+            static const bool grid = getenv("HK_PC_RATE_GRID") != nullptr && atoi(getenv("HK_PC_RATE_GRID")) == 1;
+            if (!grid || ghz() < cab_hz() + 0.5) {   // the cabinet's own rate: as it was
+                last = at;
+                return;
+            }
+            if (!shown) return;   // (a picture between two shown, or one made up: still the frame's)
+            const auto period = std::chrono::nanoseconds((long long)(1e9 * per_frame_ / ghz()));
+            last = std::clamp(last + period, at - std::chrono::milliseconds(250), at);
+        };
         uint32_t seen = link_->frame_seq, rate_pictures = seen;
-        uint64_t rate_repeats = 0;
+        uint64_t rate_repeats = 0, rate_frames = frame_;
         for (;;) {
             if (!game_running()) {
                 printf("hiraku-pc: the game ended%s\n", exit_note().c_str());
@@ -1112,20 +1148,35 @@ public:
                 std::atomic_thread_fence(std::memory_order_acquire);
                 seen = seq;
                 shown_seq_ = seq;
+                picture_timed();
                 // a picture for a frame already gone by, shown again without it (the game was late):
                 // not shown, and the game's next frame started at once. It times its notes by its
                 // frames, its music by its sound (the shell's, a frame's for every frame shown): a
                 // frame never made up leaves the notes a frame behind the music, for the song
-                if (owed_ > 0) {
+                // ... unless its own frame took a period or more (pc/owed.h): a game that is not
+                // keeping its rate, its pictures shown as they come (still owed: made up if it gets
+                // quicker, else given up as in a pause)
+                // (the frame's time as the game's side stamped it, from its go to its picture: not the
+                // time this loop came to look, which with --game-ahead holds the shell's own frame)
+                const double took_ms = go_at_ == std::chrono::steady_clock::time_point{} ? 0.0   // (no go yet: as before)
+                                       : link_->drawn_us / 1000.0;
+                if (owed_ > 0 && !hk::pc::show_owed_picture(took_ms, 1e3 / ghz())) {
                     owed_--;
                     made_up_++;
+                    slow_run_ = 0;
                     go(seq);
-                    last = std::chrono::steady_clock::now();
+                    next_slot(std::chrono::steady_clock::now(), false);
                     continue;
+                }
+                if (owed_ > 0 && ++slow_run_ == 120 && !slow_said_) {   // (a second's worth, none made up: not a hold-up's)
+                    slow_said_ = true;
+                    printf("hiraku-pc: the game is not keeping its rate: %.1f ms a frame for a %.1f ms frame: its pictures shown "
+                           "as they come, its notes will fall behind its music\n", took_ms, 1e3 / ghz());
+                    fflush(stdout);
                 }
                 if (++pics_ < per_frame_) {   // a picture between two shown (a 120 Hz game, a slower display): the next at once
                     go(seq);
-                    last = std::chrono::steady_clock::now();
+                    next_slot(std::chrono::steady_clock::now(), false);
                     continue;
                 }
                 pics_ = 0;
@@ -1147,7 +1198,7 @@ public:
                 per_frame_ = pictures_per_frame();
                 // the shell's next frame starts: the game's too (it reads its controls, draws)
                 if (!ahead_) go(seq);
-                last = std::chrono::steady_clock::now();
+                next_slot(std::chrono::steady_clock::now(), true);
             } else if (now - last > std::chrono::microseconds((long long)(1e6 * per_frame_ / ghz()))) {
                 // no picture (starting, loading): the last again
                 repeating_ = true;
@@ -1156,7 +1207,12 @@ public:
                 repeats_++;
                 // once the game's sound has started: owed (above), as long as it's a moment's
                 // hold-up; a longer pause (loading) is the game's own, its frames as they come
-                if (sound_on_ && (owed_ += per_frame_) > MAX_OWED) not_made_up_ += owed_, owed_ = 0;
+                // (half a second's: MAX_OWED cabinet frames, more pictures at a mod's rate)
+                if (sound_on_ && (owed_ += per_frame_) > MAX_OWED * std::max(1.0, ghz() / (pc64_ ? 60.0 : cab_hz()))) {
+                    not_made_up_ += owed_;
+                    if (ghz() > cab_hz() + 0.5) not_made_up_rate_ += owed_;
+                    owed_ = 0;
+                }
                 // when, for the report: a run of frames shown again, from the moment the game was
                 // told to go on (its sound started: not its start-up)
                 if (sound_on_) {
@@ -1164,7 +1220,7 @@ public:
                     if (!late_runs_.empty() && late_runs_.back().last + 1 == frame_) late_runs_.back().last = frame_, late_runs_.back().n++;
                     else if (late_runs_.size() < 400) late_runs_.push_back({t, frame_, frame_, 1});
                 }
-                last = now;
+                next_slot(std::chrono::steady_clock::now(), true);
             } else if (sound_on_ && !ahead_ && now - go_at_ > std::chrono::microseconds((long long)(5e5 * per_frame_ / ghz())) &&
                        (int32_t)(sound_for(tick_ + per_frame_) - link_->audio_made) > 0) {
                 // the picture is late (half a frame): its frame's sound goes on without it, before
@@ -1177,9 +1233,10 @@ public:
             if (!patches_.empty()) patches_said();
             if (getenv("HK_PC_RATE") && now - rate_from > std::chrono::seconds(10)) {   // how the game keeps up
                 const double sec = std::chrono::duration<double>(now - rate_from).count();
-                fprintf(stderr, "hiraku-pc: the game drew %.2f pictures a second, %llu shown again\n", (seq - rate_pictures) / sec,
+                fprintf(stderr, "hiraku-pc: the game drew %.2f pictures a second, %.2f a second shown, %llu shown again\n",
+                        (seq - rate_pictures) / sec, (double)(frame_ - rate_frames - (repeats_ - rate_repeats)) / sec,
                         (unsigned long long)(repeats_ - rate_repeats));
-                rate_from = now, rate_pictures = seq, rate_repeats = repeats_;
+                rate_from = now, rate_pictures = seq, rate_repeats = repeats_, rate_frames = frame_;
             }
         }
     }
@@ -1807,6 +1864,12 @@ private:
     }
 
     // A picture came at `now`: its frame's times (the DLL's, and since go() here)
+    // ... and every picture's, shown or not (picture_ms: the last 120)
+    void picture_timed() {
+        if (go_at_ == std::chrono::steady_clock::time_point{} || !sound_on_) return;
+        if (rate_pics_.size() < 120) rate_pics_.push_back(link_->drawn_us / 1000.0f);
+        else rate_pics_[rate_at_++ % 120] = link_->drawn_us / 1000.0f;
+    }
     void timed(std::chrono::steady_clock::time_point now) {
         if (go_at_ == std::chrono::steady_clock::time_point{} || go_to_shell_.size() >= 1u << 20) return;
         go_to_shell_.push_back(std::chrono::duration<float, std::milli>(now - go_at_).count());
@@ -2369,6 +2432,8 @@ private:
     uint32_t sound_base_ = 0;   // sound_for()
     std::chrono::steady_clock::time_point go_at_{};
     std::vector<float> go_to_shell_, pad_read_, drawn_;   // ms, per picture (report)
+    std::vector<float> rate_pics_;                          // ... the last 120 at the rate set (picture_ms)
+    size_t rate_at_ = 0;
     std::chrono::steady_clock::time_point pressed_at_{};   // a button went down (set_input)
     bool press_time_ = false;                              // --press-time
     bool skip_tutorial_ = false;                           // --skip-tutorial
@@ -2392,7 +2457,10 @@ private:
     // at most MAX_OWED (half a second at 60 Hz)
     static constexpr int MAX_OWED = 30;
     int owed_ = 0;
+    bool slow_said_ = false;   // (the frame loop: the game not keeping its rate, said once)
+    int slow_run_ = 0;         // ... its pictures shown while owed since the last one made up
     uint64_t made_up_ = 0, not_made_up_ = 0;
+    uint64_t not_made_up_rate_ = 0;   // ... of them at a mod's [[rate]] (in a song: the report says so)
     // the game's hold-ups, for the report: from the second `t` of the run, `n` frames shown again
     struct LateRun { double t; uint64_t first, last; uint32_t n; };
     std::vector<LateRun> late_runs_;

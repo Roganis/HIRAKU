@@ -616,6 +616,15 @@ add_test(NAME mods_script COMMAND test_mod_script ${CMAKE_CURRENT_BINARY_DIR}/mo
 add_executable(test_per_picture mods/test_per_picture.cpp)
 target_link_libraries(test_per_picture PRIVATE hiraku_shell)
 add_test(NAME mods_per_picture COMMAND test_per_picture)
+# ... and a [[rate]] stepped down to a whole fraction when the game's pictures take too long
+add_executable(test_ratestep host/test_ratestep.cpp)
+target_include_directories(test_ratestep PRIVATE ${CMAKE_SOURCE_DIR}/runtime)
+add_test(NAME mods_rate_step COMMAND test_ratestep)
+# a PC game's picture that comes while it owes frames: made up, or shown when its frame took a period
+add_executable(test_owed host/test_owed.cpp)
+target_include_directories(test_owed PRIVATE ${CMAKE_SOURCE_DIR}/runtime)
+add_test(NAME pc_owed_pictures COMMAND test_owed)
+
 # tools/ingest.py (Python 3.11 or later: tomllib): a Konami Python game waiting for its BIOS and keys,
 # finished when they're dropped
 if(Python3_Interpreter_FOUND AND Python3_VERSION VERSION_GREATER_EQUAL 3.11)

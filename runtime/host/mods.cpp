@@ -27,6 +27,7 @@
 #include "host/modsettings.h"
 #include "host/png.h"
 #include "host/pythondisk.h"
+#include "host/ratestep.h"
 #include "shell/core.h"
 #include "shell/kvfile.h"
 #include "shell/overlay.h"
@@ -111,7 +112,8 @@ struct Rate {
     int times = 0;            // hz = "x2"...: that many times the machine's own rate (as it is: a PC IIDX's display type)
     WordCondition when;       // while_changing, while_equal (shell/wordcond.h)
     bool on = false, refused = false;
-    int chart_times = 0;   // chart_times: the game's chart files read with their times this many times (a PC IIDX's)
+    int div = 1;           // the rate asked over this: a PC that can't keep it (host/ratestep.h)
+    int chart_times = 0;  // chart_times: the game's chart files read with their times this many times (a PC IIDX's)
 };
 
 constexpr double kDisplayFallbackHz = 119.88;   // hz = "display" with no window, or not known
@@ -1186,7 +1188,23 @@ void frame() {
         const bool want = r.when.step(r.on, [](uint32_t a) { return core().mem(a, 4); }, known);
         if (!known) continue;
         // hz = "display": follow the display (a window moved to another one)
-        const double hz = r.times ? r.times * core().native_rate() : r.hz > 0 ? r.hz : g_display_hz > 30 ? g_display_hz : kDisplayFallbackHz;
+        const double asked = r.times ? r.times * core().native_rate() : r.hz > 0 ? r.hz : g_display_hz > 30 ? g_display_hz : kDisplayFallbackHz;
+        // ... at a whole fraction of it while the game's pictures take longer than its refreshes
+        // (host/ratestep.h; not hz = "x2": its game counts its charts in its frames), for the run
+        if (want && r.on && !r.times)
+            if (const double ms = core().picture_ms(); ms > 0) {
+                const int k = hk::host::rate_divisor(asked, ms, core().native_rate());
+                if (k > r.div) {
+                    r.div = k;
+                    char a[16], b[16];
+                    snprintf(a, sizeof a, "%.0f", asked / k), snprintf(b, sizeof b, "%.1f", ms);
+                    fprintf(stderr, "mods: %s: the game's pictures take %s ms, too long for %.0f Hz: at %s Hz (%.0f / %d) from here on\n",
+                            r.mod.c_str(), b, asked / (k - 1), a, asked, k);
+                    modscript::notice({r.mod, hk::lang::later(HK_N("boxes", "This PC draws the game at %1 Hz, not %2: its pictures take %3 ms"),
+                                                              {a, std::to_string((int)std::lround(asked)), b})});
+                }
+            }
+        const double hz = r.times ? asked : asked / r.div;
         if (want == r.on && (!want || hz == r.now)) continue;
         if (!core().set_vsync_rate(want ? hz : 0)) {
             fprintf(stderr, "mods: %s: this machine's core can't change its vsync rate ([[rate]] ignored)\n", r.mod.c_str());
@@ -1543,6 +1561,10 @@ void report() {
     for (const Counter &c : g_counters)
         fprintf(stderr, "mods: %s: count %s = %llu\n", c.mod.c_str(), c.name.c_str(), (unsigned long long)c.n.load());
     for (const Setting &s : g_settings) fprintf(stderr, "mods: %s: %s = %s at the end\n", s.mod.c_str(), s.name.c_str(), shown(s).c_str());
+    for (const Rate &r : g_rates)   // (a rate stepped down: the log answers why the game ran slower than the display)
+        if (r.div > 1)
+            fprintf(stderr, "mods: %s: the rate stepped down to a %s of the asked rate (the game's pictures took too long for it)\n",
+                    r.mod.c_str(), r.div == 2 ? "half" : r.div == 3 ? "third" : r.div == 4 ? "quarter" : "fraction");
 }
 
 void clear() {

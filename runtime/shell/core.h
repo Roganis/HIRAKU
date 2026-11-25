@@ -94,6 +94,10 @@ public:
     virtual bool set_vsync_rate(double hz) { (void)hz; return false; }
     // The machine's own vsync rate (the cabinet's ticks, host/mods.h between_ticks)
     virtual double native_rate() const { return 59.94; }
+    // How long the game takes to make a picture at the rate set (ms: most of the last pictures', a
+    // high percentile, measured since the rate was last set); 0 while not known. A [[rate]] steps
+    // down when it doesn't fit (host/ratestep.h)
+    virtual double picture_ms() const { return 0; }
     // This frame shows the last picture again, the game having drawn none (a game in a process of its
     // own, loading or held up): a [[rate]]'s watched word can't have changed, so it isn't looked at
     virtual bool frame_repeated() const { return false; }

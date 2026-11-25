@@ -782,10 +782,9 @@ int main(int argc, char **argv) {
         lang::start(opt.root);
 #ifdef HK_WITH_SDL
         host::notice::warn(machine.setup_warning());   // e.g. Keyboardmania's blank sound flash
-        if (modscript::any()) {   // mods' scripts: their text's font, their hk.notice on the window
-            modscript::set_font(host::statsview::font());
-            modscript::set_notice([](const std::vector<std::string> &lines) { host::notice::hint(lines, 3); });
-        }
+        if (modscript::any()) modscript::set_font(host::statsview::font());   // mods' scripts: their text's font
+        // ... their hk.notice on the window, and the mods' own (a [[rate]] stepped down: host/mods.cpp)
+        modscript::set_notice([](const std::vector<std::string> &lines) { host::notice::hint(lines, 3); });
         host::notice::start(opt.root);   // a new release, said on the window (not from the launcher)
 #endif
         host::readers_start();

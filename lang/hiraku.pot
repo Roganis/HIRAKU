@@ -5026,6 +5026,12 @@ msgctxt "boxes"
 msgid "Files and patches: from the game's next start"
 msgstr ""
 
+#: runtime/host/mods.cpp
+#, qt-format
+msgctxt "boxes"
+msgid "This PC draws the game at %1 Hz, not %2: its pictures take %3 ms"
+msgstr ""
+
 #. %1 is the launcher's menu entry, "Help > Check for updates"
 #: runtime/host/notice.cpp
 #, qt-format

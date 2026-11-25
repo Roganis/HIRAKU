@@ -5123,6 +5123,12 @@ msgctxt "boxes"
 msgid "Files and patches: from the game's next start"
 msgstr "ファイルとパッチ：次回の起動から"
 
+#: runtime/host/mods.cpp
+#, qt-format
+msgctxt "boxes"
+msgid "This PC draws the game at %1 Hz, not %2: its pictures take %3 ms"
+msgstr "このPCではゲームを%2 Hzではなく%1 Hzで描画します：1枚に%3 msかかります"
+
 #. %1 is the launcher's menu entry, "Help > Check for updates"
 #: runtime/host/notice.cpp
 #, qt-format

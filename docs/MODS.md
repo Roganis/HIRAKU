@@ -610,6 +610,26 @@ than 5 % at once (smoothed, after 240 -> 60 Hz the sound played at a quarter of 
 a while and queued seconds), and a sound queue grown far past its target is cut back at once
 rather than steered down over minutes (runtime/host/pacing.cpp, window.cpp).
 
+A PC that can't keep the rate (the PC games so far, whose core measures it): a game whose pictures
+take longer than the display's refreshes falls behind without end at the rate (each late frame
+drawn at once after, the display showing pictures again: 2026-11-22, 11 ms pictures at 240 Hz,
+2,912 of 9,691 frames shown again). Instead, while the rate is on, the time the game takes to a
+picture (the 108th of its last 120) is held against the rate's refresh: when it is more than
+three quarters of it, the rate steps down to the display's rate divided by 2, 3, 4... (the
+smallest that fits; always a whole fraction, so each picture holds the same number of refreshes,
+and never under the cabinet's rate), for the rest of the run, with a line in the log and three
+seconds of notice on the window ("This PC draws the game at 60 Hz, not 240: its pictures take
+11.0 ms"). Not for `hz = "x2"` (its game counts its charts in its frames: only that rate keeps
+its music with its notes). runtime/host/ratestep.h, tests/host/test_ratestep.cpp. Before it steps
+down, and on a PC just short of the rate, the PC core keeps its frames on a steady grid of the
+rate's period: a picture late by less than a refresh used to begin the next period anew, so the
+shell's frames, and the game's music with them (a frame's sound each), fell behind its song clock
+for good, frame after frame (pop'n 18 at 240 Hz with pictures a little too slow: its music 25 s
+behind its notes 54 s into a song in the rig, the owner's "desync" of 2026-11-22); now a frame
+the game hasn't drawn by its time is shown again and made up, and the music stays within a few
+milliseconds of the notes. The exit report says when pictures at a rate were not made up, and
+when the rate stepped down.
+
 pop'n music 14 (`games/popn14/mods/smooth-notes`, 2026-10-19):
 - the play screen computes the song's position from a hardware timer on every frame
   (FUN_01740298, the word at 0x018ff668), draws the notes from it and judges from it: while that

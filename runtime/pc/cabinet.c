@@ -1431,10 +1431,29 @@ void hk_picture_drawn(int captured) {
     wait_for_go();
 }
 
+// testing: HK_PC_SLOW_PICTURES=A,B,N: each picture A ms longer while a mod's rate is on, every Nth B ms
+// more (a PC that can't quite keep the rate: runtime/host/ratestep.h, core.cpp's frame grid)
+static void slow_pictures(void) {
+    static double a = -1, b;
+    static int every, k;
+    if (a < 0) {
+        a = 0;
+        const char *e = getenv("HK_PC_SLOW_PICTURES");
+        if (e) sscanf(e, "%lf,%lf,%d", &a, &b, &every);
+    }
+    if (a <= 0 || hk_link()->game_hz_milli <= 60500) return;
+    const double ms = a + (every > 0 && ++k % every == 0 ? b : 0);
+    LARGE_INTEGER t0, t, f;
+    QueryPerformanceCounter(&t0), QueryPerformanceFrequency(&f);
+    do QueryPerformanceCounter(&t);
+    while ((t.QuadPart - t0.QuadPart) * 1000.0 / f.QuadPart < ms);
+}
+
 static HRESULT WINAPI my_Present(IDirect3DDevice9 *d, const RECT *src, const RECT *dst, HWND wnd, const RGNDATA *dirty) {
     static int said;
     if (!said++) hk_log("hiraku-pc: the game's first Present");
     hk_present_begin();
+    slow_pictures();
     if (host_shows()) {   // HIRAKU's window shows it, at the time its pacing chooses
         const int captured = capture(d);
         hk_d3d9_frame_end(d, captured);   // (smooth motion: the frame's quads, d3d9_smooth.c)

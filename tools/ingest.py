@@ -1517,9 +1517,21 @@ def revisions_folder(folder: str) -> tuple[dict, str, str] | None:
             if f.lower() in exes and (g := revision_game(os.path.join(d, f))):
                 programs.append((os.path.basename(d).upper(), d, g))
         datas += [os.path.join(d, x) for x in dirs if x.lower() == "data"]
-    if not programs or not datas:
+    if not programs:
         return None
-    _, program, game = max(programs, key=lambda p: p[0])
+    # a revision's folder is three letters (JAA ... JAH). One named otherwise is a copy someone made
+    # or changed, kept beside ("JADC", last by name: it was run, and stopped at BACKUP DATA ERROR,
+    # 2026-11-24): taken only when there is no other
+    named = [p for p in programs if re.fullmatch(r"[A-Z]{3}", p[0])]
+    for name, d, _ in sorted(programs):
+        if named and not re.fullmatch(r"[A-Z]{3}", name):
+            print(f"note     {d}: not a revision's folder by its name, left aside")
+    _, program, game = max(named or programs, key=lambda p: p[0])
+    if not named:
+        print(f"note     {program}: not a revision's folder by its name (three letters, as JAD); "
+              "a program changed since the cabinet may not start")
+    if not datas:
+        return None
     # the data folder beside a program folder, else the only one
     beside = [x for x in datas if any(os.path.dirname(x) == os.path.dirname(p[1]) for p in programs)]
     data = (beside or datas)[0]

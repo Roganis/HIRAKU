@@ -38,6 +38,32 @@ folder: your games, saves and settings stay. A checkout doesn't offer updates: u
 
 Details: [PLAY-NOTES.md](PLAY-NOTES.md#updating-a-release-package)
 
+## The PC it needs
+
+HIRAKU is made for small PCs. What a very small one does, measured with release 0.14.0 on a
+Celeron N4020 mini PC (two cores, no AVX, 4 GB of memory, a 720p screen; the whole PC draws 5 to
+7 W in a game), one game of each board:
+
+| Board (the game measured) | On the N4020 |
+|---|---|
+| DJ Main (beatmania 1st MIX) | full speed, with a sixth of a frame's time |
+| System 573 (DDR 2ndMIX, DrumMania 10th Mix) | full speed, with a quarter to a third |
+| Twinkle (beatmania IIDX 8th style), beatmania III THE FINAL | full speed, with a third; the sound can break while the game reads its hard disk from slow storage (see below) |
+| Keyboardmania 3rd MIX | about 86 % of full speed: its two processors each want most of a core |
+| Konami Python (pop'n music 14) | about 70 %: the PlayStation 2's pictures are drawn by the CPU, which wants AVX2 |
+| BEMANI PC (pop'n music 15, under Wine) | plays in a window, with frames shown twice |
+
+- **A CPU with four cores and AVX2** (an N100 or better) is what the last three need. That class
+  hasn't been measured the same way yet.
+- **Storage:** the games with a large hard disk (the Twinkle IIDX games and beatmania III, 20 GB
+  each) read it while they play. In 0.14.0, from the N4020's eMMC, one read took up to half a
+  second and the sound broke each time. Since then HIRAKU reads ahead of the game in small pieces
+  ([disk read-ahead](PLAY-NOTES.md#slow-drives-disk-read-ahead)): beatmania IIDX 8th style's worst
+  stall there went from 0.6–0.8 s to under 0.1 s. An SSD is still the better place for `dumps/`.
+- **CRT shaders** (F10) need more than the smallest integrated graphics: on the N4020 either one
+  takes a whole frame's time at 720p.
+- The performance overlay (F7) shows what your PC does with a game.
+
 ## Language
 
 HIRAKU's windows, the game menu and the boxes and overlay over a game come in English, French and

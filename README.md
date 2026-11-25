@@ -35,7 +35,7 @@ What each game needs, its first start and its quirks: [docs/PLAY.md](docs/PLAY.m
 - **The picture.** Each game at its monitor's shape, CRT shaders (F10), a CRT beam simulator, and smooth motion or true high frame rates on 120–240 Hz displays. ([docs/MOTION.md](docs/MOTION.md))
 - **Controls and lights.** Keyboards, IIDX/pop'n controllers and turntables, card readers and cabinet I/O boards; the cabinet's lamps on your controller's LEDs. ([docs/LIGHTS.md](docs/LIGHTS.md))
 - **Mods.** Patches, replaced files and text on every board, turned on per game in **Mods…**. ([docs/MODS.md](docs/MODS.md))
-- **Light on the PC.** Made for N100-class mini PCs, and checked frame by frame against MAME.
+- **Light on the PC.** Made for N100-class mini PCs ([what each board needs](docs/PLAY.md#the-pc-it-needs)), and checked frame by frame against MAME.
 
 ## Getting started
 

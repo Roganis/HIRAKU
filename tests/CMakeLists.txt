@@ -667,6 +667,7 @@ endif()
 if(Python3_Interpreter_FOUND AND Python3_VERSION VERSION_GREATER_EQUAL 3.11 AND NOT CMAKE_CROSSCOMPILING)
   add_test(NAME tools_unlock COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/tools/test_unlock.py)
   add_test(NAME tools_mameset COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/tools/test_mameset.py)
+  add_test(NAME tools_fbexe_disc COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/tools/test_fbexe_disc.py)
 endif()
 # The Python tools read over without being run (tools/lint.py): each compiles, with warnings as
 # errors, and reads no name it doesn't define; and the lint's own test
@@ -686,7 +687,6 @@ if(HK_BASH AND HK_CURL AND NOT WIN32)
 endif()
 # tools/runpath.py: a packaged program's run path keeps only the package's own folders
 find_program(HK_READELF readelf)
-  add_test(NAME tools_fbexe_disc COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/tools/test_fbexe_disc.py)
 if(Python3_Interpreter_FOUND AND HK_READELF AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
   add_test(NAME package_run_paths COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/tools/test_runpath.py ${CMAKE_C_COMPILER})
 endif()

@@ -835,6 +835,151 @@ feels. Checked in a scripted stage, the scratch state read each frame: three fli
 were one scratch for 18 frames, now three of 2; a flick, one back and one forward 2 frames apart
 were a scratch that ended at the turn back, now three. Not checked on real hardware or by ear.
 
+## beatmania IIDX's keysounds on Twinkle (`games/<id>/mods/quick-keysounds`)
+
+The Twinkle IIDX games read the keys at the start of a frame, but a press's keysound reaches the
+sound board only with the next frame's sounds: the board keys it on about 18 ms after the frame
+the press was read in, where the PC IIDX games take about 4 ms (2026-11-22). Every style does it the
+same way: the game queues its sounds (a queue of 16) and sends them once a frame, early in the main
+loop (the sound service: the whole queue to the dual-port RAM and the board's mailbox rung, or with
+none queued one of the board's other commands, so one command a frame); the play screen's frame
+reads the presses and queues their keysounds later in that frame. The mod (off by default, as every
+mod) calls the game's own service again right after the play screen's frame when the queue holds
+only the presses' keysounds (it was empty where the keys' part began, so the chart's sounds, such as
+the music's start, keep their frame) and the board had no command yet that frame (a second command
+in a frame, while the board still works on the first, can lose its keysound). The next frame's
+service then sends nothing where it would have sent those keysounds (its "board free" test reads the
+mod's flag too), so the board's other commands keep their frames too. Its routines lie in main RAM
+the machine leaves at zero and never touches (0x8000d000, in the BIOS's area below the program:
+nothing read, wrote or ran there over boot, attract, play, test mode and its reset, in every style),
+so the patch carries nothing of the program there; two words of the gap after the queue hold its
+flag and what the board last got, and the game's own paths take as many instructions as before up to
+each write to the dual-port RAM. The DEMO PLAY's keysounds come the same way (the autoplay presses
+the keys), so they move too. Not how the machine behaved: the keysound comes one frame sooner.
+
+Each set has its own program (no two share the bytes), so each has its own mod, made by the same
+method from the same instruction shapes, each replaced word checked against the program. The styles
+come in three shapes: from 3rd style on the board's mailbox has a
+function of its own, through which every command rings, and the mod notes the frame of the last ring
+there; in 1st style, Substream and 2nd style the queue's send and the service ring it themselves, so
+the mod marks a command in two instruction slots that did nothing (a nop after the send's return and
+one after a load where the board's other commands are taken), clearing the mark each frame. The club kits'
+driver is older again (the send rings the mailbox itself, the play screen's frame is called from
+three places, the main loop keeps no frame number): a word in the gap is set after a ring and cleared
+when the play screen's frame ends.
+
+| game | set | program | shape | status |
+|---|---|---|---|---|
+| beatmania IIDX (1st style) | bmiidx | GQ863 JAB | the send's own ring | done: key-on 17.90 -> 1.85 ms |
+| | bmiidxa | GQ863 JAA | the send's own ring | done: 17.90 -> 1.84 ms |
+| Substream | bmiidxs | GC983 JAA | the send's own ring | done: 17.90 -> 1.73 ms |
+| | bmiidxsa | GC983 JAA (983-AA, Asia) | the send's own ring | done: 17.90 -> 1.73 ms |
+| 2nd style | bmiidx2 | GC985 JAA | the send's own ring | done: 17.97 -> 1.78 ms |
+| 3rd style | bmiidx3 | GC992 JAC | the mailbox function | done: 17.93 -> 1.76 ms |
+| | bmiidx3a | GC992 JAA | the mailbox function | done: 17.93 -> 1.76 ms |
+| | bmiidx3b | GC992 JAB | the mailbox function | done: 17.93 -> 1.76 ms |
+| 4th style | bmiidx4 | GCA03 JAA | the mailbox function | done: 17.95 -> 1.79 ms |
+| 5th style | bmiidx5 | GCA17 JAA | the mailbox function | done: 17.95 -> 1.82 ms |
+| 6th style | bmiidx6 | GCB4U JAB | the mailbox function | done (2026-11-22): 17.95 -> 1.83 ms |
+| | bmiidx6a | GCB4U JAA | the mailbox function | done: 17.95 -> 1.83 ms |
+| 7th style | bmiidx7 | GCB44 JAB | the mailbox function | done: 18.08 -> 1.99 ms |
+| | bmiidx7a | GCB44 JAA | the mailbox function | done: 17.95 -> 1.85 ms |
+| 8th style | bmiidx8 | GCC44 JAA | the mailbox function | done: 18.06 -> 1.98 ms |
+| club kit | bmiidxc | 896 JAB | the club kits' | done: 17.96 -> 1.94 ms |
+| | bmiidxca | 896 JAA | the club kits' | done: 17.96 -> 1.94 ms |
+| club kit 2 | bmiidxc2 | GE984 | the club kits' | done: 17.94 -> 1.76 ms |
+
+Checked headless (2026-11-22 and -23; `--wav`, the dual-port RAM's writes and the board's key-ons
+logged), per style: 1st (bmiidx: full set; bmiidxa: the reduced set), Substream (bmiidxs full, bmiidxsa reduced), 2nd (full),
+3rd (bmiidx3 full, bmiidx3a and 3b reduced), 4th (full): 14 to 30 presses in a stage, key-on about
+17.9 ms after the press's frame began, now 1.73 to 1.85 (1.69-1.97), and the recorded keysound
+(the press run against one without that press) 17.4 ms after it, now 1.3; a press offered later in a
+frame waits for the next frame's read, so the worst case is 34.6-34.7 ms, now 18.5. A run without
+presses records the same sound and pictures, byte for byte, and the dual-port RAM is written at the
+same moments, in all seventeen new sets; with presses, the chart's and the board's other commands go out in the same
+frames with the same bytes (a few of them 0.2 to 1.6 µs off, as in 6th style); the same presses give
+the same pictures to the result screen, and the same requests and key-ons, also in a song played with
+a key group every frame (none lost, the queue never more than 2 deep); the reset from test mode brings
+the hooks back with the reloaded program.
+5th, 6th (JAA), 7th (both) and 8th style and the three club kits each had the whole set of checks,
+with the same results (key-on 1.76 to 1.99 ms). The club kits were also run as a pair with their DDR
+cabinet, the mod on the IIDX side: both cabinets' pictures identical in every frame, the keysounds a
+frame sooner in the session too (the DDR cabinet plays the IIDX's sound, so its recording changes with it).
+When the board already had a command in the frame (a turntable's, the chart's), the keysound waits
+for the next frame, as the game's did; with a new keysound in every frame (a key every frame through
+a song) that wait carries on to the next frame's keysounds, so in such a run most keysounds keep the
+game's timing (none lost). Not checked on a cabinet; nobody has listened.
+
+## pop'n music's keysounds on DJ Main (`games/<id>/mods/quick-keysounds`)
+
+The DJ Main pop'n music games read the buttons at the start of a frame, but a press's keysound is
+keyed on only by the next frame's sound work, about 18 to 19 ms after the frame the press was read
+in (2026-11-23). The 68EC020 plays the two K054539s itself, with a small kernel taking turns between
+its tasks: a sound is a request in a ring of 64, queued by the game's play routine under the ring's
+lock; once a frame the sound task runs the ring's service, which takes ONE request and plays it
+(and, only in a frame where it took none, the voices' tick: their ages, fades, ends and chained
+sounds). The game task runs after it in the frame, and its key handling queues the pressed buttons'
+keysounds: they wait for the next frame's service, and a chord's keysounds come one a frame.
+
+The mod (off by default, as every mod) has the key handling queue a keysound through a routine of
+its own, which does the play routine's work as the play routine does it (the same kernel calls, the
+caller's own task block, the game's own queueing) and, before giving the lock back, sends the new
+keysound at once with the game's own service when every request before it in the ring is one of the
+mod's placeholders and the frame's service took none (or a placeholder). It leaves a placeholder in
+the keysound's place in the ring (the driver's "pan" request, whose handler writes only a voice's
+word that nothing reads), so the next frames' services take the placeholder where they took the
+keysound: every other request (the chart's, the system's) is played in its frame, the voices' tick is
+skipped in the same frames, and the ring fills as before. The routine runs only when a keysound is
+queued, so a game without presses is the same, every write to the sound chips at the same moment.
+
+A setting, **Chords**: "One sound a frame (the machine's)" (the default) sends the first keysound of
+a frame at once and leaves the others of a chord to the machine's one-a-frame order; "Together" sends
+every key's keysound of the frame at once (a chord's sounds start together, about 0.2 ms apart, where
+the machine needs a frame for each). Not how the machine behaved, either way: the keysound comes one
+frame sooner, and with Together a chord's keysounds come in its frame.
+
+The program is in ROM, so the routine lies in the ROM's padding after the program (0xFF bytes that
+nothing reads or runs but the ROM check). The ROM check (at power-on and in test mode) sums each ROM
+chip's bytes, so the mod lowers more of the padding's bytes until both sums are the program's own
+(without them the power-on check stops with E121/E122 PRG ROM ERROR); test mode's ROM TEST says OK.
+The patches carry 6 bytes of the program each (the key handling's call, one per call: two in pop'n
+stage EX), the rest is the padding's 0xFF.
+
+| game | set | program | key-on, ms from the press's frame start | status |
+|---|---|---|---|---|
+| pop'n music | popn1j | GQ803 JA-A | 18.84 -> 2.45 (1.81-2.99) | done, full set |
+| | popn1a | AA-A | 18.00 -> 1.53 (0.88-2.11) | done, reduced set (pop'n 1's program, revised) |
+| | popn1k | KA-A | 18.37 -> 1.75 (1.14-2.68) | done, reduced set |
+| | popn1 | TA-A | - | not made: its program ROMs are not among the dumps here |
+| pop'n music 2 | popn2 | GQ831 JA-A | 18.46 -> 2.18 (1.38-3.28) | done, full set |
+| pop'n music 3 | popn3 | GQ980 JA-A | 18.43 -> 2.61 (2.05-3.44) | done, full set |
+| pop'n stage EX | popnstex | GQ970 JB-A | 18.63 -> 2.01 (1.70-2.46) | done, full set (keysounds only for a press that hits a note) |
+
+Checked headless (2026-11-23; `--wav`, every write to the sound chips, the ring and the voices'
+choice logged): per program 14 to 22 presses with a keysound in a stage: the recorded keysound
+(the press run against one without that press) 18.5 to 18.9 ms after the press's frame began, now
+2.0 to 2.6; a press offered later in a frame is read in the next frame, so the worst case is 35.7 to
+36.1 ms, now 19.2 to 19.9. A run without presses (power-on from a blank NVRAM to a song) records the same sound and
+pictures and writes the chips at the same moments, byte for byte. With presses, the chart's and the
+system's sounds and the voices' ticks go out in the same frames with the same register values (a few
+cycles off in time); the same presses give the same pictures through a stage played a button every
+10 frames (to the game over and the ranking), with chords (pop'n 1 and 3, stage EX), and after test
+mode. A song played with a button group every frame (chords of 2 to 4 and a 9-button mash, far past
+a player: the ring of 64 is full and drops requests on the machine too) gives the same requests, the
+same key-ons per voice, the same fill and drops, and the game's own work (its calls of the play
+routine, its judgments) the same, in pop'n 1 (JA-A, KA-A), 2 and 3; in such frames the 68EC020 is at
+its limit, and the routine's few microseconds a press (and with Together the keysounds' own work,
+moved into the press's frame) can move an animation (a character's pose, the gauge's blink, a hit's
+spark) by a frame (pop'n 1 in the mash; pop'n 2 in the mash with Together and once in the chords),
+and the sound task's work by up to 1.7 ms within its frame; in pop'n 1 AA-A the mash makes the
+machine itself miss presses when its frame overruns, and with the mod it missed 6 fewer of 13,758.
+The voices: pop'n 1 JA-A's and AA-A's keysounds have voices of their own (the same in every run); in
+pop'n 1 KA-A, 2, 3 and stage EX a keysound takes a free voice, and as the earlier keysounds end a frame sooner too, some take another voice than on the
+machine (pop'n 3, a stage of 539 presses: 30 another voice, and once a playing voice of the same
+priority taken where the machine found a free one: 58 such takes against the machine's 57).
+After test mode (a sound played in the sound test, then its EXIT: the game starts again) the mod
+works as before. Not checked on a cabinet; nobody has listened.
+
 ## How the layers work
 
 - **Patches:** every frame, before the game's frame runs, each patch looks at its address: with

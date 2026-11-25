@@ -1,0 +1,71 @@
+name = "Quick keysounds"
+version = "0.1"
+game = "bmiidx2"
+description = "The keysound of a key or turntable the player presses goes to the sound board in the frame the press is read, about 1 ms after it, instead of with the next frame's sounds (18 ms after it). Not how the machine behaved: the keysound comes one frame sooner. The music, the other sounds and the judging keep their timing. For the program of GC985 VER. JAA."
+
+# The game's sounds (2nd style, GC985 VER. JAA): a sound is a request in a queue of 16 (0x80188e58: a
+# count, then the requests). Once a frame the main loop calls the sound service (0x80040ddc): if the
+# sound board is free (dual-port RAM 0x1f000400 bit 7 clear) and the queue holds requests, it writes them
+# all to the dual-port RAM and rings the board's mailbox; with none, it takes the next of the board's
+# other commands from a second queue and sends it itself. So the board gets one command a frame at most.
+# Later in the frame the play screen's frame (0x8003edb8, called at 0x8003766c, 0x80038068 and 0x80038ff0)
+# runs the chart (its sound events: the music's start) and then the keys and turntables, whose keysounds
+# it queues: they waited for the next frame's service.
+#
+# The mod's routines lie in main RAM the machine leaves at zero and never touches (0x8000d000, in
+# the BIOS's area below the program; checked over boot, attract, play, test mode and its reset):
+# - the play screen's frame is called through the first; the second, called where the keys' part
+#   begins (0x8003f078), notes the queue's count there in the first's frame on the stack. When it
+#   was 0, the queue holds requests after the play screen's frame (the presses' keysounds only) and
+#   the board had no command yet this frame, the first calls the game's own sound service at once,
+#   which sends them if the board is free (if not, they wait for the next frame's, as before), and
+#   sets a flag (0x80188e80, in a gap after the queue that the game doesn't use) once they're sent;
+# - the service's "board free" test (0x80040e94) also reads the flag: with it set, the service
+#   ends there and clears it, as the game's sent those keysounds then, so the board's other
+#   commands keep their frames. It takes as many instructions as the game's, so the dual-port RAM
+#   is written at the same moments;
+# - the queue's send and the other commands' dequeue store a mark (0x80188e84, in the same gap) in an
+#   instruction slot of their own that did nothing (a nop after a jump or a load), so they take no more
+#   time; the first reads it for "no command yet this frame" (a second command within a frame, while
+#   the board still works on the first, can lose its keysound) and clears it each frame.
+# Requests made elsewhere (the chart's, the other screens') are sent when they always were.
+
+[[patch]]                      # the routines (zeros before): 0x8000d000 (around the play screen's frame),
+address = 0x8000d000           # 0x8000d078 (the keys' part begins)
+original = "0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+replace = "e0ffbd271800bfaf010002246efb000c1c00a2af1c00a28f00000000100040141980033c588e6294000000000c004010848e628c0000000009004014000000007703010c000000001980033c588e6294000000000200401401000224808e62a41980033c848e60ac1800bf8f000000000800e0032000bd271980023c588e42940000000055e500085400a2af"
+
+[[patch]]                      # the play screen's frame called through the first
+address = 0x8003766c           # (jal 0x8003edb8 -> jal 0x8000d000)
+original = "6efb000c"
+replace = "0034000c"
+
+[[patch]]                      # the play screen's frame called through the first
+address = 0x80038068           # (jal 0x8003edb8 -> jal 0x8000d000)
+original = "6efb000c"
+replace = "0034000c"
+
+[[patch]]                      # the play screen's frame called through the first
+address = 0x80038ff0           # (jal 0x8003edb8 -> jal 0x8000d000)
+original = "6efb000c"
+replace = "0034000c"
+
+[[patch]]                      # the keys' part begins through the second
+address = 0x8003f078           # (jal 0x80039554 -> jal 0x8000d078)
+original = "55e5000c"
+replace = "1e34000c"
+
+[[patch]]                      # the service's "board free" test reads the flag too (7 words: nop; sb/lbu v0 via its
+address = 0x80040e94           # stack; nop; andi; bnez end; delay slot -> lui t0; lhu t1, flag; andi; bnez end; delay slot; bnez t1, end; sh zero, flag)
+original = "000000001000a2a31000a2930000000080004230da0040141980023c"
+replace = "1980083c808e099580004230dc0040141980023cda002015808e00a5"
+
+[[patch]]                      # the queue's send marks its command: the nop in its return's delay slot
+address = 0x80040b2c           # (-> sw t0, mark(t0): t0 holds the queue's upper half)
+original = "0800e00300000000"
+replace = "0800e003848e08ad"
+
+[[patch]]                      # the other commands' dequeue marks it: the nop in a load's delay slot
+address = 0x80040f94           # (-> sw v1, mark(v1): v1 holds the queue's upper half)
+original = "888e628c00000000"
+replace = "888e628c848e63ac"

@@ -1,0 +1,67 @@
+name = "Quick keysounds"
+version = "0.1"
+game = "popn1j"
+description = "The keysound of a button the player presses is keyed on in the frame the press is read, about 2 ms after it, instead of with the next frame's sounds (about 19 ms after it). Not how the machine behaved: the keysound comes one frame sooner; with Chords set to Together, a chord's keysounds also start in the same frame instead of one a frame. The music, the other sounds and the judging keep their timing. For the program of pop'n music (GQ803 JA-A)."
+api = 1
+requires = ["settings", "choose"]
+
+# The game's sounds (pop'n music, GQ803 JA-A): the 68EC020 plays the two K054539s itself. A sound is a
+# request in a ring of 64 words (0x4075fc the read index, 0x4075fa the write index, the requests from
+# 0x4075fe), queued by the play routine (0x9c94), which takes the ring's lock (0x405216, the
+# kernel's call $c), queues the request (0x1065e) and gives the lock back. The tasks take turns under
+# a small kernel (trap #0; an interrupt can switch them as it returns). Once a frame the sound task,
+# holding the lock, runs the ring's service (0x1061e): it clears its flag (0x4075f8); if the ring
+# holds a request it takes ONE, sets the flag to 0xff and plays it (a voice from the driver's table, the
+# chips' registers, the key-on); only when it took none, the voices' tick follows (ages, fades, ends,
+# chained sounds). The game task runs after it in the frame: its key handling queues a pressed
+# button's keysound through the play routine (0x100c4),
+# so a press read at the frame's start waited for the next frame's service (key-on 18 to 19 ms after
+# the frame began), and a chord's keysounds came one a frame.
+#
+# The mod's routine lies in the program ROM's padding at 0xfe000 (0xFF bytes after the program; nothing
+# reads or runs them but the ROM check, which sums each ROM chip's bytes: the balance bytes after the
+# routine keep both sums, so the boot's and test mode's ROM check pass as before). The key handling
+# calls it in place of the play routine, so it runs only when a keysound is queued. It does the play
+# routine's work as the play routine does it (the same kernel calls with the caller's own task block,
+# the game's own queueing), and before giving the lock back, when the new request is in the ring, every
+# request before it is a placeholder of the mod's and this frame's service took none or a placeholder
+# (Chords "Together": or the mod has sent one this frame), it points the read index at the new request,
+# calls the game's own service (which plays it), puts a placeholder in its slot (0x1000: the driver's
+# "pan" request, whose handler writes only a voice's word +0xe, which nothing reads) and the read index
+# back, and sets the service's flag to 1 (one sent early this frame; every service clears it). So the
+# next frames' services take a placeholder where they took the keysound: every other request is taken
+# in its frame and the voices' tick is skipped in the same frames as before. Requests made elsewhere
+# (the chart's, the other screens') are played when they always were.
+
+[[setting]]
+name = "chords"
+label = "Chords"
+choices = ["One sound a frame (the machine's)", "Together"]
+default = "One sound a frame (the machine's)"
+
+[[patch]]                      # the routine (0xFF before)
+address = 0xfe000
+original = "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+replace = "4e56ffec48e7f0f847f90000077e246e000843eeffec337c00200008337cffff000a237c00405216000c2f092f0a4878000c4e934fef000c4a6a00086b000098386e000e2f0c4eb90001065e588f207c004075fc3228fffe55410241007f342e000eb4701002660000523010b04167120c70100000026600004254400240007f60ea1628fffc671a0c0300016710301055400240007f0c701000000267046000001a341030814eb90001061e31bc100010023082117c0001fffc337c0001000a237c00405216000c2f092f0a4878000c4e934fef000c4cdf1f0f4e5e4e75ff80"
+
+[[patch]]                      # the key handling queues a keysound through it
+address = 0x100c4              # (jsr 0x9c94.l -> jsr 0xfe000.l)
+original = "4eb900009c94"
+replace = "4eb9000fe000"
+
+[[patch]]                      # Chords "Together": a 1 in the flag (the mod sent one this frame) goes on
+address = 0xfe08d              # to the send (beq.s past it -> beq.s to it)
+original = "10"
+replace = "14"
+when = "chords=1"
+
+[[patch]]                      # ... and the byte after the routine (never run) keeps that ROM chip's sum
+address = 0xfe0df
+original = "80"
+replace = "7c"
+when = "chords=1"
+
+[[patch]]                      # the ROM chips' sums kept: the padding's 0xFF bytes after the routine lowered
+address = 0xfe0e0
+original = "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+replace = "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000f600ff00ff00ff00ff00ff00ff00ff00ff00ff00ff56"

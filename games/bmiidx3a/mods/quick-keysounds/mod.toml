@@ -1,0 +1,54 @@
+name = "Quick keysounds"
+version = "0.1"
+game = "bmiidx3a"
+description = "The keysound of a key or turntable the player presses goes to the sound board in the frame the press is read, about 1 ms after it, instead of with the next frame's sounds (18 ms after it). Not how the machine behaved: the keysound comes one frame sooner. The music, the other sounds and the judging keep their timing. For the program of GC992 VER. JAA."
+
+# The game's sounds (3rd style, GC992 VER. JAA): a sound is a request in a queue of 16 (0x8017a6f8: a
+# count, then the requests). Once a frame the main loop calls the sound service (0x8003ab34): if the
+# sound board is free (dual-port RAM 0x1f000400 bit 7 clear) and the queue holds requests, it writes them
+# all to the dual-port RAM and rings the board's mailbox; with none, it sends one of the board's other
+# commands (a second queue). So the board gets one command a frame at most. Later in the frame the play
+# screen's frame (0x800389cc, called at 0x8003163c) runs the chart (its sound events: the music's start)
+# and then the keys and turntables, whose keysounds it queues: they waited for the next frame's service.
+#
+# The mod's routines lie in main RAM the machine leaves at zero and never touches (0x8000d000, in
+# the BIOS's area below the program; checked over boot, attract, play, test mode and its reset):
+# - the play screen's frame is called through the first; the second, called where the keys' part
+#   begins (0x80038c10), notes the queue's count there in the first's frame on the stack. When it
+#   was 0, the queue holds requests after the play screen's frame (the presses' keysounds only) and
+#   the board had no command yet this frame, the first calls the game's own sound service at once,
+#   which sends them if the board is free (if not, they wait for the next frame's, as before), and
+#   sets a flag (0x8017a720, in a gap after the queue that the game doesn't use) once they're sent;
+# - the service's "board free" test (0x8003ab50) also reads the flag: with it set, the service
+#   ends there and clears it, as the game's sent those keysounds then, so the board's other
+#   commands keep their frames. It takes as many instructions as the game's, so the dual-port RAM
+#   is written at the same moments;
+# - after the mailbox rings (0x8003a1a4), the main loop's frame number (0x8005b264) is noted at
+#   0x8017a724, for the first's "no command yet this frame" (a second command within a frame, while
+#   the board still works on the first, can lose its keysound).
+# Requests made elsewhere (the chart's, the other screens') are sent when they always were.
+
+[[patch]]                      # the routines (zeros before): 0x8000d000 (around the play screen's frame),
+address = 0x8000d000           # 0x8000d078 (the keys' part begins), 0x8000d08c (after the ring)
+original = "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+replace = "e0ffbd271800bfaf0100022473e2000c1c00a2af1c00a28f00000000120040141880033cf8a66294000000000e0040100680023c64b2428c24a7688c000000000900481000000000cdea000c000000001880033cf8a6629400000000020040140100022420a762a41800bf8f000000000800e0032000bd271880023cf8a6429400000000d4b700085400a2af0680033c64b2628c1880033c0800e00324a762ac"
+
+[[patch]]                      # the play screen's frame called through the first
+address = 0x8003163c           # (jal 0x800389cc -> jal 0x8000d000)
+original = "73e2000c"
+replace = "0034000c"
+
+[[patch]]                      # the keys' part begins through the second
+address = 0x80038c10           # (jal 0x8002df50 -> jal 0x8000d078)
+original = "d4b7000c"
+replace = "1e34000c"
+
+[[patch]]                      # the service's "board free" test reads the flag too (7 words: nop; sb/lbu v0 via its
+address = 0x8003ab50           # stack; nop; andi; bnez end; delay slot -> lui t0; lhu t1, flag; andi; bnez end; delay slot; bnez t1, end; sh zero, flag)
+original = "000000001000a2a31000a29300000000800042307100401400000000"
+replace = "1880083c20a709958000423073004014000000007100201520a700a5"
+
+[[patch]]                      # after the mailbox rings: jr ra -> j 0x8000d08c
+address = 0x8003a1a4           # (its frame noted)
+original = "0800e00300000000"
+replace = "2334000800000000"
